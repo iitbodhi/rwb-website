@@ -173,13 +173,7 @@ function initNav(){
         /* prevent body scroll when menu open */
         document.body.style.overflow=right.classList.contains('open')?'hidden':'';
     });
-    /* Close drawer on backdrop click (area left of drawer) */
-    right?.addEventListener('click',(e)=>{
-        if(e.target===right){
-            toggle.classList.remove('open');right.classList.remove('open');
-            document.body.style.overflow='';
-        }
-    });
+   
     links.forEach(l=>l.addEventListener('click',()=>{
         toggle.classList.remove('open');right.classList.remove('open');
         document.body.style.overflow='';
@@ -1017,3 +1011,17 @@ function enableGallerySwipe() {
         if (endX - startX > 50) container.scrollLeft -= 300;
     });
 }
+document.addEventListener('click', (e) => {
+
+    if (!right.classList.contains('open')) return;
+
+    const isMenu = right.contains(e.target);
+    const isToggle = toggle.contains(e.target);
+
+    if (!isMenu && !isToggle) {
+        toggle.classList.remove('open');
+        right.classList.remove('open');
+        document.body.style.overflow = '';
+    }
+
+});
