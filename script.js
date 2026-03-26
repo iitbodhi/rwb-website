@@ -167,12 +167,21 @@ function initNav(){
         document.querySelectorAll('section[id]').forEach(s=>{if(y>=s.offsetTop-200)cur=s.id;});
         links.forEach(l=>l.classList.toggle('active',l.getAttribute('href')==='#'+cur));
     },{passive:true});
-    toggle?.addEventListener('click',()=>{
-        toggle.classList.toggle('open');
-        right.classList.toggle('open');
-        /* prevent body scroll when menu open */
-        document.body.style.overflow=right.classList.contains('open')?'hidden':'';
-    });
+    toggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+
+    const isOpen = right.classList.contains('open');
+
+    if (isOpen) {
+        toggle.classList.remove('open');
+        right.classList.remove('open');
+        document.body.style.overflow = '';
+    } else {
+        toggle.classList.add('open');
+        right.classList.add('open');
+        document.body.style.overflow = 'hidden';
+    }
+});
    
     links.forEach(l=>l.addEventListener('click',()=>{
         toggle.classList.remove('open');right.classList.remove('open');
@@ -1015,13 +1024,17 @@ document.addEventListener('click', (e) => {
 
     if (!right.classList.contains('open')) return;
 
-    const isMenu = right.contains(e.target);
-    const isToggle = toggle.contains(e.target);
-
-    if (!isMenu && !isToggle) {
+    if (!right.contains(e.target) && !toggle.contains(e.target)) {
         toggle.classList.remove('open');
         right.classList.remove('open');
         document.body.style.overflow = '';
     }
 
+});
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        toggle.classList.remove('open');
+        right.classList.remove('open');
+        document.body.style.overflow = '';
+    }
 });
