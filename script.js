@@ -5,7 +5,7 @@
    ✅ Music: looping toggle button in nav
    ✅ Hint texts removed
    ================================================================ */
-
+console.log("NEW SCRIPT LOADED");
 const CONFIG = {
     /* Direct CSV export — no "Publish to Web" step needed */
     EVENTS_SHEET_URL:  'https://docs.google.com/spreadsheets/d/13qt3ZmYHX1EILkQzqo9TzLWKfKmuAd_QwYzStDTLEzU/export?format=csv&gid=0',
