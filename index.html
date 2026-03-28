@@ -8,93 +8,213 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;600;800&display=swap" rel="stylesheet">
 
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      font-family: 'Poppins', sans-serif;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
 
     body {
       height: 100vh;
-      background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.9)),
-                  url('https://images.unsplash.com/photo-1518655048521-f130df041f66?q=80&w=1920');
-      background-size: cover;
-      background-position: center;
+      background: radial-gradient(circle at center, #0a0a0a 0%, #000 100%);
       color: #fff;
       display: flex;
       align-items: center;
       justify-content: center;
       text-align: center;
+      overflow: hidden;
+    }
+
+    /* subtle grain overlay */
+    body::after {
+      content: "";
+      position: absolute;
+      width: 100%; height: 100%;
+      background: url('https://grainy-gradients.vercel.app/noise.svg');
+      opacity: 0.05;
+      pointer-events: none;
     }
 
     .container {
       max-width: 900px;
       padding: 20px;
+      animation: fadeIn 1.5s ease forwards;
+      z-index: 2;
     }
 
-    .logo {
-      font-size: 22px;
-      letter-spacing: 8px;
-      color: #d4a017;
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .logo-img {
+      width: 140px;
       margin-bottom: 20px;
+      filter: drop-shadow(0 0 20px rgba(212,160,23,0.7));
+      animation: logoPop 1.2s ease;
+    }
+
+    @keyframes logoPop {
+      from { transform: scale(0.7); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .domain {
+      font-size: 18px;
+      letter-spacing: 4px;
+      color: #d4a017;
+      margin-bottom: 15px;
+      font-weight: 600;
     }
 
     h1 {
-      font-size: 72px;
+      font-size: clamp(36px, 6vw, 72px);
       font-weight: 800;
       letter-spacing: 2px;
     }
 
     .highlight {
       color: #d4a017;
+      animation: flicker 3s infinite;
+    }
+
+    @keyframes flicker {
+      0%,18%,22%,25%,53%,57%,100% { opacity: 1; }
+      20%,24%,55% { opacity: 0.6; }
     }
 
     .coming {
-      margin-top: 30px;
-      font-size: 22px;
-      opacity: 0.8;
+      margin-top: 20px;
+      font-size: 16px;
+      opacity: 0.7;
     }
 
-    .date {
-      margin-top: 10px;
-      font-size: 48px;
+    .countdown {
+      margin-top: 20px;
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      flex-wrap: wrap;
+    }
+
+    .time-box {
+      border: 1px solid rgba(212,160,23,0.4);
+      padding: 14px 18px;
+      border-radius: 12px;
+      min-width: 70px;
+      backdrop-filter: blur(8px);
+      transition: transform 0.3s ease;
+    }
+
+    .time-box:hover { transform: translateY(-5px); }
+
+    .time-box span {
+      display: block;
+      font-size: 26px;
       font-weight: 700;
       color: #d4a017;
     }
 
+    .time-box small {
+      font-size: 11px;
+      opacity: 0.6;
+      letter-spacing: 1px;
+    }
+
     .tagline {
-      margin-top: 30px;
-      font-size: 16px;
+      margin-top: 25px;
+      font-size: 13px;
       letter-spacing: 3px;
       opacity: 0.6;
     }
 
-    @media (max-width: 768px) {
-      h1 {
-        font-size: 42px;
-      }
+    .music-control {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: rgba(212,160,23,0.15);
+      border: 1px solid #d4a017;
+      padding: 10px 14px;
+      border-radius: 30px;
+      cursor: pointer;
+      font-size: 14px;
+      z-index: 3;
+    }
 
-      .date {
-        font-size: 32px;
-      }
+    @media (max-width: 768px) {
+      .logo-img { width: 90px; }
     }
   </style>
 </head>
 
 <body>
   <div class="container">
-    <div class="logo">R W B</div>
+
+    <img src="logo.png" class="logo-img" alt="RWB Logo">
+
+    <div class="domain">www.roninwb.in</div>
 
     <h1>
       RONIN <span class="highlight">WARRIORS</span><br>
       OF BENGAL
     </h1>
 
-    <div class="coming">COMING SOON</div>
-    <div class="date">04.04.2026</div>
+    <div class="coming">LAUNCHING IN</div>
+
+    <div class="countdown">
+      <div class="time-box"><span id="days">0</span><small>DAYS</small></div>
+      <div class="time-box"><span id="hours">0</span><small>HOURS</small></div>
+      <div class="time-box"><span id="minutes">0</span><small>MINUTES</small></div>
+      <div class="time-box"><span id="seconds">0</span><small>SECONDS</small></div>
+    </div>
 
     <div class="tagline">RIDE SAFE. RIDE MORE.</div>
   </div>
+
+  <!-- ignition sound first -->
+  <audio id="ignite">
+    <source src="music.mp3" type="audio/mpeg">
+  </audio>
+
+  <audio id="bgMusic" loop>
+    <source src="music.mp3" type="audio/mpeg">
+  </audio>
+
+  <div class="music-control" onclick="toggleMusic()">🔊 Sound</div>
+
+  <script>
+    const targetDate = new Date("April 4, 2026 00:00:00").getTime();
+
+    function updateCountdown() {
+      const now = new Date().getTime();
+      const gap = targetDate - now;
+
+      const d = Math.floor(gap / (1000 * 60 * 60 * 24));
+      const h = Math.floor((gap / (1000 * 60 * 60)) % 24);
+      const m = Math.floor((gap / (1000 * 60)) % 60);
+      const s = Math.floor((gap / 1000) % 60);
+
+      document.getElementById("days").innerText = d;
+      document.getElementById("hours").innerText = h;
+      document.getElementById("minutes").innerText = m;
+      document.getElementById("seconds").innerText = s;
+    }
+
+    setInterval(updateCountdown, 1000);
+
+    const music = document.getElementById("bgMusic");
+    const ignite = document.getElementById("ignite");
+    let started = false;
+
+    function toggleMusic() {
+      if (music.paused) music.play(); else music.pause();
+    }
+
+    document.addEventListener("click", () => {
+      if (!started) {
+        ignite.play().then(() => {
+          setTimeout(() => music.play(), 1200);
+        });
+        started = true;
+      }
+    }, { once: true });
+  </script>
+
 </body>
 </html>
