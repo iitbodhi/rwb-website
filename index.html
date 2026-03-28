@@ -1,400 +1,100 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Ronin Warriors of Bengal — TVS Ronin 225 motorcycle club. Bengal's brotherhood on two wheels.">
-<title>RWB — Ronin Warriors of Bengal</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RWB - Coming Soon</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;600;800&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Poppins', sans-serif;
+    }
+
+    body {
+      height: 100vh;
+      background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.9)),
+                  url('https://images.unsplash.com/photo-1518655048521-f130df041f66?q=80&w=1920');
+      background-size: cover;
+      background-position: center;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .container {
+      max-width: 900px;
+      padding: 20px;
+    }
+
+    .logo {
+      font-size: 22px;
+      letter-spacing: 8px;
+      color: #d4a017;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      font-size: 72px;
+      font-weight: 800;
+      letter-spacing: 2px;
+    }
+
+    .highlight {
+      color: #d4a017;
+    }
+
+    .coming {
+      margin-top: 30px;
+      font-size: 22px;
+      opacity: 0.8;
+    }
+
+    .date {
+      margin-top: 10px;
+      font-size: 48px;
+      font-weight: 700;
+      color: #d4a017;
+    }
+
+    .tagline {
+      margin-top: 30px;
+      font-size: 16px;
+      letter-spacing: 3px;
+      opacity: 0.6;
+    }
+
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 42px;
+      }
+
+      .date {
+        font-size: 32px;
+      }
+    }
+  </style>
 </head>
-<body class="loading">
 
-<!-- PRELOADER -->
-<div id="preloader" class="preloader">
-  <div class="preloader-inner">
-    <div class="pl-bars"><span></span><span></span><span></span></div>
-    <div class="pl-logo">RWB</div>
-    <div class="pl-sub">Ronin Warriors of Bengal</div>
-    <div class="pl-bar"><div class="pl-fill"></div></div>
-    <div class="pl-tag">Ride Safe. Ride More.</div>
-  </div>
-</div>
+<body>
+  <div class="container">
+    <div class="logo">R W B</div>
 
-<!-- FIREFLIES -->
-<canvas id="firefly-canvas" aria-hidden="true"></canvas>
-
-<!-- NAV -->
-<nav id="nav" class="nav">
-  <a href="#home" class="nav-brand">RWB</a>
-  <button id="nav-toggle" class="nav-toggle" aria-label="Open menu" aria-expanded="false">
-    <span></span><span></span><span></span>
-  </button>
-  <div id="nav-drawer" class="nav-drawer">
-    <div class="nav-drawer-inner">
-      <ul class="nav-links">
-        <li><a href="#home"     class="nav-link" data-section="home">Home</a></li>
-        <li><a href="#about"    class="nav-link" data-section="about">About</a></li>
-        <li><a href="#gallery"  class="nav-link" data-section="gallery">Gallery</a></li>
-        <li><a href="#events"   class="nav-link" data-section="events">Events</a></li>
-        <li><a href="#warriors" class="nav-link" data-section="warriors">Warriors</a></li>
-      </ul>
-      <div class="nav-cta-wrap">
-        <a href="#contact" class="nav-cta">Join Us</a>
-        <button id="theme-btn" class="theme-btn" aria-label="Toggle theme">
-          <div class="theme-thumb"></div>
-        </button>
-      </div>
-    </div>
-  </div>
-  <div id="nav-backdrop" class="nav-backdrop"></div>
-</nav>
-
-<!-- HERO -->
-<section id="home" class="hero">
-  <div class="hero-bg">
-    <img id="hero-img" src="hero-bg.png" alt="" aria-hidden="true"
-         onerror="this.src='https://imgd.aeplcdn.com/1056x594/n/cw/ec/198071/ronin-right-side-view-3.png?q=80'">
-    <div class="hero-overlay"></div>
-  </div>
-
-  <div class="hero-logo" id="hero-logo">
-    <div class="hero-logo-ring">
-      <img src="logo.png" alt="RWB Logo" class="hero-logo-img"
-           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-      <div class="hero-logo-fallback" style="display:none">RWB</div>
-    </div>
-    <div class="hero-logo-glow"></div>
-  </div>
-
-  <div class="hero-badge" id="hero-badge">
-    <div class="badge-ring">
-      <img src="logo.png" alt="" aria-hidden="true" class="badge-img"
-           onerror="this.style.display='none'">
-    </div>
-  </div>
-
-  <div class="hero-content">
-    <p class="hero-est hero-r">— EST. IN BENGAL 2023 —</p>
-    <h1 class="hero-title">
-      <span class="hero-r ht-line">Ronin</span>
-      <span class="hero-r ht-line gold">Warriors</span>
-      <span class="hero-r ht-line">of Bengal</span>
+    <h1>
+      RONIN <span class="highlight">WARRIORS</span><br>
+      OF BENGAL
     </h1>
-    <div class="hero-divider hero-r">
-      <span class="hd-line"></span><span class="hd-gem">◆</span><span class="hd-line"></span>
-    </div>
-    <p class="hero-motto hero-r"><em>Ride Safe. Ride More.</em></p>
+
+    <div class="coming">COMING SOON</div>
+    <div class="date">04.04.2026</div>
+
+    <div class="tagline">RIDE SAFE. RIDE MORE.</div>
   </div>
-
-  <div class="hero-label">
-    <span class="hl-line"></span>
-    <span class="hl-text">TVS Ronin 225 · Our Steel Horse</span>
-  </div>
-
-  <div id="hero-scroll" class="hero-scroll">
-    <span class="scroll-text">Scroll</span>
-    <div class="scroll-bar"></div>
-  </div>
-</section>
-
-<!-- MARQUEE -->
-<div class="marquee-wrap" aria-hidden="true">
-  <div class="marquee-track">
-    <span>◆ TVS RONIN 225</span><span>◆ RONIN WARRIORS OF BENGAL</span>
-    <span>◆ RIDE SAFE. RIDE MORE.</span><span>◆ EST. 2023</span>
-    <span>◆ BENGAL'S BROTHERHOOD</span><span>◆ RIDE UNSCRIPTED</span>
-    <span>◆ TVS RONIN 225</span><span>◆ RONIN WARRIORS OF BENGAL</span>
-    <span>◆ RIDE SAFE. RIDE MORE.</span><span>◆ EST. 2023</span>
-    <span>◆ BENGAL'S BROTHERHOOD</span><span>◆ RIDE UNSCRIPTED</span>
-  </div>
-</div>
-
-<!-- ABOUT -->
-<section id="about" class="about section">
-  <div class="container">
-    <p class="section-tag rv">Our Brotherhood</p>
-    <div class="about-grid">
-
-      <div class="about-visual rv-l">
-        <div class="patch-wrap">
-          <div class="patch" id="patch-logo">
-            <div class="patch-ring-dashed"></div>
-            <img src="logo.png" alt="RWB" class="patch-img"
-                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-            <div class="patch-fallback" style="display:none">
-              <span class="pf-name">RWB</span>
-            </div>
-          </div>
-          <p class="rev-hint" id="rev-hint">🔊 Click to Rev</p>
-          <div class="spec-tag st-1">
-            <div class="st-num-row"><span class="st-num" data-target="400">0</span><span class="st-plus">+</span></div>
-            <span class="st-label">TVS Ronins</span>
-          </div>
-          <div class="spec-tag st-2">
-            <div class="st-num-row"><span class="st-num" data-target="20">0</span><span class="st-plus">+</span></div>
-            <span class="st-label">Service Centers</span>
-          </div>
-          <div class="spec-tag st-3">
-            <div class="st-num-row"><span class="st-num" data-target="15">0</span><span class="st-plus">+</span></div>
-            <span class="st-label">Service Camps</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="about-text rv-r">
-        <h2 class="section-title">We Are the<br><em>Ronin Warriors</em></h2>
-        <p>Born from the spirit of the open road and the soul of Bengal, the <strong>Ronin Warriors of Bengal (RWB)</strong> is more than a motorcycle club — it is a brotherhood forged in chrome and asphalt.</p>
-        <p>At our heart beats the <strong>TVS Ronin 225</strong> — Bengal's favourite neo-retro machine. With <strong>400+ TVS Ronins</strong> in our ranks, backed by <strong>20+ Patron Service Centers</strong> and <strong>15+ Service Camps</strong>, we don't just ride together — we grow together.</p>
-        <p>We stand for <strong>loyalty, freedom, and the unbreakable bond</strong> between rider and road. Every mile is a story. Every sunrise is a new chapter written in exhaust and wind.</p>
-
-        <div class="stats-row">
-          <div class="stat">
-            <div class="stat-val"><span class="stat-num" data-target="430">0</span><span class="stat-plus">+</span></div>
-            <span class="stat-label">Members</span>
-          </div>
-          <span class="stat-sep">◆</span>
-          <div class="stat">
-            <div class="stat-val"><span class="stat-num" data-target="120">0</span><span class="stat-plus">+</span></div>
-            <span class="stat-label">Rides Done</span>
-          </div>
-          <span class="stat-sep">◆</span>
-          <div class="stat">
-            <div class="stat-val"><span class="stat-num" data-target="75000">0</span><span class="stat-plus">+</span></div>
-            <span class="stat-label">KM Ridden</span>
-          </div>
-        </div>
-
-        <div class="social-links">
-          <p class="social-title">Find Us On</p>
-          <div class="social-row">
-            <a href="https://www.facebook.com/profile.php?id=61556220173720&mibextid=ZbWKwL" class="soc-btn soc-fb" target="_blank" rel="noopener">
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
-              <span>Facebook</span>
-            </a>
-            <a href="https://www.instagram.com/ronin_warriors_bengal?igsh=MWF6MzZnZmVuczBveg==" class="soc-btn soc-ig" target="_blank" rel="noopener">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
-              <span>Instagram</span>
-            </a>
-            <a href="https://whatsapp.com/channel/0029VaiK6QHEgGfTItym9t2H" class="soc-btn soc-wa" target="_blank" rel="noopener">
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.124.556 4.118 1.528 5.845L0 24l6.345-1.505A11.954 11.954 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 0 1-5.006-1.366l-.359-.213-3.718.881.899-3.63-.234-.374A9.818 9.818 0 1 1 12 21.818z"/></svg>
-              <span>WhatsApp</span>
-            </a>
-            <a href="mailto:ronin.warriors.bengal@gmail.com" class="soc-btn soc-em" target="_blank" rel="noopener">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 7l10 7 10-7"/></svg>
-              <span>Email</span>
-            </a>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="about-wm" aria-hidden="true">RWB</div>
-</section>
-
-<!-- GALLERY -->
-<section id="gallery" class="gallery section">
-  <div class="container">
-    <p class="section-tag rv">Our Memories</p>
-    <h2 class="section-title rv">THE RWB <em>Memories</em></h2>
-  </div>
-  <div class="gal-wrap rv">
-    <div id="gal-outer" class="gal-outer">
-      <div id="gal-track" class="gal-track">
-        <div class="gal-loading">Loading memories…</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- EVENTS -->
-<section id="events" class="events section">
-  <div class="container">
-    <p class="section-tag rv">Past · Present · Future</p>
-    <h2 class="section-title rv">RWB <em>Rides &amp; Events</em></h2>
-    <div class="ev-tabs rv" id="ev-tabs">
-      <button class="ev-tab active" data-f="upcoming">Upcoming</button>
-      <button class="ev-tab" data-f="live">Live Today</button>
-      <button class="ev-tab" data-f="past">Past</button>
-      <button class="ev-tab" data-f="all">All</button>
-    </div>
-    <div id="ev-list" class="ev-list">
-      <div class="ev-loading">Loading events…</div>
-    </div>
-  </div>
-</section>
-
-<!-- WARRIORS -->
-<section id="warriors" class="warriors section">
-  <div class="container">
-    <p class="section-tag rv">The People Behind the Pack</p>
-    <h2 class="section-title rv">Meet the <em>Ronin Warriors</em></h2>
-    <p class="section-sub rv">The riders who built something from nothing.</p>
-    <div class="war-tabs rv" id="war-tabs">
-      <button class="war-tab active" data-f="all">All</button>
-      <button class="war-tab" data-f="admin">Admins</button>
-      <button class="war-tab" data-f="coadmin">Co-admins</button>
-      <button class="war-tab" data-f="coordinator">Co-ordinators</button>
-    </div>
-  </div>
-  <div class="war-carousel-wrap">
-    <button class="war-arrow war-prev" id="war-prev" aria-label="Previous">←</button>
-    <div id="war-outer" class="war-outer">
-      <div id="war-track" class="war-track"></div>
-    </div>
-    <button class="war-arrow war-next" id="war-next" aria-label="Next">→</button>
-  </div>
-  <div class="war-dots" id="war-dots"></div>
-  <div class="warriors-wm" aria-hidden="true">WARRIORS</div>
-</section>
-
-<!-- CONTACT -->
-<section id="contact" class="contact section">
-  <div class="container">
-    <p class="section-tag rv">Ride With Us</p>
-    <h2 class="section-title rv">Join the <em>Brotherhood</em></h2>
-    <p class="section-sub rv" style="text-align:center;max-width:480px;margin:0 auto 3rem">Fill out the form below and we'll reach out on WhatsApp within 48 hours.</p>
-
-    <form id="join-form" class="join-form">
-      <div id="form-status" class="form-status" style="display:none"></div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="f-name">Full Name <span class="req">*</span></label>
-          <input type="text" id="f-name" name="name" placeholder="Your full name" required>
-        </div>
-        <div class="form-group">
-          <label for="f-email">Email <span class="req">*</span></label>
-          <input type="email" id="f-email" name="email" placeholder="you@email.com" required>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="f-phone">WhatsApp Number <span class="req">*</span></label>
-          <input type="tel" id="f-phone" name="phone" placeholder="+91 98765 43210" required>
-        </div>
-        <div class="form-group">
-          <label for="f-alt">Alternate Phone</label>
-          <input type="tel" id="f-alt" name="alt_phone" placeholder="+91 98765 43210">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="f-dob">Date of Birth <span class="req">*</span></label>
-          <input type="date" id="f-dob" name="dob" required>
-        </div>
-        <div class="form-group">
-          <label for="f-blood">Blood Group <span class="req">*</span></label>
-          <select id="f-blood" name="blood_group" class="form-select" required>
-            <option value="" disabled selected>Select…</option>
-            <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
-            <option>AB+</option><option>AB-</option><option>O+</option><option>O-</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="f-vrn">Vehicle Reg. No. <span class="req">*</span></label>
-          <input type="text" id="f-vrn" name="vrn" placeholder="WB 01 AB 1234" required style="text-transform:uppercase">
-        </div>
-        <div class="form-group">
-          <label for="f-emergency">Emergency Contact <span class="req">*</span></label>
-          <input type="tel" id="f-emergency" name="emergency_contact" placeholder="Parent / Spouse" required>
-        </div>
-      </div>
-      <div class="form-group">
-        <label for="f-bike">Your Ride <span class="req">*</span></label>
-        <select id="f-bike" name="bike" class="form-select" required>
-          <option value="" disabled selected>Choose your machine…</option>
-          <optgroup label="◆ TVS Ronin 225">
-            <option>TVS Ronin 225 — Stargaze Black</option>
-            <option>TVS Ronin 225 — Blazing Blue</option>
-            <option>TVS Ronin 225 — Magma Red</option>
-            <option>TVS Ronin 225 — Copper Bronze</option>
-            <option>TVS Ronin 225 — Nimbus Grey</option>
-            <option>TVS Ronin 225 — Galactic Grey</option>
-            <option>TVS Ronin 225 — Glacier Silver</option>
-            <option>TVS Ronin 225 — Charcoal Ember</option>
-            <option>TVS Ronin 225 — Scout Blue</option>
-            <option>TVS Ronin 225 — Agonda Special Edition</option>
-            <option>TVS Ronin 225 DS</option>
-          </optgroup>
-          <optgroup label="◆ Royal Enfield">
-            <option>RE Himalayan 411</option><option>RE Himalayan 450</option>
-            <option>RE Hunter 350</option><option>RE Classic 350</option>
-            <option>RE Scram 411</option><option>RE Meteor 350</option>
-          </optgroup>
-          <optgroup label="◆ Others">
-            <option>KTM Duke / Adventure</option><option>Bajaj Dominar</option>
-            <option>TVS Apache / RR 310</option><option>Yamaha FZ / MT / R15</option>
-            <option>Honda CB300R / CB350</option><option>Other</option>
-          </optgroup>
-        </select>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="f-loc">Current Locality <span class="req">*</span></label>
-          <input type="text" id="f-loc" name="current_locality" placeholder="Salt Lake, Kolkata" required>
-        </div>
-        <div class="form-group">
-          <label for="f-exp">Riding Experience</label>
-          <select id="f-exp" name="riding_experience" class="form-select">
-            <option value="" disabled selected>How long riding?</option>
-            <option>Less than 6 months</option><option>6 months – 1 year</option>
-            <option>1 – 3 years</option><option>3 – 5 years</option>
-            <option>5 – 10 years</option><option>10+ years</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-group">
-        <label for="f-msg">Tell us about yourself</label>
-        <textarea id="f-msg" name="message" rows="4" placeholder="What draws you to RWB? Previous club experience?"></textarea>
-      </div>
-      <button type="submit" class="form-submit" id="form-submit">
-        <span id="submit-text">Send My Application</span>
-        <span id="submit-arrow">→</span>
-      </button>
-      <p class="form-note">◆ We'll reach out on WhatsApp within 48 hours. Ride Safe. Ride More. ◆</p>
-    </form>
-  </div>
-</section>
-
-<!-- FOOTER -->
-<footer class="footer">
-  <div class="footer-inner">
-    <div class="footer-logo">RWB</div>
-    <p class="footer-motto"><em>Ride Safe. Ride More.</em></p>
-    <div class="footer-icons">
-      <a href="https://www.facebook.com/profile.php?id=61556220173720" target="_blank" class="fi" aria-label="Facebook">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
-      </a>
-      <a href="https://www.instagram.com/ronin_warriors_bengal" target="_blank" class="fi" aria-label="Instagram">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
-      </a>
-      <a href="https://whatsapp.com/channel/0029VaiK6QHEgGfTItym9t2H" target="_blank" class="fi" aria-label="WhatsApp">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.124.556 4.118 1.528 5.845L0 24l6.345-1.505A11.954 11.954 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 0 1-5.006-1.366l-.359-.213-3.718.881.899-3.63-.234-.374A9.818 9.818 0 1 1 12 21.818z"/></svg>
-      </a>
-      <a href="mailto:ronin.warriors.bengal@gmail.com" class="fi" aria-label="Email">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 7l10 7 10-7"/></svg>
-      </a>
-    </div>
-    <div class="footer-rule">◆</div>
-    <p class="footer-bike">Powered by TVS Ronin 225 · Bengal's Neo-Retro Brotherhood</p>
-    <p class="footer-copy">© 2024 Ronin Warriors of Bengal. All Rights Reserved.</p>
-    <p class="footer-tag">Forged in Bengal. Bound by the Road.</p>
-  </div>
-</footer>
-
-<!-- LIGHTBOX -->
-<div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="Photo lightbox">
-  <div id="lb-bg" class="lb-bg"></div>
-  <div class="lb-box">
-    <img id="lb-img" src="" alt="Gallery photo">
-    <button id="lb-close" class="lb-close" aria-label="Close">✕</button>
-  </div>
-</div>
-
-<script src="script.js"></script>
 </body>
 </html>
