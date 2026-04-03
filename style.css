@@ -2818,7 +2818,7 @@ em {
         display: flex;
         position: absolute;
         top: 82px;
-        left: 10%;
+        left: 35%;
         transform: translateX(-50%);
         z-index: 4;
         animation: float-right-badge 4s ease-in-out infinite;
