@@ -438,7 +438,7 @@ em {
     .nav-right {
         position: fixed;
         inset: 0;
-        background: rgba(10, 9, 6, .97);
+        background: rgba(10, 9, 6, .96);
         flex-direction: column;
         justify-content: center;
         align-items: center;
@@ -479,7 +479,7 @@ em {
         font-size: 2.2rem;
         letter-spacing: .15em;
         text-transform: uppercase;
-        color: var(--cream-dim);
+        color: var(--gold);
         display: block;
         padding: .6rem 0;
         text-align: center;
