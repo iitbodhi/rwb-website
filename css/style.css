@@ -29,9 +29,9 @@ h2{font-size:clamp(2.2rem,5vw,3.6rem);margin-bottom:2rem;max-width:16ch}
 /* moving faded background: three soft glows drifting slowly, fixed behind everything */
 .bg{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
 .bg i{position:absolute;width:75vmax;height:75vmax;border-radius:50%;will-change:transform}
-.bg i:nth-child(1){left:-25vmax;top:-20vmax;background:radial-gradient(closest-side,rgba(212,80,26,.26),transparent);animation:drift-a 32s ease-in-out infinite alternate}
-.bg i:nth-child(2){right:-30vmax;top:25vh;background:radial-gradient(closest-side,rgba(85,82,79,.20),transparent);animation:drift-b 38s ease-in-out infinite alternate}
-.bg i:nth-child(3){left:5vw;bottom:-35vmax;background:radial-gradient(closest-side,rgba(240,140,70,.22),transparent);animation:drift-c 44s ease-in-out infinite alternate}
+.bg i:nth-child(1){left:-25vmax;top:-20vmax;background:radial-gradient(closest-side,rgba(212,80,26,.26),transparent);animation:drift-a 28s ease-in-out infinite alternate}
+.bg i:nth-child(2){right:-30vmax;top:25vh;background:radial-gradient(closest-side,rgba(85,82,79,.20),transparent);animation:drift-b 34s ease-in-out infinite alternate}
+.bg i:nth-child(3){left:5vw;bottom:-35vmax;background:radial-gradient(closest-side,rgba(240,140,70,.22),transparent);animation:drift-c 40s ease-in-out infinite alternate}
 @keyframes drift-a{to{transform:translate3d(45vw,30vh,0) scale(1.15)}}
 @keyframes drift-b{to{transform:translate3d(-50vw,-25vh,0) scale(.9)}}
 @keyframes drift-c{to{transform:translate3d(40vw,-35vh,0) scale(1.2)}}
