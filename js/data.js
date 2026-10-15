@@ -10,9 +10,9 @@ const CONFIG = {
     /* Marketplace products come from a Google Sheet. Paste its CSV link here (see setup guide) */
     MARKET_SHEET_URL: '',
     /* Ronin Maintenance: Apps Script web app link that lists the PDFs in your Drive folder */
-    MAINTENANCE_SCRIPT_URL: '',
+    MAINTENANCE_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbz4v89tStt7dg7p6wgvFdCJL3WqRjAFCMc6oRiR3SnDRsxrnY6SNpLGpDJaSDpZQw0aRw/exec',
     /* Ronin Accessories: Google Sheet published as CSV (columns: name, category, score, link, price) */
-    ACCESSORIES_SHEET_URL: ''
+    ACCESSORIES_SHEET_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT9sKAmhlfRFrwFZ78rlobXVHMogYUz4PR7gu5HuoFQTuZnk30c6e7K3df61_BEpRhzdY_ivB0hVaqH/pub?gid=111766051&single=true&output=csv'
 };
 
 /* Team — role: admin | coadmin | coordinator. Photos live in assets/warriors/ */
