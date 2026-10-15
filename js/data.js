@@ -8,7 +8,7 @@ const CONFIG = {
     /* Opens a direct message to RWB on Instagram (used by "Contact to order") */
     INSTAGRAM_DM_URL: 'https://ig.me/m/ronin_warriors_bengal',
     /* Marketplace products come from a Google Sheet. Paste its CSV link here (see setup guide) */
-    MARKET_SHEET_URL: ''
+    MARKET_SHEET_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSjkJgFnwlNkbq9W1L_IZwC2lnYkMDkjdT8MgwmPRiHPiow9989pJvP4e0uDaA0k4kK31q4S6X_dqT7/pub?gid=2137982980&single=true&output=csv'
 };
 
 /* Team — role: admin | coadmin | coordinator. Photos live in assets/warriors/ */
