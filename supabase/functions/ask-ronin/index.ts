@@ -13,6 +13,7 @@ const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Expose-Headers": "x-left",
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
@@ -85,108 +86,173 @@ THE RWB APP (help members find things)
 - Admins (only admins see this): Admin panel for access requests, Motomart approvals, members, birthdays; News page to post announcements.
 `;
 
-let cache: { at: number; text: string } | null = null;
+/* ---------------- RWB website knowledge (cached, never slows answers down) ---------------- */
+let cache: { at: number; ttl: number; text: string } | null = null;
+const get = (u: string, ms = 3500) => fetch(u, { signal: AbortSignal.timeout(ms), redirect: "follow" });
 async function siteKnowledge(): Promise<string> {
-  if (cache && Date.now() - cache.at < 60 * 60 * 1000) return cache.text;
+  if (cache && Date.now() - cache.at < cache.ttl) return cache.text;
   const out: string[] = [];
+  let ok = false;
   try {
-    const js = await (await fetch(`${SITE}/js/data.js`)).text();
+    const js = await (await get(`${SITE}/js/data.js`, 3000)).text();
+    ok = true;
     const url = (k: string) => js.match(new RegExp(k + ":\\s*'([^']+)'"))?.[1];
     const team = [...js.matchAll(/name:\s*'([^']+)',\s*nickname:\s*'([^']*)',\s*role:\s*'(\w+)',\s*roleLabel:\s*'([^']+)'/g)]
       .map((m) => `${m[1]} ("${m[2]}") – ${m[4]}`);
     if (team.length) out.push("RWB TEAM (admins, co-admins, coordinators):\n" + team.join("\n"));
-    const mUrl = url("MAINTENANCE_SCRIPT_URL");
-    if (mUrl) {
-      const posts = await (await fetch(mUrl)).json() as { name: string; description?: string }[];
-      if (Array.isArray(posts) && posts.length) {
-        out.push("RWB MAINTENANCE GUIDES available in the app (Guides → Maintenance):\n" +
-          posts.slice(0, 60).map((p) => "- " + p.name.replace(/\.pdf$/i, "").replace(/_+/g, " ") + (p.description ? `: ${p.description}` : "")).join("\n"));
-      }
+    const mUrl = url("MAINTENANCE_SCRIPT_URL"), aUrl = url("ACCESSORIES_SHEET_URL");
+    const [guides, gear] = await Promise.allSettled([   // both at once, 3.5 s max each
+      mUrl ? get(mUrl).then((r) => r.json()) : Promise.resolve([]),
+      aUrl ? get(aUrl).then((r) => r.text()) : Promise.resolve(""),
+    ]);
+    if (guides.status === "fulfilled" && Array.isArray(guides.value) && guides.value.length) {
+      out.push("RWB MAINTENANCE GUIDES available in the app (Guides → Maintenance):\n" +
+        (guides.value as { name: string; description?: string }[]).slice(0, 60)
+          .map((p) => "- " + String(p.name).replace(/\.pdf$/i, "").replace(/_+/g, " ") + (p.description ? `: ${p.description}` : "")).join("\n"));
     }
-    const aUrl = url("ACCESSORIES_SHEET_URL");
-    if (aUrl) {
-      const rows = (await (await fetch(aUrl)).text()).split(/\r?\n/).slice(1).filter(Boolean).slice(0, 80);
+    if (gear.status === "fulfilled" && gear.value) {
+      const rows = String(gear.value).split(/\r?\n/).slice(1).filter(Boolean).slice(0, 80);
       if (rows.length) out.push("RWB RECOMMENDED GEAR (Guides → Accessories; columns: name, category, RWB score/5, link, price):\n" + rows.join("\n"));
     }
   } catch (_) { /* the bot still works without these */ }
-  cache = { at: Date.now(), text: out.join("\n\n") };
+  // keep for 6 hours; if the website didn't answer, try again in 10 minutes
+  cache = { at: Date.now(), ttl: ok ? 6 * 3600e3 : 600e3, text: out.join("\n\n") };
   return cache.text;
 }
 
-/* ---------------- Gemini with automatic model choice ---------------- */
-let workingModel: string | null = null;
-async function gemini(key: string, preferred: string[], body: unknown): Promise<string> {
-  const tryModel = async (m: string) => {
-    const r = await fetch(`${GEMINI}/models/${m}:generateContent`, {
-      method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: JSON.stringify(body),
-    });
-    if (!r.ok) return { ok: false, status: r.status, err: (await r.text()).slice(0, 300) };
-    const d = await r.json();
-    const text = (d.candidates?.[0]?.content?.parts || []).map((p: { text?: string }) => p.text || "").join("").trim();
-    return text ? { ok: true, text } : { ok: false, status: 502, err: "empty answer " + (d.candidates?.[0]?.finishReason || d.promptFeedback?.blockReason || "") };
-  };
+/* ---------------- Gemini: fast settings, automatic model choice, streaming ---------------- */
+// Newer Flash models "think" before answering, which is slow. These ask for little or no thinking;
+// if a model doesn't understand one setting, the next one is tried.
+const THINKING: (Record<string, unknown> | null)[] = [{ thinkingBudget: 0 }, { thinkingLevel: "low" }, null];
+let remembered: { model: string; t: number } | null = null;
+
+async function listFlashModels(key: string): Promise<string[]> {
+  try {
+    const l = await get(`${GEMINI}/models?pageSize=200&key=${encodeURIComponent(key)}`, 5000);
+    if (!l.ok) return [];
+    return ((await l.json()).models || [])
+      .filter((m: { name: string; supportedGenerationMethods?: string[] }) =>
+        m.supportedGenerationMethods?.includes("generateContent") && /flash/i.test(m.name) && !/image|tts|audio|live|embed|exp/i.test(m.name))
+      .map((m: { name: string }) => m.name.replace(/^models\//, ""))
+      .sort((a: string, b: string) => (/lite/.test(a) ? 1 : 0) - (/lite/.test(b) ? 1 : 0) || b.localeCompare(a, undefined, { numeric: true }))
+      .slice(0, 4);
+  } catch { return []; }
+}
+
+/** Opens a streaming answer from the first model + setting that works. */
+async function openStream(key: string, preferred: string[], body: Record<string, unknown>): Promise<Response> {
   const errors: string[] = [];
-  let order = [...new Set([workingModel, ...preferred].filter(Boolean) as string[])];
-  for (let round = 0; round < 2; round++) {
-    for (const m of order) {
-      const r = await tryModel(m);
-      if (r.ok) { workingModel = m; return r.text!; }
-      errors.push(`${m}: ${r.status}`);
-      if (r.status === 400 && !/not found|not supported|unknown name/i.test(r.err || "")) throw new Error("Gemini rejected the request: " + r.err);
+  const attempt = async (model: string, t: number): Promise<Response | "next-setting" | "next-model"> => {
+    const gc = { ...(body.generationConfig as object) } as Record<string, unknown>;
+    if (THINKING[t]) gc.thinkingConfig = THINKING[t];
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 25000);       // no first byte in 25 s: try another model
+    try {
+      const r = await fetch(`${GEMINI}/models/${model}:streamGenerateContent?alt=sse`, {
+        method: "POST", signal: ctrl.signal,
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify({ ...body, generationConfig: gc }),
+      });
+      clearTimeout(timer);
+      if (r.ok && r.body) { remembered = { model, t }; return r; }
+      const err = (await r.text()).slice(0, 300);
+      errors.push(`${model}/${t}: ${r.status}`);
+      if (r.status === 400 && /thinking|unknown name|invalid json payload|not supported/i.test(err)) return "next-setting";
+      return "next-model";
+    } catch (e) {
+      clearTimeout(timer); errors.push(`${model}/${t}: ${String(e).slice(0, 60)}`); return "next-model";
     }
-    if (round === 0) {   // none of the preferred names worked: ask Google which Flash models exist now
-      const l = await fetch(`${GEMINI}/models?pageSize=200`, { headers: { "x-goog-api-key": key } });
-      if (!l.ok) break;
-      const names = ((await l.json()).models || [])
-        .filter((m: { name: string; supportedGenerationMethods?: string[] }) =>
-          m.supportedGenerationMethods?.includes("generateContent") && /flash/i.test(m.name) && !/image|tts|audio|live|embed|thinking-exp/i.test(m.name))
-        .map((m: { name: string }) => m.name.replace(/^models\//, ""))
-        .sort((a: string, b: string) => (/lite/.test(a) ? 1 : 0) - (/lite/.test(b) ? 1 : 0) || b.localeCompare(a, undefined, { numeric: true }));
-      order = names.filter((n: string) => !order.includes(n)).slice(0, 4);
-      if (!order.length) break;
+  };
+  const tryAll = async (models: string[]) => {
+    for (const m of models) {
+      for (let t = remembered?.model === m ? remembered.t : 0; t < THINKING.length; t++) {
+        const r = await attempt(m, t);
+        if (r instanceof Response) return r;
+        if (r === "next-model") break;
+      }
     }
-  }
+    return null;
+  };
+  const first = [...new Set([remembered?.model, ...preferred].filter(Boolean) as string[])];
+  const r = await tryAll(first) ?? await tryAll((await listFlashModels(key)).filter((m) => !first.includes(m)));
+  if (r) return r;
   throw new Error("No Gemini model answered (" + errors.join(", ") + ")");
+}
+
+/** Turns Google's event stream into plain text for the app. */
+function textStream(src: Response, onEmpty: () => Promise<void>): ReadableStream<Uint8Array> {
+  const enc = new TextEncoder(), dec = new TextDecoder();
+  return new ReadableStream({
+    async start(ctl) {
+      const reader = src.body!.getReader();
+      let buf = "", sent = 0;
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let i;
+          while ((i = buf.indexOf("\n")) >= 0) {
+            const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+            if (!line.startsWith("data:")) continue;
+            try {
+              const d = JSON.parse(line.slice(5));
+              const parts = d.candidates?.[0]?.content?.parts || [];
+              const t = parts.filter((p: { thought?: boolean }) => !p.thought).map((p: { text?: string }) => p.text || "").join("");
+              if (t) { ctl.enqueue(enc.encode(t)); sent += t.length; }
+            } catch { /* partial line */ }
+          }
+        }
+      } catch (e) { console.error("stream", e); }
+      if (!sent) { await onEmpty(); ctl.enqueue(enc.encode("Sorry, I couldn't come up with an answer. Please ask again in a different way.")); }
+      ctl.close();
+    },
+  });
 }
 
 /* ---------------- Request ---------------- */
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const asUser = createClient(SB_URL, ANON, { global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } }, auth: { persistSession: false } });
-  const { data: left, error: quotaErr } = await asUser.rpc("chat_take_quota");
-  if (quotaErr) return json({ error: quotaErr.message }, 429);
+  const server = createClient(SB_URL, SERVICE, { auth: { persistSession: false } });
+
+  // quota, settings, website knowledge and the request body: all at the same time
+  const [quota, cfgRes, knowledge, input] = await Promise.all([
+    asUser.rpc("chat_take_quota"), server.rpc("chat_config"), siteKnowledge(), req.json().catch(() => ({})),
+  ]);
+  if (quota.error) return json({ error: quota.error.message }, 429);
+  const refund = async () => { await asUser.rpc("chat_refund"); };
 
   try {
-    const { messages = [], context = null, image = null } = await req.json();
-    const server = createClient(SB_URL, SERVICE, { auth: { persistSession: false } });
-    const { data: cfg, error: cfgErr } = await server.rpc("chat_config");
-    if (cfgErr || !cfg?.key) throw new Error("Pookie is not set up yet (Gemini key missing).");
+    const cfg = cfgRes.data;
+    if (cfgRes.error || !cfg?.key) throw new Error("Pookie is not set up yet (Gemini key missing).");
+    const { messages = [], context = null, image = null } = input as { messages?: { role: string; text: string }[]; context?: unknown; image?: string };
 
     const history = (Array.isArray(messages) ? messages : []).slice(-12)
-      .filter((m: { role: string; text: string }) => m && typeof m.text === "string" && m.text.trim())
-      .map((m: { role: string; text: string }) => ({ role: m.role === "model" ? "model" : "user", parts: [{ text: m.text.slice(0, 2000) }] }));
-    if (!history.length || history[history.length - 1].role !== "user") return json({ error: "Please type a question." }, 400);
+      .filter((m) => m && typeof m.text === "string" && m.text.trim())
+      .map((m) => ({ role: m.role === "model" ? "model" : "user", parts: [{ text: m.text.slice(0, 2000) }] as Record<string, unknown>[] }));
+    if (!history.length || history[history.length - 1].role !== "user") { await refund(); return json({ error: "Please type a question." }, 400); }
     if (image && typeof image === "string" && image.length < 1_500_000) {
-      history[history.length - 1].parts.push({ inlineData: { mimeType: "image/jpeg", data: image } } as never);
+      history[history.length - 1].parts.push({ inlineData: { mimeType: "image/jpeg", data: image } });
     }
 
     const today = new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "long", year: "numeric" });
     const system = [
-      BASE_KNOWLEDGE,
-      `Today's date: ${today}.`,
-      await siteKnowledge(),
+      BASE_KNOWLEDGE, `Today's date: ${today}.`, knowledge,
       cfg.notes ? "NOTES FROM RWB ADMINS (trust these for RWB-specific info):\n" + cfg.notes : "",
       context ? "ABOUT THIS RIDER (from their own app data, use only if relevant):\n" + JSON.stringify(context).slice(0, 1500) : "",
     ].filter(Boolean).join("\n\n");
 
-    const reply = await gemini(cfg.key, String(cfg.models).split(",").map((s: string) => s.trim()).filter(Boolean), {
+    const upstream = await openStream(cfg.key, String(cfg.models).split(",").map((s: string) => s.trim()).filter(Boolean), {
       systemInstruction: { parts: [{ text: system }] },
       contents: history,
-      generationConfig: { temperature: 0.4, maxOutputTokens: 4096 },
+      generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
     });
-    return json({ reply, left });
+    return new Response(textStream(upstream, refund), {
+      headers: { ...CORS, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache", "x-left": String(quota.data ?? "") },
+    });
   } catch (e) {
-    await asUser.rpc("chat_refund");
+    await refund();
     console.error(e);
     return json({ error: "Pookie couldn't answer right now. Please try again in a minute.", detail: String(e).slice(0, 300) }, 502);
   }

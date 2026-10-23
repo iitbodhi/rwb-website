@@ -120,14 +120,31 @@ async function supabaseApi(url, key) {
         testPush: async () => must(await sb.rpc('admin_test_push')),
 
         /* ---- Pookie ---- */
-        async ask(messages, context, image) {
-            const { data, error } = await sb.functions.invoke('ask-ronin', { body: { messages, context, image } });
-            if (error) {
+        /* streams the answer: onText(textSoFar) is called as words arrive */
+        async ask(messages, context, image, onText) {
+            const token = (await sb.auth.getSession()).data.session?.access_token;
+            const ctrl = new AbortController(); let got = false;
+            const timer = setTimeout(() => { if (!got) ctrl.abort(); }, 45000);
+            let r;
+            try {
+                r = await fetch(url + '/functions/v1/ask-ronin', {
+                    method: 'POST', signal: ctrl.signal,
+                    headers: { 'Content-Type': 'application/json', apikey: key, Authorization: 'Bearer ' + (token || key) },
+                    body: JSON.stringify({ messages, context, image })
+                });
+            } catch (e) { clearTimeout(timer); throw new Error(e.name === 'AbortError' ? 'Pookie is taking too long. Please try again.' : 'No internet connection. Please try again.'); }
+            if (!r.ok || !(r.headers.get('content-type') || '').startsWith('text/plain')) {
+                clearTimeout(timer);
                 let msg = 'Pookie couldn\'t answer right now. Please try again.';
-                try { const b = await error.context.json(); if (b?.error) msg = b.error; } catch { if (/fetch|network/i.test(error.message)) msg = 'No internet connection. Please try again.'; }
+                try { const b = await r.json(); if (b?.error) msg = b.error; } catch { /* keep default */ }
                 throw new Error(msg);
             }
-            return data;
+            const left = r.headers.get('x-left');
+            const reader = r.body.getReader(), dec = new TextDecoder(); let text = '';
+            try {
+                for (;;) { const { value, done } = await reader.read(); if (done) break; got = true; text += dec.decode(value, { stream: true }); onText?.(text); }
+            } finally { clearTimeout(timer); }
+            return { reply: text, left: left === '' || left == null ? null : Number(left) };
         },
         chatNotes: async () => must(await sb.rpc('admin_get_chat_notes')),
         saveChatNotes: async notes => must(await sb.rpc('admin_set_chat_notes', { p_notes: notes })),
@@ -270,6 +287,8 @@ function demoApi() {
             const reply = /chain/.test(q) ? 'For the Ronin 225 chain:\n\n1. **Clean** it every 500–700 km (sooner after rain) with a chain cleaner and brush.\n2. **Dry** it, then **lube** the inner side of the rollers while turning the wheel.\n3. Let it sit 15–20 minutes before riding.\n\nCheck the slack too. If it looks loose or kinked, get it adjusted at a service centre.'
                 : '*(Demo mode: this is a sample answer.)*\n\nOnce Pookie is connected, I can help with your Ronin 225, maintenance, riding tips and using the RWB App.';
             db.chatLeft = (db.chatLeft ?? 20) - 1; save();
+            const onText = arguments[3]; let shown = '';
+            for (const w of reply.split(/(?<= )/)) { shown += w; onText?.(shown); await new Promise(r => setTimeout(r, 25)); }
             return { reply, left: db.chatLeft };
         },
         chatNotes: async () => db.chatNotes || '', async saveChatNotes(n) { db.chatNotes = n; save(); },

@@ -92,7 +92,10 @@ function mileageStats(logs) {
 
 /* ---------- router ---------- */
 const ROUTES = { home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat };
-async function render() {
+/* screens render one after another, so the screen the rider tapped last always wins */
+let renderChain = Promise.resolve();
+function render() { renderChain = renderChain.then(doRender, doRender); return renderChain; }
+async function doRender() {
     const [name, param] = (location.hash.slice(1) || 'home').split('?')[0].split('/');
     state.param = param || null;
     const view = ROUTES[name] || viewHome;
@@ -1058,13 +1061,24 @@ async function sendChat(text) {
     chat.msgs.push({ role: 'user', text, img: imgUrl && imgUrl.length < 400e3 ? imgUrl : null });
     const q = $('#q'); if (q) { q.value = ''; q.style.height = 'auto'; }
     chat.busy = true; drawChat();
+    let live = null, frame = 0;
+    const onText = t => {
+        if (!live) { live = { role: 'model', text: '' }; chat.msgs.push(live); chat.busy = false; drawChat(); }
+        live.text = t;
+        if (!frame) frame = requestAnimationFrame(() => {   /* redraw at most once per screen refresh */
+            frame = 0; const el = [...document.querySelectorAll('#chatlog .msg.model')].pop();
+            if (el) { el.innerHTML = md(live.text); window.scrollTo({ top: document.body.scrollHeight }); }
+        });
+    };
     try {
-        const r = await api.ask(chat.msgs.filter(m => !m.err).map(m => ({ role: m.role, text: m.text })), riderContext(), imgB64);
-        chat.msgs.push({ role: 'model', text: r.reply });
+        const history = chat.msgs.filter(m => !m.err).map(m => ({ role: m.role, text: m.text }));
+        const r = await api.ask(history, riderContext(), imgB64, onText);
+        if (live) live.text = r.reply; else chat.msgs.push({ role: 'model', text: r.reply });
         chat.left = r.left;
         const l = $('#left'); if (l && r.left != null) l.textContent = ` ${r.left} question${r.left === 1 ? '' : 's'} left today.`;
     } catch (e) {
-        chat.msgs.push({ role: 'model', text: e.message || 'Something went wrong. Please try again.', err: true });
+        if (live && live.text) live.text += '\n\n*(Connection lost. The answer may be incomplete.)*';
+        else { if (live) chat.msgs.pop(); chat.msgs.push({ role: 'model', text: e.message || 'Something went wrong. Please try again.', err: true }); }
     } finally {
         chat.busy = false; saveChat(); drawChat();
     }
