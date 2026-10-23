@@ -111,7 +111,7 @@ const seenNews = () => { try { return Number(localStorage.getItem('rwb-news-seen
 const unread = () => (state.news || []).some(n => n.id > seenNews());
 const initials = m => (m?.full_name || '?').split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1>${right}
-    <a class="icon-btn" href="#chat" aria-label="Ask RWB AI">${AI_ICON}</a>
+    <a class="icon-btn" href="#chat" aria-label="Ask Pookie">${AI_ICON}</a>
     <a class="icon-btn bell" href="#news" aria-label="Announcements${unread() ? ' (new)' : ''}">${BELL}${unread() ? '<i class="dot"></i>' : ''}</a>
     <a class="avatar" href="#me" aria-label="My profile">${esc(initials(state.me))}</a></header>`;
 
@@ -204,7 +204,7 @@ async function viewHome() {
             <div class="stat"><b>${last ? km(last.odometer_km).replace(' km', '') : '–'}</b><span>Last service (km)</span></div>
             <div class="stat"><b>${rs(spent)}</b><span>Service spend ${yr}</span></div>
         </div></section>
-        <section class="section"><a class="card tap row ai-card" href="#chat" style="text-decoration:none"><span class="ai-badge sm">${AI_ICON}</span><div class="grow"><h3>Ask RWB AI</h3><p class="small muted">Bike trouble, maintenance or app help. Ask anything.</p></div><span class="kmpl">›</span></a></section>
+        <section class="section"><a class="card tap row ai-card" href="#chat" style="text-decoration:none"><span class="ai-badge sm">${AI_ICON}</span><div class="grow"><h3>Ask Pookie</h3><p class="small muted">Bike trouble, maintenance or app help. Ask anything.</p></div><span class="kmpl">›</span></a></section>
         ${pushAsk ? `<section class="section"><div class="card"><h3>🔔 Turn on notifications</h3><p class="small muted" style="margin-bottom:12px">Get birthdays, new Motomart posts and RWB announcements on this phone.</p><div class="btns"><button class="btn sm" data-act="push-on">Turn on</button><button class="btn sm ghost" data-act="push-later">Not now</button></div></div></section>` : ''}
         ${news.length ? `<section class="section"><h2>Latest from RWB <a href="#news">See all</a></h2>${newsCard(news[0])}</section>` : ''}
         <section class="section"><div class="btns"><button class="btn" data-act="add-fuel">＋ Fuel fill-up</button><button class="btn ghost" data-act="add-service">＋ Service</button></div></section>
@@ -500,7 +500,7 @@ async function viewGuides() {
             <button role="tab" aria-selected="${tab === 'maint'}" data-act="tab" data-tab="maint">Maintenance</button>
             <button role="tab" aria-selected="${tab === 'acc'}" data-act="tab" data-tab="acc">Accessories</button></div>
         <div id="guide-body"><p class="muted">Loading…</p></div>
-        <a class="card tap row ai-card section" href="#chat" style="text-decoration:none;display:flex"><span class="ai-badge sm">${AI_ICON}</span><div class="grow"><h3>Can't find it?</h3><p class="small muted">Ask RWB AI</p></div><span class="kmpl">›</span></a>`;
+        <a class="card tap row ai-card section" href="#chat" style="text-decoration:none;display:flex"><span class="ai-badge sm">${AI_ICON}</span><div class="grow"><h3>Can't find it?</h3><p class="small muted">Ask Pookie</p></div><span class="kmpl">›</span></a>`;
     actions = { tab: el => { state.guideTab = el.dataset.tab; viewGuides(); } };
     tab === 'maint' ? drawMaint() : drawAcc();
 }
@@ -632,7 +632,7 @@ async function viewAdmin() {
             <button role="tab" aria-selected="${tab === 'motomart'}" data-act="tab" data-tab="motomart">Motomart<span id="mm-count"></span></button>
             <button role="tab" aria-selected="${tab === 'members'}" data-act="tab" data-tab="members">Members</button>
             <button role="tab" aria-selected="${tab === 'bdays'}" data-act="tab" data-tab="bdays">Birthdays</button>
-            <button role="tab" aria-selected="${tab === 'ai'}" data-act="tab" data-tab="ai">RWB AI</button></div>
+            <button role="tab" aria-selected="${tab === 'ai'}" data-act="tab" data-tab="ai">Pookie</button></div>
         <div id="admin-body"><p class="muted">Loading…</p></div>`;
     actions = { tab: el => { state.adminTab = el.dataset.tab; viewAdmin(); }, mfilter: el => { state.adminTab = 'members'; state.memberFilter = el.dataset.f; state.adminSearch = ''; viewAdmin(); } };
     load.listings(true).then(ls => { const n = ls.filter(l => l.status === 'pending').length; const c = $('#mm-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
@@ -962,7 +962,7 @@ async function adminMotomart() {
     actions.listing = el => listingDetail(pend.find(l => String(l.id) === el.dataset.id));
 }
 
-/* =================== RWB AI chatbot =================== */
+/* =================== Pookie chatbot =================== */
 const CHAT_KEY = () => 'rwb-chat-' + (state.me?.id || 'x');
 const chat = { msgs: null, busy: false, image: null, left: null };
 const loadChat = () => { if (chat.msgs) return; try { chat.msgs = JSON.parse(localStorage.getItem(CHAT_KEY())) || []; } catch { chat.msgs = []; } };
@@ -1000,16 +1000,16 @@ function riderContext() {
 async function viewChat() {
     loadChat();
     await Promise.all([load.services().catch(() => []), load.fuel().catch(() => [])]);
-    app.innerHTML = top('RWB AI', chat.msgs.length ? '<button class="btn sm ghost" data-act="clear">New chat</button>' : '') + `
+    app.innerHTML = top('Pookie', chat.msgs.length ? '<button class="btn sm ghost" data-act="clear">New chat</button>' : '') + `
         <div id="chatlog" class="chatlog" aria-live="polite"></div>
         <form id="ask" class="askbar">
             <div id="att" class="att" hidden></div>
             <div class="row">
                 <label class="icon-btn" aria-label="Add a photo" title="Add a photo">📷<input type="file" accept="image/*" id="aphoto" hidden></label>
-                <textarea id="q" rows="1" maxlength="1500" placeholder="Ask RWB AI…" aria-label="Your question"></textarea>
+                <textarea id="q" rows="1" maxlength="1500" placeholder="Ask Pookie…" aria-label="Your question"></textarea>
                 <button class="btn send" aria-label="Send">➤</button>
             </div>
-            <p class="small muted ai-note">RWB AI uses Google Gemini and can make mistakes. Check anything safety-related with a mechanic. Don't share personal details.<span id="left"></span></p>
+            <p class="small muted ai-note">Pookie uses Google Gemini and can make mistakes. Check anything safety-related with a mechanic. Don't share personal details.<span id="left"></span></p>
         </form>`;
     drawChat();
     const q = $('#q'), form = $('#ask');
@@ -1040,7 +1040,7 @@ function drawChat() {
     const log = $('#chatlog'); if (!log) return;
     log.innerHTML = chat.msgs.length ? chat.msgs.map(m => `<div class="msg ${m.role}">${m.img ? `<img src="${esc(m.img)}" alt="" class="msg-img">` : ''}${m.role === 'model' ? md(m.text) : `<p>${esc(m.text).replace(/\n/g, '<br>')}</p>`}${m.err ? '<p class="small" style="margin-top:6px"><button class="btn sm ghost" data-act="retry">Try again</button></p>' : ''}</div>`).join('')
         + (chat.busy ? '<div class="msg model typing"><span></span><span></span><span></span></div>' : '')
-        : `<div class="chat-hello"><div class="ai-badge">${AI_ICON}</div><h2>Hi ${esc(firstName(state.me))}, I'm RWB AI</h2>
+        : `<div class="chat-hello"><div class="ai-badge">${AI_ICON}</div><h2>Hi ${esc(firstName(state.me))}, I'm Pookie</h2>
             <p class="muted">Ask me about your Ronin 225, maintenance, a strange noise, riding tips, or how to use this app. You can also send a photo of a part or a warning light.</p>
             <div class="chips sugg">${SUGGEST.map(s => `<button class="chip" data-act="suggest">${esc(s)}</button>`).join('')}</div></div>`;
     actions.retry = () => { const last = [...chat.msgs].reverse().find(m => m.role === 'user'); chat.msgs = chat.msgs.filter(m => !m.err); if (last) { chat.msgs.pop(); sendChat(last.text); } };
@@ -1070,14 +1070,14 @@ async function sendChat(text) {
     }
 }
 
-/* Admin: teach RWB AI RWB-specific things */
+/* Admin: teach Pookie RWB-specific things */
 async function adminAI() {
     const notes = await api.chatNotes();
-    $('#admin-body').innerHTML = `<div class="card"><h3>Teach RWB AI</h3>
-        <p class="small muted" style="margin:4px 0 12px">Anything written here, RWB AI knows and trusts. For example: patron service centres with area and phone, RWB ride rules, the sticker process, recommended oil brands, tyre pressures your coordinators use, upcoming ride details. Members never see this text directly.</p>
+    $('#admin-body').innerHTML = `<div class="card"><h3>Teach Pookie</h3>
+        <p class="small muted" style="margin:4px 0 12px">Anything written here, Pookie knows and trusts. For example: patron service centres with area and phone, RWB ride rules, the sticker process, recommended oil brands, tyre pressures your coordinators use, upcoming ride details. Members never see this text directly.</p>
         <form id="ainotes"><textarea name="notes" rows="12" maxlength="8000" placeholder="e.g. Patron service centres:\n- Example Motors, Salt Lake Sector 5 (10% off for RWB members)\n\nRide rules: helmet and riding jacket compulsory on all RWB rides…">${esc(notes)}</textarea>
         <button class="btn block">Save notes</button></form></div>`;
-    $('#ainotes').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { await api.saveChatNotes(e.target.notes.value.trim()); toast('Saved. RWB AI will use this from the next question.'); }); };
+    $('#ainotes').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { await api.saveChatNotes(e.target.notes.value.trim()); toast('Saved. Pookie will use this from the next question.'); }); };
 }
 
 /* =================== Boot =================== */

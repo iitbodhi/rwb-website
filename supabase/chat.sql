@@ -1,5 +1,5 @@
 -- =====================================================================
--- RWB App: "RWB AI" chatbot (free, Google Gemini)
+-- RWB App: "Pookie" chatbot (free, Google Gemini)
 -- Run in Supabase > SQL Editor. Safe to run again.
 -- The Gemini key itself is added separately (private file), never on GitHub.
 -- =====================================================================
@@ -30,13 +30,13 @@ begin
   if not is_member() then raise exception 'Members only'; end if;
   if is_admin() then lim := lim * 3; end if;
   if (select coalesce(sum(count), 0) from chat_usage where day = d) >= glb then
-    raise exception 'RWB AI has answered a lot of questions today and is resting. Please try again tomorrow.';
+    raise exception 'Pookie has answered a lot of questions today and is resting. Please try again tomorrow.';
   end if;
   insert into chat_usage (user_id, day, count) values (auth.uid(), d, 1)
   on conflict (user_id, day) do update set count = chat_usage.count + 1
   returning count into c;
   if c > lim then
-    raise exception 'You have used all % questions for today. RWB AI will be back for you tomorrow.', lim;
+    raise exception 'You have used all % questions for today. Pookie will be back for you tomorrow.', lim;
   end if;
   return lim - c;
 end $$;
