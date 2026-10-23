@@ -112,8 +112,9 @@ const load = {
 function tanks(logs) {
     const out = []; let start = null, litres = 0, amount = 0, priced = true;
     for (const f of logs) {
-        if (!start) { if (f.full_tank) start = f; continue; }
         litres += Number(f.litres); amount += Number(f.amount || 0); priced = priced && f.amount != null;
+        /* the very first full tank counts too when it has a Trip A reading (Trip A was reset at an earlier full tank) */
+        if (!start && !(f.full_tank && f.trip_a_km > 0)) { if (f.full_tank) { start = f; litres = 0; amount = 0; priced = true; } continue; }
         if (f.full_tank) {
             const dist = f.trip_a_km != null ? Number(f.trip_a_km) : f.odometer_km - start.odometer_km;
             if (dist > 0 && litres > 0) out.push({ end: f, dist, litres, kmpl: dist / litres, amount: priced ? amount : null });
@@ -169,6 +170,7 @@ const globalActions = {
     'reset-demo': () => { if (confirmBox('Reset the demo data?')) { api.resetDemo(); Object.assign(state, { services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null, board: null, dir: null }); boot(); } },
     'add-service': () => serviceForm(),
     'add-fuel': () => fuelForm(),
+    'odo': () => odoSheet(),
     'wish': () => wishSheet(state.bdays.filter(b => b.day === todayISO()))
 };
 
@@ -237,39 +239,78 @@ const ICON = {
 
 /* the newest odometer reading: from whichever entry (service or fill-up) has the latest date */
 function latestOdo(services = [], fuel = []) {
-    const all = [...services.map(s => ({ km: s.odometer_km, d: s.service_date, src: 'service' })), ...fuel.map(f => ({ km: f.odometer_km, d: f.fill_date, src: 'fill-up' }))]
+    const me = state.me || {}, manual = me.odo_km != null && me.odo_date ? [{ km: me.odo_km, d: me.odo_date, src: 'update', manual: true }] : [];
+    const all = [...manual, ...services.map(s => ({ km: s.odometer_km, d: s.service_date, src: 'service' })), ...fuel.map(f => ({ km: f.odometer_km, d: f.fill_date, src: 'fill-up' }))]
         .filter(x => x.km > 0).sort((a, b) => b.d.localeCompare(a.d) || b.km - a.km);
     return all[0] || null;
 }
 
-/* the instrument-cluster card: odometer in the middle, the ring fills up as the next service comes closer */
+function odoSheet() {
+    const cur = latestOdo(state.services || [], state.fuel || []);
+    openSheet('Update odometer', `<form id="of">
+        <p class="small muted">Enter the km shown on your bike's odometer right now. It shows on Home and the leaderboard, and fills in by itself next time you add fuel or a service.</p>
+        <label>Odometer (km)<input type="number" name="km" required min="0" max="2000000" inputmode="numeric" value="${cur?.km ?? ''}" autofocus></label>
+        ${cur ? `<p class="small muted">Last reading: ${km(cur.km)} on ${fmtDayMonth(cur.d)}</p>` : ''}
+        <button class="btn block">Save</button></form>`, body => {
+        const f = body.querySelector('#of'); setTimeout(() => f.km.select(), 50);
+        f.onsubmit = e => {
+            e.preventDefault(); const v = Math.round(Number(f.km.value));
+            if (cur && v < cur.km && !confirmBox(`${km(v)} is lower than your last reading (${km(cur.km)}). Save anyway?`)) return;
+            busy(e.submitter, async () => { const m = await api.updateMe({ odo_km: v, odo_date: todayISO() }); Object.assign(state.me, m || { odo_km: v, odo_date: todayISO() }); state.board = null; closeSheet(); render(); toast('Odometer updated'); });
+        };
+    });
+}
+const currentOdo = () => latestOdo(state.services || [], state.fuel || [])?.km ?? '';
+
+/* ---------- next service, from the TVS Ronin service chart (owner's manual) ----------
+   1st free: 750–1,000 km or 30–45 days · 2nd free: 5,500–6,000 km or 6 months · 3rd free: 11,500–12,000 km or 12 months
+   then every 6,000 km or 6 months, whichever comes first. Worked out automatically; riders can't edit it. */
+const addMonths = (iso, n) => { const d = new Date(iso + 'T00:00:00'); const day = d.getDate(); d.setMonth(d.getMonth() + n); if (d.getDate() < day) d.setDate(0); return d.toISOString().slice(0, 10); };
+const ORD = ['1st', '2nd', '3rd'];
+function nextService(services = [], odo = 0) {
+    const last = [...services].filter(s => s.odometer_km > 0).sort((a, b) => b.service_date.localeCompare(a.service_date) || b.odometer_km - a.odometer_km)[0];
+    let r;
+    if (!last) {
+        r = odo < 1000 ? { km: 1000, base: 0, label: '1st free service', date: null }
+            : { km: Math.ceil((odo + 1) / 6000) * 6000, base: Math.floor(odo / 6000) * 6000, label: 'Next service', date: null, guess: true };
+    } else {
+        const b = last.odometer_km, n = last.service_type === 'free' && last.service_no ? last.service_no : b < 3000 ? 1 : b < 9000 ? 2 : b < 15000 ? 3 : 4;
+        if (n === 1) r = { km: 6000, date: addMonths(last.service_date, 5), label: '2nd free service' };
+        else if (n === 2) r = { km: Math.max(b + 6000, 11500), date: addMonths(last.service_date, 6), label: '3rd free service' };
+        else r = { km: b + 6000, date: addMonths(last.service_date, 6), label: 'Regular service' };
+        r.base = b; r.from = last.service_date;
+    }
+    r.kmLeft = r.km - odo;
+    r.daysLeft = r.date ? Math.round((new Date(r.date) - new Date(todayISO())) / 864e5) : null;
+    const pk = r.km > r.base ? (odo - r.base) / (r.km - r.base) : 1;
+    const pd = r.date && r.from ? 1 - r.daysLeft / Math.max(1, Math.round((new Date(r.date) - new Date(r.from)) / 864e5)) : 0;
+    r.p = Math.min(1, Math.max(0, pk, pd));
+    r.status = r.kmLeft <= 0 || (r.daysLeft != null && r.daysLeft <= 0) ? 'due' : r.kmLeft <= 500 || (r.daysLeft != null && r.daysLeft <= 15) ? 'soon' : '';
+    return r;
+}
+function dueText(n) {
+    if (n.status === 'due') return n.kmLeft <= 0 ? `Service due. It was due at ${km(n.km)}` : `Service due. It was due on ${fmtDayMonth(n.date)}`;
+    const byKm = `<b>${km(n.kmLeft)}</b>`, byDate = n.date ? `<b>${n.daysLeft} day${n.daysLeft === 1 ? '' : 's'}</b>` : '';
+    return `${n.label} in ${byKm}${byDate ? ` or ${byDate}` : ''}`;
+}
+
+/* the instrument-cluster card: odometer in the middle (tap to update), the ring fills up as the next service comes closer */
 function cluster(services, fuel) {
     const last = latestOdo(services, fuel), odo = last?.km || 0;
-    const due = services.find(s => s.next_due_km || s.next_due_date);
     const ms = mileageStats(fuel), yr = String(new Date().getFullYear());
     const spent = services.filter(s => s.service_date.startsWith(yr)).reduce((a, s) => a + Number(s.cost || 0), 0);
-    let p = 0, cap = 'Add your next service date or km when you log a service', state_ = '';
-    if (due?.next_due_km) {
-        const span = due.next_due_km - due.odometer_km, left = due.next_due_km - odo;
-        p = span > 0 ? Math.min(1, Math.max(0, (odo - due.odometer_km) / span)) : 1;
-        cap = left > 0 ? `Next service in <b>${km(left)}</b>` : `Service due. It was due at ${km(due.next_due_km)}`;
-        state_ = left <= 0 ? 'due' : left < 500 ? 'soon' : '';
-    } else if (due?.next_due_date) {
-        const days = Math.round((new Date(due.next_due_date) - new Date(todayISO())) / 864e5);
-        const span = Math.max(1, Math.round((new Date(due.next_due_date) - new Date(due.service_date)) / 864e5));
-        p = Math.min(1, Math.max(0, 1 - days / span));
-        cap = days > 0 ? `Next service in <b>${days} day${days === 1 ? '' : 's'}</b>` : 'Service due now';
-        state_ = days <= 0 ? 'due' : days < 10 ? 'soon' : '';
-    }
+    const n = nextService(services, odo), p = odo ? n.p : 0, state_ = odo ? n.status : '';
+    const cap = !odo ? 'Tap the dial and enter the km on your bike' : dueText(n);
+    const alert = state_ ? `<div class="svc-alert ${state_}"><span class="svc-dot"></span><span class="grow"><b>${state_ === 'due' ? 'Service due' : 'Service due soon'}</b><span>${n.label} · at ${km(n.km)}${n.date ? ` or by ${fmtDayMonth(n.date)}` : ''}, whichever comes first</span></span><button class="btn sm" data-act="add-service">Log it</button></div>` : '';
     const R = 52, C = 2 * Math.PI * R, ARC = C * 0.75;      /* a 270° dial, like a tachometer */
     return `<section class="cluster ${state_}">
         <div class="cl-bike"><span>${esc(state.me.bike || 'My bike')}</span>${state.me.vrn ? `<span class="cl-vrn">${esc(state.me.vrn)}</span>` : ''}</div>
-        <div class="dial" role="img" aria-label="Odometer ${odo ? odo.toLocaleString('en-IN') + ' km' : 'not recorded yet'}">
+        <button class="dial" data-act="odo" aria-label="Odometer ${odo ? odo.toLocaleString('en-IN') + ' km' : 'not recorded yet'}. Tap to update">
             <svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="${R}" stroke-dasharray="${ARC} ${C}"/>
                 <circle class="fill" cx="60" cy="60" r="${R}" stroke-dasharray="${(ARC * p).toFixed(1)} ${C}"/></svg>
-            <div class="dial-read"><b>${odo ? odo.toLocaleString('en-IN') : '–'}</b><span>${last ? `km, from your ${fmtDayMonth(last.d)} ${last.src}` : 'add a fill-up or service'}</span></div>
-        </div>
-        <p class="cl-cap">${cap}</p>
+            <div class="dial-read"><b>${odo ? odo.toLocaleString('en-IN') : '–'}</b><span>${last ? `km, ${last.manual ? 'updated' : `from your`} ${fmtDayMonth(last.d)}${last.manual ? '' : ' ' + last.src}` : 'tap to enter km'}</span><i class="dial-edit">Tap to update</i></div>
+        </button>
+        ${alert || `<p class="cl-cap">${cap}</p>`}
         <div class="cl-row">
             <div><b>${ms.avg ? ms.avg.toFixed(1) : '–'}</b><span>km/l average</span></div>
             <div><b>${ms.cpk ? '₹' + ms.cpk.toFixed(2) : '–'}</b><span>fuel per km</span></div>
@@ -337,13 +378,14 @@ async function viewHome() {
 async function viewService() {
     const list = await load.services();
     const total = list.reduce((a, s) => a + Number(s.cost || 0), 0);
-    const due = list.find(s => s.next_due_km || s.next_due_date);
+    const odo = latestOdo(list, state.fuel || await load.fuel())?.km || 0, n = nextService(list, odo);
     app.innerHTML = top('Service') + `
         <div class="stats">
             <div class="stat"><b>${list.length}</b><span>Services logged</span></div>
             <div class="stat"><b>${rs(total)}</b><span>Total spent</span></div>
-            <div class="stat accent"><b>${due ? (due.next_due_km ? km(due.next_due_km).replace(' km', '') : fmtDayMonth(due.next_due_date)) : '–'}</b><span>${due?.next_due_km ? 'Next due (km)' : 'Next due'}</span></div>
         </div>
+        ${odo ? `<div class="card next-svc ${n.status}"><div class="row"><span class="grow"><span class="small muted">${esc(n.label)}${n.guess ? ' (log your last service for exact dates)' : ''}</span><b>${km(n.km)}${n.date ? ` <span class="muted" style="font-weight:500">or by</span> ${fmtDate(n.date)}` : ''}</b><span class="small muted">${n.status === 'due' ? 'Due now' : `${km(Math.max(0, n.kmLeft))} to go${n.daysLeft != null ? ` · ${n.daysLeft} days left` : ''}`}, whichever comes first</span></span><span class="svc-chip ${n.status}">${n.status === 'due' ? 'Due' : n.status === 'soon' ? 'Soon' : 'On track'}</span></div>
+            <p class="small muted" style="margin-top:8px">Worked out from the TVS Ronin service chart: every 6,000 km or 6 months after the free services.</p></div>` : ''}
         <section class="section">${list.length ? `<div class="list">${list.map(serviceCard).join('')}</div>` :
             `<div class="card empty"><b>No services yet</b>Add your last service: date, km, what was done and the bill. It's your bike's history in one place.</div>`}</section>
         <button class="btn fab" data-act="add-service">＋ Add service</button>`;
@@ -367,7 +409,6 @@ function serviceDetail(s) {
             <dt>Odometer</dt><dd>${km(s.odometer_km)}</dd>
             ${s.service_center ? `<dt>Where</dt><dd>${esc(s.service_center)}</dd>` : ''}
             <dt>Cost</dt><dd>${rs(s.cost)}</dd>
-            ${s.next_due_km || s.next_due_date ? `<dt>Next due</dt><dd>${[s.next_due_km && km(s.next_due_km), s.next_due_date && fmtDate(s.next_due_date)].filter(Boolean).join(' or ')}</dd>` : ''}
             ${s.notes ? `<dt>Notes</dt><dd>${esc(s.notes)}</dd>` : ''}
         </dl>
         ${s.items?.length ? `<p class="small muted">Work done</p><div class="tags" style="margin-bottom:16px">${s.items.map(i => `<span class="badge">${esc(i)}</span>`).join('')}</div>` : ''}
@@ -426,10 +467,9 @@ async function compressImage(file, maxSide = 1400, target = 220e3) {
 }
 
 function serviceForm(s = null) {
-    const r = s ? { ...s } : { service_date: todayISO(), service_type: 'paid', items: [] };
+    const r = s ? { ...s } : { service_date: todayISO(), service_type: 'paid', items: [], odometer_km: currentOdo() };
     const known = new Set(C.SERVICE_ITEMS || []);
     const extra = (r.items || []).filter(i => !known.has(i));
-    const centres = [...new Set((state.services || []).map(x => x.service_center).filter(Boolean))];
     let file = null;
     openSheet(s ? 'Edit service' : 'Add service', `<form id="sf">
         <div class="grid2">
@@ -440,16 +480,12 @@ function serviceForm(s = null) {
             <label>Service type<select name="service_type">${Object.entries(SERVICE_TYPES).map(([k, v]) => `<option value="${k}"${k === r.service_type ? ' selected' : ''}>${v}</option>`).join('')}</select></label>
             <label id="sno-wrap"><span id="sno-label">Which one?</span><select name="service_no"><option value="">–</option>${Array.from({ length: 12 }, (_, i) => `<option${r.service_no === i + 1 ? ' selected' : ''}>${i + 1}</option>`).join('')}</select></label>
         </div>
-        <label>Service centre<input name="service_center" list="centres" placeholder="Where was it done?" value="${esc(r.service_center || '')}"><datalist id="centres">${centres.map(c => `<option value="${esc(c)}">`).join('')}</datalist></label>
+        <div class="field"><span class="flabel">Service centre</span>${centrePicker(r.service_center)}</div>
         <fieldset><legend>Work done <span class="hint muted small">(tap all that apply)</span></legend>
             <div class="chips" id="items">${[...known, ...extra].map(i => `<button type="button" class="chip" aria-pressed="${r.items.includes(i)}">${esc(i)}</button>`).join('')}</div>
             <div class="row"><input id="other-item" placeholder="Something else? Type and add" class="grow"><button type="button" class="btn sm ghost" id="add-item">Add</button></div>
         </fieldset>
         <label>Total cost (₹)<input type="number" name="cost" min="0" step="1" inputmode="numeric" value="${esc(r.cost ?? '')}"></label>
-        <div class="grid2">
-            <label>Next service at (km)<input type="number" name="next_due_km" min="0" inputmode="numeric" value="${esc(r.next_due_km ?? '')}"></label>
-            <label>or by date<input type="date" name="next_due_date" value="${esc(r.next_due_date || '')}"></label>
-        </div>
         <label>Notes<textarea name="notes" maxlength="2000" placeholder="Anything worth remembering">${esc(r.notes || '')}</textarea></label>
         <div>
             <label class="file-pick" id="pick"><input type="file" accept="image/*,.heic,.heif,application/pdf"><span id="pick-text">${r.bill_path ? '🧾 Bill attached. Tap to replace' : '📷 Add bill / invoice (photo or PDF)'}</span></label>
@@ -460,6 +496,7 @@ function serviceForm(s = null) {
         const f = body.querySelector('#sf'), type = f.service_type, sno = body.querySelector('#sno-wrap');
         const syncType = () => { sno.hidden = !['free', 'amc'].includes(type.value); body.querySelector('#sno-label').textContent = type.value === 'amc' ? 'Which AMC service?' : 'Which free service?'; };
         type.onchange = syncType; syncType();
+        const centre = bindCentrePicker(body);
         const chips = body.querySelector('#items');
         chips.onclick = e => { const c = e.target.closest('.chip'); if (c) c.setAttribute('aria-pressed', c.getAttribute('aria-pressed') !== 'true'); };
         const addOther = () => { const v = body.querySelector('#other-item').value.trim(); if (!v) return; chips.insertAdjacentHTML('beforeend', `<button type="button" class="chip" aria-pressed="true">${esc(v)}</button>`); body.querySelector('#other-item').value = ''; };
@@ -480,13 +517,71 @@ function serviceForm(s = null) {
                 id: s?.id, bill_path: r.bill_path || null,
                 service_date: d.service_date, odometer_km: num(d.odometer_km), service_type: d.service_type,
                 service_no: ['free', 'amc'].includes(d.service_type) ? num(d.service_no) : null,
-                service_center: d.service_center.trim() || null,
+                service_center: centre.value(),
                 items: [...chips.querySelectorAll('.chip[aria-pressed=true]')].map(c => c.textContent),
-                cost: num(d.cost), next_due_km: num(d.next_due_km), next_due_date: d.next_due_date || null, notes: d.notes.trim() || null
+                cost: num(d.cost), next_due_km: null, next_due_date: null, notes: d.notes.trim() || null
             };
-            busy(e.submitter, async () => { await api.saveService(rec, file); await load.services(true); state.board = null; closeSheet(); location.hash === '#service' ? render() : (location.hash = '#service'); toast(s ? 'Saved' : 'Service added'); });
+            if (centre.isOther() && !rec.service_center) { toast('Type the service centre name, or pick one from the list', true); return; }
+            busy(e.submitter, async () => { await centre.remember(); await api.saveService(rec, file); await load.services(true); state.board = null; closeSheet(); location.hash === '#service' ? render() : (location.hash = '#service'); toast(s ? 'Saved' : 'Service added'); });
         };
     });
+}
+
+/* ---------- service centre picker: searchable TVS list + "Other" ---------- */
+const CHEV_DOWN = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+const centreLabel = c => c.name + (c.area ? ', ' + c.area : '');
+function centrePicker(current) {
+    return `<div class="cp" id="cp">
+        <button type="button" class="cp-btn" id="cp-btn" aria-expanded="false"><span id="cp-val" class="${current ? '' : 'muted'}">${esc(current || 'Choose a TVS service centre')}</span>${CHEV_DOWN}</button>
+        <div class="cp-panel" id="cp-panel" hidden>
+            <input type="search" id="cp-q" placeholder="Search name, area or pincode" autocomplete="off" aria-label="Search service centres">
+            <div class="cp-list" id="cp-list" role="listbox"><p class="small muted" style="padding:10px">Loading…</p></div>
+        </div>
+        <div class="cp-other" id="cp-other" hidden>
+            <input id="cp-name" maxlength="120" placeholder="Service centre name">
+            <div class="grid2"><input id="cp-area" maxlength="120" placeholder="Area / city"><input id="cp-pin" maxlength="6" inputmode="numeric" placeholder="Pincode"></div>
+            <p class="small muted">It'll be added to the list so other members can pick it too.</p>
+        </div></div>`;
+}
+function bindCentrePicker(body) {
+    const $b = q => body.querySelector(q);
+    const btn = $b('#cp-btn'), panel = $b('#cp-panel'), list = $b('#cp-list'), q = $b('#cp-q'), other = $b('#cp-other'), val = $b('#cp-val');
+    let chosen = val.classList.contains('muted') ? null : val.textContent, isOther = false, all = [];
+    const show = open => { panel.hidden = !open; btn.setAttribute('aria-expanded', open); if (open) { draw(); setTimeout(() => q.focus(), 30); } };
+    const setVal = (text, otherMode = false) => { isOther = otherMode; chosen = otherMode ? null : text; val.textContent = text; val.classList.toggle('muted', !text || otherMode && false); other.hidden = !otherMode; show(false); if (otherMode) setTimeout(() => $b('#cp-name').focus(), 30); };
+    const draw = () => {
+        const t = q.value.trim().toLowerCase(), digits = t.replace(/\D/g, '');
+        const hits = all.filter(c => !t || [c.name, c.area].some(v => (v || '').toLowerCase().includes(t)) || (digits.length >= 2 && (c.pincode || '').startsWith(digits)));
+        list.innerHTML = hits.slice(0, 80).map(c => `<div class="cp-item" role="option" data-id="${c.id}"><span class="grow"><b>${esc(c.name)}</b><span class="small muted">${esc([c.area, c.pincode].filter(Boolean).join(' · '))}</span></span>${isAdmin() ? `<button type="button" class="icon-btn cp-del" data-del="${c.id}" aria-label="Remove ${esc(c.name)} from the list">✕</button>` : ''}</div>`).join('')
+            + (hits.length ? '' : `<p class="small muted" style="padding:10px 12px">No centre matches “${esc(q.value)}”.</p>`)
+            + `<div class="cp-item cp-new" role="option" data-other="1"><span class="grow"><b>Other</b><span class="small muted">Not in the list? Type the name</span></span>＋</div>`;
+    };
+    btn.onclick = async () => {
+        if (!panel.hidden) return show(false);
+        show(true);
+        try { all = state.centres ??= await api.centres(); } catch { all = []; }
+        draw();
+    };
+    q.oninput = draw;
+    list.onclick = e => {
+        const del = e.target.closest('[data-del]');
+        if (del) { const c = all.find(x => String(x.id) === del.dataset.del); if (c && confirmBox(`Remove “${c.name}” from the list for everyone?`)) api.deleteCentre(c.id).then(() => { state.centres = all = all.filter(x => x !== c); draw(); toast('Removed'); }).catch(err => toast(err.message, true)); return; }
+        const it = e.target.closest('.cp-item'); if (!it) return;
+        if (it.dataset.other) { setVal('Other (type below)', true); return; }
+        const c = all.find(x => String(x.id) === it.dataset.id); if (c) setVal(centreLabel(c));
+    };
+    return {
+        isOther: () => isOther,
+        value: () => {
+            if (!isOther) return chosen;
+            const n = $b('#cp-name').value.trim(), a = $b('#cp-area').value.trim();
+            return n ? n + (a ? ', ' + a : '') : null;
+        },
+        remember: async () => {
+            const n = $b('#cp-name').value.trim(); if (!isOther || !n) return;
+            try { await api.addCentre(n, $b('#cp-area').value.trim(), $b('#cp-pin').value.trim()); state.centres = null; } catch { /* the service still saves */ }
+        }
+    };
 }
 
 /* =================== Mileage =================== */
@@ -516,7 +611,7 @@ async function viewMileage() {
         </div></section>
         ${ms.tanks.length >= 2 ? `<section class="section"><h2>Trend</h2><div class="card">${chart(ms.tanks, ms.avg)}</div></section>` : ''}
         <section class="section"><h2>Fill-ups</h2>${logs.length ? `<div class="list">${[...logs].reverse().map(f => fuelCard(f, byEnd.get(f.id))).join('')}</div>` :
-            `<div class="card empty"><b>No fill-ups yet</b>Next time you fill to full, reset Trip A and add the entry here. Your mileage shows from the second full tank.</div>`}</section>
+            `<div class="card empty"><b>No fill-ups yet</b>Fill to full, add the litres and your Trip A reading here, then reset Trip A. Your mileage shows straight away.</div>`}</section>
         <button class="btn fab" data-act="add-fuel">＋ Add fuel</button>`;
     if (logs.length < 2) $('#howto').open = true;
     actions = { open: el => fuelForm(logs.find(f => String(f.id) === el.dataset.id)) };
@@ -547,7 +642,7 @@ function chart(t, avg) {
 function fuelForm(f = null) {
     const logs = state.fuel || [];
     const prev = logs.filter(x => !f || x.id !== f.id);
-    const r = f ? { ...f } : { fill_date: todayISO(), full_tank: true };
+    const r = f ? { ...f } : { fill_date: todayISO(), full_tank: true, odometer_km: currentOdo() };
     openSheet(f ? 'Edit fill-up' : 'Add fuel', `<form id="ff">
         <div class="grid2">
             <label>Date<input type="date" name="fill_date" required max="${todayISO()}" value="${esc(r.fill_date)}"></label>
@@ -575,7 +670,7 @@ function fuelForm(f = null) {
                 const seq = [...prev, draft].sort((a, b) => a.odometer_km - b.odometer_km || a.fill_date.localeCompare(b.fill_date));
                 const t = tanks(seq).find(x => x.end.id === '__new');
                 if (t) msg.push(`<b style="color:var(--orange)">${t.kmpl.toFixed(1)} km/l</b> for this tank (${Math.round(t.dist)} km on ${t.litres.toFixed(2)} L)`);
-                else if (!prev.some(x => x.full_tank && x.odometer_km < odo)) msg.push('This starts your tracking. Mileage shows from the next full tank.');
+                else if (!prev.some(x => x.full_tank && x.odometer_km < odo)) msg.push('Add the Trip A reading to see this tank’s mileage. Then reset Trip A.');
             }
             calc.innerHTML = msg.join(' · ');
         };
@@ -1201,12 +1296,12 @@ function md(text) {
 /* a short summary of the rider's own bike data, so answers can be personal */
 function riderContext() {
     const s = state.services || [], f = state.fuel || [], m = state.me || {};
-    const last = s[0], due = s.find(x => x.next_due_km || x.next_due_date), ms = f.length ? mileageStats(f) : null;
-    const odo = latestOdo(s, f)?.km || 0;
+    const last = s[0], ms = f.length ? mileageStats(f) : null;
+    const odo = latestOdo(s, f)?.km || 0, due = odo ? nextService(s, odo) : null;
     return {
         first_name: firstName(m), bike: m.bike || null, odometer_km: odo || null,
         last_service: last ? { date: last.service_date, km: last.odometer_km, type: SERVICE_TYPES[last.service_type], number: last.service_no, items: last.items } : null,
-        next_service_due: due ? { km: due.next_due_km, date: due.next_due_date } : null,
+        next_service_due: due ? { km: due.km, date: due.date, which: due.label, status: due.status || 'on track' } : null,
         average_kmpl: ms?.avg ? Number(ms.avg.toFixed(1)) : null, last_tank_kmpl: ms?.last ? Number(ms.last.toFixed(1)) : null
     };
 }

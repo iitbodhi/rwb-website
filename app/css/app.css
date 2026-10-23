@@ -553,3 +553,49 @@ dialog#sheet::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(2px)}
 /* header: solid enough that scrolled content never shows through */
 .top{background:color-mix(in srgb,var(--paper) 94%,transparent);box-shadow:0 1px 0 var(--hair)}
 .mm-intro{margin:10px 0 12px}
+
+/* odometer dial: tap to update */
+button.dial{display:block;background:none;border:0;padding:0;color:inherit;cursor:pointer;font:inherit;-webkit-tap-highlight-color:transparent}
+button.dial:active{transform:scale(.985)}
+.dial-edit{display:inline-block;margin-top:7px;font:600 .62rem/1 var(--body);font-style:normal;letter-spacing:.08em;text-transform:uppercase;color:#f3b08f;border:1px solid rgba(243,176,143,.35);border-radius:999px;padding:4px 9px}
+/* service alert inside the cluster */
+.svc-alert{display:flex;align-items:center;gap:10px;margin:12px 0 2px;padding:10px 10px 10px 12px;border-radius:14px;text-align:left;font-size:.82rem;line-height:1.35}
+.svc-alert .grow{display:grid;gap:1px;min-width:0}
+.svc-alert b{font-size:.9rem;color:#fff}
+.svc-alert span span{color:#d9d3cc}
+.svc-alert.soon{background:rgba(242,163,58,.14);border:1px solid rgba(242,163,58,.4)}
+.svc-alert.due{background:rgba(239,91,76,.16);border:1px solid rgba(239,91,76,.5)}
+.svc-alert .btn{flex:none;min-height:32px;padding:0 14px}
+.svc-alert.soon .btn{background:linear-gradient(135deg,#e8902a,#f2a33a);box-shadow:none}
+.svc-alert.due .btn{background:linear-gradient(135deg,#d9443a,#ef5b4c);box-shadow:none}
+.svc-dot{flex:none;width:10px;height:10px;border-radius:50%;background:#f2a33a;box-shadow:0 0 0 0 rgba(242,163,58,.6);animation:pulse 1.8s infinite}
+.svc-alert.due .svc-dot{background:#ef5b4c;box-shadow:0 0 0 0 rgba(239,91,76,.6)}
+@keyframes pulse{70%{box-shadow:0 0 0 9px rgba(0,0,0,0)}100%{box-shadow:0 0 0 0 rgba(0,0,0,0)}}
+/* next service card on the Service screen */
+.next-svc{margin-top:12px}
+.next-svc .grow{display:grid;gap:2px}
+.next-svc b{font:700 1.15rem/1.25 var(--body)}
+.next-svc.soon{border-color:rgba(242,163,58,.55)}
+.next-svc.due{border-color:rgba(239,91,76,.6)}
+.svc-chip{flex:none;font:700 .68rem/1 var(--body);letter-spacing:.06em;text-transform:uppercase;padding:6px 10px;border-radius:999px;background:var(--ok-soft);color:var(--ok)}
+.svc-chip.soon{background:rgba(242,163,58,.16);color:#c77b12}
+.svc-chip.due{background:rgba(239,91,76,.16);color:var(--bad)}
+/* service centre picker */
+.field{display:grid;gap:5px}
+.flabel{font-size:.84rem;font-weight:600;color:var(--stone)}
+.cp-btn{width:100%;min-height:46px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;background:var(--card);cursor:pointer;text-align:left;font-size:16px}
+.cp-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp-btn[aria-expanded=true]{border-color:var(--orange)}
+.cp-panel{margin-top:6px;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:8px;box-shadow:var(--lift)}
+.cp-panel input{min-height:40px;margin-bottom:6px}
+.cp-list{max-height:270px;overflow-y:auto;overscroll-behavior:contain}
+.cp-item{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:9px;cursor:pointer}
+.cp-item:hover,.cp-item:active{background:var(--paper-2)}
+.cp-item .grow{display:grid;gap:1px;min-width:0}
+.cp-item b{font-weight:600;font-size:.92rem}
+.cp-new{border-top:1px solid var(--line);border-radius:0 0 9px 9px;color:var(--orange);font-weight:700}
+.cp-new b{color:var(--orange)}
+.cp-del{width:30px;height:30px;font-size:.8rem;color:var(--muted);flex:none}
+.cp-other{display:grid;gap:8px;margin-top:8px}
+.cp-item .grow{flex:1 1 auto}
+.svc-alert{margin-top:-14px}

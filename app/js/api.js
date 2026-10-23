@@ -61,6 +61,9 @@ async function supabaseApi(url, key) {
         birthdays: async (days = 0) => must(await sb.rpc('birthdays', { p_days: days })),
         directory: async () => must(await sb.rpc('member_directory')),
         leaderboard: async () => must(await sb.rpc('odometer_leaderboard')),
+        centres: async () => must(await sb.from('service_centres').select('id,name,area,pincode').order('name')),
+        addCentre: async (name, area, pincode) => must(await sb.rpc('add_service_centre', { p_name: name, p_area: area || null, p_pincode: pincode || null })),
+        deleteCentre: async id => must(await sb.from('service_centres').delete().eq('id', id)),
 
         services: async () => must(await sb.from('service_records').select('*').order('service_date', { ascending: false }).order('odometer_km', { ascending: false })),
         async saveService(rec, file) {
@@ -285,7 +288,7 @@ function demoApi() {
         async setAvatar(file) { me().avatar_url = file ? await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); }) : null; save(); return wait(me()); },
         directory: () => wait(db.members.map(m => ({ id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url, bike: m.bike, vrn: m.vrn, locality: m.locality, role: m.role, phone: ['superadmin', 'admin', 'coordinator'].includes(m.role) ? m.phone : null, on_app: !!m.user_id })).sort((a, b) => a.full_name.localeCompare(b.full_name))),
         async leaderboard() {
-            const myKm = Math.max(0, ...db.fuel.map(f => f.odometer_km), ...db.services.map(x => x.odometer_km));
+            const myKm = Math.max(0, me().odo_km || 0, ...db.fuel.map(f => f.odometer_km), ...db.services.map(x => x.odometer_km));
             const rows = [['Rahul Ghosh', 'Rocket', 18420, 'TVS Ronin 225'], ['Arjun Sen', 'Sultan', 11250, 'TVS Ronin 225'], ['Sourav Paul', '', 5310, 'TVS Apache RTR 200 4V']].map(([n, k, km, b]) => ({ full_name: n, nickname: k, km, bike: b, is_me: false }));
             if (me().show_on_leaderboard !== false) rows.push({ full_name: me().full_name, nickname: me().nickname, avatar_url: me().avatar_url, km: myKm, bike: me().bike, is_me: true });
             return wait(rows.sort((a, b) => b.km - a.km).map((r, i) => ({ ...r, rank: i + 1, member_id: i + 1 })));
@@ -299,6 +302,9 @@ function demoApi() {
             return wait(out);
         },
 
+        centres: () => wait([...(db.centres ||= [['Seven Point Motors', '88 Park Street', '700017'], ['Shaw Wheels', 'Narayantala West, Baguiati', '700059'], ['Subir Udyog', '36 Chowringhee Road', '700071'], ['Radharani Auto Centre', 'Roy Bahadur Road, Behala', '700034'], ['Ashvavahan', 'Sector 5, Salt Lake', '700091']].map(([name, area, pincode], i) => ({ id: i + 1, name, area, pincode })))].sort((a, b) => a.name.localeCompare(b.name))),
+        async addCentre(name, area, pincode) { const c = { id: nid(), name, area: area || null, pincode: pincode || null }; db.centres.push(c); save(); return c.id; },
+        async deleteCentre(id) { db.centres = db.centres.filter(c => c.id !== id); save(); },
         services: () => wait([...db.services].sort((a, b) => b.service_date.localeCompare(a.service_date) || b.odometer_km - a.odometer_km)),
         async saveService(rec, file) {
             if (file) rec.bill_path = 'demo:' + await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); });
