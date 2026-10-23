@@ -219,3 +219,37 @@ dl.facts dd{font-weight:500;overflow-wrap:anywhere}
 #app{overflow-x:clip}
 .member-row .who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .stat.tap{text-align:left;font:inherit;color:inherit;cursor:pointer;width:auto}
+
+/* Ronin AI */
+.ai-badge{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,var(--orange),#f08a4b);color:#fff;display:grid;place-items:center;margin:0 auto 12px}
+.ai-badge svg{width:30px;height:30px}
+.ai-badge.sm{width:40px;height:40px;border-radius:12px;margin:0;flex:none}
+.ai-badge.sm svg{width:22px;height:22px}
+.chatlog{display:flex;flex-direction:column;gap:10px;padding-bottom:150px}
+.chat-hello{text-align:center;padding:24px 4px}
+.chat-hello h2{font-size:1.6rem;margin-bottom:8px}
+.chips.sugg{justify-content:center;margin-top:18px}
+.chips.sugg .chip{text-align:left}
+.msg{max-width:88%;padding:10px 14px;border-radius:18px;line-height:1.5;overflow-wrap:anywhere}
+.msg.user{align-self:flex-end;background:var(--orange);color:#fff;border-bottom-right-radius:6px}
+.msg.model{align-self:flex-start;background:var(--card);border:1px solid var(--line);border-bottom-left-radius:6px}
+.msg p + p,.msg ul,.msg ol{margin-top:8px}
+.msg ul,.msg ol{padding-left:20px;display:grid;gap:4px}
+.msg code{background:var(--paper-2);padding:1px 5px;border-radius:5px;font-size:.9em}
+.msg a{color:inherit}
+.msg-img{max-width:220px;border-radius:12px;margin-bottom:6px}
+.typing{display:flex;gap:5px;padding:14px 16px}
+.typing span{width:8px;height:8px;border-radius:50%;background:var(--muted);animation:blink 1.2s infinite}
+.typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+.askbar{position:fixed;left:0;right:0;bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));z-index:9;background:color-mix(in srgb,var(--paper) 94%,transparent);backdrop-filter:blur(12px);border-top:1px solid var(--line);padding:8px 16px 6px;display:block;max-width:720px;margin:0 auto}
+.askbar .row{gap:8px;align-items:flex-end}
+.askbar textarea{min-height:44px;max-height:140px;resize:none;border-radius:22px;padding:10px 16px;flex:1}
+.askbar .send{width:46px;height:46px;min-height:0;padding:0;border-radius:50%;flex:none;font-size:1.1rem}
+.askbar .icon-btn{flex:none;height:46px;width:40px;cursor:pointer}
+.ai-note{font-size:.72rem;margin-top:4px;text-align:center}
+.att{margin-bottom:6px}.att .thumb{width:72px}
+.top{gap:8px}
+.top h1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top .icon-btn{flex:none;width:38px}
+@media (max-width:380px){.top .hide-narrow{display:none}.top h1{font-size:1.6rem}}

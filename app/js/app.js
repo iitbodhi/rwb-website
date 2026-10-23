@@ -91,7 +91,7 @@ function mileageStats(logs) {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews };
+const ROUTES = { home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat };
 async function render() {
     const [name, param] = (location.hash.slice(1) || 'home').split('?')[0].split('/');
     state.param = param || null;
@@ -111,6 +111,7 @@ const seenNews = () => { try { return Number(localStorage.getItem('rwb-news-seen
 const unread = () => (state.news || []).some(n => n.id > seenNews());
 const initials = m => (m?.full_name || '?').split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1>${right}
+    <a class="icon-btn" href="#chat" aria-label="Ask Ronin AI">${AI_ICON}</a>
     <a class="icon-btn bell" href="#news" aria-label="Announcements${unread() ? ' (new)' : ''}">${BELL}${unread() ? '<i class="dot"></i>' : ''}</a>
     <a class="avatar" href="#me" aria-label="My profile">${esc(initials(state.me))}</a></header>`;
 
@@ -192,7 +193,7 @@ async function viewHome() {
     const [news, listings] = await Promise.all([load.news(), load.listings().catch(() => [])]);
     const fresh = listings.filter(l => l.status === 'live').slice(0, 4);
     const pushAsk = pushSupported() && Notification.permission === 'default' && !localStorage.getItem('rwb-push-dismissed');
-    app.innerHTML = top('RWB', isAdmin() ? '<a class="btn sm ghost" href="#admin">Admin</a>' : '') + `
+    app.innerHTML = top('RWB', isAdmin() ? '<a class="btn sm ghost hide-narrow" href="#admin">Admin</a>' : '') + `
         <div class="hero"><h2>Hi, ${esc(firstName(state.me))}</h2><p>${esc([state.me.bike, state.me.vrn].filter(Boolean).join(' · ') || 'Ride safe, Ronin.')}</p></div>
         ${today.length ? `<section class="section"><div class="card bday"><h3>🎂 Birthdays today</h3>
             <ul>${today.map(b => `<li>${esc(b.full_name)}${b.nickname ? ` <span class="muted">(${esc(b.nickname)})</span>` : ''}</li>`).join('')}</ul>
@@ -203,6 +204,7 @@ async function viewHome() {
             <div class="stat"><b>${last ? km(last.odometer_km).replace(' km', '') : '–'}</b><span>Last service (km)</span></div>
             <div class="stat"><b>${rs(spent)}</b><span>Service spend ${yr}</span></div>
         </div></section>
+        <section class="section"><a class="card tap row ai-card" href="#chat" style="text-decoration:none"><span class="ai-badge sm">${AI_ICON}</span><div class="grow"><h3>Ask Ronin AI</h3><p class="small muted">Bike trouble, maintenance or app help. Ask anything.</p></div><span class="kmpl">›</span></a></section>
         ${pushAsk ? `<section class="section"><div class="card"><h3>🔔 Turn on notifications</h3><p class="small muted" style="margin-bottom:12px">Get birthdays, new Motomart posts and RWB announcements on this phone.</p><div class="btns"><button class="btn sm" data-act="push-on">Turn on</button><button class="btn sm ghost" data-act="push-later">Not now</button></div></div></section>` : ''}
         ${news.length ? `<section class="section"><h2>Latest from RWB <a href="#news">See all</a></h2>${newsCard(news[0])}</section>` : ''}
         <section class="section"><div class="btns"><button class="btn" data-act="add-fuel">＋ Fuel fill-up</button><button class="btn ghost" data-act="add-service">＋ Service</button></div></section>
@@ -497,7 +499,8 @@ async function viewGuides() {
     app.innerHTML = top('Guides') + `<div class="seg" role="tablist">
             <button role="tab" aria-selected="${tab === 'maint'}" data-act="tab" data-tab="maint">Maintenance</button>
             <button role="tab" aria-selected="${tab === 'acc'}" data-act="tab" data-tab="acc">Accessories</button></div>
-        <div id="guide-body"><p class="muted">Loading…</p></div>`;
+        <div id="guide-body"><p class="muted">Loading…</p></div>
+        <a class="card tap row ai-card section" href="#chat" style="text-decoration:none;display:flex"><span class="ai-badge sm">${AI_ICON}</span><div class="grow"><h3>Can't find it?</h3><p class="small muted">Ask Ronin AI</p></div><span class="kmpl">›</span></a>`;
     actions = { tab: el => { state.guideTab = el.dataset.tab; viewGuides(); } };
     tab === 'maint' ? drawMaint() : drawAcc();
 }
@@ -628,11 +631,12 @@ async function viewAdmin() {
             <button role="tab" aria-selected="${tab === 'requests'}" data-act="tab" data-tab="requests">Requests${s.pending ? ` (${s.pending})` : ''}</button>
             <button role="tab" aria-selected="${tab === 'motomart'}" data-act="tab" data-tab="motomart">Motomart<span id="mm-count"></span></button>
             <button role="tab" aria-selected="${tab === 'members'}" data-act="tab" data-tab="members">Members</button>
-            <button role="tab" aria-selected="${tab === 'bdays'}" data-act="tab" data-tab="bdays">Birthdays</button></div>
+            <button role="tab" aria-selected="${tab === 'bdays'}" data-act="tab" data-tab="bdays">Birthdays</button>
+            <button role="tab" aria-selected="${tab === 'ai'}" data-act="tab" data-tab="ai">Ronin AI</button></div>
         <div id="admin-body"><p class="muted">Loading…</p></div>`;
     actions = { tab: el => { state.adminTab = el.dataset.tab; viewAdmin(); }, mfilter: el => { state.adminTab = 'members'; state.memberFilter = el.dataset.f; state.adminSearch = ''; viewAdmin(); } };
     load.listings(true).then(ls => { const n = ls.filter(l => l.status === 'pending').length; const c = $('#mm-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
-    try { await ({ requests: adminRequests, motomart: adminMotomart, members: adminMembers, bdays: adminBdays })[tab](); }
+    try { await ({ requests: adminRequests, motomart: adminMotomart, members: adminMembers, bdays: adminBdays, ai: adminAI })[tab](); }
     catch (e) { $('#admin-body').innerHTML = `<div class="card empty"><b>Could not load</b>${esc(e.message)}</div>`; }
 }
 async function adminRequests() {
@@ -958,6 +962,124 @@ async function adminMotomart() {
     actions.listing = el => listingDetail(pend.find(l => String(l.id) === el.dataset.id));
 }
 
+/* =================== Ronin AI chatbot =================== */
+const CHAT_KEY = () => 'rwb-chat-' + (state.me?.id || 'x');
+const chat = { msgs: null, busy: false, image: null, left: null };
+const loadChat = () => { if (chat.msgs) return; try { chat.msgs = JSON.parse(localStorage.getItem(CHAT_KEY())) || []; } catch { chat.msgs = []; } };
+const saveChat = () => { try { localStorage.setItem(CHAT_KEY(), JSON.stringify(chat.msgs.slice(-40))); } catch { /* ignore */ } };
+const SUGGEST = ['My chain is making noise. What should I do?', 'Which engine oil does the Ronin 225 use?', 'How do I track mileage with Trip A?', 'How do I sell my old helmet on Motomart?', 'Tips for a long ride to the hills', 'Engine warning light is on. Is it safe to ride?'];
+const AI_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/><path d="M9 10h.01M12 10h.01M15 10h.01"/></svg>';
+
+/* tiny, safe markdown: **bold**, *italic*, lists, links, paragraphs */
+function md(text) {
+    const lines = esc(text).split(/\n/); let html = '', list = null;
+    const inline = s => s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*(?!\s)(.+?)\*(?!\*)/g, '$1<i>$2</i>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>').replace(/(https?:\/\/[^\s<)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    const close = () => { if (list) { html += `</${list}>`; list = null; } };
+    for (const raw of lines) {
+        const l = raw.trim(), ul = l.match(/^[-*•]\s+(.*)/), ol = l.match(/^\d+[.)]\s+(.*)/), h = l.match(/^#{1,4}\s+(.*)/);
+        if (ul || ol) { const t = ul ? 'ul' : 'ol'; if (list !== t) { close(); html += `<${t}>`; list = t; } html += `<li>${inline((ul || ol)[1])}</li>`; }
+        else { close(); if (h) html += `<p><b>${inline(h[1])}</b></p>`; else if (l) html += `<p>${inline(l)}</p>`; }
+    }
+    close(); return html;
+}
+
+/* a short summary of the rider's own bike data, so answers can be personal */
+function riderContext() {
+    const s = state.services || [], f = state.fuel || [], m = state.me || {};
+    const last = s[0], due = s.find(x => x.next_due_km || x.next_due_date), ms = f.length ? mileageStats(f) : null;
+    const odo = Math.max(0, ...s.map(x => x.odometer_km), ...f.map(x => x.odometer_km));
+    return {
+        first_name: firstName(m), bike: m.bike || null, odometer_km: odo || null,
+        last_service: last ? { date: last.service_date, km: last.odometer_km, type: SERVICE_TYPES[last.service_type], number: last.service_no, items: last.items } : null,
+        next_service_due: due ? { km: due.next_due_km, date: due.next_due_date } : null,
+        average_kmpl: ms?.avg ? Number(ms.avg.toFixed(1)) : null, last_tank_kmpl: ms?.last ? Number(ms.last.toFixed(1)) : null
+    };
+}
+
+async function viewChat() {
+    loadChat();
+    await Promise.all([load.services().catch(() => []), load.fuel().catch(() => [])]);
+    app.innerHTML = top('Ronin AI', chat.msgs.length ? '<button class="btn sm ghost" data-act="clear">New chat</button>' : '') + `
+        <div id="chatlog" class="chatlog" aria-live="polite"></div>
+        <form id="ask" class="askbar">
+            <div id="att" class="att" hidden></div>
+            <div class="row">
+                <label class="icon-btn" aria-label="Add a photo" title="Add a photo">📷<input type="file" accept="image/*" id="aphoto" hidden></label>
+                <textarea id="q" rows="1" maxlength="1500" placeholder="Ask Ronin AI…" aria-label="Your question"></textarea>
+                <button class="btn send" aria-label="Send">➤</button>
+            </div>
+            <p class="small muted ai-note">Ronin AI uses Google Gemini and can make mistakes. Check anything safety-related with a mechanic. Don't share personal details.<span id="left"></span></p>
+        </form>`;
+    drawChat();
+    const q = $('#q'), form = $('#ask');
+    const grow = () => { q.style.height = 'auto'; q.style.height = Math.min(q.scrollHeight, 140) + 'px'; };
+    q.oninput = grow;
+    q.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(pointer:coarse)').matches) { e.preventDefault(); form.requestSubmit(); } };
+    $('#aphoto').onchange = async e => {
+        const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+        try { const c = await compressImage(f, 1024, 180e3); chat.image = { file: c, url: URL.createObjectURL(c) }; drawAttach(); }
+        catch (err) { toast(err.message, true); }
+    };
+    form.onsubmit = e => { e.preventDefault(); sendChat(q.value); };
+    actions = {
+        clear: () => { if (confirmBox('Start a new chat? This clears the conversation on this phone.')) { chat.msgs = []; saveChat(); viewChat(); } },
+        suggest: el => sendChat(el.textContent),
+        'rm-att': () => { URL.revokeObjectURL(chat.image.url); chat.image = null; drawAttach(); }
+    };
+    if (state.param === 'new') { /* opened from a "help" link */ }
+    drawAttach();
+    if (chat.left != null) $('#left').textContent = ` ${chat.left} question${chat.left === 1 ? '' : 's'} left today.`;
+}
+function drawAttach() {
+    const a = $('#att'); if (!a) return;
+    a.hidden = !chat.image;
+    a.innerHTML = chat.image ? `<div class="thumb"><img src="${esc(chat.image.url)}" alt="Photo to send"><button type="button" data-act="rm-att" aria-label="Remove photo">✕</button></div>` : '';
+}
+function drawChat() {
+    const log = $('#chatlog'); if (!log) return;
+    log.innerHTML = chat.msgs.length ? chat.msgs.map(m => `<div class="msg ${m.role}">${m.img ? `<img src="${esc(m.img)}" alt="" class="msg-img">` : ''}${m.role === 'model' ? md(m.text) : `<p>${esc(m.text).replace(/\n/g, '<br>')}</p>`}${m.err ? '<p class="small" style="margin-top:6px"><button class="btn sm ghost" data-act="retry">Try again</button></p>' : ''}</div>`).join('')
+        + (chat.busy ? '<div class="msg model typing"><span></span><span></span><span></span></div>' : '')
+        : `<div class="chat-hello"><div class="ai-badge">${AI_ICON}</div><h2>Hi ${esc(firstName(state.me))}, I'm Ronin AI</h2>
+            <p class="muted">Ask me about your Ronin 225, maintenance, a strange noise, riding tips, or how to use this app. You can also send a photo of a part or a warning light.</p>
+            <div class="chips sugg">${SUGGEST.map(s => `<button class="chip" data-act="suggest">${esc(s)}</button>`).join('')}</div></div>`;
+    actions.retry = () => { const last = [...chat.msgs].reverse().find(m => m.role === 'user'); chat.msgs = chat.msgs.filter(m => !m.err); if (last) { chat.msgs.pop(); sendChat(last.text); } };
+    requestAnimationFrame(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }));
+}
+async function sendChat(text) {
+    text = (text || '').trim();
+    if (chat.busy || (!text && !chat.image)) return;
+    if (!text) text = 'What can you tell me from this photo?';
+    let imgB64 = null, imgUrl = null;
+    if (chat.image) {
+        imgUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(chat.image.file); });
+        imgB64 = imgUrl.split(',')[1]; URL.revokeObjectURL(chat.image.url); chat.image = null; drawAttach();
+    }
+    chat.msgs.push({ role: 'user', text, img: imgUrl && imgUrl.length < 400e3 ? imgUrl : null });
+    const q = $('#q'); if (q) { q.value = ''; q.style.height = 'auto'; }
+    chat.busy = true; drawChat();
+    try {
+        const r = await api.ask(chat.msgs.filter(m => !m.err).map(m => ({ role: m.role, text: m.text })), riderContext(), imgB64);
+        chat.msgs.push({ role: 'model', text: r.reply });
+        chat.left = r.left;
+        const l = $('#left'); if (l && r.left != null) l.textContent = ` ${r.left} question${r.left === 1 ? '' : 's'} left today.`;
+    } catch (e) {
+        chat.msgs.push({ role: 'model', text: e.message || 'Something went wrong. Please try again.', err: true });
+    } finally {
+        chat.busy = false; saveChat(); drawChat();
+    }
+}
+
+/* Admin: teach Ronin AI RWB-specific things */
+async function adminAI() {
+    const notes = await api.chatNotes();
+    $('#admin-body').innerHTML = `<div class="card"><h3>Teach Ronin AI</h3>
+        <p class="small muted" style="margin:4px 0 12px">Anything written here, Ronin AI knows and trusts. For example: patron service centres with area and phone, RWB ride rules, the sticker process, recommended oil brands, tyre pressures your coordinators use, upcoming ride details. Members never see this text directly.</p>
+        <form id="ainotes"><textarea name="notes" rows="12" maxlength="8000" placeholder="e.g. Patron service centres:\n- Example Motors, Salt Lake Sector 5 (10% off for RWB members)\n\nRide rules: helmet and riding jacket compulsory on all RWB rides…">${esc(notes)}</textarea>
+        <button class="btn block">Save notes</button></form></div>`;
+    $('#ainotes').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { await api.saveChatNotes(e.target.notes.value.trim()); toast('Saved. Ronin AI will use this from the next question.'); }); };
+}
+
 /* =================== Boot =================== */
 async function boot() {
     try {
@@ -979,6 +1101,6 @@ async function boot() {
     try { api = await createApi(); }
     catch { app.innerHTML = `<section class="signin"><h1>Can't load</h1><p class="lead">Please check your internet connection.</p><button class="btn block" onclick="location.reload()">Try again</button></section>`; return; }
     if (location.hash === '#install') { history.replaceState(null, '', location.pathname); setTimeout(installSheet, 1200); }
-    api.onAuthChange(ev => { Object.assign(state, { me: null, services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null }); if (ev === 'SIGNED_OUT') location.hash = ''; boot(); });
+    api.onAuthChange(ev => { chat.msgs = null; chat.left = null; Object.assign(state, { me: null, services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null }); if (ev === 'SIGNED_OUT') location.hash = ''; boot(); });
     boot();
 })();

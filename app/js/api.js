@@ -119,6 +119,19 @@ async function supabaseApi(url, key) {
         deletePush: async endpoint => must(await sb.rpc('delete_push_subscription', { p_endpoint: endpoint })),
         testPush: async () => must(await sb.rpc('admin_test_push')),
 
+        /* ---- Ronin AI ---- */
+        async ask(messages, context, image) {
+            const { data, error } = await sb.functions.invoke('ask-ronin', { body: { messages, context, image } });
+            if (error) {
+                let msg = 'Ronin AI couldn\'t answer right now. Please try again.';
+                try { const b = await error.context.json(); if (b?.error) msg = b.error; } catch { if (/fetch|network/i.test(error.message)) msg = 'No internet connection. Please try again.'; }
+                throw new Error(msg);
+            }
+            return data;
+        },
+        chatNotes: async () => must(await sb.rpc('admin_get_chat_notes')),
+        saveChatNotes: async notes => must(await sb.rpc('admin_set_chat_notes', { p_notes: notes })),
+
         admin: {
             stats: async () => must(await sb.rpc('admin_stats')),
             requests: async () => must(await sb.rpc('admin_list_requests')),
@@ -251,6 +264,15 @@ function demoApi() {
         async announce(title, body) { db.news.push({ id: nid(), kind: 'announcement', title, body, url: '#news', audience: 'all', created_at: new Date().toISOString() }); save(); },
         async deleteNews(id) { db.news = db.news.filter(n => n.id !== id); save(); },
         savePush: async () => 'saved', deletePush: async () => 'deleted',
+        async ask(messages) {
+            await new Promise(r => setTimeout(r, 700));
+            const q = messages.at(-1).text.toLowerCase();
+            const reply = /chain/.test(q) ? 'For the Ronin 225 chain:\n\n1. **Clean** it every 500–700 km (sooner after rain) with a chain cleaner and brush.\n2. **Dry** it, then **lube** the inner side of the rollers while turning the wheel.\n3. Let it sit 15–20 minutes before riding.\n\nCheck the slack too. If it looks loose or kinked, get it adjusted at a service centre.'
+                : '*(Demo mode: this is a sample answer.)*\n\nOnce Ronin AI is connected, I can help with your Ronin 225, maintenance, riding tips and using the RWB App.';
+            db.chatLeft = (db.chatLeft ?? 20) - 1; save();
+            return { reply, left: db.chatLeft };
+        },
+        chatNotes: async () => db.chatNotes || '', async saveChatNotes(n) { db.chatNotes = n; save(); },
         async testPush() { db.news.push({ id: nid(), kind: 'admin', title: 'Test notification ✅', body: 'Push notifications are working on this phone.', url: '#news', audience: 'admins', created_at: new Date().toISOString() }); save(); },
 
         admin: {
