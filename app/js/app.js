@@ -11,7 +11,7 @@ let api;
 const state = { me: null, services: null, fuel: null, bdays: null, guides: null, acc: null, guideTab: 'maint', accCat: 'all', accSort: 'default', adminTab: 'requests', adminMembers: null, adminSearch: '' };
 const isAdmin = () => ['admin', 'superadmin'].includes(state.me?.role);
 const isMod = () => ['coordinator', 'admin', 'superadmin'].includes(state.me?.role);   /* Motomart moderators */
-const ROLE = { superadmin: 'Super admin', admin: 'Admin', coordinator: 'Coordinator', member: 'Member' };
+const ROLE = { superadmin: 'Admin', admin: 'Admin', coordinator: 'Coordinator', member: 'Member' };
 const TEAM_ORDER = { superadmin: 0, admin: 1, coordinator: 2 };
 const isTeam = m => m.role in TEAM_ORDER;
 const roleBadge = m => isTeam(m) ? `<span class="badge ${m.role === 'coordinator' ? 'coord' : 'orange'}">${ROLE[m.role]}</span>` : '';
@@ -59,10 +59,46 @@ const confirmBox = (msg) => window.confirm(msg);
 /* ---------- WhatsApp ---------- */
 const waShare = text => `https://wa.me/?text=${encodeURIComponent(text)}`;
 const waTo = (phone, text = '') => `https://wa.me/91${String(phone).replace(/\D/g, '').slice(-10)}${text ? '?text=' + encodeURIComponent(text) : ''}`;
-function wishText(people) {
-    const names = people.map(p => p.full_name);
-    const list = names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : names[0];
-    return (C.BIRTHDAY_WISH || 'Happy Birthday {names}!').replace('{names}', list);
+const andList = a => a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a.at(-1) : a[0] || '';
+/* Ready-made birthday wishes. {names} becomes the birthday riders' names. Each phone starts on a different one. */
+const WISHES = [
+    ['Classic', '🎂 Happy Birthday {names}! 🏍️\n\nWishing you many more miles of open roads, safe rides and endless adventures. Have a great one!\n\n— Ronin Warriors of Bengal 🧡'],
+    ['Rider', 'Happy Birthday {names}! 🎉\nMay your tank stay full, your chain stay lubed and your roads stay twisty. Ride safe, Warrior! 🏍️💨'],
+    ['Short & sweet', 'Happy Birthday {names}! 🎂 Have a fantastic day! 🧡'],
+    ['Road trip', '🎂 Happy Birthday {names}!\nHere\'s to another year of sunrise rides, chai stops and hills that call your name. See you on the next ride! 🌄'],
+    ['Brotherhood', 'Happy Birthday {names}! 🙌\nProud to ride with you. Wishing you health, happiness and a thousand more kilometres with the RWB family. 🧡🏍️'],
+    ['Fun', 'Happy Birthday {names}! 🥳\nOne more year older, zero kilometres slower. Cake first, then a ride! 🎂🏍️'],
+    ['Bengali', 'শুভ জন্মদিন {names}! 🎂\nNew year, new roads, same Ronin spirit. Have a great day! 🧡'],
+    ['Safe miles', 'Happy Birthday {names}! 🎂\nWishing you a year of safe miles, smooth roads and great memories. Keep riding, keep shining! ✨🏍️']
+];
+const tagOf = b => b.phone ? '@91' + String(b.phone).replace(/\D/g, '').slice(-10) : '';
+function wishSheet(people) {
+    if (!people.length) return;
+    let pick = 0; try { pick = (Number(localStorage.getItem('rwb-wish-pick')) || Math.floor(Math.random() * WISHES.length)) % WISHES.length; } catch { /* ignore */ }
+    const canTag = people.some(b => b.phone);
+    const names = andList(people.map(b => b.full_name));
+    const build = (tpl, tag) => tpl.replaceAll('{names}', names) + (tag && canTag ? '\n\n' + people.map(tagOf).filter(Boolean).join(' ') : '');
+    openSheet('Send birthday wishes', `
+        <p class="small muted" style="margin-bottom:12px">Pick a message for <b>${esc(names)}</b> or write your own, then choose the RWB group in WhatsApp.</p>
+        <div class="wish-list" role="radiogroup" aria-label="Message">
+            ${WISHES.map(([k, t], i) => `<label class="wish-opt"><input type="radio" name="w" value="${i}"${i === pick ? ' checked' : ''}><span><b>${esc(k)}</b><span class="wish-prev">${esc(t.replaceAll('{names}', names))}</span></span></label>`).join('')}
+            <label class="wish-opt"><input type="radio" name="w" value="custom"><span><b>Write my own</b><span class="wish-prev">Your own words</span></span></label>
+        </div>
+        <textarea id="wish-own" maxlength="1000" placeholder="Write your wish…" hidden></textarea>
+        ${canTag ? `<label class="switch" style="margin-top:12px">Tag ${people.length > 1 ? 'them' : firstName(people[0])} in the message<input type="checkbox" id="wish-tag" checked></label>
+            <p class="small muted" style="margin-top:6px">Adds ${esc(people.map(tagOf).filter(Boolean).join(' '))} so WhatsApp can notify ${people.length > 1 ? 'them' : 'them'} in the group.</p>` : ''}
+        <button class="btn wa block" id="wish-go" style="margin-top:14px">Send on WhatsApp</button>`, body => {
+        const own = body.querySelector('#wish-own');
+        const sel = () => body.querySelector('input[name=w]:checked').value;
+        body.querySelectorAll('input[name=w]').forEach(r => r.onchange = () => { own.hidden = sel() !== 'custom'; if (!own.hidden) { own.value ||= `Happy Birthday ${names}! `; own.focus(); } });
+        body.querySelector('#wish-go').onclick = () => {
+            const v = sel(), tag = body.querySelector('#wish-tag')?.checked;
+            const txt = v === 'custom' ? own.value.trim() : WISHES[Number(v)][1];
+            if (!txt) { toast('Write a message first', true); return; }
+            try { if (v !== 'custom') localStorage.setItem('rwb-wish-pick', String((Number(v) + 1) % WISHES.length)); } catch { /* ignore */ }
+            window.open(waShare(build(txt, tag)), '_blank', 'noopener'); closeSheet();
+        };
+    });
 }
 
 /* ---------- data loaders (cached until changed) ---------- */
@@ -137,7 +173,7 @@ const globalActions = {
     'reset-demo': () => { if (confirmBox('Reset the demo data?')) { api.resetDemo(); Object.assign(state, { services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null, board: null, dir: null }); boot(); } },
     'add-service': () => serviceForm(),
     'add-fuel': () => fuelForm(),
-    'wish': () => window.open(waShare(wishText(state.bdays.filter(b => b.day === todayISO()))), '_blank', 'noopener')
+    'wish': () => wishSheet(state.bdays.filter(b => b.day === todayISO()))
 };
 
 /* =================== Sign in / access =================== */
@@ -953,16 +989,20 @@ function newsCard(n, del = false) {
         ${del ? `<button class="icon-btn" data-act="del-news" data-id="${n.id}" aria-label="Delete">🗑</button>` : ''}</div></article>`;
 }
 async function viewNews() {
-    const news = await load.news(true);
-    try { if (news[0]) localStorage.setItem('rwb-news-seen', String(Math.max(...news.map(n => n.id)))); } catch { /* ignore */ }
-    app.innerHTML = top('News') + `
+    const all = await load.news(true);
+    try { if (all[0]) localStorage.setItem('rwb-news-seen', String(Math.max(...all.map(n => n.id)))); } catch { /* ignore */ }
+    let clearedAt = 0; try { clearedAt = Number(localStorage.getItem('rwb-feed-cleared') || 0); } catch { /* ignore */ }
+    const news = all.filter(n => n.kind === 'announcement' || n.id > clearedAt);
+    const canClear = news.some(n => n.kind !== 'announcement');
+    app.innerHTML = top('News', canClear ? `<button class="icon-btn clear-btn" data-act="clear-news" aria-label="Clear notifications" title="Clear">${ICON_CLEAR}</button>` : '') + `
         ${isAdmin() ? `<details class="howto" style="margin-bottom:6px"><summary>Post an announcement</summary>
             <form id="ann" style="padding-bottom:16px"><label>Title<input name="title" required maxlength="120" placeholder="e.g. Sunday breakfast ride"></label>
             <label>Message<textarea name="body" maxlength="1000" placeholder="Meeting point, time, anything members should know"></textarea></label>
             <p class="small muted">Goes to everyone's feed and as a notification to every phone that has them on.</p>
             <button class="btn block">Send to all members</button></form></details>` : ''}
-        <section class="section">${news.length ? `<div class="group">${news.map(n => newsRow(n, isAdmin())).join('')}</div>` : '<div class="card empty"><b>No news yet</b>Announcements, birthdays and new Motomart posts show up here.</div>'}</section>`;
-    actions = { 'del-news': b => { if (confirmBox('Delete this from the feed?')) busy(b, async () => { await api.deleteNews(Number(b.dataset.id)); render(); }); } };
+        <section class="section">${news.length ? `<div class="group">${news.map(n => newsRow(n, isAdmin())).join('')}</div>` : `<div class="card empty"><b>${all.length ? 'All caught up' : 'No news yet'}</b>Announcements, birthdays and new Motomart posts show up here.</div>`}</section>`;
+    actions = {
+        'clear-news': () => { try { localStorage.setItem('rwb-feed-cleared', String(Math.max(0, ...all.map(n => n.id)))); } catch { /* ignore */ } render(); toast('Cleared. Admin announcements stay.'); }, 'del-news': b => { if (confirmBox('Delete this from the feed?')) busy(b, async () => { await api.deleteNews(Number(b.dataset.id)); render(); }); } };
     const f = $('#ann');
     if (f) f.onsubmit = e => {
         e.preventDefault(); const d = Object.fromEntries(new FormData(f));
@@ -970,6 +1010,8 @@ async function viewNews() {
         busy(e.submitter, async () => { await api.announce(d.title.trim(), d.body.trim()); toast('Announcement sent'); render(); });
     };
 }
+
+const ICON_CLEAR = '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11M3 12h8M3 18h6"/><path d="m15 14 5 5m0-5-5 5"/></svg>';
 
 /* =================== Motomart =================== */
 const CATS = C.MOTOMART_CATEGORIES || ['Helmet', 'Riding jacket', 'Riding pants', 'Riding shoes / boots', 'Gloves', 'Bike protection', 'Bike accessories', 'Rider accessories', 'Luggage', 'Electronics', 'Spare parts', 'Other'];
@@ -1185,7 +1227,7 @@ async function viewChat() {
                 <textarea id="q" rows="1" maxlength="1500" placeholder="Ask Pookie…" aria-label="Your question"></textarea>
                 <button class="btn send" aria-label="Send">➤</button>
             </div>
-            <p class="small muted ai-note">Pookie uses free AI services (Groq and Google Gemini) and can make mistakes. Check anything safety-related with a mechanic. Don't share personal details.<span id="left"></span></p>
+            <p class="muted ai-note">Pookie is an AI and can make mistakes.<span id="left"></span></p>
         </form>`;
     drawChat();
     const q = $('#q'), form = $('#ask');
@@ -1281,7 +1323,7 @@ async function viewCrew() {
             ${face(r, 'avatar pod-face')}<span class="pod-medal">${MEDAL[r.rank - 1]}</span><b>${esc(r.nickname || r.full_name.split(' ')[0])}</b><span class="pod-km">${kmTxt(r.km)}</span></div>` : '<div></div>').join('')}</div>` : '';
     app.innerHTML = top('RWB') + `
         <section class="board card">
-            <div class="row" style="justify-content:space-between;margin-bottom:6px"><h2 class="board-title">Odometer leaderboard</h2><span class="small muted">${board.length} rider${board.length === 1 ? '' : 's'}</span></div>
+            <div class="row" style="justify-content:space-between;margin-bottom:6px"><h2 class="board-title">Warrior leaderboard</h2><span class="small muted">${board.length} rider${board.length === 1 ? '' : 's'}</span></div>
             ${board.length ? podium + (rest.length ? `<ol class="board-list" start="4">${rest.map(r => `<li class="${r.is_me ? 'me' : ''}"><span class="rk">${r.rank}</span>${face(r, 'avatar sm')}<span class="grow"><b>${esc(r.full_name)}</b><span class="small muted">${esc(r.bike || '')}</span></span><span class="num km">${kmTxt(r.km)}</span></li>`).join('')}</ol>` : '')
                 + (board.length > 10 ? `<button class="link-btn" data-act="board-all" style="margin-top:10px">${state.boardAll ? 'Show top 10' : `Show all ${board.length}`}</button>` : '')
                 + (me && me.rank > 10 && !state.boardAll ? `<p class="board-me">You're <b>#${me.rank}</b> with ${kmTxt(me.km)}</p>` : '')
