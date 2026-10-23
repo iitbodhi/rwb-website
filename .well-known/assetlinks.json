@@ -1,8 +1,26 @@
-[{
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "in.roninwb.app",
-        "sha256_cert_fingerprints": ["DF:05:0F:90:63:50:82:15:FC:23:4C:F8:CC:88:77:31:D3:0B:1D:61:5E:33:7F:82:0B:C4:C8:62:4C:7E:35:7D"]
-      }
-    }]
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "in.roninwb.twa",
+      "sha256_cert_fingerprints": [
+        "F0:66:68:57:FE:89:8A:A7:C0:D6:D8:8F:F3:FD:CF:83:D8:DC:53:27:C6:57:3B:C1:FD:E6:FF:E4:30:9C:E0:8F"
+      ]
+    }
+  },
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "in.roninwb.app",
+      "sha256_cert_fingerprints": [
+        "DF:05:0F:90:63:50:82:15:FC:23:4C:F8:CC:88:77:31:D3:0B:1D:61:5E:33:7F:82:0B:C4:C8:62:4C:7E:35:7D"
+      ]
+    }
+  }
+]
