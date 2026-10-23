@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "in.roninwb.app",
+        "sha256_cert_fingerprints": ["DF:05:0F:90:63:50:82:15:FC:23:4C:F8:CC:88:77:31:D3:0B:1D:61:5E:33:7F:82:0B:C4:C8:62:4C:7E:35:7D"]
+      }
+    }]

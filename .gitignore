@@ -2,3 +2,8 @@
 *members_import*.csv
 RWB_Contact*.csv
 *.zip
+
+# Android signing key and Play bundle: keep these OFF GitHub
+*.keystore
+*.aab
+signing-key-info.txt
