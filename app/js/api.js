@@ -59,6 +59,8 @@ async function supabaseApi(url, key) {
             return must(await sb.from('members').update({ avatar_url: url }).eq('user_id', me).select().single());
         },
         birthdays: async (days = 0) => must(await sb.rpc('birthdays', { p_days: days })),
+        directory: async () => must(await sb.rpc('member_directory')),
+        leaderboard: async () => must(await sb.rpc('odometer_leaderboard')),
 
         services: async () => must(await sb.from('service_records').select('*').order('service_date', { ascending: false }).order('odometer_km', { ascending: false })),
         async saveService(rec, file) {
@@ -281,6 +283,13 @@ function demoApi() {
         me: () => wait(me()),
         async updateMe(f) { Object.assign(me(), f); save(); return wait(me()); },
         async setAvatar(file) { me().avatar_url = file ? await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); }) : null; save(); return wait(me()); },
+        directory: () => wait(db.members.map(m => ({ id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url, bike: m.bike, locality: m.locality, role: m.role, on_app: !!m.user_id })).sort((a, b) => a.full_name.localeCompare(b.full_name))),
+        async leaderboard() {
+            const myKm = Math.max(0, ...db.fuel.map(f => f.odometer_km), ...db.services.map(x => x.odometer_km));
+            const rows = [['Rahul Ghosh', 'Rocket', 18420, 'TVS Ronin 225'], ['Arjun Sen', 'Sultan', 11250, 'TVS Ronin 225'], ['Sourav Paul', '', 5310, 'TVS Apache RTR 200 4V']].map(([n, k, km, b]) => ({ full_name: n, nickname: k, km, bike: b, is_me: false }));
+            if (me().show_on_leaderboard !== false) rows.push({ full_name: me().full_name, nickname: me().nickname, avatar_url: me().avatar_url, km: myKm, bike: me().bike, is_me: true });
+            return wait(rows.sort((a, b) => b.km - a.km).map((r, i) => ({ ...r, rank: i + 1, member_id: i + 1 })));
+        },
         async birthdays(days = 0) {
             const out = [];
             for (let i = 0; i <= days; i++) {

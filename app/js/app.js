@@ -91,7 +91,7 @@ function mileageStats(logs) {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat };
+const ROUTES = { home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, crew: viewCrew };
 /* screens render one after another, so the screen the rider tapped last always wins */
 let renderChain = Promise.resolve();
 function render() { renderChain = renderChain.then(doRender, doRender); return renderChain; }
@@ -117,7 +117,6 @@ const initials = m => (m?.full_name || '?').split(/\s+/).slice(0, 2).map(w => w[
 /* profile photo if the member added one, otherwise their initials */
 const face = (m, cls = 'avatar') => `<span class="${cls}">${m?.avatar_url ? `<img src="${esc(m.avatar_url)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<i>${esc(initials(m))}</i></span>`;
 const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1>${right}
-    <a class="icon-btn" href="#chat" aria-label="Ask Pookie">${AI_ICON}</a>
     <a class="icon-btn bell" href="#news" aria-label="Announcements${unread() ? ' (new)' : ''}">${BELL}${unread() ? '<i class="dot"></i>' : ''}</a>
     <a href="#me" aria-label="My profile" class="avatar-link">${face(state.me)}</a></header>`;
 
@@ -128,7 +127,7 @@ app.addEventListener('click', e => {
     const fn = actions[el.dataset.act] || globalActions[el.dataset.act]; if (fn) { e.preventDefault(); fn(el); }
 });
 const globalActions = {
-    'reset-demo': () => { if (confirmBox('Reset the demo data?')) { api.resetDemo(); Object.assign(state, { services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null }); boot(); } },
+    'reset-demo': () => { if (confirmBox('Reset the demo data?')) { api.resetDemo(); Object.assign(state, { services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null, board: null, dir: null }); boot(); } },
     'add-service': () => serviceForm(),
     'add-fuel': () => fuelForm(),
     'wish': () => window.open(waShare(wishText(state.bdays.filter(b => b.day === todayISO()))), '_blank', 'noopener')
@@ -197,9 +196,16 @@ const ICON = {
     out: '<svg viewBox="0 0 24 24" class="chev"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></svg>'
 };
 
+/* the newest odometer reading: from whichever entry (service or fill-up) has the latest date */
+function latestOdo(services = [], fuel = []) {
+    const all = [...services.map(s => ({ km: s.odometer_km, d: s.service_date, src: 'service' })), ...fuel.map(f => ({ km: f.odometer_km, d: f.fill_date, src: 'fill-up' }))]
+        .filter(x => x.km > 0).sort((a, b) => b.d.localeCompare(a.d) || b.km - a.km);
+    return all[0] || null;
+}
+
 /* the instrument-cluster card: odometer in the middle, the ring fills up as the next service comes closer */
 function cluster(services, fuel) {
-    const odo = Math.max(0, ...services.map(s => s.odometer_km), ...fuel.map(f => f.odometer_km));
+    const last = latestOdo(services, fuel), odo = last?.km || 0;
     const due = services.find(s => s.next_due_km || s.next_due_date);
     const ms = mileageStats(fuel), yr = String(new Date().getFullYear());
     const spent = services.filter(s => s.service_date.startsWith(yr)).reduce((a, s) => a + Number(s.cost || 0), 0);
@@ -222,7 +228,7 @@ function cluster(services, fuel) {
         <div class="dial" role="img" aria-label="Odometer ${odo ? odo.toLocaleString('en-IN') + ' km' : 'not recorded yet'}">
             <svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="${R}" stroke-dasharray="${ARC} ${C}"/>
                 <circle class="fill" cx="60" cy="60" r="${R}" stroke-dasharray="${(ARC * p).toFixed(1)} ${C}"/></svg>
-            <div class="dial-read"><b>${odo ? odo.toLocaleString('en-IN') : '–'}</b><span>km on the clock</span></div>
+            <div class="dial-read"><b>${odo ? odo.toLocaleString('en-IN') : '–'}</b><span>${last ? `km, from your ${fmtDayMonth(last.d)} ${last.src}` : 'add a fill-up or service'}</span></div>
         </div>
         <p class="cl-cap">${cap}</p>
         <div class="cl-row">
@@ -246,6 +252,9 @@ async function viewHome() {
     const fresh = listings.filter(l => l.status === 'live').slice(0, 8);
     let pushAsk = false; try { pushAsk = pushSupported() && Notification.permission === 'default' && !localStorage.getItem('rwb-push-dismissed'); } catch { /* ignore */ }
     const names = today.map(b => b.full_name.split(' ')[0]);
+    /* "Clear" hides birthdays, Motomart and member updates on this phone; admin announcements stay until an admin deletes them */
+    let clearedAt = 0; try { clearedAt = Number(localStorage.getItem('rwb-feed-cleared') || 0); } catch { /* ignore */ }
+    const feed = news.filter(n => n.kind === 'announcement' || n.id > clearedAt);
     app.innerHTML = top(`Hi, ${firstName(state.me)}`) + `
         ${cluster(services, fuel)}
         <nav class="quick" aria-label="Quick actions">
@@ -257,7 +266,7 @@ async function viewHome() {
         ${isAdmin() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
         ${today.length ? `<div class="banner bday"><span class="b-ico">🎂</span><span class="grow"><b>${esc(names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : names[0])}</b> ${names.length > 1 ? 'have' : 'has'} a birthday today</span><button class="btn sm wa" data-act="wish">Wish</button></div>` : ''}
         ${pushAsk ? `<div class="banner"><span class="b-ico">🔔</span><span class="grow">Get birthdays, Motomart posts and ride news as notifications</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
-        ${news.length ? `<section class="section"><h2>Latest from RWB <a href="#news">See all</a></h2><div class="group">${news.slice(0, 2).map(n => newsRow(n)).join('')}</div></section>` : ''}
+        ${feed.length ? `<section class="section"><h2>Latest from RWB <span class="h-acts">${feed.some(n => n.kind !== 'announcement') ? '<button data-act="clear-feed">Clear</button>' : ''}<a href="#news">See all</a></span></h2><div class="group">${feed.slice(0, 3).map(n => newsRow(n)).join('')}</div></section>` : ''}
         <section class="section"><h2>Fresh on Motomart <a href="#motomart">See all</a></h2>
             ${fresh.length ? `<div class="strip">${fresh.map(listingCard).join('')}</div>` : `<a class="group-row-card" href="#motomart"><span class="g-ico">${ICON.tag}</span><span class="grow"><b>Nothing for sale yet</b><span class="small muted">Selling old gear? Post it here for fellow riders.</span></span>${ICON.chev}</a>`}</section>
         <section class="section"><h2>Explore</h2><div class="group">
@@ -269,6 +278,7 @@ async function viewHome() {
         'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); render(); }),
         'push-later': () => { try { localStorage.setItem('rwb-push-dismissed', '1'); } catch { /* ignore */ } render(); },
         sell: () => listingForm(),
+        'clear-feed': () => { try { localStorage.setItem('rwb-feed-cleared', String(Math.max(0, ...news.map(n => n.id)))); } catch { /* ignore */ } render(); toast('Cleared. Admin announcements stay until an admin removes them.'); },
         listing: el => location.hash = '#motomart/' + el.dataset.id
     };
     app.querySelectorAll('[data-guide]').forEach(a => a.addEventListener('click', () => state.guideTab = a.dataset.guide));
@@ -321,7 +331,7 @@ function serviceDetail(s) {
         <div class="btns" style="margin-bottom:10px">${s.bill_path ? '<button class="btn ghost" data-x="bill">🧾 View bill</button>' : ''}<button class="btn" data-x="edit">Edit</button></div>
         <button class="btn danger block" data-x="del">Delete this record</button>`, body => {
         body.querySelector('[data-x=edit]').onclick = () => serviceForm(s);
-        body.querySelector('[data-x=del]').onclick = e => { if (confirmBox('Delete this service record and its bill?')) busy(e.target, async () => { await api.deleteService(s); await load.services(true); closeSheet(); render(); toast('Deleted'); }); };
+        body.querySelector('[data-x=del]').onclick = e => { if (confirmBox('Delete this service record and its bill?')) busy(e.target, async () => { await api.deleteService(s); await load.services(true); state.board = null; closeSheet(); render(); toast('Deleted'); }); };
         const b = body.querySelector('[data-x=bill]'); if (b) b.onclick = () => showBill(s);
     });
 }
@@ -333,15 +343,32 @@ async function showBill(s) {
         body => body.querySelector('[data-x=back]').onclick = () => serviceDetail(s));
 }
 
+/* Any phone photo works: JPG, PNG, WebP, AVIF, and HEIC/HEIF from iPhones and OnePlus/Samsung phones.
+   Browsers can't show HEIC directly, so those are converted on the phone first (the converter loads only when needed). */
+const isHeic = f => /heic|heif/i.test(f.type) || /\.(heic|heif)$/i.test(f.name || '');
+const isImageFile = f => f.type.startsWith('image/') || isHeic(f) || /\.(jpe?g|png|webp|avif|gif|bmp)$/i.test(f.name || '');
+let heicLib;
+async function loadImage(file) {
+    if (!isImageFile(file)) throw new Error('Please choose a photo.');
+    const open = blob => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(blob); });
+    try { return await open(file); }
+    catch {
+        if (!isHeic(file)) throw new Error('Could not read that photo. Please try another one.');
+        toast('Converting iPhone photo…');
+        heicLib ??= new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js'; sc.onload = () => res(window.heic2any); sc.onerror = () => rej(new Error('Could not load the photo converter. Check your internet.')); document.head.appendChild(sc); });
+        const conv = await (await heicLib)({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+        return open(Array.isArray(conv) ? conv[0] : conv).catch(() => { throw new Error('Could not read that photo. Please try another one.'); });
+    }
+}
+
 /* shrink photos so free storage lasts: about 150–250 KB each */
 async function compressBill(file) {
     if (file.type === 'application/pdf') { if (file.size > 2e6) throw new Error('That PDF is over 2 MB. Please upload a photo of the bill instead.'); return file; }
-    if (!file.type.startsWith('image/')) throw new Error('Please choose a photo or a PDF.');
+    if (!isImageFile(file)) throw new Error('Please choose a photo or a PDF.');
     return compressImage(file, 1600, 250e3);
 }
 async function compressImage(file, maxSide = 1400, target = 220e3) {
-    if (!file.type.startsWith('image/')) throw new Error('Please choose a photo.');
-    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Could not read that photo. Try a JPG or PNG.')); i.src = URL.createObjectURL(file); });
+    const img = await loadImage(file);
     let max = maxSide, q = 0.72, blob;
     for (let tries = 0; tries < 6; tries++) {
         const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
@@ -382,7 +409,7 @@ function serviceForm(s = null) {
         </div>
         <label>Notes<textarea name="notes" maxlength="2000" placeholder="Anything worth remembering">${esc(r.notes || '')}</textarea></label>
         <div>
-            <label class="file-pick" id="pick"><input type="file" accept="image/*,application/pdf"><span id="pick-text">${r.bill_path ? '🧾 Bill attached. Tap to replace' : '📷 Add bill / invoice (photo or PDF)'}</span></label>
+            <label class="file-pick" id="pick"><input type="file" accept="image/*,.heic,.heif,application/pdf"><span id="pick-text">${r.bill_path ? '🧾 Bill attached. Tap to replace' : '📷 Add bill / invoice (photo or PDF)'}</span></label>
             ${r.bill_path ? '<button type="button" class="btn sm ghost" id="rm-bill" style="margin-top:8px">Remove attached bill</button>' : ''}
         </div>
         <button class="btn block">${s ? 'Save changes' : 'Save service'}</button>
@@ -414,7 +441,7 @@ function serviceForm(s = null) {
                 items: [...chips.querySelectorAll('.chip[aria-pressed=true]')].map(c => c.textContent),
                 cost: num(d.cost), next_due_km: num(d.next_due_km), next_due_date: d.next_due_date || null, notes: d.notes.trim() || null
             };
-            busy(e.submitter, async () => { await api.saveService(rec, file); await load.services(true); closeSheet(); location.hash === '#service' ? render() : (location.hash = '#service'); toast(s ? 'Saved' : 'Service added'); });
+            busy(e.submitter, async () => { await api.saveService(rec, file); await load.services(true); state.board = null; closeSheet(); location.hash === '#service' ? render() : (location.hash = '#service'); toast(s ? 'Saved' : 'Service added'); });
         };
     });
 }
@@ -511,14 +538,14 @@ function fuelForm(f = null) {
         };
         form.oninput = update; update();
         const del = body.querySelector('#del');
-        if (del) del.onclick = () => { if (confirmBox('Delete this fill-up?')) busy(del, async () => { await api.deleteFuel(f); await load.fuel(true); closeSheet(); render(); toast('Deleted'); }); };
+        if (del) del.onclick = () => { if (confirmBox('Delete this fill-up?')) busy(del, async () => { await api.deleteFuel(f); await load.fuel(true); state.board = null; closeSheet(); render(); toast('Deleted'); }); };
         form.onsubmit = e => {
             e.preventDefault();
             const d = Object.fromEntries(new FormData(form)), full = form.full_tank.checked;
             const rec = { id: f?.id, fill_date: d.fill_date, odometer_km: num(d.odometer_km), litres: num(d.litres), amount: num(d.amount), full_tank: full, trip_a_km: full ? num(d.trip_a_km) : null, notes: d.notes.trim() || null };
             const before = prev.filter(x => x.fill_date <= rec.fill_date).sort((a, b) => b.odometer_km - a.odometer_km)[0];
             if (before && rec.odometer_km < before.odometer_km && !confirmBox(`The odometer (${km(rec.odometer_km)}) is lower than an earlier fill-up (${km(before.odometer_km)}). Save anyway?`)) return;
-            busy(e.submitter, async () => { await api.saveFuel(rec); await load.fuel(true); closeSheet(); location.hash === '#mileage' ? render() : (location.hash = '#mileage'); toast(f ? 'Saved' : 'Fill-up added'); });
+            busy(e.submitter, async () => { await api.saveFuel(rec); await load.fuel(true); state.board = null; closeSheet(); location.hash === '#mileage' ? render() : (location.hash = '#mileage'); toast(f ? 'Saved' : 'Fill-up added'); });
         };
     });
 }
@@ -621,7 +648,7 @@ function viewMe() {
     const theme = getTheme();
     app.innerHTML = top('Me') + `
         <section class="profile">
-            <label class="photo-pick" aria-label="Change profile photo">${face(m, 'avatar xl')}<span class="cam">📷</span><input type="file" accept="image/*" id="pic" hidden></label>
+            <label class="photo-pick" aria-label="Change profile photo">${face(m, 'avatar xl')}<span class="cam">📷</span><input type="file" accept="image/*,.heic,.heif" id="pic" hidden></label>
             <div class="grow"><h2>${esc(m.full_name)}</h2><p class="muted">${esc(role)}${m.nickname ? `, “${esc(m.nickname)}”` : ''}</p></div>
             <button class="btn sm ghost" data-act="edit">Edit</button>
         </section>
@@ -639,6 +666,9 @@ function viewMe() {
             ${[['birthday', 'Birthdays'], ['motomart', 'New Motomart posts'], ['member', 'New members on the app']].map(([k, l]) => `<label class="toggle-row"><span class="grow">${l}</span><span class="switch-only"><input type="checkbox" data-pref="${k}"${(m.notify || {})[k] !== false ? ' checked' : ''}></span></label>`).join('')}
         </div>
         <p class="small muted" style="margin:8px 4px 0">RWB announcements always come through.</p>
+
+        <h2 class="group-title">Privacy</h2>
+        <div class="group"><label class="toggle-row"><span class="grow">Show me on the odometer leaderboard<span class="small muted">Other members see your name, photo and km</span></span><span class="switch-only"><input type="checkbox" id="lb"${m.show_on_leaderboard !== false ? ' checked' : ''}></span></label></div>
 
         <h2 class="group-title">App</h2>
         <div class="group">
@@ -677,6 +707,10 @@ function viewMe() {
         const notify = { birthday: true, motomart: true, member: true, ...(state.me.notify || {}), [cb.dataset.pref]: cb.checked };
         try { state.me = await api.updateMe({ notify }); toast('Saved'); } catch (e) { cb.checked = !cb.checked; toast(e.message, true); }
     });
+    $('#lb').onchange = async e => {
+        try { state.me = await api.updateMe({ show_on_leaderboard: e.target.checked }); state.board = null; toast(e.target.checked ? 'You\'re on the leaderboard' : 'Hidden from the leaderboard'); }
+        catch (err) { e.target.checked = !e.target.checked; toast(err.message, true); }
+    };
     $('#pic').onchange = async e => {
         const f = e.target.files[0]; e.target.value = ''; if (!f) return;
         try { toast('Uploading photo…'); state.me = await api.setAvatar(await squarePhoto(f)); render(); toast('Profile photo updated'); }
@@ -689,8 +723,7 @@ function viewMe() {
 
 /* centre-cropped square, 320 px, about 20–40 KB: thousands of members fit in the free storage */
 async function squarePhoto(file) {
-    if (!file.type.startsWith('image/')) throw new Error('Please choose a photo.');
-    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Could not read that photo. Try a JPG or PNG.')); i.src = URL.createObjectURL(file); });
+    const img = await loadImage(file);
     const side = Math.min(img.naturalWidth, img.naturalHeight), cv = document.createElement('canvas'); cv.width = cv.height = 320;
     cv.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 320, 320);
     URL.revokeObjectURL(img.src);
@@ -739,12 +772,12 @@ async function adminMembers() {
     const F = { all: 'Everyone', app: 'On the app', admins: 'Admins' };
     state.memberFilter ||= 'all';
     $('#admin-body').innerHTML = `<div class="chips" style="margin-bottom:10px">${Object.entries(F).map(([k, v]) => `<button class="chip" data-act="mf" data-f="${k}" aria-pressed="${state.memberFilter === k}">${v}</button>`).join('')}</div>
-    ${state.memberFilter !== 'all' && state.me.role === 'superadmin' ? '<p class="small muted" style="margin-bottom:10px">Tap a person to make them an admin or remove their admin rights.</p>' : ''}<input class="search" type="search" id="mq" placeholder="Search name, number or bike no." value="${esc(state.adminSearch)}" aria-label="Search members"><p class="small muted" id="mcount" style="margin:-4px 0 10px"></p><div class="list" id="ml"></div><button class="btn ghost block section" id="more" hidden>Show more</button>`;
+    ${state.memberFilter !== 'all' && state.me.role === 'superadmin' ? '<p class="small muted" style="margin-bottom:10px">Tap a person to make them an admin or remove their admin rights.</p>' : ''}<input class="search" type="search" id="mq" placeholder="Search name, number, bike no. or place" value="${esc(state.adminSearch)}" aria-label="Search members"><p class="small muted" id="mcount" style="margin:-4px 0 10px"></p><div class="list" id="ml"></div><button class="btn ghost block section" id="more" hidden>Show more</button>`;
     let limit = 50;
     const draw = () => {
         const q = state.adminSearch.trim().toLowerCase(), qd = q.replace(/\D/g, '');
         const pool = all.filter(m => state.memberFilter === 'app' ? m.user_id : state.memberFilter === 'admins' ? m.role !== 'member' : true);
-        const hits = pool.filter(m => !q || m.full_name.toLowerCase().includes(q) || (m.nickname || '').toLowerCase().includes(q) || (qd.length >= 3 && (m.phone || '').includes(qd)) || (m.vrn || '').toLowerCase().replace(/\s/g, '').includes(q.replace(/\s/g, '')));
+        const hits = pool.filter(m => !q || m.full_name.toLowerCase().includes(q) || (m.nickname || '').toLowerCase().includes(q) || (qd.length >= 3 && (m.phone || '').includes(qd)) || (m.vrn || '').toLowerCase().replace(/\s/g, '').includes(q.replace(/\s/g, '')) || (m.locality || '').toLowerCase().includes(q) || (m.hideout || '').toLowerCase().includes(q));
         $('#mcount').textContent = `${hits.length} ${state.memberFilter === 'app' ? 'on the app' : state.memberFilter === 'admins' ? (hits.length === 1 ? 'admin' : 'admins') : 'member' + (hits.length === 1 ? '' : 's')}`;
         $('#ml').innerHTML = hits.slice(0, limit).map(m => `<button class="card tap row member-row" data-act="member" data-id="${m.id}">${face(m, 'avatar sm')}
             <div class="grow"><div class="who">${esc(m.full_name)} ${m.role !== 'member' ? `<span class="badge orange">${m.role === 'superadmin' ? 'Super admin' : 'Admin'}</span>` : ''}</div>
@@ -784,7 +817,7 @@ function memberSheet(m) {
         if (rm) rm.onclick = () => {
             const typed = window.prompt(`This permanently deletes ${m.full_name}${m.user_id ? ' and all their app data' : ''}.\n\nType REMOVE to confirm.`);
             if ((typed || '').trim().toUpperCase() !== 'REMOVE') return;
-            busy(rm, async () => { await api.admin.remove(m.id, m.user_id); state.adminMembers = state.adminMembers.filter(x => x.id !== m.id); closeSheet(); toast(`${m.full_name} removed`); viewAdmin(); });
+            busy(rm, async () => { await api.admin.remove(m.id, m.user_id); state.adminMembers = state.adminMembers.filter(x => x.id !== m.id); closeSheet(); toast(`${m.full_name} removed`); state.dir = null; state.board = null; render(); });
         };
     });
 }
@@ -1021,7 +1054,7 @@ function listingForm(l = null) {
         ${l ? '' : '<p class="small muted">Your post goes live after an admin approves it, usually within 24 hours. Members can then message you on WhatsApp.</p>'}
         <fieldset><legend>Photos <span class="hint muted small">(1 to ${MAX}, clear and well lit)</span></legend>
             <div class="thumbs" id="thumbs"></div>
-            <label class="file-pick"><input type="file" accept="image/*" multiple id="pics"><span>📷 Add photos</span></label></fieldset>
+            <label class="file-pick"><input type="file" accept="image/*,.heic,.heif" multiple id="pics"><span>📷 Add photos</span></label></fieldset>
         <label>Product name<input name="product_name" required maxlength="120" placeholder="e.g. Axor Apex helmet, matte black" value="${esc(r.product_name || '')}"></label>
         <div class="grid2">
             <label>Category<select name="category" required><option value="">Choose…</option>${CATS.map(c => `<option${c === r.category ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
@@ -1113,7 +1146,7 @@ function md(text) {
 function riderContext() {
     const s = state.services || [], f = state.fuel || [], m = state.me || {};
     const last = s[0], due = s.find(x => x.next_due_km || x.next_due_date), ms = f.length ? mileageStats(f) : null;
-    const odo = Math.max(0, ...s.map(x => x.odometer_km), ...f.map(x => x.odometer_km));
+    const odo = latestOdo(s, f)?.km || 0;
     return {
         first_name: firstName(m), bike: m.bike || null, odometer_km: odo || null,
         last_service: last ? { date: last.service_date, km: last.odometer_km, type: SERVICE_TYPES[last.service_type], number: last.service_no, items: last.items } : null,
@@ -1130,7 +1163,7 @@ async function viewChat() {
         <form id="ask" class="askbar">
             <div id="att" class="att" hidden></div>
             <div class="row">
-                <label class="icon-btn" aria-label="Add a photo" title="Add a photo">📷<input type="file" accept="image/*" id="aphoto" hidden></label>
+                <label class="icon-btn" aria-label="Add a photo" title="Add a photo">📷<input type="file" accept="image/*,.heic,.heif" id="aphoto" hidden></label>
                 <textarea id="q" rows="1" maxlength="1500" placeholder="Ask Pookie…" aria-label="Your question"></textarea>
                 <button class="btn send" aria-label="Send">➤</button>
             </div>
@@ -1220,6 +1253,47 @@ async function adminAI() {
     $('#ainotes').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { await api.saveChatNotes(e.target.notes.value.trim()); toast('Saved. Pookie will use this from the next question.'); }); };
 }
 
+/* =================== RWB: leaderboard + members =================== */
+const MEDAL = ['🥇', '🥈', '🥉'];
+const kmTxt = n => Number(n).toLocaleString('en-IN') + ' km';
+async function viewCrew() {
+    const board = state.board ??= await api.leaderboard().catch(() => []);
+    const me = board.find(r => r.is_me), top3 = board.slice(0, 3), rest = board.slice(3, state.boardAll ? board.length : 10);
+    const podium = top3.length ? `<div class="podium">${[top3[1], top3[0], top3[2]].map((r, i) => r ? `<div class="pod p${[2, 1, 3][i]}${r.is_me ? ' me' : ''}">
+            ${face(r, 'avatar pod-face')}<span class="pod-medal">${MEDAL[r.rank - 1]}</span><b>${esc(r.nickname || r.full_name.split(' ')[0])}</b><span class="pod-km">${kmTxt(r.km)}</span></div>` : '<div></div>').join('')}</div>` : '';
+    app.innerHTML = top('RWB') + `
+        <section class="board card">
+            <div class="row" style="justify-content:space-between;margin-bottom:6px"><h2 class="board-title">Odometer leaderboard</h2><span class="small muted">${board.length} rider${board.length === 1 ? '' : 's'}</span></div>
+            ${board.length ? podium + (rest.length ? `<ol class="board-list" start="4">${rest.map(r => `<li class="${r.is_me ? 'me' : ''}"><span class="rk">${r.rank}</span>${face(r, 'avatar sm')}<span class="grow"><b>${esc(r.full_name)}</b><span class="small muted">${esc(r.bike || '')}</span></span><span class="num km">${kmTxt(r.km)}</span></li>`).join('')}</ol>` : '')
+                + (board.length > 10 ? `<button class="link-btn" data-act="board-all" style="margin-top:10px">${state.boardAll ? 'Show top 10' : `Show all ${board.length}`}</button>` : '')
+                + (me && me.rank > 10 && !state.boardAll ? `<p class="board-me">You're <b>#${me.rank}</b> with ${kmTxt(me.km)}</p>` : '')
+                + (!me ? `<p class="small muted" style="margin-top:10px">${state.me.show_on_leaderboard === false ? 'You\'re hidden from the leaderboard (Me → Privacy).' : 'Add a fill-up or a service with your odometer reading to join the board.'}</p>` : '')
+              : '<p class="muted">No odometer readings yet. Add a fill-up or a service to start the board.</p>'}
+        </section>
+        <section class="section"><h2>Members</h2><div id="crew-body"><p class="muted">Loading…</p></div></section>`;
+    actions = { 'board-all': () => { state.boardAll = !state.boardAll; viewCrew(); } };
+    if (isAdmin()) {   /* admins get their full member tools here too */
+        $('#crew-body').id = 'admin-body';
+        await adminMembers(); return;
+    }
+    const all = state.dir ??= await api.directory();
+    $('#crew-body').innerHTML = `<input class="search" type="search" id="cq" placeholder="Search name, bike or place" value="${esc(state.crewSearch || '')}" aria-label="Search members">
+        <p class="small muted" id="ccount" style="margin:-4px 0 10px"></p><div class="list" id="cl"></div><button class="btn ghost block section" id="cmore" hidden>Show more</button>`;
+    let limit = 50;
+    const draw = () => {
+        const q = (state.crewSearch || '').trim().toLowerCase();
+        const hits = all.filter(m => !q || [m.full_name, m.nickname, m.bike, m.locality].some(v => (v || '').toLowerCase().includes(q)));
+        $('#ccount').textContent = `${hits.length} member${hits.length === 1 ? '' : 's'}${q ? ' found' : ' in RWB'}`;
+        $('#cl').innerHTML = hits.slice(0, limit).map(m => `<div class="card row member-row">${face(m, 'avatar sm')}
+            <div class="grow"><div class="who">${esc(m.full_name)}${m.nickname ? ` <span class="muted" style="font-weight:400">“${esc(m.nickname)}”</span>` : ''} ${m.role !== 'member' ? '<span class="badge orange">Admin</span>' : ''}</div>
+            <div class="meta">${esc([m.bike, m.locality].filter(Boolean).join(', ') || 'RWB member')}</div></div></div>`).join('') || '<div class="card empty">No one matches.</div>';
+        $('#cmore').hidden = hits.length <= limit;
+    };
+    $('#cq').oninput = e => { state.crewSearch = e.target.value; limit = 50; draw(); };
+    $('#cmore').onclick = () => { limit += 100; draw(); };
+    draw();
+}
+
 /* =================== Boot =================== */
 async function boot() {
     try {
@@ -1241,6 +1315,6 @@ async function boot() {
     try { api = await createApi(); }
     catch { app.innerHTML = `<section class="signin"><h1>Can't load</h1><p class="lead">Please check your internet connection.</p><button class="btn block" onclick="location.reload()">Try again</button></section>`; return; }
     if (location.hash === '#install') { history.replaceState(null, '', location.pathname); setTimeout(installSheet, 1200); }
-    api.onAuthChange(ev => { chat.msgs = null; chat.left = null; Object.assign(state, { me: null, services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null }); if (ev === 'SIGNED_OUT') history.replaceState(null, '', location.pathname); boot(); });
+    api.onAuthChange(ev => { chat.msgs = null; chat.left = null; Object.assign(state, { me: null, services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null, board: null, dir: null }); if (ev === 'SIGNED_OUT') history.replaceState(null, '', location.pathname); boot(); });
     boot();
 })();

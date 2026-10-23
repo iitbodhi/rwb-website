@@ -379,3 +379,32 @@ details.howto summary{font-weight:600}
 .member-row{gap:12px}
 details.tech{margin-top:12px;font-size:.82rem}
 details.tech summary{color:var(--muted);cursor:pointer}
+
+/* 7-button bottom bar */
+.tabbar a{max-width:none;min-width:0;font-size:.66rem;gap:2px;padding:0 1px}
+.tabbar a span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.tabbar svg{width:22px;height:22px}
+@media (max-width:360px){.tabbar a{font-size:.6rem}}
+
+/* RWB tab: leaderboard */
+.board{padding:16px 16px 14px}
+.board-title{font:600 1.05rem/1.2 var(--body)}
+.podium{display:grid;grid-template-columns:1fr 1.15fr 1fr;align-items:end;gap:8px;margin:14px 0 6px;text-align:center}
+.pod{display:grid;justify-items:center;gap:2px;padding:12px 6px 10px;border-radius:14px;background:var(--paper-2);position:relative;min-width:0}
+.pod.p1{background:var(--orange-soft);padding-top:16px}
+.pod.p1 .pod-face{width:64px;height:64px;font-size:1.1rem}
+.pod .pod-face{width:50px;height:50px;font-size:.9rem;box-shadow:0 0 0 3px var(--card)}
+.pod-medal{font-size:1.3rem;line-height:1;margin-top:-12px}
+.pod b{font-weight:600;font-size:.95rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pod-km{font:700 1.05rem/1.1 var(--display);font-variant-numeric:tabular-nums;color:var(--orange)}
+.pod.p1 .pod-km{font-size:1.25rem}
+.pod.me,.board-list li.me{outline:2px solid var(--orange);outline-offset:-2px}
+.board-list{list-style:none;padding:0;margin-top:8px;display:grid}
+.board-list li{display:flex;align-items:center;gap:10px;padding:9px 6px;border-top:1px solid var(--line);border-radius:10px}
+.board-list .rk{width:24px;text-align:center;font:700 1rem var(--display);color:var(--muted);flex:none}
+.board-list .grow{display:grid;min-width:0}
+.board-list b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.board-list .km{font-weight:600;white-space:nowrap}
+.board-me{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--orange-soft);font-size:.92rem}
+.section > h2 .h-acts{display:flex;gap:14px;align-items:center}
+.section > h2 .h-acts button{font:600 .9rem var(--body);color:var(--muted);background:none;border:0;cursor:pointer;padding:0}
