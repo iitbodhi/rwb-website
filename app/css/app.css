@@ -550,3 +550,6 @@ dialog#sheet::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(2px)}
 .toast{font-size:.85rem;padding:9px 16px;box-shadow:0 12px 30px -12px rgba(0,0,0,.45)}
 .wish-prev{-webkit-line-clamp:2}
 .sheet-head{background:color-mix(in srgb,var(--paper) 94%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+/* header: solid enough that scrolled content never shows through */
+.top{background:color-mix(in srgb,var(--paper) 94%,transparent);box-shadow:0 1px 0 var(--hair)}
+.mm-intro{margin:10px 0 12px}

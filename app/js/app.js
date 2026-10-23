@@ -71,13 +71,11 @@ const WISHES = [
     ['Bengali', 'শুভ জন্মদিন {names}! 🎂\nNew year, new roads, same Ronin spirit. Have a great day! 🧡'],
     ['Safe miles', 'Happy Birthday {names}! 🎂\nWishing you a year of safe miles, smooth roads and great memories. Keep riding, keep shining! ✨🏍️']
 ];
-const tagOf = b => b.phone ? '@91' + String(b.phone).replace(/\D/g, '').slice(-10) : '';
 function wishSheet(people) {
     if (!people.length) return;
     let pick = 0; try { pick = (Number(localStorage.getItem('rwb-wish-pick')) || Math.floor(Math.random() * WISHES.length)) % WISHES.length; } catch { /* ignore */ }
-    const canTag = people.some(b => b.phone);
     const names = andList(people.map(b => b.full_name));
-    const build = (tpl, tag) => tpl.replaceAll('{names}', names) + (tag && canTag ? '\n\n' + people.map(tagOf).filter(Boolean).join(' ') : '');
+    const build = tpl => tpl.replaceAll('{names}', names);
     openSheet('Send birthday wishes', `
         <p class="small muted" style="margin-bottom:12px">Pick a message for <b>${esc(names)}</b> or write your own, then choose the RWB group in WhatsApp.</p>
         <div class="wish-list" role="radiogroup" aria-label="Message">
@@ -85,18 +83,16 @@ function wishSheet(people) {
             <label class="wish-opt"><input type="radio" name="w" value="custom"><span><b>Write my own</b><span class="wish-prev">Your own words</span></span></label>
         </div>
         <textarea id="wish-own" maxlength="1000" placeholder="Write your wish…" hidden></textarea>
-        ${canTag ? `<label class="switch" style="margin-top:12px">Tag ${people.length > 1 ? 'them' : firstName(people[0])} in the message<input type="checkbox" id="wish-tag" checked></label>
-            <p class="small muted" style="margin-top:6px">Adds ${esc(people.map(tagOf).filter(Boolean).join(' '))} so WhatsApp can notify ${people.length > 1 ? 'them' : 'them'} in the group.</p>` : ''}
         <button class="btn wa block" id="wish-go" style="margin-top:14px">Send on WhatsApp</button>`, body => {
         const own = body.querySelector('#wish-own');
         const sel = () => body.querySelector('input[name=w]:checked').value;
         body.querySelectorAll('input[name=w]').forEach(r => r.onchange = () => { own.hidden = sel() !== 'custom'; if (!own.hidden) { own.value ||= `Happy Birthday ${names}! `; own.focus(); } });
         body.querySelector('#wish-go').onclick = () => {
-            const v = sel(), tag = body.querySelector('#wish-tag')?.checked;
+            const v = sel();
             const txt = v === 'custom' ? own.value.trim() : WISHES[Number(v)][1];
             if (!txt) { toast('Write a message first', true); return; }
             try { if (v !== 'custom') localStorage.setItem('rwb-wish-pick', String((Number(v) + 1) % WISHES.length)); } catch { /* ignore */ }
-            window.open(waShare(build(txt, tag)), '_blank', 'noopener'); closeSheet();
+            window.open(waShare(build(txt)), '_blank', 'noopener'); closeSheet();
         };
     });
 }
@@ -1040,7 +1036,7 @@ async function viewMotomart() {
         (!q || (l.product_name + ' ' + l.category + ' ' + (l.details || '')).toLowerCase().includes(q)));
     const cats = CATS.filter(c => all.some(l => l.category === c));
     app.innerHTML = top('Motomart') + `
-        <p class="muted small" style="margin:-6px 0 12px">Used gear from fellow Ronins. Tap an item to see photos and message the seller on WhatsApp.</p>
+        <p class="muted small mm-intro">Used gear from fellow Ronins. Tap an item to see photos and message the seller on WhatsApp.</p>
         <input class="search" type="search" id="mmq" placeholder="Search helmets, jackets, guards…" value="${esc(mmState.q)}" aria-label="Search Motomart">
         <div class="chips hscroll" style="margin-bottom:10px">${['all', ...cats].map(c => `<button class="chip" data-act="cat" data-cat="${esc(c)}" aria-pressed="${mmState.cat === c}">${c === 'all' ? 'All' : esc(c)}</button>`).join('')}</div>
         <div class="row" style="margin-bottom:14px;gap:8px">

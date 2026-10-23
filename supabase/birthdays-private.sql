@@ -1,8 +1,5 @@
--- =====================================================================
--- RWB App: birthday wishes can tag the birthday rider (@number) in WhatsApp
--- Members get the phone number only of riders whose birthday is TODAY.
--- Run once in Supabase > SQL Editor. Safe to run again.
--- =====================================================================
+-- RWB App: birthday tags removed. Phone numbers in the birthday list go back to admins only.
+-- Run once in Supabase > SQL Editor. Safe to run even if you never ran 19-birthday-tags.sql.
 create or replace function public.birthdays(p_days integer default 0)
 returns table (member_id bigint, full_name text, nickname text, day date, phone text, on_app boolean)
 language plpgsql stable security definer set search_path = public as $$
@@ -11,7 +8,7 @@ begin
   if not is_member() then raise exception 'Members only'; end if;
   return query
     select m.id, m.full_name, m.nickname, g.d::date,
-           case when is_admin() or g.d::date = d0 then m.phone end, m.user_id is not null
+           case when is_admin() then m.phone end, m.user_id is not null
     from generate_series(d0, d0 + greatest(0, least(p_days, 31)), interval '1 day') g(d)
     join members m on m.dob is not null and (
          (extract(month from m.dob) = extract(month from g.d) and extract(day from m.dob) = extract(day from g.d))
