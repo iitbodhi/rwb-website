@@ -1,0 +1,18 @@
+# Free Supabase projects pause after 7 days without activity.
+# This pings the database once a day so the RWB app never goes to sleep. Costs nothing.
+name: Keep Supabase awake
+on:
+  schedule:
+    - cron: '17 3 * * *'   # every day, 08:47 IST
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ping database
+        run: |
+          URL=$(grep -oP "SUPABASE_URL:\s*'\K[^']+" app/config.js || true)
+          KEY=$(grep -oP "SUPABASE_ANON_KEY:\s*'\K[^']+" app/config.js || true)
+          if [ -z "$URL" ]; then echo "App not connected to Supabase yet, nothing to do."; exit 0; fi
+          curl -fsS -X POST "$URL/rest/v1/rpc/today_ist" -H "apikey: $KEY" -H "Content-Type: application/json" -d '{}'

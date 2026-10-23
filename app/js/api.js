@@ -1,0 +1,208 @@
+/* RWB App — data layer.
+   One set of functions, two backends:
+   - Supabase (real data) when APP_CONFIG has a URL and key
+   - Demo (sample data in this browser) when it does not */
+
+const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
+const BILL_BUCKET = 'bills';
+
+export async function createApi() {
+    const c = typeof APP_CONFIG !== 'undefined' ? APP_CONFIG : {};
+    if (c.SUPABASE_URL && c.SUPABASE_ANON_KEY) return supabaseApi(c.SUPABASE_URL, c.SUPABASE_ANON_KEY);
+    return demoApi();
+}
+
+/* Turn database errors into a sentence a rider can act on */
+function friendly(error) {
+    if (!error) return null;
+    const m = error.message || String(error);
+    if (/Failed to fetch|NetworkError|network/i.test(m)) return new Error('No internet connection. Please try again.');
+    if (/JWT|session/i.test(m)) return new Error('Your sign-in has expired. Please sign in again.');
+    return new Error(m.replace(/^.*?ERROR:\s*/, ''));
+}
+const must = ({ data, error }) => { if (error) throw friendly(error); return data; };
+
+/* ======================= Supabase ======================= */
+async function supabaseApi(url, key) {
+    const { createClient } = await import(SUPABASE_JS);
+    const sb = createClient(url, key, { auth: { flowType: 'pkce', persistSession: true, detectSessionInUrl: true } });
+    const uid = async () => (await sb.auth.getSession()).data.session?.user?.id;
+
+    return {
+        demo: false,
+        async session() { const s = (await sb.auth.getSession()).data.session; return s ? { email: s.user.email, name: s.user.user_metadata?.full_name } : null; },
+        onAuthChange(fn) {
+            /* only react when the signed-in person actually changes (Supabase also fires on token refresh / tab focus) */
+            let last;
+            sb.auth.onAuthStateChange((ev, s) => {
+                const id = s?.user?.id || null;
+                if (ev === 'INITIAL_SESSION') { last = id; return; }
+                if (id !== last) { last = id; setTimeout(() => fn(id ? 'SIGNED_IN' : 'SIGNED_OUT'), 0); }
+            });
+        },
+        async signIn() {
+            const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname, queryParams: { prompt: 'select_account' } } });
+            if (error) throw friendly(error);
+        },
+        async signOut() { await sb.auth.signOut(); },
+
+        linkAccount: async () => must(await sb.rpc('link_account')),
+        requestAccess: async f => must(await sb.rpc('request_access', { p_full_name: f.full_name, p_phone: f.phone, p_dob: f.dob || null, p_vrn: f.vrn || null, p_locality: f.locality || null })),
+        myRequest: async () => must(await sb.from('link_requests').select('*').maybeSingle()),
+        me: async () => must(await sb.from('members').select('*').eq('user_id', await uid()).single()),
+        updateMe: async f => must(await sb.from('members').update(f).eq('user_id', await uid()).select().single()),
+        birthdays: async (days = 0) => must(await sb.rpc('birthdays', { p_days: days })),
+
+        services: async () => must(await sb.from('service_records').select('*').order('service_date', { ascending: false }).order('odometer_km', { ascending: false })),
+        async saveService(rec, file) {
+            const me = await uid();
+            if (file) {
+                const ext = file.type === 'application/pdf' ? 'pdf' : file.type === 'image/png' ? 'png' : 'jpg';
+                const path = `${me}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+                must(await sb.storage.from(BILL_BUCKET).upload(path, file, { contentType: file.type, upsert: false }));
+                if (rec.bill_path) await sb.storage.from(BILL_BUCKET).remove([rec.bill_path]);
+                rec.bill_path = path;
+            }
+            const { id, user_id, created_at, ...row } = rec;
+            return id ? must(await sb.from('service_records').update(row).eq('id', id).select().single())
+                      : must(await sb.from('service_records').insert(row).select().single());
+        },
+        async deleteService(rec) {
+            if (rec.bill_path) await sb.storage.from(BILL_BUCKET).remove([rec.bill_path]);
+            must(await sb.from('service_records').delete().eq('id', rec.id));
+        },
+        async removeBill(rec) {
+            await sb.storage.from(BILL_BUCKET).remove([rec.bill_path]);
+            return must(await sb.from('service_records').update({ bill_path: null }).eq('id', rec.id).select().single());
+        },
+        billUrl: async path => must(await sb.storage.from(BILL_BUCKET).createSignedUrl(path, 600)).signedUrl,
+
+        fuel: async () => must(await sb.from('fuel_logs').select('*').order('odometer_km', { ascending: true }).order('fill_date', { ascending: true })),
+        async saveFuel(rec) {
+            const { id, user_id, created_at, ...row } = rec;
+            return id ? must(await sb.from('fuel_logs').update(row).eq('id', id).select().single())
+                      : must(await sb.from('fuel_logs').insert(row).select().single());
+        },
+        deleteFuel: async rec => must(await sb.from('fuel_logs').delete().eq('id', rec.id)),
+
+        admin: {
+            stats: async () => must(await sb.rpc('admin_stats')),
+            requests: async () => must(await sb.rpc('admin_list_requests')),
+            approve: async id => must(await sb.rpc('admin_approve_request', { p_request_id: id })),
+            reject: async id => must(await sb.rpc('admin_reject_request', { p_request_id: id })),
+            async members() {
+                const all = []; let from = 0;
+                for (;;) {   /* fetch in pages of 1000 (Supabase's default limit) */
+                    const page = must(await sb.from('members').select('*').order('full_name').range(from, from + 999));
+                    all.push(...page); if (page.length < 1000) return all; from += 1000;
+                }
+            },
+            update: async (id, p) => must(await sb.rpc('admin_update_member', { p_member_id: id, p })),
+            setRole: async (id, role) => must(await sb.rpc('admin_set_role', { p_member_id: id, p_role: role })),
+            async remove(id) {
+                const files = must(await sb.rpc('admin_begin_removal', { p_member_id: id })) || [];
+                if (files.length) must(await sb.storage.from(BILL_BUCKET).remove(files));
+                return must(await sb.rpc('admin_remove_member', { p_member_id: id }));
+            }
+        }
+    };
+}
+
+/* ======================= Demo (sample data in this browser) ======================= */
+function demoApi() {
+    const KEY = 'rwb-app-demo-v1';
+    const iso = d => d.toISOString().slice(0, 10);
+    const daysAgo = n => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
+    const today = new Date();
+    const md = (offset) => { const d = new Date(today); d.setDate(d.getDate() + offset); return `1992-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+    function seed() {
+        const members = [
+            { id: 1, full_name: 'Demo Rider', nickname: 'Demo', dob: '1994-03-12', phone: '9000000001', email: 'demo@example.com', vrn: 'WB 02 AB 1234', bike: 'TVS Ronin 225', blood_group: 'B+', locality: 'Salt Lake', hideout: 'Kolkata', emergency_phone: '9000000099', alt_phone: '', role: 'superadmin', user_id: 'me', joined_at: '2024-01-10' },
+            { id: 2, full_name: 'Arjun Sen', nickname: 'Sultan', dob: md(0), phone: '9000000002', email: 'arjun@example.com', vrn: 'WB 06 CD 4567', bike: 'TVS Ronin 225', blood_group: 'O+', locality: 'Howrah', role: 'member', user_id: 'u2', joined_at: '2024-02-01' },
+            { id: 3, full_name: 'Priya Dutta', nickname: '', dob: md(0), phone: '9000000003', email: 'priya@example.com', vrn: 'WB 20 EF 7890', bike: 'TVS Ronin 225', blood_group: 'A+', locality: 'Durgapur', role: 'member', user_id: null, joined_at: '2024-03-15' },
+            { id: 4, full_name: 'Rahul Ghosh', nickname: 'Rocket', dob: md(3), phone: '9000000004', email: 'rahul@example.com', vrn: 'WB 74 GH 1111', bike: 'TVS Ronin 225', blood_group: 'AB+', locality: 'Siliguri', role: 'admin', user_id: 'u4', joined_at: '2023-11-20' },
+            { id: 5, full_name: 'Sourav Paul', nickname: '', dob: md(6), phone: '9000000005', email: 'sourav@example.com', vrn: 'WB 12 IJ 2222', bike: 'TVS Apache RTR 200 4V', blood_group: 'B-', locality: 'Barasat', role: 'member', user_id: null, joined_at: '2025-05-02' }
+        ];
+        const services = [
+            { id: 1, service_date: daysAgo(210), odometer_km: 980, service_center: 'TVS Partner, Salt Lake', service_type: 'free', service_no: 1, items: ['Engine oil change', 'Oil filter', 'General check-up'], cost: 0, next_due_km: 4000, next_due_date: null, notes: '', bill_path: null },
+            { id: 2, service_date: daysAgo(95), odometer_km: 4120, service_center: 'TVS Partner, Salt Lake', service_type: 'free', service_no: 2, items: ['Engine oil change', 'Chain clean & lube', 'Chain adjustment', 'General check-up'], cost: 450, next_due_km: 8000, next_due_date: daysAgo(-80), notes: 'Asked them to check the rear brake squeal.', bill_path: 'demo-bill' },
+            { id: 3, service_date: daysAgo(12), odometer_km: 6850, service_center: 'Self', service_type: 'self', service_no: null, items: ['Chain clean & lube'], cost: 350, next_due_km: null, next_due_date: null, notes: 'Motul chain kit', bill_path: null }
+        ];
+        const fuel = []; let odo = 6000, id = 1;
+        const fills = [[9.1, true], [4.0, false], [5.3, true], [9.6, true], [8.8, true], [10.2, true], [9.0, true]];
+        const kmpl = [41.2, 0, 0, 43.0, 39.5, 42.4, 44.1];
+        fills.forEach(([l, full], i) => {
+            const dist = i === 0 ? 0 : i === 1 ? 160 : i === 2 ? Math.round(9.3 * 42.1 - 160) : Math.round(l * kmpl[i]);
+            odo += dist;
+            fuel.push({ id: id++, fill_date: daysAgo(70 - i * 10), odometer_km: odo, litres: l, amount: Math.round(l * 104.9), full_tank: full, trip_a_km: i === 0 ? null : full ? (i === 2 ? 392 : dist) : null, notes: '' });
+        });
+        const requests = [{ id: 1, email: 'newrider@example.com', full_name: 'Kunal Das', phone: '9000000010', dob: '1998-08-21', vrn: 'WB 26 KL 3333', locality: 'Kalyani', created_at: daysAgo(1), match_member_id: null, match_name: null, match_linked: false }];
+        return { signedIn: false, members, services, fuel, requests, nextId: 100 };
+    }
+    let db; try { db = JSON.parse(localStorage.getItem(KEY)); } catch { /* storage blocked */ }
+    if (!db) db = seed();
+    const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { /* ignore */ } };
+    const clone = x => JSON.parse(JSON.stringify(x));
+    const nid = () => ++db.nextId;
+    const me = () => db.members.find(m => m.user_id === 'me');
+    const wait = (v) => new Promise(r => setTimeout(() => r(clone(v)), 120));
+    const authFns = [];
+    const isBirthday = (dob, d) => dob && dob.slice(5) === iso(d).slice(5);
+
+    return {
+        demo: true,
+        session: async () => db.signedIn ? { email: 'demo@example.com', name: 'Demo Rider' } : null,
+        onAuthChange: fn => authFns.push(fn),
+        async signIn() { db.signedIn = true; save(); authFns.forEach(f => f('SIGNED_IN')); },
+        async signOut() { db.signedIn = false; save(); authFns.forEach(f => f('SIGNED_OUT')); },
+        resetDemo() { db = seed(); db.signedIn = true; save(); },
+
+        linkAccount: () => wait('member'),
+        requestAccess: () => wait('pending'),
+        myRequest: () => wait(null),
+        me: () => wait(me()),
+        async updateMe(f) { Object.assign(me(), f); save(); return wait(me()); },
+        async birthdays(days = 0) {
+            const out = [];
+            for (let i = 0; i <= days; i++) {
+                const d = new Date(today); d.setDate(d.getDate() + i);
+                db.members.filter(m => isBirthday(m.dob, d)).forEach(m => out.push({ member_id: m.id, full_name: m.full_name, nickname: m.nickname, day: iso(d), phone: m.phone, on_app: !!m.user_id }));
+            }
+            return wait(out);
+        },
+
+        services: () => wait([...db.services].sort((a, b) => b.service_date.localeCompare(a.service_date) || b.odometer_km - a.odometer_km)),
+        async saveService(rec, file) {
+            if (file) rec.bill_path = 'demo:' + await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); });
+            if (rec.id) Object.assign(db.services.find(s => s.id === rec.id), rec); else db.services.push({ ...rec, id: nid() });
+            save(); return wait(rec);
+        },
+        async deleteService(rec) { db.services = db.services.filter(s => s.id !== rec.id); save(); },
+        async removeBill(rec) { const s = db.services.find(x => x.id === rec.id); s.bill_path = null; save(); return wait(s); },
+        billUrl: async path => path.startsWith('demo:') ? path.slice(5) : 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="100%" height="100%" fill="#fff"/><text x="40" y="80" font-family="sans-serif" font-size="32">Sample bill</text><text x="40" y="140" font-family="sans-serif" font-size="20" fill="#666">Your uploaded bill shows here.</text></svg>'),
+
+        fuel: () => wait([...db.fuel].sort((a, b) => a.odometer_km - b.odometer_km || a.fill_date.localeCompare(b.fill_date))),
+        async saveFuel(rec) { if (rec.id) Object.assign(db.fuel.find(s => s.id === rec.id), rec); else db.fuel.push({ ...rec, id: nid() }); save(); return wait(rec); },
+        async deleteFuel(rec) { db.fuel = db.fuel.filter(s => s.id !== rec.id); save(); },
+
+        admin: {
+            stats: () => wait({ members: db.members.length, on_app: db.members.filter(m => m.user_id).length, pending: db.requests.length, admins: db.members.filter(m => m.role !== 'member').length }),
+            requests: () => wait(db.requests),
+            async approve(id) {
+                const r = db.requests.find(x => x.id === id);
+                db.members.push({ id: nid(), full_name: r.full_name, phone: r.phone, email: r.email, dob: r.dob, vrn: r.vrn, locality: r.locality, role: 'member', user_id: 'u' + id, joined_at: iso(today) });
+                db.requests = db.requests.filter(x => x.id !== id); save(); return 'approved';
+            },
+            async reject(id) { db.requests = db.requests.filter(x => x.id !== id); save(); return 'rejected'; },
+            members: () => wait([...db.members].sort((a, b) => a.full_name.localeCompare(b.full_name))),
+            async update(id, p) { Object.assign(db.members.find(m => m.id === id), p); save(); return 'saved'; },
+            async setRole(id, role) { db.members.find(m => m.id === id).role = role; save(); return role; },
+            async remove(id) {
+                const m = db.members.find(x => x.id === id);
+                if (m.role === 'superadmin') throw new Error('The super admin cannot be removed');
+                db.members = db.members.filter(x => x.id !== id); save(); return 'removed';
+            }
+        }
+    };
+}

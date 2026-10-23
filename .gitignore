@@ -1,0 +1,4 @@
+# Member data exports: never commit
+*members_import*.csv
+RWB_Contact*.csv
+*.zip
