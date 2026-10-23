@@ -272,3 +272,7 @@ dialog::backdrop{background:rgba(0,0,0,.8)}
   .app-phones{min-height:0;order:-1;margin-bottom:2.5rem}
   .app-install{grid-template-columns:1fr}
 }
+.ios-steps{padding:1.5rem;max-width:420px}
+.ios-steps h3{font-size:1.8rem;margin-bottom:1rem}
+.ios-steps ol{padding-left:1.2rem;display:grid;gap:.5rem;margin-bottom:1rem}
+.ios-steps .btn{margin-top:1rem}

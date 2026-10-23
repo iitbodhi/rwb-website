@@ -12,6 +12,8 @@ const CONFIG = {
     /* Ronin Maintenance: Apps Script web app link that lists the PDFs in your Drive folder */
     MAINTENANCE_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbz4v89tStt7dg7p6wgvFdCJL3WqRjAFCMc6oRiR3SnDRsxrnY6SNpLGpDJaSDpZQw0aRw/exec',
     /* Ronin Accessories: Google Sheet published as CSV (columns: name, category, score, link, price) */
+    /* RWB App for Android (.apk). Leave empty until the file is in the repo; then "Download Now" downloads it */
+    APK_URL: '',
     ACCESSORIES_SHEET_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT9sKAmhlfRFrwFZ78rlobXVHMogYUz4PR7gu5HuoFQTuZnk30c6e7K3df61_BEpRhzdY_ivB0hVaqH/pub?gid=111766051&single=true&output=csv'
 };
 

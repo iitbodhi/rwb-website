@@ -164,3 +164,28 @@ function renderMarket(csvText) {
 if (CONFIG.MARKET_SHEET_URL) fetchCSV(CONFIG.MARKET_SHEET_URL).then(renderMarket)
     .catch(() => { $('#market-track').innerHTML = '<p class="muted">Products will be listed here soon.</p>'; });
 else $('#market-track').innerHTML = '<p class="muted">New products are on the way. Check back soon.</p>';
+
+/* "Download Now" for the RWB App:
+   Android -> downloads the .apk (or installs the web app if no .apk is published yet)
+   iPhone  -> shows the 3-tap "Add to Home Screen" steps (Apple doesn't allow app files outside the App Store) */
+(function appDownload() {
+    const btn = document.getElementById('app-download'); if (!btn) return;
+    const ua = navigator.userAgent, android = /android/i.test(ua), ios = /iphone|ipad|ipod/i.test(ua) || (/macintosh/i.test(ua) && 'ontouchend' in document);
+    const note = document.getElementById('app-download-note');
+    if (android && CONFIG.APK_URL) {
+        btn.href = CONFIG.APK_URL; btn.setAttribute('download', 'RWB-App.apk');
+        note.hidden = false;
+        note.textContent = 'After it downloads, open the file and tap Install. If Android asks, allow installs from your browser.';
+    } else if (android) {
+        btn.href = 'app/#install';
+    } else if (ios) {
+        btn.addEventListener('click', e => {
+            e.preventDefault();
+            openDialog(`<div class="ios-steps"><h3>Install on iPhone</h3>
+                <ol><li>Tap <b>Open the app</b> below (in <b>Safari</b>).</li><li>Tap the <b>Share</b> button <span aria-hidden="true">⬆︎</span> at the bottom.</li>
+                <li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol>
+                <p class="muted">The RWB icon appears on your home screen. Open it from there and sign in with Google.</p>
+                <a class="btn" href="app/">Open the app</a></div>`);
+        });
+    }
+})();
