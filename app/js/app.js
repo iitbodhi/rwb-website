@@ -114,10 +114,12 @@ const BELL = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke
 const seenNews = () => { try { return Number(localStorage.getItem('rwb-news-seen') || 0); } catch { return 0; } };
 const unread = () => (state.news || []).some(n => n.id > seenNews());
 const initials = m => (m?.full_name || '?').split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+/* profile photo if the member added one, otherwise their initials */
+const face = (m, cls = 'avatar') => `<span class="${cls}">${m?.avatar_url ? `<img src="${esc(m.avatar_url)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<i>${esc(initials(m))}</i></span>`;
 const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1>${right}
     <a class="icon-btn" href="#chat" aria-label="Ask Pookie">${AI_ICON}</a>
     <a class="icon-btn bell" href="#news" aria-label="Announcements${unread() ? ' (new)' : ''}">${BELL}${unread() ? '<i class="dot"></i>' : ''}</a>
-    <a class="avatar" href="#me" aria-label="My profile">${esc(initials(state.me))}</a></header>`;
+    <a href="#me" aria-label="My profile" class="avatar-link">${face(state.me)}</a></header>`;
 
 /* delegated clicks: each screen sets its own actions */
 let actions = {};
@@ -619,7 +621,7 @@ function viewMe() {
     const theme = getTheme();
     app.innerHTML = top('Me') + `
         <section class="profile">
-            <span class="avatar xl">${esc(initials(m))}</span>
+            <label class="photo-pick" aria-label="Change profile photo">${face(m, 'avatar xl')}<span class="cam">📷</span><input type="file" accept="image/*" id="pic" hidden></label>
             <div class="grow"><h2>${esc(m.full_name)}</h2><p class="muted">${esc(role)}${m.nickname ? `, “${esc(m.nickname)}”` : ''}</p></div>
             <button class="btn sm ghost" data-act="edit">Edit</button>
         </section>
@@ -675,7 +677,25 @@ function viewMe() {
         const notify = { birthday: true, motomart: true, member: true, ...(state.me.notify || {}), [cb.dataset.pref]: cb.checked };
         try { state.me = await api.updateMe({ notify }); toast('Saved'); } catch (e) { cb.checked = !cb.checked; toast(e.message, true); }
     });
+    $('#pic').onchange = async e => {
+        const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+        try { toast('Uploading photo…'); state.me = await api.setAvatar(await squarePhoto(f)); render(); toast('Profile photo updated'); }
+        catch (err) { toast(err.message, true); }
+    };
+    if (m.avatar_url) app.querySelector('.profile .grow').insertAdjacentHTML('beforeend', '<button class="link-btn small" data-act="rm-pic">Remove photo</button>');
+    actions['rm-pic'] = b => { if (confirmBox('Remove your profile photo?')) busy(b, async () => { state.me = await api.setAvatar(null); render(); toast('Photo removed'); }); };
     drawPushState();
+}
+
+/* centre-cropped square, 320 px, about 20–40 KB: thousands of members fit in the free storage */
+async function squarePhoto(file) {
+    if (!file.type.startsWith('image/')) throw new Error('Please choose a photo.');
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Could not read that photo. Try a JPG or PNG.')); i.src = URL.createObjectURL(file); });
+    const side = Math.min(img.naturalWidth, img.naturalHeight), cv = document.createElement('canvas'); cv.width = cv.height = 320;
+    cv.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 320, 320);
+    URL.revokeObjectURL(img.src);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.82));
+    return new File([blob], 'avatar.jpg', { type: 'image/jpeg' });
 }
 
 /* =================== Admin =================== */
@@ -726,7 +746,7 @@ async function adminMembers() {
         const pool = all.filter(m => state.memberFilter === 'app' ? m.user_id : state.memberFilter === 'admins' ? m.role !== 'member' : true);
         const hits = pool.filter(m => !q || m.full_name.toLowerCase().includes(q) || (m.nickname || '').toLowerCase().includes(q) || (qd.length >= 3 && (m.phone || '').includes(qd)) || (m.vrn || '').toLowerCase().replace(/\s/g, '').includes(q.replace(/\s/g, '')));
         $('#mcount').textContent = `${hits.length} ${state.memberFilter === 'app' ? 'on the app' : state.memberFilter === 'admins' ? (hits.length === 1 ? 'admin' : 'admins') : 'member' + (hits.length === 1 ? '' : 's')}`;
-        $('#ml').innerHTML = hits.slice(0, limit).map(m => `<button class="card tap row member-row" data-act="member" data-id="${m.id}">
+        $('#ml').innerHTML = hits.slice(0, limit).map(m => `<button class="card tap row member-row" data-act="member" data-id="${m.id}">${face(m, 'avatar sm')}
             <div class="grow"><div class="who">${esc(m.full_name)} ${m.role !== 'member' ? `<span class="badge orange">${m.role === 'superadmin' ? 'Super admin' : 'Admin'}</span>` : ''}</div>
             <div class="meta">${esc([m.phone, m.vrn, m.locality].filter(Boolean).join(' · '))}</div></div>
             ${m.user_id ? '<span class="badge ok">On app</span>' : ''}</button>`).join('') || '<div class="card empty">No one matches.</div>';
@@ -742,7 +762,7 @@ function memberSheet(m) {
     const superA = state.me.role === 'superadmin', self = m.user_id && m.user_id === state.me.user_id;
     const canRemove = !self && m.role !== 'superadmin' && (m.role !== 'admin' || superA);
     openSheet(m.full_name, `
-        <div class="tags" style="margin:0 0 10px">${m.user_id ? '<span class="badge ok">On the app</span>' : '<span class="badge">Not on the app yet</span>'}${m.role !== 'member' ? `<span class="badge orange">${m.role === 'superadmin' ? 'Super admin' : 'Admin'}</span>` : ''}</div>
+        ${m.avatar_url ? `<img class="member-photo" src="${esc(m.avatar_url)}" alt="">` : ''}<div class="tags" style="margin:0 0 10px">${m.user_id ? '<span class="badge ok">On the app</span>' : '<span class="badge">Not on the app yet</span>'}${m.role !== 'member' ? `<span class="badge orange">${m.role === 'superadmin' ? 'Super admin' : 'Admin'}</span>` : ''}</div>
         <dl class="facts">
             <dt>WhatsApp</dt><dd>${esc(m.phone || '–')}</dd><dt>Email</dt><dd>${esc(m.email || '–')}</dd>
             <dt>Birthday</dt><dd>${m.dob ? fmtDayMonth(m.dob) : '–'}</dd><dt>Bike</dt><dd>${esc([m.bike, m.vrn].filter(Boolean).join(' · ') || '–')}</dd>
@@ -764,7 +784,7 @@ function memberSheet(m) {
         if (rm) rm.onclick = () => {
             const typed = window.prompt(`This permanently deletes ${m.full_name}${m.user_id ? ' and all their app data' : ''}.\n\nType REMOVE to confirm.`);
             if ((typed || '').trim().toUpperCase() !== 'REMOVE') return;
-            busy(rm, async () => { await api.admin.remove(m.id); state.adminMembers = state.adminMembers.filter(x => x.id !== m.id); closeSheet(); toast(`${m.full_name} removed`); viewAdmin(); });
+            busy(rm, async () => { await api.admin.remove(m.id, m.user_id); state.adminMembers = state.adminMembers.filter(x => x.id !== m.id); closeSheet(); toast(`${m.full_name} removed`); viewAdmin(); });
         };
     });
 }
@@ -829,8 +849,26 @@ async function disablePush(quiet = false) {
     await api.deletePush(sub.endpoint).catch(e => { if (!quiet) throw e; });
     await sub.unsubscribe();
 }
+/* what the phone reports about notifications: a screenshot of this tells us exactly what's wrong */
+async function pushDetails() {
+    const out = [];
+    try {
+        out.push(`Inside RWB app: ${isTWA() ? 'yes' : 'no'} (opened from: ${document.referrer || 'nothing'})`);
+        out.push(`Full-screen app mode: ${isStandalone() ? 'yes' : 'no'}`);
+        out.push(`Notification permission: ${'Notification' in window ? Notification.permission : 'not supported'}`);
+        const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
+        out.push(`Service worker: ${reg ? 'ready' : 'missing'}`);
+        if (reg?.pushManager) {
+            out.push(`Push permission: ${await reg.pushManager.permissionState({ userVisibleOnly: true }).catch(e => 'error ' + e.message)}`);
+            out.push(`Subscribed: ${(await reg.pushManager.getSubscription()) ? 'yes' : 'no'}`);
+        }
+        out.push(`Browser: ${(navigator.userAgent.match(/(Chrome|SamsungBrowser|Firefox|Version)\/[\d.]+/g) || []).join(', ')}`);
+    } catch (e) { out.push('error: ' + e.message); }
+    return out.join('\n');
+}
 async function drawPushState() {
     const st = $('#push-state'), btn = $('#push-btn'); if (!st) return;
+    pushDetails().then(t => { const c = $('#notif-card'); if (!c) return; c.querySelector('details.tech')?.remove(); c.insertAdjacentHTML('beforeend', `<details class="tech"><summary>Notification details</summary><pre class="diag">${esc(t)}</pre></details>`); });
     let on = false;
     if (pushSupported()) { const reg = await navigator.serviceWorker.getRegistration(); on = !!(reg && await reg.pushManager.getSubscription()) && Notification.permission === 'granted'; }
     if (!pushSupported()) { st.textContent = isIOS() && !isStandalone() ? 'On iPhone, notifications work after you add RWB to your Home Screen and open it from there.' : 'This browser does not support notifications.'; btn.innerHTML = ''; return; }
@@ -1162,7 +1200,7 @@ async function sendChat(text) {
         const l = $('#left'); if (l && r.left != null) l.textContent = ` ${r.left} question${r.left === 1 ? '' : 's'} left today.`;
     } catch (e) {
         if (live && live.text) live.text += '\n\n*(Connection lost. The answer may be incomplete.)*';
-        else { if (live) chat.msgs.pop(); chat.msgs.push({ role: 'model', text: e.message || 'Something went wrong. Please try again.', err: true }); }
+        else { if (live) chat.msgs.pop(); chat.msgs.push({ role: 'model', text: (e.message || 'Something went wrong. Please try again.') + (isAdmin() && e.detail ? `\n\n*Admin info: ${e.detail}*` : ''), err: true }); }
     } finally {
         chat.busy = false; saveChat(); drawChat();
     }

@@ -51,6 +51,13 @@ async function supabaseApi(url, key) {
         myRequest: async () => must(await sb.from('link_requests').select('*').maybeSingle()),
         me: async () => must(await sb.from('members').select('*').eq('user_id', await uid()).single()),
         updateMe: async f => must(await sb.from('members').update(f).eq('user_id', await uid()).select().single()),
+        async setAvatar(file) {   /* file = small square JPEG, or null to remove */
+            const me = await uid(), path = `${me}/avatar.jpg`;
+            if (!file) { await sb.storage.from('avatars').remove([path]); return must(await sb.from('members').update({ avatar_url: null }).eq('user_id', me).select().single()); }
+            must(await sb.storage.from('avatars').upload(path, file, { contentType: 'image/jpeg', upsert: true, cacheControl: '3600' }));
+            const url = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl + '?v=' + Date.now();
+            return must(await sb.from('members').update({ avatar_url: url }).eq('user_id', me).select().single());
+        },
         birthdays: async (days = 0) => must(await sb.rpc('birthdays', { p_days: days })),
 
         services: async () => must(await sb.from('service_records').select('*').order('service_date', { ascending: false }).order('odometer_km', { ascending: false })),
@@ -132,14 +139,15 @@ async function supabaseApi(url, key) {
                     body: JSON.stringify({ messages, context, image, stream })
                 }) };
             };
-            const errorOf = async r => { try { const b = await r.json(); return b?.error || null; } catch { return null; } };
+            /* the server's own message, plus (for admins) the technical reason in .detail */
+            const errorOf = async r => { try { const b = await r.json(); return b?.error ? Object.assign(new Error(b.error), { detail: b.detail, final: true }) : null; } catch { return null; } };
             /* 1) streaming */
             let text = '', left = null;
             const a = call(true, 20000);
             try {
                 const r = await a.res;
                 const type = r.headers.get('content-type') || '';
-                if (!r.ok) { clearTimeout(a.timer); const m = await errorOf(r); if (r.status === 429 || r.status === 400) throw Object.assign(new Error(m || 'Pookie couldn\'t answer.'), { final: true }); throw new Error(m || 'stream failed'); }
+                if (!r.ok) { clearTimeout(a.timer); throw (await errorOf(r)) || new Error('stream failed'); }   /* a real answer from the server: no point asking twice */
                 if (type.includes('json')) { clearTimeout(a.timer); const b = await r.json(); onText?.(b.reply); return b; }
                 left = r.headers.get('x-left');
                 const reader = r.body.getReader(), dec = new TextDecoder();
@@ -155,10 +163,11 @@ async function supabaseApi(url, key) {
             const b = call(false, 40000);
             try {
                 const r = await b.res; clearTimeout(b.timer);
-                if (!r.ok) throw new Error(await errorOf(r) || 'Pookie couldn\'t answer right now. Please try again.');
+                if (!r.ok) throw (await errorOf(r)) || Object.assign(new Error(`Pookie couldn't answer right now (HTTP ${r.status}). Please try again.`), { final: true });
                 const d = await r.json(); onText?.(d.reply); return d;
             } catch (e) {
                 clearTimeout(b.timer);
+                if (e.final) throw e;
                 throw new Error(e.name === 'AbortError' ? 'Pookie is taking too long. Please try again in a minute.'
                     : /fetch|network|load failed/i.test(e.message) ? (navigator.onLine ? 'Pookie\'s server refused the request. An admin can check it in Admin → Pookie → Run a check.' : 'No internet connection. Please try again.') : e.message);
             }
@@ -191,7 +200,8 @@ async function supabaseApi(url, key) {
             },
             update: async (id, p) => must(await sb.rpc('admin_update_member', { p_member_id: id, p })),
             setRole: async (id, role) => must(await sb.rpc('admin_set_role', { p_member_id: id, p_role: role })),
-            async remove(id) {
+            async remove(id, userId) {
+                if (userId) await sb.storage.from('avatars').remove([`${userId}/avatar.jpg`]).catch(() => {});
                 const photos = must(await sb.rpc('admin_listing_photos', { p_member_id: id })) || [];
                 if (photos.length) await sb.storage.from(PHOTO_BUCKET).remove(photos);
                 const files = must(await sb.rpc('admin_begin_removal', { p_member_id: id })) || [];
@@ -270,6 +280,7 @@ function demoApi() {
         myRequest: () => wait(null),
         me: () => wait(me()),
         async updateMe(f) { Object.assign(me(), f); save(); return wait(me()); },
+        async setAvatar(file) { me().avatar_url = file ? await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); }) : null; save(); return wait(me()); },
         async birthdays(days = 0) {
             const out = [];
             for (let i = 0; i <= days; i++) {

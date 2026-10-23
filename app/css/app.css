@@ -364,3 +364,18 @@ details.howto summary{font-weight:600}
 .stats{grid-template-columns:repeat(2,1fr)}
 .stats:has(> :nth-child(3):last-child){grid-template-columns:repeat(3,1fr)}
 .stats:has(> :nth-child(3):last-child) .stat b{font-size:1.35rem}
+
+/* profile photos */
+.avatar-link{flex:none;text-decoration:none;display:block}
+.avatar{position:relative;overflow:hidden;width:36px;height:36px;border-radius:50%;background:var(--ink);color:var(--paper);display:grid;place-items:center;font:700 .85rem var(--body);flex:none}
+.avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.avatar i{font-style:normal}
+.avatar.sm{width:40px;height:40px;font-size:.8rem}
+.avatar.xl{width:62px;height:62px;font-size:1.15rem}
+.photo-pick{position:relative;cursor:pointer;flex:none;display:block;color:inherit;font-weight:inherit}
+.photo-pick .cam{position:absolute;right:-3px;bottom:-3px;width:26px;height:26px;border-radius:50%;background:var(--card);border:1px solid var(--line);display:grid;place-items:center;font-size:.75rem}
+.link-btn{background:none;border:0;color:var(--orange);padding:0;margin-top:2px;cursor:pointer;justify-self:start;font-weight:600}
+.member-photo{width:96px;height:96px;border-radius:50%;object-fit:cover;margin:0 auto 12px}
+.member-row{gap:12px}
+details.tech{margin-top:12px;font-size:.82rem}
+details.tech summary{color:var(--muted);cursor:pointer}
