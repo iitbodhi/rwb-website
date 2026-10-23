@@ -226,7 +226,7 @@ function demoApi() {
         const members = [
             { id: 1, full_name: 'Demo Rider', nickname: 'Demo', dob: '1994-03-12', phone: '9000000001', email: 'demo@example.com', vrn: 'WB 02 AB 1234', bike: 'TVS Ronin 225', blood_group: 'B+', locality: 'Salt Lake', hideout: 'Kolkata', emergency_phone: '9000000099', alt_phone: '', role: 'superadmin', user_id: 'me', joined_at: '2024-01-10' },
             { id: 2, full_name: 'Arjun Sen', nickname: 'Sultan', dob: md(0), phone: '9000000002', email: 'arjun@example.com', vrn: 'WB 06 CD 4567', bike: 'TVS Ronin 225', blood_group: 'O+', locality: 'Howrah', role: 'member', user_id: 'u2', joined_at: '2024-02-01' },
-            { id: 3, full_name: 'Priya Dutta', nickname: '', dob: md(0), phone: '9000000003', email: 'priya@example.com', vrn: 'WB 20 EF 7890', bike: 'TVS Ronin 225', blood_group: 'A+', locality: 'Durgapur', role: 'member', user_id: null, joined_at: '2024-03-15' },
+            { id: 3, full_name: 'Priya Dutta', nickname: '', dob: md(0), phone: '9000000003', email: 'priya@example.com', vrn: 'WB 20 EF 7890', bike: 'TVS Ronin 225', blood_group: 'A+', locality: 'Durgapur', role: 'coordinator', user_id: null, joined_at: '2024-03-15' },
             { id: 4, full_name: 'Rahul Ghosh', nickname: 'Rocket', dob: md(3), phone: '9000000004', email: 'rahul@example.com', vrn: 'WB 74 GH 1111', bike: 'TVS Ronin 225', blood_group: 'AB+', locality: 'Siliguri', role: 'admin', user_id: 'u4', joined_at: '2023-11-20' },
             { id: 5, full_name: 'Sourav Paul', nickname: '', dob: md(6), phone: '9000000005', email: 'sourav@example.com', vrn: 'WB 12 IJ 2222', bike: 'TVS Apache RTR 200 4V', blood_group: 'B-', locality: 'Barasat', role: 'member', user_id: null, joined_at: '2025-05-02' }
         ];
@@ -283,7 +283,7 @@ function demoApi() {
         me: () => wait(me()),
         async updateMe(f) { Object.assign(me(), f); save(); return wait(me()); },
         async setAvatar(file) { me().avatar_url = file ? await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); }) : null; save(); return wait(me()); },
-        directory: () => wait(db.members.map(m => ({ id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url, bike: m.bike, locality: m.locality, role: m.role, on_app: !!m.user_id })).sort((a, b) => a.full_name.localeCompare(b.full_name))),
+        directory: () => wait(db.members.map(m => ({ id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url, bike: m.bike, vrn: m.vrn, locality: m.locality, role: m.role, phone: ['superadmin', 'admin', 'coordinator'].includes(m.role) ? m.phone : null, on_app: !!m.user_id })).sort((a, b) => a.full_name.localeCompare(b.full_name))),
         async leaderboard() {
             const myKm = Math.max(0, ...db.fuel.map(f => f.odometer_km), ...db.services.map(x => x.odometer_km));
             const rows = [['Rahul Ghosh', 'Rocket', 18420, 'TVS Ronin 225'], ['Arjun Sen', 'Sultan', 11250, 'TVS Ronin 225'], ['Sourav Paul', '', 5310, 'TVS Apache RTR 200 4V']].map(([n, k, km, b]) => ({ full_name: n, nickname: k, km, bike: b, is_me: false }));
@@ -314,7 +314,7 @@ function demoApi() {
         async deleteFuel(rec) { db.fuel = db.fuel.filter(s => s.id !== rec.id); save(); },
 
         myId: async () => 'me',
-        listings: () => wait([...db.listings].filter(l => ['live', 'sold'].includes(l.status) || l.user_id === 'me' || ['admin', 'superadmin'].includes(me().role)).sort((a, b) => String(b.published_at || '9').localeCompare(String(a.published_at || '9')))),
+        listings: () => wait([...db.listings].filter(l => ['live', 'sold'].includes(l.status) || l.user_id === 'me' || ['coordinator', 'admin', 'superadmin'].includes(me().role)).sort((a, b) => String(b.published_at || '9').localeCompare(String(a.published_at || '9')))),
         photoUrl: path => path.startsWith('demo:') ? path.slice(5) : path,
         async saveListing(rec, newFiles = [], removed = []) {
             const added = await Promise.all(newFiles.map(f => new Promise(r => { const fr = new FileReader(); fr.onload = () => r('demo:' + fr.result); fr.readAsDataURL(f); })));

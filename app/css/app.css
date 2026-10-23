@@ -408,3 +408,21 @@ details.tech summary{color:var(--muted);cursor:pointer}
 .board-me{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--orange-soft);font-size:.92rem}
 .section > h2 .h-acts{display:flex;gap:14px;align-items:center}
 .section > h2 .h-acts button{font:600 .9rem var(--body);color:var(--muted);background:none;border:0;cursor:pointer;padding:0}
+
+/* RWB tab: club logo */
+.tabbar .tab-logo{width:26px;height:26px;border-radius:50%;object-fit:cover;opacity:.8;transition:opacity .15s,box-shadow .15s}
+.tabbar a[aria-current=page] .tab-logo{opacity:1;box-shadow:0 0 0 2px var(--orange)}
+@media (max-width:480px){.tabbar .tab-logo{width:24px;height:24px}}
+/* RWB team (pinned on the member list) */
+.badge.coord{background:color-mix(in srgb,#2f7de1 14%,transparent);color:#2f7de1}
+.team{margin-bottom:14px;padding:12px 14px}
+.team-title{font-size:1rem;margin:0 0 6px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.team-row{padding:8px 0;border-top:1px solid var(--line);gap:10px}
+.team-row:first-of-type{border-top:0}
+.team-row .icon-btn{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;text-decoration:none}
+.team-row .call{background:color-mix(in srgb,var(--orange) 14%,transparent);color:var(--orange)}
+.team-row .wa-btn{background:color-mix(in srgb,#25d366 16%,transparent);color:#1a9e4b}
+.vrn{flex:none;font-family:ui-monospace,Menlo,monospace;font-size:.72rem;font-weight:600;letter-spacing:.02em;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--paper);white-space:nowrap}
+.chip.warn-chip{border-color:var(--orange);color:var(--orange)}
+.chip.warn-chip[aria-pressed=true]{background:var(--orange);color:#fff}
+.team-row .who{white-space:normal;overflow:visible;text-overflow:clip}

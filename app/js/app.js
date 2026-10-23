@@ -10,6 +10,13 @@ const app = $('#app'), tabbar = $('#tabbar'), sheet = $('#sheet');
 let api;
 const state = { me: null, services: null, fuel: null, bdays: null, guides: null, acc: null, guideTab: 'maint', accCat: 'all', accSort: 'default', adminTab: 'requests', adminMembers: null, adminSearch: '' };
 const isAdmin = () => ['admin', 'superadmin'].includes(state.me?.role);
+const isMod = () => ['coordinator', 'admin', 'superadmin'].includes(state.me?.role);   /* Motomart moderators */
+const ROLE = { superadmin: 'Super admin', admin: 'Admin', coordinator: 'Coordinator', member: 'Member' };
+const TEAM_ORDER = { superadmin: 0, admin: 1, coordinator: 2 };
+const isTeam = m => m.role in TEAM_ORDER;
+const roleBadge = m => isTeam(m) ? `<span class="badge ${m.role === 'coordinator' ? 'coord' : 'orange'}">${ROLE[m.role]}</span>` : '';
+const teamFirst = list => [...list].sort((a, b) => (TEAM_ORDER[a.role] ?? 3) - (TEAM_ORDER[b.role] ?? 3) || a.full_name.localeCompare(b.full_name));
+const vrnKey = v => (v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /* ---------- formatting ---------- */
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -242,7 +249,7 @@ function cluster(services, fuel) {
 function newsRow(n, del = false) {
     const href = n.url && n.url.startsWith('#') ? n.url : '#news';
     return `<a class="news-row ${n.kind}" href="${esc(href)}"><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || '📣'}</span>
-        <span class="grow"><b>${esc(n.title)}</b>${n.body ? `<span class="news-body">${esc(n.body)}</span>` : ''}<span class="small muted">${timeAgo(n.created_at)}${n.audience === 'admins' ? ', admins only' : ''}</span></span>
+        <span class="grow"><b>${esc(n.title)}</b>${n.body ? `<span class="news-body">${esc(n.body)}</span>` : ''}<span class="small muted">${timeAgo(n.created_at)}${n.audience === 'admins' ? ', admins only' : n.audience === 'moderators' ? ', team only' : ''}</span></span>
         ${del ? `<button class="icon-btn del" data-act="del-news" data-id="${n.id}" aria-label="Delete">✕</button>` : ICON.chev}</a>`;
 }
 
@@ -263,7 +270,7 @@ async function viewHome() {
             <button data-act="sell"><span>${ICON.tag}</span>Sell gear</button>
             <a href="#chat"><span>${ICON.chat}</span>Ask Pookie</a>
         </nav>
-        ${isAdmin() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
+        ${isMod() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
         ${today.length ? `<div class="banner bday"><span class="b-ico">🎂</span><span class="grow"><b>${esc(names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : names[0])}</b> ${names.length > 1 ? 'have' : 'has'} a birthday today</span><button class="btn sm wa" data-act="wish">Wish</button></div>` : ''}
         ${pushAsk ? `<div class="banner"><span class="b-ico">🔔</span><span class="grow">Get birthdays, Motomart posts and ride news as notifications</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
         ${feed.length ? `<section class="section"><h2>Latest from RWB <span class="h-acts">${feed.some(n => n.kind !== 'announcement') ? '<button data-act="clear-feed">Clear</button>' : ''}<a href="#news">See all</a></span></h2><div class="group">${feed.slice(0, 3).map(n => newsRow(n)).join('')}</div></section>` : ''}
@@ -282,6 +289,10 @@ async function viewHome() {
         listing: el => location.hash = '#motomart/' + el.dataset.id
     };
     app.querySelectorAll('[data-guide]').forEach(a => a.addEventListener('click', () => state.guideTab = a.dataset.guide));
+    if (isMod() && !isAdmin()) {   /* coordinators: Motomart posts to check */
+        const mm = listings.filter(l => l.status === 'pending').length, b = $('#admin-banner');
+        if (b && mm) { b.innerHTML = `<span class="b-ico">${ICON.tag}</span><span class="grow">${mm} Motomart post${mm > 1 ? 's' : ''} waiting for approval</span>${ICON.chev}`; b.href = '#motomart/review'; b.hidden = false; }
+    }
     if (isAdmin()) api.admin.stats().then(s => {
         const b = $('#admin-banner'), mm = listings.filter(l => l.status === 'pending').length, parts = [];
         if (s.pending) parts.push(`${s.pending} access request${s.pending > 1 ? 's' : ''}`);
@@ -643,7 +654,7 @@ function installSheet() {
 }
 
 function viewMe() {
-    const m = state.me, role = m.role === 'superadmin' ? 'Super admin' : m.role === 'admin' ? 'Admin' : 'Member';
+    const m = state.me, role = (ROLE[m.role] || 'Member') + (m.role === 'coordinator' ? ' (Motomart)' : '');
     const row = (k, v) => `<div><span class="muted">${k}</span><span class="rt">${esc(v || '–')}</span></div>`;
     const theme = getTheme();
     app.innerHTML = top('Me') + `
@@ -769,18 +780,18 @@ async function adminRequests() {
 async function adminMembers() {
     state.adminMembers ??= await api.admin.members();
     const all = state.adminMembers;
-    const F = { all: 'Everyone', app: 'On the app', admins: 'Admins' };
+    const F = { all: 'Everyone', app: 'On the app', admins: 'RWB team' };
     state.memberFilter ||= 'all';
     $('#admin-body').innerHTML = `<div class="chips" style="margin-bottom:10px">${Object.entries(F).map(([k, v]) => `<button class="chip" data-act="mf" data-f="${k}" aria-pressed="${state.memberFilter === k}">${v}</button>`).join('')}</div>
-    ${state.memberFilter !== 'all' && state.me.role === 'superadmin' ? '<p class="small muted" style="margin-bottom:10px">Tap a person to make them an admin or remove their admin rights.</p>' : ''}<input class="search" type="search" id="mq" placeholder="Search name, number, bike no. or place" value="${esc(state.adminSearch)}" aria-label="Search members"><p class="small muted" id="mcount" style="margin:-4px 0 10px"></p><div class="list" id="ml"></div><button class="btn ghost block section" id="more" hidden>Show more</button>`;
+    ${state.memberFilter === 'admins' ? `<p class="small muted" style="margin-bottom:10px">Tap a person to ${state.me.role === 'superadmin' ? 'make them an admin or a coordinator' : 'make them a coordinator'} or change their role. Coordinators can approve Motomart posts.</p>` : ''}<input class="search" type="search" id="mq" placeholder="Search name, number, bike no. or place" value="${esc(state.adminSearch)}" aria-label="Search members"><p class="small muted" id="mcount" style="margin:-4px 0 10px"></p><div class="list" id="ml"></div><button class="btn ghost block section" id="more" hidden>Show more</button>`;
     let limit = 50;
     const draw = () => {
         const q = state.adminSearch.trim().toLowerCase(), qd = q.replace(/\D/g, '');
-        const pool = all.filter(m => state.memberFilter === 'app' ? m.user_id : state.memberFilter === 'admins' ? m.role !== 'member' : true);
-        const hits = pool.filter(m => !q || m.full_name.toLowerCase().includes(q) || (m.nickname || '').toLowerCase().includes(q) || (qd.length >= 3 && (m.phone || '').includes(qd)) || (m.vrn || '').toLowerCase().replace(/\s/g, '').includes(q.replace(/\s/g, '')) || (m.locality || '').toLowerCase().includes(q) || (m.hideout || '').toLowerCase().includes(q));
-        $('#mcount').textContent = `${hits.length} ${state.memberFilter === 'app' ? 'on the app' : state.memberFilter === 'admins' ? (hits.length === 1 ? 'admin' : 'admins') : 'member' + (hits.length === 1 ? '' : 's')}`;
+        const pool = teamFirst(all.filter(m => state.memberFilter === 'app' ? m.user_id : state.memberFilter === 'admins' ? isTeam(m) : true));
+        const hits = pool.filter(m => !q || m.full_name.toLowerCase().includes(q) || (m.nickname || '').toLowerCase().includes(q) || (qd.length >= 3 && (m.phone || '').includes(qd)) || (vrnKey(q).length >= 2 && vrnKey(m.vrn).includes(vrnKey(q))) || (m.locality || '').toLowerCase().includes(q) || (m.hideout || '').toLowerCase().includes(q));
+        $('#mcount').textContent = `${hits.length} ${state.memberFilter === 'app' ? 'on the app' : state.memberFilter === 'admins' ? 'in the RWB team' : 'member' + (hits.length === 1 ? '' : 's')}`;
         $('#ml').innerHTML = hits.slice(0, limit).map(m => `<button class="card tap row member-row" data-act="member" data-id="${m.id}">${face(m, 'avatar sm')}
-            <div class="grow"><div class="who">${esc(m.full_name)} ${m.role !== 'member' ? `<span class="badge orange">${m.role === 'superadmin' ? 'Super admin' : 'Admin'}</span>` : ''}</div>
+            <div class="grow"><div class="who">${esc(m.full_name)} ${roleBadge(m)}</div>
             <div class="meta">${esc([m.phone, m.vrn, m.locality].filter(Boolean).join(' · '))}</div></div>
             ${m.user_id ? '<span class="badge ok">On app</span>' : ''}</button>`).join('') || '<div class="card empty">No one matches.</div>';
         $('#more').hidden = hits.length <= limit;
@@ -795,7 +806,7 @@ function memberSheet(m) {
     const superA = state.me.role === 'superadmin', self = m.user_id && m.user_id === state.me.user_id;
     const canRemove = !self && m.role !== 'superadmin' && (m.role !== 'admin' || superA);
     openSheet(m.full_name, `
-        ${m.avatar_url ? `<img class="member-photo" src="${esc(m.avatar_url)}" alt="">` : ''}<div class="tags" style="margin:0 0 10px">${m.user_id ? '<span class="badge ok">On the app</span>' : '<span class="badge">Not on the app yet</span>'}${m.role !== 'member' ? `<span class="badge orange">${m.role === 'superadmin' ? 'Super admin' : 'Admin'}</span>` : ''}</div>
+        ${m.avatar_url ? `<img class="member-photo" src="${esc(m.avatar_url)}" alt="">` : ''}<div class="tags" style="margin:0 0 10px">${m.user_id ? '<span class="badge ok">On the app</span>' : '<span class="badge">Not on the app yet</span>'}${roleBadge(m)}</div>
         <dl class="facts">
             <dt>WhatsApp</dt><dd>${esc(m.phone || '–')}</dd><dt>Email</dt><dd>${esc(m.email || '–')}</dd>
             <dt>Birthday</dt><dd>${m.dob ? fmtDayMonth(m.dob) : '–'}</dd><dt>Bike</dt><dd>${esc([m.bike, m.vrn].filter(Boolean).join(' · ') || '–')}</dd>
@@ -804,15 +815,17 @@ function memberSheet(m) {
             <dt>Joined</dt><dd>${m.joined_at ? fmtDate(String(m.joined_at).slice(0, 10)) : '–'}</dd>
         </dl>
         <div class="btns" style="margin-bottom:10px">${m.phone ? `<a class="btn wa" href="${waTo(m.phone)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}<button class="btn ghost" data-x="edit">Edit details</button></div>
-        ${superA && !self && m.role !== 'superadmin' ? `<button class="btn ghost block" data-x="role" style="margin-bottom:10px">${m.role === 'admin' ? 'Remove admin rights' : 'Make admin'}</button>` : ''}
+        ${!self && m.role !== 'superadmin' && (m.role !== 'admin' || superA) ? `<div class="btns" style="margin-bottom:10px">
+            ${m.role === 'admin' ? '' : `<button class="btn ghost" data-x="role" data-to="${m.role === 'coordinator' ? 'member' : 'coordinator'}">${m.role === 'coordinator' ? 'Remove coordinator' : 'Make coordinator'}</button>`}
+            ${superA ? `<button class="btn ghost" data-x="role" data-to="${m.role === 'admin' ? 'member' : 'admin'}">${m.role === 'admin' ? 'Remove admin rights' : 'Make admin'}</button>` : ''}</div>
+            <p class="small muted" style="margin:-4px 0 12px">Coordinators can approve, reject and delete Motomart posts. They can't manage members.</p>` : ''}
         ${canRemove ? `<button class="btn danger block" data-x="remove">Remove from RWB</button><p class="small muted" style="margin-top:6px">Use when someone leaves the RWB WhatsApp community. Deletes their profile${m.user_id ? ', app account, service records, fuel log and bills' : ''}. This can't be undone.</p>` : ''}`, body => {
         body.querySelector('[data-x=edit]').onclick = () => memberEdit(m);
-        const role = body.querySelector('[data-x=role]');
-        if (role) role.onclick = () => {
-            const to = m.role === 'admin' ? 'member' : 'admin';
-            if (to === 'admin' && !m.user_id && !confirmBox(`${m.full_name} hasn't signed in to the app yet. They'll get admin rights when they do. Continue?`)) return;
-            busy(role, async () => { await api.admin.setRole(m.id, to); m.role = to; toast(to === 'admin' ? 'Now an admin' : 'Admin rights removed'); memberSheet(m); adminMembers(); });
-        };
+        body.querySelectorAll('[data-x=role]').forEach(role => role.onclick = () => {
+            const to = role.dataset.to;
+            if (to !== 'member' && !m.user_id && !confirmBox(`${m.full_name} hasn't signed in to the app yet. They'll get ${ROLE[to].toLowerCase()} rights when they do. Continue?`)) return;
+            busy(role, async () => { await api.admin.setRole(m.id, to); m.role = to; state.dir = null; toast(to === 'member' ? 'Role removed' : `Now ${to === 'admin' ? 'an admin' : 'a coordinator'}`); memberSheet(m); adminMembers(); });
+        });
         const rm = body.querySelector('[data-x=remove]');
         if (rm) rm.onclick = () => {
             const typed = window.prompt(`This permanently deletes ${m.full_name}${m.user_id ? ' and all their app data' : ''}.\n\nType REMOVE to confirm.`);
@@ -936,7 +949,7 @@ function newsCard(n, del = false) {
     const go = n.url && n.url !== '#news' && n.url.startsWith('#');
     return `<article class="card news ${n.kind}"><div class="row" style="align-items:flex-start"><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || '📣'}</span>
         <div class="grow"><h3>${esc(n.title)}</h3>${n.body ? `<p>${linkify(n.body)}</p>` : ''}
-        <p class="small muted" style="margin-top:6px">${timeAgo(n.created_at)}${n.audience === 'admins' ? ' · admins only' : ''}${go ? ` · <a href="${esc(n.url)}">Open</a>` : ''}</p></div>
+        <p class="small muted" style="margin-top:6px">${timeAgo(n.created_at)}${n.audience === 'admins' ? ' · admins only' : n.audience === 'moderators' ? ' · team only' : ''}${go ? ` · <a href="${esc(n.url)}">Open</a>` : ''}</p></div>
         ${del ? `<button class="icon-btn" data-act="del-news" data-id="${n.id}" aria-label="Delete">🗑</button>` : ''}</div></article>`;
 }
 async function viewNews() {
@@ -961,7 +974,7 @@ async function viewNews() {
 /* =================== Motomart =================== */
 const CATS = C.MOTOMART_CATEGORIES || ['Helmet', 'Riding jacket', 'Riding pants', 'Riding shoes / boots', 'Gloves', 'Bike protection', 'Bike accessories', 'Rider accessories', 'Luggage', 'Electronics', 'Spare parts', 'Other'];
 const CONDITIONS = ['Brand new (unused)', 'Like new', 'Good', 'Fair', 'Needs repair'];
-const mmState = { cat: 'all', status: 'all', mine: false, q: '' };
+const mmState = { cat: 'all', status: 'all', mine: false, q: '', review: false };
 const price = n => '₹' + Number(n).toLocaleString('en-IN');
 const photo = (l, i = 0) => l.photos?.[i] ? api.photoUrl(l.photos[i]) : '';
 const mine = l => l.user_id === state.myId;
@@ -975,9 +988,12 @@ function listingCard(l) {
 
 async function viewMotomart() {
     state.myId ??= await api.myId();
+    if (state.param === 'review') { if (isMod()) Object.assign(mmState, { review: true, mine: false, status: 'all' }); state.param = null; history.replaceState(null, '', '#motomart'); }
     const all = await load.listings(true);
+    const mod = isMod(), waiting = mod ? all.filter(l => l.status === 'pending') : [];
+    if (!mod || !waiting.length) mmState.review = false;
     const q = mmState.q.trim().toLowerCase();
-    const shown = all.filter(l => (mmState.mine ? mine(l) : (['live', 'sold'].includes(l.status) || mine(l))) &&
+    const shown = mmState.review ? waiting : all.filter(l => (mmState.mine ? mine(l) : (['live', 'sold'].includes(l.status) || mine(l))) &&
         (mmState.cat === 'all' || l.category === mmState.cat) && (mmState.status === 'all' || l.status === mmState.status) &&
         (!q || (l.product_name + ' ' + l.category + ' ' + (l.details || '')).toLowerCase().includes(q)));
     const cats = CATS.filter(c => all.some(l => l.category === c));
@@ -987,12 +1003,14 @@ async function viewMotomart() {
         <div class="chips hscroll" style="margin-bottom:10px">${['all', ...cats].map(c => `<button class="chip" data-act="cat" data-cat="${esc(c)}" aria-pressed="${mmState.cat === c}">${c === 'all' ? 'All' : esc(c)}</button>`).join('')}</div>
         <div class="row" style="margin-bottom:14px;gap:8px">
             <select id="mms" aria-label="Show" style="flex:1"><option value="all">Live and sold</option><option value="live"${mmState.status === 'live' ? ' selected' : ''}>Only available</option><option value="sold"${mmState.status === 'sold' ? ' selected' : ''}>Only sold</option></select>
-            <button class="chip" data-act="mine" aria-pressed="${mmState.mine}">My posts</button></div>
+            <button class="chip" data-act="mine" aria-pressed="${mmState.mine}">My posts</button>${waiting.length ? `<button class="chip warn-chip" data-act="review" aria-pressed="${mmState.review}">To approve (${waiting.length})</button>` : ''}</div>
+        ${mmState.review ? '<p class="small muted" style="margin:-4px 0 12px">Check photos, price and details, then approve or reject. Members are notified when a post goes live.</p>' : ''}
         ${shown.length ? `<div class="mm-grid">${shown.map(listingCard).join('')}</div>` : `<div class="card empty"><b>${all.length ? 'Nothing matches' : 'Nothing for sale yet'}</b>${mmState.mine ? 'You haven’t posted anything yet.' : 'Be the first to sell something.'}</div>`}
         <button class="btn fab" data-act="sell">＋ Sell something</button>`;
     actions = {
         cat: el => { mmState.cat = el.dataset.cat; viewMotomart(); },
-        mine: () => { mmState.mine = !mmState.mine; mmState.status = 'all'; viewMotomart(); },
+        mine: () => { mmState.mine = !mmState.mine; mmState.review = false; mmState.status = 'all'; viewMotomart(); },
+        review: () => { mmState.review = !mmState.review; mmState.mine = false; viewMotomart(); },
         sell: () => listingForm(),
         listing: el => listingDetail(all.find(l => String(l.id) === el.dataset.id))
     };
@@ -1016,7 +1034,7 @@ async function shareListing(l) {
 }
 
 function listingDetail(l) {
-    const own = mine(l), adm = isAdmin();
+    const own = mine(l), adm = isMod();
     const contact = `Hi ${l.seller_name.split(' ')[0]}, I saw your ${l.product_name} (${price(l.price)}) on RWB Motomart. Is it still available?`;
     const fact = (k, v) => v ? `<dt>${k}</dt><dd>${esc(v)}</dd>` : '';
     openSheet(l.product_name, `
@@ -1024,7 +1042,7 @@ function listingDetail(l) {
         <div class="row" style="margin:12px 0 4px;justify-content:space-between"><b class="mm-price" style="font-size:1.9rem">${price(l.price)}</b>
             <span class="badge ${l.status === 'live' ? 'ok' : l.status === 'sold' ? '' : 'orange'}">${{ live: 'Available', sold: 'Sold', pending: 'Waiting for approval', rejected: 'Not approved' }[l.status]}</span></div>
         ${l.status === 'rejected' && l.reject_reason ? `<p class="warn" style="margin:8px 0">Admin note: ${esc(l.reject_reason)}. Edit the post to send it again.</p>` : ''}
-        ${l.status === 'pending' && own ? '<p class="warn" style="margin:8px 0">An admin will check and publish your post, usually within 24 hours.</p>' : ''}
+        ${l.status === 'pending' && own && !adm ? '<p class="warn" style="margin:8px 0">An admin will check and publish your post, usually within 24 hours.</p>' : ''}
         <dl class="facts">${fact('Category', l.category)}${fact('Size', l.size)}${fact('Age', l.age)}${fact('Condition', l.condition)}${fact('Reason', l.reason)}${fact('Seller', l.seller_name)}${fact('Posted', l.published_at ? fmtDate(String(l.published_at).slice(0, 10)) : '')}</dl>
         ${l.details ? `<p style="margin-bottom:16px">${linkify(l.details)}</p>` : ''}
         <div class="list">
@@ -1276,23 +1294,33 @@ async function viewCrew() {
         $('#crew-body').id = 'admin-body';
         await adminMembers(); return;
     }
-    const all = state.dir ??= await api.directory();
-    $('#crew-body').innerHTML = `<input class="search" type="search" id="cq" placeholder="Search name, bike or place" value="${esc(state.crewSearch || '')}" aria-label="Search members">
+    const all = state.dir ??= teamFirst(await api.directory());
+    const team = all.filter(isTeam), others = all.filter(m => !isTeam(m));
+    const name = m => `${esc(m.full_name)}${m.nickname ? ` <span class="muted" style="font-weight:400">“${esc(m.nickname)}”</span>` : ''}`;
+    $('#crew-body').innerHTML = (team.length ? `<div class="team card"><h3 class="team-title">RWB team <span class="small muted">for help or emergencies</span></h3>
+            ${team.map(m => `<div class="row member-row team-row">${face(m, 'avatar sm')}
+                <div class="grow"><div class="who">${name(m)} ${roleBadge(m)}</div><div class="meta">${esc(m.phone ? m.phone.replace(/(\d{5})(\d{5})/, '$1 $2') : '')}${m.vrn ? ` · ${esc(m.vrn)}` : ''}</div></div>
+                ${m.phone ? `<a class="icon-btn call" href="tel:+91${esc(m.phone)}" aria-label="Call ${esc(m.full_name)}">${ICON_PHONE}</a><a class="icon-btn wa-btn" href="${waTo(m.phone)}" target="_blank" rel="noopener" aria-label="WhatsApp ${esc(m.full_name)}">${ICON_WA}</a>` : ''}</div>`).join('')}</div>` : '')
+        + `<input class="search" type="search" id="cq" placeholder="Search name, bike number or place" value="${esc(state.crewSearch || '')}" aria-label="Search members">
         <p class="small muted" id="ccount" style="margin:-4px 0 10px"></p><div class="list" id="cl"></div><button class="btn ghost block section" id="cmore" hidden>Show more</button>`;
     let limit = 50;
     const draw = () => {
-        const q = (state.crewSearch || '').trim().toLowerCase();
-        const hits = all.filter(m => !q || [m.full_name, m.nickname, m.bike, m.locality].some(v => (v || '').toLowerCase().includes(q)));
-        $('#ccount').textContent = `${hits.length} member${hits.length === 1 ? '' : 's'}${q ? ' found' : ' in RWB'}`;
+        const q = (state.crewSearch || '').trim().toLowerCase(), qv = vrnKey(q);
+        const pool = q ? all : others;   /* while searching, the team is included too */
+        const hits = pool.filter(m => !q || [m.full_name, m.nickname, m.bike, m.locality].some(v => (v || '').toLowerCase().includes(q)) || (qv.length >= 2 && vrnKey(m.vrn).includes(qv)));
+        $('#ccount').textContent = q ? `${hits.length} found${qv.length >= 4 && !hits.length ? '. That bike isn\'t registered with RWB.' : ''}` : `${all.length} members in RWB`;
         $('#cl').innerHTML = hits.slice(0, limit).map(m => `<div class="card row member-row">${face(m, 'avatar sm')}
-            <div class="grow"><div class="who">${esc(m.full_name)}${m.nickname ? ` <span class="muted" style="font-weight:400">“${esc(m.nickname)}”</span>` : ''} ${m.role !== 'member' ? '<span class="badge orange">Admin</span>' : ''}</div>
-            <div class="meta">${esc([m.bike, m.locality].filter(Boolean).join(', ') || 'RWB member')}</div></div></div>`).join('') || '<div class="card empty">No one matches.</div>';
+            <div class="grow"><div class="who">${name(m)} ${roleBadge(m)}</div>
+            <div class="meta">${esc([m.bike, m.locality].filter(Boolean).join(', ') || 'RWB member')}</div></div>
+            ${m.vrn ? `<span class="vrn">${esc(m.vrn)}</span>` : ''}</div>`).join('') || (q ? '<div class="card empty">No one matches.</div>' : '');
         $('#cmore').hidden = hits.length <= limit;
     };
     $('#cq').oninput = e => { state.crewSearch = e.target.value; limit = 50; draw(); };
     $('#cmore').onclick = () => { limit += 100; draw(); };
     draw();
 }
+const ICON_PHONE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>';
+const ICON_WA = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.8-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2s.2-1.1.2-1.2-.2-.2-.4-.3z"/></svg>';
 
 /* =================== Boot =================== */
 async function boot() {
