@@ -119,11 +119,11 @@ async function supabaseApi(url, key) {
         deletePush: async endpoint => must(await sb.rpc('delete_push_subscription', { p_endpoint: endpoint })),
         testPush: async () => must(await sb.rpc('admin_test_push')),
 
-        /* ---- Ronin AI ---- */
+        /* ---- RWB AI ---- */
         async ask(messages, context, image) {
             const { data, error } = await sb.functions.invoke('ask-ronin', { body: { messages, context, image } });
             if (error) {
-                let msg = 'Ronin AI couldn\'t answer right now. Please try again.';
+                let msg = 'RWB AI couldn\'t answer right now. Please try again.';
                 try { const b = await error.context.json(); if (b?.error) msg = b.error; } catch { if (/fetch|network/i.test(error.message)) msg = 'No internet connection. Please try again.'; }
                 throw new Error(msg);
             }
@@ -268,7 +268,7 @@ function demoApi() {
             await new Promise(r => setTimeout(r, 700));
             const q = messages.at(-1).text.toLowerCase();
             const reply = /chain/.test(q) ? 'For the Ronin 225 chain:\n\n1. **Clean** it every 500–700 km (sooner after rain) with a chain cleaner and brush.\n2. **Dry** it, then **lube** the inner side of the rollers while turning the wheel.\n3. Let it sit 15–20 minutes before riding.\n\nCheck the slack too. If it looks loose or kinked, get it adjusted at a service centre.'
-                : '*(Demo mode: this is a sample answer.)*\n\nOnce Ronin AI is connected, I can help with your Ronin 225, maintenance, riding tips and using the RWB App.';
+                : '*(Demo mode: this is a sample answer.)*\n\nOnce RWB AI is connected, I can help with your Ronin 225, maintenance, riding tips and using the RWB App.';
             db.chatLeft = (db.chatLeft ?? 20) - 1; save();
             return { reply, left: db.chatLeft };
         },

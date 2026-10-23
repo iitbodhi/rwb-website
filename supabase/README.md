@@ -131,10 +131,10 @@ Members removed by an admin are not re-added from old rows; if they fill the for
 
 ---
 
-# Ronin AI chatbot (free, Google Gemini)
+# RWB AI chatbot (free, Google Gemini)
 
 1. Get a free Gemini API key at **aistudio.google.com/apikey** (Create API key).
 2. **SQL Editor** → paste `supabase/chat.sql` plus this line with your key → **Run**:
    `insert into private.config (key, value) values ('gemini_key', 'YOUR-KEY') on conflict (key) do update set value = excluded.value;`
 3. **Edge Functions → Deploy a new function → Via Editor** → name `ask-ronin` → paste `supabase/functions/ask-ronin/index.ts` → **Deploy**.
-4. Admins can teach it RWB-specific info in **Admin → Ronin AI**. Limits: 20 questions per member per day (admins 60), 500 in total per day; change `chat_daily_limit` / `chat_global_daily_limit` in `private.config`.
+4. Admins can teach it RWB-specific info in **Admin → RWB AI**. Limits: 20 questions per member per day (admins 60), 500 in total per day; change `chat_daily_limit` / `chat_global_daily_limit` in `private.config`.

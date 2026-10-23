@@ -220,7 +220,7 @@ dl.facts dd{font-weight:500;overflow-wrap:anywhere}
 .member-row .who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .stat.tap{text-align:left;font:inherit;color:inherit;cursor:pointer;width:auto}
 
-/* Ronin AI */
+/* RWB AI */
 .ai-badge{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,var(--orange),#f08a4b);color:#fff;display:grid;place-items:center;margin:0 auto 12px}
 .ai-badge svg{width:30px;height:30px}
 .ai-badge.sm{width:40px;height:40px;border-radius:12px;margin:0;flex:none}

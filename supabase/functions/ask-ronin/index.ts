@@ -1,4 +1,4 @@
-// RWB App: "ask-ronin" Supabase Edge Function. The Ronin AI chatbot.
+// RWB App: "ask-ronin" Supabase Edge Function. The RWB AI chatbot.
 // The app sends the question here; this function checks the member's daily limit,
 // adds RWB knowledge, asks Google Gemini (free tier) and sends the answer back.
 // The Gemini key stays on the server (private.config), never on phones.
@@ -17,9 +17,9 @@ const CORS = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
-/* ---------------- What Ronin AI knows ---------------- */
+/* ---------------- What RWB AI knows ---------------- */
 const BASE_KNOWLEDGE = `
-You are "Ronin AI", the friendly assistant inside the RWB App of Ronin Warriors of Bengal (RWB), a riding community
+You are "RWB AI", the friendly assistant inside the RWB App of Ronin Warriors of Bengal (RWB), a riding community
 from West Bengal, India, founded in 2023, built around the TVS Ronin 225 (riders of other bikes are welcome too).
 Motto: Explore. Evolve. Inspire. Website: roninwb.in. 500+ members, 20+ patron service centres, 15+ service camps.
 
@@ -156,7 +156,7 @@ Deno.serve(async (req) => {
     const { messages = [], context = null, image = null } = await req.json();
     const server = createClient(SB_URL, SERVICE, { auth: { persistSession: false } });
     const { data: cfg, error: cfgErr } = await server.rpc("chat_config");
-    if (cfgErr || !cfg?.key) throw new Error("Ronin AI is not set up yet (Gemini key missing).");
+    if (cfgErr || !cfg?.key) throw new Error("RWB AI is not set up yet (Gemini key missing).");
 
     const history = (Array.isArray(messages) ? messages : []).slice(-12)
       .filter((m: { role: string; text: string }) => m && typeof m.text === "string" && m.text.trim())
@@ -184,6 +184,6 @@ Deno.serve(async (req) => {
   } catch (e) {
     await asUser.rpc("chat_refund");
     console.error(e);
-    return json({ error: "Ronin AI couldn't answer right now. Please try again in a minute.", detail: String(e).slice(0, 300) }, 502);
+    return json({ error: "RWB AI couldn't answer right now. Please try again in a minute.", detail: String(e).slice(0, 300) }, 502);
   }
 });
