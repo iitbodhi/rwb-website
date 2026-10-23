@@ -3,8 +3,8 @@
       Both are safe to publish: the database rules decide who can see what.
    2) Leave them empty to run the app in demo mode (sample data, stored only on this device). */
 const APP_CONFIG = {
-    SUPABASE_URL: '',
-    SUPABASE_ANON_KEY: '',
+    SUPABASE_URL: 'https://hcowcybshljgkeixudry.supabase.co',
+    SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhjb3djeWJzaGxqZ2tlaXh1ZHJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3NDI2MjMsImV4cCI6MjEwODMxODYyM30.LLYjaairRQZ3-Ddwo9kschTeVXjEv84n45RrqEUhi0g',
 
     /* Shown in the Service record form. Add or rename freely. */
     SERVICE_ITEMS: [
