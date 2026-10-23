@@ -875,7 +875,7 @@ async function drawPushState() {
     if (Notification.permission === 'denied') {
         st.innerHTML = 'Notifications are blocked on this phone. The app can\'t ask again, so allow them once in your settings:';
         if (isTWA()) {
-            btn.innerHTML = `<ol class="steps"><li>Open phone <b>Settings → Apps → RWB → Notifications</b></li><li>Turn on <b>Allow notifications</b></li><li>Close RWB fully (swipe it away) and open it again</li></ol>
+            btn.innerHTML = `<ol class="steps"><li>Open phone <b>Settings → Apps → RWB → Notifications</b></li><li>Turn on <b>Allow notifications</b> and also <b>every category</b> listed under it (tap <b>Notification categories</b> if you see it)</li><li>Go back to <b>App info</b> and tap <b>Force stop</b>. The app only checks this setting when it starts.</li><li>Open RWB again and come back here</li></ol>
                 <p class="small muted" style="margin-top:8px">Nothing to change in Chrome: the RWB app handles its own notifications.</p>
                 <button class="btn sm" data-act="push-on" style="margin-top:10px">I've allowed it, try again</button>`;
             return;
