@@ -71,7 +71,9 @@ language sql stable security definer set search_path = public, private as $$
   select jsonb_build_object(
     'key',    (select value from private.config where key = 'gemini_key'),
     'models', coalesce((select value from private.config where key = 'gemini_models'), 'gemini-flash-latest,gemini-flash-lite-latest'),
-    'notes',  coalesce((select value from private.config where key = 'chat_notes'), ''));
+    'notes',  coalesce((select value from private.config where key = 'chat_notes'), ''),
+    'groq_key',    (select value from private.config where key = 'groq_key'),
+    'groq_models', coalesce((select value from private.config where key = 'groq_models'), 'llama-3.3-70b-versatile,llama-3.1-8b-instant'));
 $$;
 
 revoke execute on function public.chat_take_quota() from public, anon;

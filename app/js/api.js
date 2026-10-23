@@ -159,7 +159,8 @@ async function supabaseApi(url, key) {
                 const d = await r.json(); onText?.(d.reply); return d;
             } catch (e) {
                 clearTimeout(b.timer);
-                throw new Error(e.name === 'AbortError' ? 'Pookie is taking too long. Please try again in a minute.' : /fetch|network/i.test(e.message) ? 'No internet connection. Please try again.' : e.message);
+                throw new Error(e.name === 'AbortError' ? 'Pookie is taking too long. Please try again in a minute.'
+                    : /fetch|network|load failed/i.test(e.message) ? (navigator.onLine ? 'Pookie\'s server refused the request. An admin can check it in Admin → Pookie → Run a check.' : 'No internet connection. Please try again.') : e.message);
             }
         },
         async diagnoseAI() {
@@ -167,7 +168,11 @@ async function supabaseApi(url, key) {
             const r = await fetch(url + '/functions/v1/ask-ronin', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: key, Authorization: 'Bearer ' + token }, body: JSON.stringify({ diagnose: true }) })
                 .catch(e => ({ ok: false, status: 0, text: async () => String(e) }));
             const body = await r.text();
-            try { return JSON.parse(body).log || [JSON.parse(body).error]; } catch { return [`The function answered HTTP ${r.status}: ${body.slice(0, 300) || '(empty)'}`, r.status === 404 ? 'The ask-ronin function is not deployed (or has a different name).' : '']; }
+            try { return JSON.parse(body).log || [JSON.parse(body).error]; } catch {
+                return [r.status === 0 ? 'Could not reach the ask-ronin function at all.' : `The function answered HTTP ${r.status}: ${body.slice(0, 300) || '(empty)'}`,
+                    r.status === 404 ? 'FIX: the ask-ronin function is not deployed, or it has a different name.'
+                    : (r.status === 0 || r.status === 401) ? 'FIX: in Supabase open Edge Functions → ask-ronin → Details (or Settings), turn OFF "Verify JWT with legacy secret" / "Enforce JWT verification", and save. Pookie checks members itself.' : ''];
+            }
         },
         chatNotes: async () => must(await sb.rpc('admin_get_chat_notes')),
         saveChatNotes: async notes => must(await sb.rpc('admin_set_chat_notes', { p_notes: notes })),

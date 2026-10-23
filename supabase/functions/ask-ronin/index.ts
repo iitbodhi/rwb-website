@@ -184,12 +184,46 @@ async function openGemini(key: string, preferred: string[], body: Record<string,
 const partsText = (d: { candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[] }) =>
   (d.candidates?.[0]?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || "").join("");
 
-/** Google's event stream → plain text, passed on piece by piece as it arrives. */
-function textStream(src: Response, onEmpty: () => Promise<void>): ReadableStream<Uint8Array> {
+/* ---------------- Groq (free backup: very fast open models, used when Gemini fails) ---------------- */
+const GROQ = "https://api.groq.com/openai/v1";
+type Chat = { role: string; content: string }[];
+const groqDelta = (d: { choices?: { delta?: { content?: string } }[] }) => d.choices?.[0]?.delta?.content || "";
+const groqFull = (d: { choices?: { message?: { content?: string } }[] }) => d.choices?.[0]?.message?.content || "";
+async function openGroq(key: string, preferred: string[], messages: Chat, stream: boolean, log: string[]): Promise<Response> {
+  const tryModel = async (model: string) => {
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), stream ? 15000 : 30000), t0 = Date.now();
+    try {
+      const r = await fetch(`${GROQ}/chat/completions`, {
+        method: "POST", signal: ctrl.signal,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 1500, stream }),
+      });
+      if (!stream && r.ok) await r.clone().arrayBuffer();
+      clearTimeout(timer);
+      if (r.ok && r.body) { log.push(`groq ${model} OK in ${Date.now() - t0} ms`); return r; }
+      log.push(`groq ${model} HTTP ${r.status}: ${(await r.text()).replace(/\s+/g, " ").slice(0, 160)}`);
+    } catch (e) { clearTimeout(timer); log.push(`groq ${model}: ${ctrl.signal.aborted ? "no reply in time" : String(e).slice(0, 80)}`); }
+    return null;
+  };
+  for (const m of preferred) { const r = await tryModel(m); if (r) return r; }
+  try {   // the preferred models may have been retired: pick from what Groq offers now
+    const l = await get(`${GROQ}/models`, 5000).catch(() => null);
+    if (l?.ok) {
+      const ids: string[] = ((await l.json()).data || []).map((m: { id: string }) => m.id)
+        .filter((id: string) => /llama|gpt-oss|qwen|gemma/i.test(id) && !/guard|whisper|tts|prompt|vision|embed/i.test(id) && !preferred.includes(id)).slice(0, 3);
+      log.push("groq models available: " + ids.join(", "));
+      for (const m of ids) { const r = await tryModel(m); if (r) return r; }
+    }
+  } catch { /* ignore */ }
+  throw new Error("No Groq model answered");
+}
+
+/** An event stream (Gemini or Groq) → plain text, passed on piece by piece as it arrives. */
+function textStream(src: Response, pick: (d: never) => string, onEmpty: () => Promise<void>): ReadableStream<Uint8Array> {
   let buf = "", sent = 0;
   const handle = (line: string, ctl: TransformStreamDefaultController<string>) => {
-    line = line.trim(); if (!line.startsWith("data:")) return;
-    try { const t = partsText(JSON.parse(line.slice(5))); if (t) { ctl.enqueue(t); sent += t.length; } } catch { /* ignore */ }
+    line = line.trim(); if (!line.startsWith("data:") || line === "data: [DONE]") return;
+    try { const t = pick(JSON.parse(line.slice(5)) as never); if (t) { ctl.enqueue(t); sent += t.length; } } catch { /* ignore */ }
   };
   return src.body!
     .pipeThrough(new TextDecoderStream())
@@ -200,7 +234,8 @@ function textStream(src: Response, onEmpty: () => Promise<void>): ReadableStream
     .pipeThrough(new TextEncoderStream());
 }
 
-const VERSION = "pookie-4";
+const VERSION = "pookie-5";
+const list = (s: unknown, dflt: string) => String(s || dflt).split(",").map((x) => x.trim()).filter(Boolean);
 
 /* ---------------- Request ---------------- */
 Deno.serve(async (req) => {
@@ -213,16 +248,24 @@ Deno.serve(async (req) => {
   /* Admin → Pookie → "Run a check": test every step and report, without using anyone's quota */
   if (input.diagnose) {
     const adm = await asUser.rpc("is_admin");
-    if (!adm.data) return json({ error: "Admins only" }, 403);
+    if (adm.error || !adm.data) return json({ log: [`version ${VERSION}`, "Your sign-in reached Pookie's server, but it couldn't confirm you are an admin: " + (adm.error?.message || "not an admin")] });
+    log.push("sign-in check: OK (the server can see you)");
     const cfg = await server.rpc("chat_config");
-    log.push(cfg.error ? "settings: ERROR " + cfg.error.message : `settings: OK, Gemini key ${cfg.data?.key ? "present (" + String(cfg.data.key).slice(0, 6) + "…)" : "MISSING"}, models: ${cfg.data?.models}`);
+    const c = cfg.data || {};
+    log.push(cfg.error ? "settings: ERROR " + cfg.error.message : `settings: OK. Gemini key ${c.key ? "present" : "MISSING"}, Groq backup key ${c.groq_key ? "present" : "not added"}`);
     const k0 = Date.now(); const kn = await siteKnowledge(); log.push(`website knowledge: ${kn.length} characters in ${Date.now() - k0} ms`);
-    if (cfg.data?.key) {
+    if (c.key) {
       try {
-        const r = await openGemini(cfg.data.key, String(cfg.data.models).split(",").map((s: string) => s.trim()), {
+        const r = await openGemini(c.key, list(c.models, "gemini-flash-latest"), {
           contents: [{ role: "user", parts: [{ text: "Reply with just: OK" }] }], generationConfig: { temperature: 0, maxOutputTokens: 20 } }, false, log);
-        log.push("test answer: " + JSON.stringify(partsText(await r.json())));
-      } catch (e) { log.push("RESULT: " + String(e)); }
+        log.push("GEMINI WORKS. Test answer: " + JSON.stringify(partsText(await r.json())));
+      } catch (e) { log.push("GEMINI FAILED: " + String(e)); }
+    }
+    if (c.groq_key) {
+      try {
+        const r = await openGroq(c.groq_key, list(c.groq_models, "llama-3.3-70b-versatile"), [{ role: "user", content: "Reply with just: OK" }], false, log);
+        log.push("GROQ WORKS. Test answer: " + JSON.stringify(groqFull(await r.json())));
+      } catch (e) { log.push("GROQ FAILED: " + String(e)); }
     }
     log.push(`total ${Date.now() - t0} ms`);
     return json({ log });
@@ -234,16 +277,15 @@ Deno.serve(async (req) => {
 
   try {
     const cfg = cfgRes.data;
-    if (cfgRes.error || !cfg?.key) throw new Error("Pookie is not set up yet (Gemini key missing).");
+    if (cfgRes.error || !(cfg?.key || cfg?.groq_key)) throw new Error("Pookie is not set up yet (no AI key).");
     const { messages = [], context = null, image = null, stream = true } = input;
+    const live = stream !== false;
 
-    const history = (Array.isArray(messages) ? messages : []).slice(-12)
+    const turns = (Array.isArray(messages) ? messages : []).slice(-12)
       .filter((m) => m && typeof m.text === "string" && m.text.trim())
-      .map((m) => ({ role: m.role === "model" ? "model" : "user", parts: [{ text: m.text.slice(0, 2000) }] as Record<string, unknown>[] }));
-    if (!history.length || history[history.length - 1].role !== "user") { await refund(); return json({ error: "Please type a question." }, 400); }
-    if (image && typeof image === "string" && image.length < 1_500_000) {
-      history[history.length - 1].parts.push({ inlineData: { mimeType: "image/jpeg", data: image } });
-    }
+      .map((m) => ({ role: m.role === "model" ? "model" : "user", text: m.text.slice(0, 2000) }));
+    if (!turns.length || turns[turns.length - 1].role !== "user") { await refund(); return json({ error: "Please type a question." }, 400); }
+    const hasImage = !!(image && typeof image === "string" && image.length < 1_500_000);
 
     const today = new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "long", year: "numeric" });
     const system = [
@@ -252,20 +294,30 @@ Deno.serve(async (req) => {
       context ? "ABOUT THIS RIDER (from their own app data, use only if relevant):\n" + JSON.stringify(context).slice(0, 1500) : "",
     ].filter(Boolean).join("\n\n");
 
-    const upstream = await openGemini(cfg.key, String(cfg.models).split(",").map((s: string) => s.trim()).filter(Boolean), {
-      systemInstruction: { parts: [{ text: system }] },
-      contents: history,
-      generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
-    }, stream !== false, log);
+    let upstream: Response | null = null, pick: (d: never) => string = partsText as never, full: (d: never) => string = partsText as never;
+    if (cfg.key) {
+      const contents = turns.map((t) => ({ role: t.role, parts: [{ text: t.text }] as Record<string, unknown>[] }));
+      if (hasImage) contents[contents.length - 1].parts.push({ inlineData: { mimeType: "image/jpeg", data: image } });
+      try {
+        upstream = await openGemini(cfg.key, list(cfg.models, "gemini-flash-latest"), {
+          systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: { temperature: 0.4, maxOutputTokens: 2048 } }, live, log);
+      } catch (e) { log.push("gemini: " + String(e)); }
+    }
+    if (!upstream && cfg.groq_key) {
+      const msgs: Chat = [{ role: "system", content: system }, ...turns.map((t) => ({ role: t.role === "model" ? "assistant" : "user", content: t.text }))];
+      if (hasImage) msgs[msgs.length - 1].content += "\n\n(The rider attached a photo, but photos can't be looked at right now. Ask them to describe what they see.)";
+      upstream = await openGroq(cfg.groq_key, list(cfg.groq_models, "llama-3.3-70b-versatile,llama-3.1-8b-instant"), msgs, live, log);
+      pick = groqDelta as never; full = groqFull as never;
+    }
+    if (!upstream) throw new Error("No AI service answered");
     console.log(log.join(" | "));
-    const left = String(quota.data ?? "");
-    if (stream === false) {
-      const reply = partsText(await upstream.json()).trim();
+    if (!live) {
+      const reply = full(await upstream.json() as never).trim();
       if (!reply) { await refund(); return json({ error: "Pookie couldn't come up with an answer. Please ask again in a different way." }, 502); }
       return json({ reply, left: quota.data });
     }
-    return new Response(textStream(upstream, refund), {
-      headers: { ...CORS, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no", "x-left": left },
+    return new Response(textStream(upstream, pick, refund), {
+      headers: { ...CORS, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no", "x-left": String(quota.data ?? "") },
     });
   } catch (e) {
     await refund();
