@@ -1134,7 +1134,7 @@ async function viewChat() {
                 <textarea id="q" rows="1" maxlength="1500" placeholder="Ask Pookie…" aria-label="Your question"></textarea>
                 <button class="btn send" aria-label="Send">➤</button>
             </div>
-            <p class="small muted ai-note">Pookie uses Google Gemini and can make mistakes. Check anything safety-related with a mechanic. Don't share personal details.<span id="left"></span></p>
+            <p class="small muted ai-note">Pookie uses free AI services (Groq and Google Gemini) and can make mistakes. Check anything safety-related with a mechanic. Don't share personal details.<span id="left"></span></p>
         </form>`;
     drawChat();
     const q = $('#q'), form = $('#ask');

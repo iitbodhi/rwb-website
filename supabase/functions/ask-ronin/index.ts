@@ -134,8 +134,8 @@ async function listFlashModels(key: string): Promise<string[]> {
       .filter((m: { name: string; supportedGenerationMethods?: string[] }) =>
         m.supportedGenerationMethods?.includes("generateContent") && /flash/i.test(m.name) && !/image|tts|audio|live|embed|exp/i.test(m.name))
       .map((m: { name: string }) => m.name.replace(/^models\//, ""))
-      .sort((a: string, b: string) => (/lite/.test(a) ? 1 : 0) - (/lite/.test(b) ? 1 : 0) || b.localeCompare(a, undefined, { numeric: true }))
-      .slice(0, 4);
+      .sort((a: string, b: string) => (/preview/.test(a) ? 1 : 0) - (/preview/.test(b) ? 1 : 0) || b.localeCompare(a, undefined, { numeric: true }))
+      .slice(0, 6);
   } catch { return []; }
 }
 
@@ -189,6 +189,19 @@ const GROQ = "https://api.groq.com/openai/v1";
 type Chat = { role: string; content: string }[];
 const groqDelta = (d: { choices?: { delta?: { content?: string } }[] }) => d.choices?.[0]?.delta?.content || "";
 const groqFull = (d: { choices?: { message?: { content?: string } }[] }) => d.choices?.[0]?.message?.content || "";
+let groqRemembered: string | null = null;
+/** Groq's current chat models, best first (names change over time, so we ask instead of guessing). */
+async function groqModels(key: string): Promise<string[]> {
+  try {
+    const l = await fetch(`${GROQ}/models`, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(5000) });
+    if (!l.ok) return [];
+    const ids: string[] = ((await l.json()).data || []).filter((m: { active?: boolean }) => m.active !== false).map((m: { id: string }) => m.id)
+      .filter((id: string) => !/guard|whisper|tts|playai|prompt|embed|compound|vision|safeguard|orpheus/i.test(id));
+    const rank = (id: string) => { const order = [/gpt-oss-120b/, /llama-3\.3-70b/, /llama-4-maverick/, /kimi/, /qwen/, /llama-4-scout/, /gpt-oss-20b/, /llama/, /gemma/];
+      const k = order.findIndex((r) => r.test(id)); return k < 0 ? 99 : k; };
+    return ids.sort((a, b) => rank(a) - rank(b)).slice(0, 5);
+  } catch { return []; }
+}
 async function openGroq(key: string, preferred: string[], messages: Chat, stream: boolean, log: string[]): Promise<Response> {
   const tryModel = async (model: string) => {
     const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), stream ? 15000 : 30000), t0 = Date.now();
@@ -200,21 +213,23 @@ async function openGroq(key: string, preferred: string[], messages: Chat, stream
       });
       if (!stream && r.ok) await r.clone().arrayBuffer();
       clearTimeout(timer);
-      if (r.ok && r.body) { log.push(`groq ${model} OK in ${Date.now() - t0} ms`); return r; }
-      log.push(`groq ${model} HTTP ${r.status}: ${(await r.text()).replace(/\s+/g, " ").slice(0, 160)}`);
-    } catch (e) { clearTimeout(timer); log.push(`groq ${model}: ${ctrl.signal.aborted ? "no reply in time" : String(e).slice(0, 80)}`); }
+      if (r.ok && r.body) { groqRemembered = model; log.push(`groq ${model} OK in ${Date.now() - t0} ms`); return r; }
+      log.push(`groq ${model} HTTP ${r.status}: ${(await r.text()).replace(/\s+/g, " ").slice(0, 120)}`);
+      if (r.status === 401) throw new Error("Groq key not accepted");
+    } catch (e) {
+      clearTimeout(timer);
+      if (String(e).includes("key not accepted")) throw e;
+      log.push(`groq ${model}: ${ctrl.signal.aborted ? "no reply in time" : String(e).slice(0, 80)}`);
+    }
     return null;
   };
-  for (const m of preferred) { const r = await tryModel(m); if (r) return r; }
-  try {   // the preferred models may have been retired: pick from what Groq offers now
-    const l = await get(`${GROQ}/models`, 5000).catch(() => null);
-    if (l?.ok) {
-      const ids: string[] = ((await l.json()).data || []).map((m: { id: string }) => m.id)
-        .filter((id: string) => /llama|gpt-oss|qwen|gemma/i.test(id) && !/guard|whisper|tts|prompt|vision|embed/i.test(id) && !preferred.includes(id)).slice(0, 3);
-      log.push("groq models available: " + ids.join(", "));
-      for (const m of ids) { const r = await tryModel(m); if (r) return r; }
-    }
-  } catch { /* ignore */ }
+  const tried = new Set<string>();
+  for (const m of [groqRemembered, ...preferred].filter(Boolean) as string[]) {
+    if (tried.has(m)) continue; tried.add(m); const r = await tryModel(m); if (r) return r;
+  }
+  const more = (await groqModels(key)).filter((m) => !tried.has(m));
+  log.push("groq models available: " + (more.join(", ") || "none"));
+  for (const m of more) { const r = await tryModel(m); if (r) return r; }
   throw new Error("No Groq model answered");
 }
 
@@ -234,7 +249,7 @@ function textStream(src: Response, pick: (d: never) => string, onEmpty: () => Pr
     .pipeThrough(new TextEncoderStream());
 }
 
-const VERSION = "pookie-5";
+const VERSION = "pookie-6";
 const list = (s: unknown, dflt: string) => String(s || dflt).split(",").map((x) => x.trim()).filter(Boolean);
 
 /* ---------------- Request ---------------- */
@@ -263,7 +278,7 @@ Deno.serve(async (req) => {
     }
     if (c.groq_key) {
       try {
-        const r = await openGroq(c.groq_key, list(c.groq_models, "llama-3.3-70b-versatile"), [{ role: "user", content: "Reply with just: OK" }], false, log);
+        const r = await openGroq(c.groq_key, list(c.groq_models, ""), [{ role: "user", content: "Reply with just: OK" }], false, log);
         log.push("GROQ WORKS. Test answer: " + JSON.stringify(groqFull(await r.json())));
       } catch (e) { log.push("GROQ FAILED: " + String(e)); }
     }
@@ -295,20 +310,22 @@ Deno.serve(async (req) => {
     ].filter(Boolean).join("\n\n");
 
     let upstream: Response | null = null, pick: (d: never) => string = partsText as never, full: (d: never) => string = partsText as never;
-    if (cfg.key) {
+    const viaGemini = async () => {
       const contents = turns.map((t) => ({ role: t.role, parts: [{ text: t.text }] as Record<string, unknown>[] }));
       if (hasImage) contents[contents.length - 1].parts.push({ inlineData: { mimeType: "image/jpeg", data: image } });
-      try {
-        upstream = await openGemini(cfg.key, list(cfg.models, "gemini-flash-latest"), {
-          systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: { temperature: 0.4, maxOutputTokens: 2048 } }, live, log);
-      } catch (e) { log.push("gemini: " + String(e)); }
-    }
-    if (!upstream && cfg.groq_key) {
+      upstream = await openGemini(cfg.key, list(cfg.models, "gemini-flash-latest,gemini-flash-lite-latest"), {
+        systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: { temperature: 0.4, maxOutputTokens: 2048 } }, live, log);
+      pick = partsText as never; full = partsText as never;
+    };
+    const viaGroq = async () => {
       const msgs: Chat = [{ role: "system", content: system }, ...turns.map((t) => ({ role: t.role === "model" ? "assistant" : "user", content: t.text }))];
       if (hasImage) msgs[msgs.length - 1].content += "\n\n(The rider attached a photo, but photos can't be looked at right now. Ask them to describe what they see.)";
-      upstream = await openGroq(cfg.groq_key, list(cfg.groq_models, "llama-3.3-70b-versatile,llama-3.1-8b-instant"), msgs, live, log);
+      upstream = await openGroq(cfg.groq_key, list(cfg.groq_models, ""), msgs, live, log);
       pick = groqDelta as never; full = groqFull as never;
-    }
+    };
+    const order = [cfg.groq_key && viaGroq, cfg.key && viaGemini].filter(Boolean) as (() => Promise<void>)[];
+    if (hasImage && cfg.key) order.reverse();   // only Gemini can look at photos
+    for (const step of order) { if (upstream) break; try { await step(); } catch (e) { log.push(String(e)); } }
     if (!upstream) throw new Error("No AI service answered");
     console.log(log.join(" | "));
     if (!live) {
@@ -322,6 +339,6 @@ Deno.serve(async (req) => {
   } catch (e) {
     await refund();
     console.error(String(e), log.join(" | "));
-    return json({ error: "Pookie couldn't answer right now. Please try again in a minute.", detail: log.slice(-4).join(" | ") }, 502);
+    return json({ error: "Pookie couldn't answer right now. Please try again in a minute.", detail: log.slice(-8).join(" | ") }, 502);
   }
 });
