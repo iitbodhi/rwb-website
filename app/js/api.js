@@ -120,31 +120,54 @@ async function supabaseApi(url, key) {
         testPush: async () => must(await sb.rpc('admin_test_push')),
 
         /* ---- Pookie ---- */
-        /* streams the answer: onText(textSoFar) is called as words arrive */
+        /* Streams the answer (onText(textSoFar) as words arrive). If nothing arrives in 20 s,
+           asks again for the whole answer in one go, which works even where streaming is held up. */
         async ask(messages, context, image, onText) {
             const token = (await sb.auth.getSession()).data.session?.access_token;
-            const ctrl = new AbortController(); let got = false;
-            const timer = setTimeout(() => { if (!got) ctrl.abort(); }, 45000);
-            let r;
-            try {
-                r = await fetch(url + '/functions/v1/ask-ronin', {
+            const call = (stream, ms) => {
+                const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), ms);
+                return { ctrl, timer, res: fetch(url + '/functions/v1/ask-ronin', {
                     method: 'POST', signal: ctrl.signal,
                     headers: { 'Content-Type': 'application/json', apikey: key, Authorization: 'Bearer ' + (token || key) },
-                    body: JSON.stringify({ messages, context, image })
-                });
-            } catch (e) { clearTimeout(timer); throw new Error(e.name === 'AbortError' ? 'Pookie is taking too long. Please try again.' : 'No internet connection. Please try again.'); }
-            if (!r.ok || !(r.headers.get('content-type') || '').startsWith('text/plain')) {
-                clearTimeout(timer);
-                let msg = 'Pookie couldn\'t answer right now. Please try again.';
-                try { const b = await r.json(); if (b?.error) msg = b.error; } catch { /* keep default */ }
-                throw new Error(msg);
-            }
-            const left = r.headers.get('x-left');
-            const reader = r.body.getReader(), dec = new TextDecoder(); let text = '';
+                    body: JSON.stringify({ messages, context, image, stream })
+                }) };
+            };
+            const errorOf = async r => { try { const b = await r.json(); return b?.error || null; } catch { return null; } };
+            /* 1) streaming */
+            let text = '', left = null;
+            const a = call(true, 20000);
             try {
-                for (;;) { const { value, done } = await reader.read(); if (done) break; got = true; text += dec.decode(value, { stream: true }); onText?.(text); }
-            } finally { clearTimeout(timer); }
-            return { reply: text, left: left === '' || left == null ? null : Number(left) };
+                const r = await a.res;
+                const type = r.headers.get('content-type') || '';
+                if (!r.ok) { clearTimeout(a.timer); const m = await errorOf(r); if (r.status === 429 || r.status === 400) throw Object.assign(new Error(m || 'Pookie couldn\'t answer.'), { final: true }); throw new Error(m || 'stream failed'); }
+                if (type.includes('json')) { clearTimeout(a.timer); const b = await r.json(); onText?.(b.reply); return b; }
+                left = r.headers.get('x-left');
+                const reader = r.body.getReader(), dec = new TextDecoder();
+                for (;;) { const { value, done } = await reader.read(); if (done) break; clearTimeout(a.timer); text += dec.decode(value, { stream: true }); onText?.(text); }
+                clearTimeout(a.timer);
+                if (text.trim()) return { reply: text, left: left === '' || left == null ? null : Number(left) };
+            } catch (e) {
+                clearTimeout(a.timer);
+                if (e.final) throw e;
+                if (text.trim()) return { reply: text + '\n\n*(The connection dropped, so this answer may be cut short.)*', left: null };
+            }
+            /* 2) whole answer at once */
+            const b = call(false, 40000);
+            try {
+                const r = await b.res; clearTimeout(b.timer);
+                if (!r.ok) throw new Error(await errorOf(r) || 'Pookie couldn\'t answer right now. Please try again.');
+                const d = await r.json(); onText?.(d.reply); return d;
+            } catch (e) {
+                clearTimeout(b.timer);
+                throw new Error(e.name === 'AbortError' ? 'Pookie is taking too long. Please try again in a minute.' : /fetch|network/i.test(e.message) ? 'No internet connection. Please try again.' : e.message);
+            }
+        },
+        async diagnoseAI() {
+            const token = (await sb.auth.getSession()).data.session?.access_token;
+            const r = await fetch(url + '/functions/v1/ask-ronin', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: key, Authorization: 'Bearer ' + token }, body: JSON.stringify({ diagnose: true }) })
+                .catch(e => ({ ok: false, status: 0, text: async () => String(e) }));
+            const body = await r.text();
+            try { return JSON.parse(body).log || [JSON.parse(body).error]; } catch { return [`The function answered HTTP ${r.status}: ${body.slice(0, 300) || '(empty)'}`, r.status === 404 ? 'The ask-ronin function is not deployed (or has a different name).' : '']; }
         },
         chatNotes: async () => must(await sb.rpc('admin_get_chat_notes')),
         saveChatNotes: async notes => must(await sb.rpc('admin_set_chat_notes', { p_notes: notes })),
@@ -291,6 +314,7 @@ function demoApi() {
             for (const w of reply.split(/(?<= )/)) { shown += w; onText?.(shown); await new Promise(r => setTimeout(r, 25)); }
             return { reply, left: db.chatLeft };
         },
+        diagnoseAI: async () => ['version demo', 'settings: OK (demo mode)', 'test answer: "OK"'],
         chatNotes: async () => db.chatNotes || '', async saveChatNotes(n) { db.chatNotes = n; save(); },
         async testPush() { db.news.push({ id: nid(), kind: 'admin', title: 'Test notification ✅', body: 'Push notifications are working on this phone.', url: '#news', audience: 'admins', created_at: new Date().toISOString() }); save(); },
 

@@ -139,28 +139,29 @@ async function listFlashModels(key: string): Promise<string[]> {
   } catch { return []; }
 }
 
-/** Opens a streaming answer from the first model + setting that works. */
-async function openStream(key: string, preferred: string[], body: Record<string, unknown>): Promise<Response> {
-  const errors: string[] = [];
+/** Finds the first model + setting that answers. stream=true → word-by-word answer, false → whole answer at once. */
+async function openGemini(key: string, preferred: string[], body: Record<string, unknown>, stream: boolean, log: string[]): Promise<Response> {
   const attempt = async (model: string, t: number): Promise<Response | "next-setting" | "next-model"> => {
     const gc = { ...(body.generationConfig as object) } as Record<string, unknown>;
     if (THINKING[t]) gc.thinkingConfig = THINKING[t];
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 25000);       // no first byte in 25 s: try another model
+    const timer = setTimeout(() => ctrl.abort(), stream ? 15000 : 30000);
+    const t0 = Date.now();
     try {
-      const r = await fetch(`${GEMINI}/models/${model}:streamGenerateContent?alt=sse`, {
+      const r = await fetch(`${GEMINI}/models/${model}:${stream ? "streamGenerateContent?alt=sse" : "generateContent"}`, {
         method: "POST", signal: ctrl.signal,
         headers: { "Content-Type": "application/json", "x-goog-api-key": key },
         body: JSON.stringify({ ...body, generationConfig: gc }),
       });
+      if (!stream && r.ok) await r.clone().arrayBuffer();   // whole answer must arrive before the timer
       clearTimeout(timer);
-      if (r.ok && r.body) { remembered = { model, t }; return r; }
-      const err = (await r.text()).slice(0, 300);
-      errors.push(`${model}/${t}: ${r.status}`);
+      if (r.ok && r.body) { remembered = { model, t }; log.push(`${model} [${JSON.stringify(THINKING[t])}] OK in ${Date.now() - t0} ms`); return r; }
+      const err = (await r.text()).replace(/\s+/g, " ").slice(0, 200);
+      log.push(`${model} [${JSON.stringify(THINKING[t])}] HTTP ${r.status}: ${err}`);
       if (r.status === 400 && /thinking|unknown name|invalid json payload|not supported/i.test(err)) return "next-setting";
       return "next-model";
     } catch (e) {
-      clearTimeout(timer); errors.push(`${model}/${t}: ${String(e).slice(0, 60)}`); return "next-model";
+      clearTimeout(timer); log.push(`${model}: ${ctrl.signal.aborted ? "no reply in time" : String(e).slice(0, 80)}`); return "next-model";
     }
   };
   const tryAll = async (models: string[]) => {
@@ -174,59 +175,67 @@ async function openStream(key: string, preferred: string[], body: Record<string,
     return null;
   };
   const first = [...new Set([remembered?.model, ...preferred].filter(Boolean) as string[])];
-  const r = await tryAll(first) ?? await tryAll((await listFlashModels(key)).filter((m) => !first.includes(m)));
+  let r = await tryAll(first);
+  if (!r) { const more = (await listFlashModels(key)).filter((m) => !first.includes(m)); log.push("available Flash models: " + (more.join(", ") || "none found")); r = await tryAll(more); }
   if (r) return r;
-  throw new Error("No Gemini model answered (" + errors.join(", ") + ")");
+  throw new Error("No Gemini model answered");
 }
 
-/** Turns Google's event stream into plain text for the app. */
+const partsText = (d: { candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[] }) =>
+  (d.candidates?.[0]?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || "").join("");
+
+/** Google's event stream → plain text, passed on piece by piece as it arrives. */
 function textStream(src: Response, onEmpty: () => Promise<void>): ReadableStream<Uint8Array> {
-  const enc = new TextEncoder(), dec = new TextDecoder();
-  return new ReadableStream({
-    async start(ctl) {
-      const reader = src.body!.getReader();
-      let buf = "", sent = 0;
-      try {
-        for (;;) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buf += dec.decode(value, { stream: true });
-          let i;
-          while ((i = buf.indexOf("\n")) >= 0) {
-            const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
-            if (!line.startsWith("data:")) continue;
-            try {
-              const d = JSON.parse(line.slice(5));
-              const parts = d.candidates?.[0]?.content?.parts || [];
-              const t = parts.filter((p: { thought?: boolean }) => !p.thought).map((p: { text?: string }) => p.text || "").join("");
-              if (t) { ctl.enqueue(enc.encode(t)); sent += t.length; }
-            } catch { /* partial line */ }
-          }
-        }
-      } catch (e) { console.error("stream", e); }
-      if (!sent) { await onEmpty(); ctl.enqueue(enc.encode("Sorry, I couldn't come up with an answer. Please ask again in a different way.")); }
-      ctl.close();
-    },
-  });
+  let buf = "", sent = 0;
+  const handle = (line: string, ctl: TransformStreamDefaultController<string>) => {
+    line = line.trim(); if (!line.startsWith("data:")) return;
+    try { const t = partsText(JSON.parse(line.slice(5))); if (t) { ctl.enqueue(t); sent += t.length; } } catch { /* ignore */ }
+  };
+  return src.body!
+    .pipeThrough(new TextDecoderStream())
+    .pipeThrough(new TransformStream<string, string>({
+      transform(chunk, ctl) { buf += chunk; let i; while ((i = buf.indexOf("\n")) >= 0) { handle(buf.slice(0, i), ctl); buf = buf.slice(i + 1); } },
+      async flush(ctl) { if (buf) handle(buf, ctl); if (!sent) { await onEmpty(); ctl.enqueue("Sorry, I couldn't come up with an answer. Please ask again in a different way."); } },
+    }))
+    .pipeThrough(new TextEncoderStream());
 }
+
+const VERSION = "pookie-4";
 
 /* ---------------- Request ---------------- */
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  const t0 = Date.now(), log: string[] = [`version ${VERSION}`];
   const asUser = createClient(SB_URL, ANON, { global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } }, auth: { persistSession: false } });
   const server = createClient(SB_URL, SERVICE, { auth: { persistSession: false } });
+  const input = await req.json().catch(() => ({})) as { messages?: { role: string; text: string }[]; context?: unknown; image?: string; stream?: boolean; diagnose?: boolean };
 
-  // quota, settings, website knowledge and the request body: all at the same time
-  const [quota, cfgRes, knowledge, input] = await Promise.all([
-    asUser.rpc("chat_take_quota"), server.rpc("chat_config"), siteKnowledge(), req.json().catch(() => ({})),
-  ]);
+  /* Admin → Pookie → "Run a check": test every step and report, without using anyone's quota */
+  if (input.diagnose) {
+    const adm = await asUser.rpc("is_admin");
+    if (!adm.data) return json({ error: "Admins only" }, 403);
+    const cfg = await server.rpc("chat_config");
+    log.push(cfg.error ? "settings: ERROR " + cfg.error.message : `settings: OK, Gemini key ${cfg.data?.key ? "present (" + String(cfg.data.key).slice(0, 6) + "…)" : "MISSING"}, models: ${cfg.data?.models}`);
+    const k0 = Date.now(); const kn = await siteKnowledge(); log.push(`website knowledge: ${kn.length} characters in ${Date.now() - k0} ms`);
+    if (cfg.data?.key) {
+      try {
+        const r = await openGemini(cfg.data.key, String(cfg.data.models).split(",").map((s: string) => s.trim()), {
+          contents: [{ role: "user", parts: [{ text: "Reply with just: OK" }] }], generationConfig: { temperature: 0, maxOutputTokens: 20 } }, false, log);
+        log.push("test answer: " + JSON.stringify(partsText(await r.json())));
+      } catch (e) { log.push("RESULT: " + String(e)); }
+    }
+    log.push(`total ${Date.now() - t0} ms`);
+    return json({ log });
+  }
+
+  const [quota, cfgRes, knowledge] = await Promise.all([asUser.rpc("chat_take_quota"), server.rpc("chat_config"), siteKnowledge()]);
   if (quota.error) return json({ error: quota.error.message }, 429);
   const refund = async () => { await asUser.rpc("chat_refund"); };
 
   try {
     const cfg = cfgRes.data;
     if (cfgRes.error || !cfg?.key) throw new Error("Pookie is not set up yet (Gemini key missing).");
-    const { messages = [], context = null, image = null } = input as { messages?: { role: string; text: string }[]; context?: unknown; image?: string };
+    const { messages = [], context = null, image = null, stream = true } = input;
 
     const history = (Array.isArray(messages) ? messages : []).slice(-12)
       .filter((m) => m && typeof m.text === "string" && m.text.trim())
@@ -243,17 +252,24 @@ Deno.serve(async (req) => {
       context ? "ABOUT THIS RIDER (from their own app data, use only if relevant):\n" + JSON.stringify(context).slice(0, 1500) : "",
     ].filter(Boolean).join("\n\n");
 
-    const upstream = await openStream(cfg.key, String(cfg.models).split(",").map((s: string) => s.trim()).filter(Boolean), {
+    const upstream = await openGemini(cfg.key, String(cfg.models).split(",").map((s: string) => s.trim()).filter(Boolean), {
       systemInstruction: { parts: [{ text: system }] },
       contents: history,
       generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
-    });
+    }, stream !== false, log);
+    console.log(log.join(" | "));
+    const left = String(quota.data ?? "");
+    if (stream === false) {
+      const reply = partsText(await upstream.json()).trim();
+      if (!reply) { await refund(); return json({ error: "Pookie couldn't come up with an answer. Please ask again in a different way." }, 502); }
+      return json({ reply, left: quota.data });
+    }
     return new Response(textStream(upstream, refund), {
-      headers: { ...CORS, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache", "x-left": String(quota.data ?? "") },
+      headers: { ...CORS, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no", "x-left": left },
     });
   } catch (e) {
     await refund();
-    console.error(e);
-    return json({ error: "Pookie couldn't answer right now. Please try again in a minute.", detail: String(e).slice(0, 300) }, 502);
+    console.error(String(e), log.join(" | "));
+    return json({ error: "Pookie couldn't answer right now. Please try again in a minute.", detail: log.slice(-4).join(" | ") }, 502);
   }
 });

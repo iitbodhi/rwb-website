@@ -96,6 +96,7 @@ const ROUTES = { home: viewHome, service: viewService, mileage: viewMileage, mot
 let renderChain = Promise.resolve();
 function render() { renderChain = renderChain.then(doRender, doRender); return renderChain; }
 async function doRender() {
+    if (!state.me) return;          /* signed out / not loaded yet: boot() shows the right screen */
     const [name, param] = (location.hash.slice(1) || 'home').split('?')[0].split('/');
     state.param = param || null;
     const view = ROUTES[name] || viewHome;
@@ -180,55 +181,100 @@ async function viewAccess(status, sess) {
 }
 
 /* =================== Home =================== */
-async function viewHome() {
-    const [services, fuel, bdays] = await Promise.all([load.services(), load.fuel(), load.bdays()]);
-    const today = bdays.filter(b => b.day === todayISO());
-    const ms = mileageStats(fuel);
-    const last = services[0];
-    const due = services.find(s => s.next_due_km || s.next_due_date);
-    const odoNow = Math.max(0, ...services.map(s => s.odometer_km), ...fuel.map(f => f.odometer_km));
-    const yr = String(new Date().getFullYear());
-    const spent = services.filter(s => s.service_date.startsWith(yr)).reduce((a, s) => a + Number(s.cost || 0), 0);
-    let dueText = '–', dueSub = 'Next service';
-    if (due?.next_due_km) { const left = due.next_due_km - odoNow; dueText = left > 0 ? km(left) : 'Due now'; dueSub = left > 0 ? `to next service (${km(due.next_due_km)})` : `next service was at ${km(due.next_due_km)}`; }
-    else if (due?.next_due_date) { dueText = fmtDayMonth(due.next_due_date); dueSub = 'Next service date'; }
+const ICON = {
+    fuel: '<svg viewBox="0 0 24 24"><path d="M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M3 21h12M7 8h4M14 9h2.5a1.5 1.5 0 0 1 1.5 1.5V17a1.5 1.5 0 0 0 3 0V8l-3-3"/></svg>',
+    wrench: '<svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8V21h3.2l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>',
+    tag: '<svg viewBox="0 0 24 24"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>',
+    chat: '<svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/><path d="M9 10h.01M12 10h.01M15 10h.01"/></svg>',
+    book: '<svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 21a2 2 0 0 1 2-2h13v2H6M9 7h6"/></svg>',
+    helmet: '<svg viewBox="0 0 24 24"><path d="M3 15a9 9 0 0 1 18 0v2H3zM12 6v5h9M3 17l1 3h8"/></svg>',
+    globe: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
+    shield: '<svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>',
+    dl: '<svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
+    chev: '<svg viewBox="0 0 24 24" class="chev"><path d="M9 6l6 6-6 6"/></svg>',
+    out: '<svg viewBox="0 0 24 24" class="chev"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></svg>'
+};
 
-    const [news, listings] = await Promise.all([load.news(), load.listings().catch(() => [])]);
-    const fresh = listings.filter(l => l.status === 'live').slice(0, 4);
-    const pushAsk = pushSupported() && Notification.permission === 'default' && !localStorage.getItem('rwb-push-dismissed');
-    app.innerHTML = top('RWB', isAdmin() ? '<a class="btn sm ghost hide-narrow" href="#admin">Admin</a>' : '') + `
-        <div class="hero"><h2>Hi, ${esc(firstName(state.me))}</h2><p>${esc([state.me.bike, state.me.vrn].filter(Boolean).join(' · ') || 'Ride safe, Ronin.')}</p></div>
-        ${today.length ? `<section class="section"><div class="card bday"><h3>🎂 Birthdays today</h3>
-            <ul>${today.map(b => `<li>${esc(b.full_name)}${b.nickname ? ` <span class="muted">(${esc(b.nickname)})</span>` : ''}</li>`).join('')}</ul>
-            <button class="btn wa sm" data-act="wish">Wish on WhatsApp</button></div></section>` : ''}
-        <section class="section"><div class="stats">
-            <div class="stat accent"><b>${ms.avg ? ms.avg.toFixed(1) : '–'}</b><span>Avg km/l</span></div>
-            <div class="stat"><b>${dueText}</b><span>${esc(dueSub)}</span></div>
-            <div class="stat"><b>${last ? km(last.odometer_km).replace(' km', '') : '–'}</b><span>Last service (km)</span></div>
-            <div class="stat"><b>${rs(spent)}</b><span>Service spend ${yr}</span></div>
-        </div></section>
-        <section class="section"><a class="card tap row ai-card" href="#chat" style="text-decoration:none"><span class="ai-badge sm">${AI_ICON}</span><div class="grow"><h3>Ask Pookie</h3><p class="small muted">Bike trouble, maintenance or app help. Ask anything.</p></div><span class="kmpl">›</span></a></section>
-        ${pushAsk ? `<section class="section"><div class="card"><h3>🔔 Turn on notifications</h3><p class="small muted" style="margin-bottom:12px">Get birthdays, new Motomart posts and RWB announcements on this phone.</p><div class="btns"><button class="btn sm" data-act="push-on">Turn on</button><button class="btn sm ghost" data-act="push-later">Not now</button></div></div></section>` : ''}
-        ${news.length ? `<section class="section"><h2>Latest from RWB <a href="#news">See all</a></h2>${newsCard(news[0])}</section>` : ''}
-        <section class="section"><div class="btns"><button class="btn" data-act="add-fuel">＋ Fuel fill-up</button><button class="btn ghost" data-act="add-service">＋ Service</button></div></section>
-        ${isAdmin() ? `<section class="section"><a class="card tap row" href="#admin" style="text-decoration:none"><div class="grow"><h3>Admin panel</h3><p class="muted small" id="admin-hint">Members, access requests, Motomart, birthdays</p></div><span class="kmpl">›</span></a></section>` : ''}
-        <section class="section"><h2>Fresh on Motomart <a href="#motomart">See all</a></h2>${fresh.length ? `<div class="mm-grid">${fresh.map(listingCard).join('')}</div>` : '<div class="card empty"><b>Nothing for sale yet</b>Selling gear? Post it on Motomart.<p style="margin-top:10px"><a class="btn sm" href="#motomart">Open Motomart</a></p></div>'}</section>
-        <section class="section"><h2>Explore</h2><div class="list">
-            <a class="card tap row" href="#guides" data-guide="maint" style="text-decoration:none"><div class="grow"><h3>Ronin maintenance</h3><p class="muted small">Service guides and how-tos from our coordinators</p></div><span class="kmpl">›</span></a>
-            <a class="card tap row" href="#guides" data-guide="acc" style="text-decoration:none"><div class="grow"><h3>Recommended gear</h3><p class="muted small">Accessories rated by RWB</p></div><span class="kmpl">›</span></a>
-            <a class="card tap row" href="https://roninwb.in" target="_blank" rel="noopener" style="text-decoration:none"><div class="grow"><h3>roninwb.in</h3><p class="muted small">Rides, events, gallery and the team</p></div><span class="kmpl">↗</span></a>
+/* the instrument-cluster card: odometer in the middle, the ring fills up as the next service comes closer */
+function cluster(services, fuel) {
+    const odo = Math.max(0, ...services.map(s => s.odometer_km), ...fuel.map(f => f.odometer_km));
+    const due = services.find(s => s.next_due_km || s.next_due_date);
+    const ms = mileageStats(fuel), yr = String(new Date().getFullYear());
+    const spent = services.filter(s => s.service_date.startsWith(yr)).reduce((a, s) => a + Number(s.cost || 0), 0);
+    let p = 0, cap = 'Add your next service date or km when you log a service', state_ = '';
+    if (due?.next_due_km) {
+        const span = due.next_due_km - due.odometer_km, left = due.next_due_km - odo;
+        p = span > 0 ? Math.min(1, Math.max(0, (odo - due.odometer_km) / span)) : 1;
+        cap = left > 0 ? `Next service in <b>${km(left)}</b>` : `Service due. It was due at ${km(due.next_due_km)}`;
+        state_ = left <= 0 ? 'due' : left < 500 ? 'soon' : '';
+    } else if (due?.next_due_date) {
+        const days = Math.round((new Date(due.next_due_date) - new Date(todayISO())) / 864e5);
+        const span = Math.max(1, Math.round((new Date(due.next_due_date) - new Date(due.service_date)) / 864e5));
+        p = Math.min(1, Math.max(0, 1 - days / span));
+        cap = days > 0 ? `Next service in <b>${days} day${days === 1 ? '' : 's'}</b>` : 'Service due now';
+        state_ = days <= 0 ? 'due' : days < 10 ? 'soon' : '';
+    }
+    const R = 52, C = 2 * Math.PI * R, ARC = C * 0.75;      /* a 270° dial, like a tachometer */
+    return `<section class="cluster ${state_}">
+        <div class="cl-bike"><span>${esc(state.me.bike || 'My bike')}</span>${state.me.vrn ? `<span class="cl-vrn">${esc(state.me.vrn)}</span>` : ''}</div>
+        <div class="dial" role="img" aria-label="Odometer ${odo ? odo.toLocaleString('en-IN') + ' km' : 'not recorded yet'}">
+            <svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="${R}" stroke-dasharray="${ARC} ${C}"/>
+                <circle class="fill" cx="60" cy="60" r="${R}" stroke-dasharray="${(ARC * p).toFixed(1)} ${C}"/></svg>
+            <div class="dial-read"><b>${odo ? odo.toLocaleString('en-IN') : '–'}</b><span>km on the clock</span></div>
+        </div>
+        <p class="cl-cap">${cap}</p>
+        <div class="cl-row">
+            <div><b>${ms.avg ? ms.avg.toFixed(1) : '–'}</b><span>km/l average</span></div>
+            <div><b>${ms.cpk ? '₹' + ms.cpk.toFixed(2) : '–'}</b><span>fuel per km</span></div>
+            <div><b>${rs(spent)}</b><span>service in ${yr}</span></div>
+        </div>
+    </section>`;
+}
+
+function newsRow(n, del = false) {
+    const href = n.url && n.url.startsWith('#') ? n.url : '#news';
+    return `<a class="news-row ${n.kind}" href="${esc(href)}"><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || '📣'}</span>
+        <span class="grow"><b>${esc(n.title)}</b>${n.body ? `<span class="news-body">${esc(n.body)}</span>` : ''}<span class="small muted">${timeAgo(n.created_at)}${n.audience === 'admins' ? ', admins only' : ''}</span></span>
+        ${del ? `<button class="icon-btn del" data-act="del-news" data-id="${n.id}" aria-label="Delete">✕</button>` : ICON.chev}</a>`;
+}
+
+async function viewHome() {
+    const [services, fuel, bdays, news, listings] = await Promise.all([load.services(), load.fuel(), load.bdays(), load.news(), load.listings().catch(() => [])]);
+    const today = bdays.filter(b => b.day === todayISO());
+    const fresh = listings.filter(l => l.status === 'live').slice(0, 8);
+    let pushAsk = false; try { pushAsk = pushSupported() && Notification.permission === 'default' && !localStorage.getItem('rwb-push-dismissed'); } catch { /* ignore */ }
+    const names = today.map(b => b.full_name.split(' ')[0]);
+    app.innerHTML = top(`Hi, ${firstName(state.me)}`) + `
+        ${cluster(services, fuel)}
+        <nav class="quick" aria-label="Quick actions">
+            <button data-act="add-fuel"><span>${ICON.fuel}</span>Add fuel</button>
+            <button data-act="add-service"><span>${ICON.wrench}</span>Log service</button>
+            <button data-act="sell"><span>${ICON.tag}</span>Sell gear</button>
+            <a href="#chat"><span>${ICON.chat}</span>Ask Pookie</a>
+        </nav>
+        ${isAdmin() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
+        ${today.length ? `<div class="banner bday"><span class="b-ico">🎂</span><span class="grow"><b>${esc(names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : names[0])}</b> ${names.length > 1 ? 'have' : 'has'} a birthday today</span><button class="btn sm wa" data-act="wish">Wish</button></div>` : ''}
+        ${pushAsk ? `<div class="banner"><span class="b-ico">🔔</span><span class="grow">Get birthdays, Motomart posts and ride news as notifications</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
+        ${news.length ? `<section class="section"><h2>Latest from RWB <a href="#news">See all</a></h2><div class="group">${news.slice(0, 2).map(n => newsRow(n)).join('')}</div></section>` : ''}
+        <section class="section"><h2>Fresh on Motomart <a href="#motomart">See all</a></h2>
+            ${fresh.length ? `<div class="strip">${fresh.map(listingCard).join('')}</div>` : `<a class="group-row-card" href="#motomart"><span class="g-ico">${ICON.tag}</span><span class="grow"><b>Nothing for sale yet</b><span class="small muted">Selling old gear? Post it here for fellow riders.</span></span>${ICON.chev}</a>`}</section>
+        <section class="section"><h2>Explore</h2><div class="group">
+            <a href="#guides" data-guide="maint"><span class="g-ico">${ICON.book}</span><span class="grow"><b>Maintenance guides</b><span class="small muted">How-tos and checklists from our coordinators</span></span>${ICON.chev}</a>
+            <a href="#guides" data-guide="acc"><span class="g-ico">${ICON.helmet}</span><span class="grow"><b>Recommended gear</b><span class="small muted">Accessories tested and scored by RWB</span></span>${ICON.chev}</a>
+            <a href="https://roninwb.in" target="_blank" rel="noopener"><span class="g-ico">${ICON.globe}</span><span class="grow"><b>roninwb.in</b><span class="small muted">Rides, events, gallery and the team</span></span>${ICON.out}</a>
         </div></section>`;
     actions = {
         'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); render(); }),
         'push-later': () => { try { localStorage.setItem('rwb-push-dismissed', '1'); } catch { /* ignore */ } render(); },
+        sell: () => listingForm(),
         listing: el => location.hash = '#motomart/' + el.dataset.id
     };
     app.querySelectorAll('[data-guide]').forEach(a => a.addEventListener('click', () => state.guideTab = a.dataset.guide));
     if (isAdmin()) api.admin.stats().then(s => {
-        const h = $('#admin-hint'), mm = listings.filter(l => l.status === 'pending').length, parts = [];
+        const b = $('#admin-banner'), mm = listings.filter(l => l.status === 'pending').length, parts = [];
         if (s.pending) parts.push(`${s.pending} access request${s.pending > 1 ? 's' : ''}`);
         if (mm) parts.push(`${mm} Motomart post${mm > 1 ? 's' : ''}`);
-        if (h && parts.length) h.innerHTML = `<b style="color:var(--orange)">${parts.join(' and ')} waiting</b>`;
+        if (b && parts.length) { b.innerHTML = `<span class="b-ico">${ICON.shield}</span><span class="grow">${parts.join(' and ')} waiting for you</span>${ICON.chev}`; b.href = s.pending ? '#admin' : '#admin/motomart'; b.hidden = false; }
     }).catch(() => {});
 }
 
@@ -568,49 +614,60 @@ function installSheet() {
 }
 
 function viewMe() {
-    const m = state.me;
+    const m = state.me, role = m.role === 'superadmin' ? 'Super admin' : m.role === 'admin' ? 'Admin' : 'Member';
+    const row = (k, v) => `<div><span class="muted">${k}</span><span class="rt">${esc(v || '–')}</span></div>`;
+    const theme = getTheme();
     app.innerHTML = top('Me') + `
-        <div class="card"><h3>${esc(m.full_name)}</h3><p class="muted">${esc([m.nickname && `“${m.nickname}”`, m.role !== 'member' && (m.role === 'superadmin' ? 'Super admin' : 'Admin')].filter(Boolean).join(' · ') || 'RWB member')}</p>
-            <dl class="facts">
-                <dt>WhatsApp</dt><dd>${esc(m.phone || '–')}</dd>
-                <dt>Bike</dt><dd>${esc([m.bike, m.vrn].filter(Boolean).join(' · ') || '–')}</dd>
-                <dt>Birthday</dt><dd>${m.dob ? fmtDayMonth(m.dob) : '–'}</dd>
-                <dt>Blood group</dt><dd>${esc(m.blood_group || '–')}</dd>
-                <dt>Locality</dt><dd>${esc(m.locality || '–')}</dd>
-                <dt>Emergency</dt><dd>${esc(m.emergency_phone || '–')}</dd>
-            </dl>
-            <button class="btn ghost block" data-act="edit">Edit my details</button></div>
-        ${isAdmin() ? '<a class="card tap row section" href="#admin" style="text-decoration:none;display:flex"><div class="grow"><h3>Admin panel</h3><p class="small muted">Members, access requests, birthdays</p></div><span class="kmpl">›</span></a>' : ''}
-        <div class="card section" id="notif-card"><h3>Notifications</h3><p class="small muted" id="push-state" style="margin-bottom:12px">Checking…</p>
-            <div id="push-btn"></div>
-            <fieldset style="margin-top:14px"><legend>Tell me about</legend>
-                ${[['birthday', 'Birthdays'], ['motomart', 'New Motomart posts'], ['member', 'New members on the app']].map(([k, l]) => `<label class="switch">${l}<input type="checkbox" data-pref="${k}"${(m.notify || {})[k] !== false ? ' checked' : ''}></label>`).join('')}
-                <p class="small muted">RWB announcements always come through.</p></fieldset></div>
-        ${isStandalone() ? '' : `<div class="card section"><h3>Install the app</h3><p class="small muted" style="margin-bottom:12px">${isIOS() ? 'In Safari, tap the Share button, then “Add to Home Screen”.' : 'Add RWB to your home screen. It opens like any other app and uses almost no space.'}</p>${!isIOS() ? '<button class="btn block" data-act="install">Install RWB app</button>' : ''}</div>`}
-        <div class="section btns"><button class="btn ghost" data-act="out">Sign out</button></div>
-        <p class="small muted section" style="text-align:center">RWB App · free for every Ronin · <a href="https://roninwb.in" target="_blank" rel="noopener">roninwb.in</a></p>`;
+        <section class="profile">
+            <span class="avatar xl">${esc(initials(m))}</span>
+            <div class="grow"><h2>${esc(m.full_name)}</h2><p class="muted">${esc(role)}${m.nickname ? `, “${esc(m.nickname)}”` : ''}</p></div>
+            <button class="btn sm ghost" data-act="edit">Edit</button>
+        </section>
+        <div class="group kv">
+            ${row('WhatsApp', m.phone)}${row('Bike', m.bike)}${row('Registration', m.vrn)}${row('Birthday', m.dob ? fmtDayMonth(m.dob) : '')}${row('Blood group', m.blood_group)}${row('Locality', m.locality)}${row('Emergency contact', m.emergency_phone)}
+        </div>
+        ${isAdmin() ? `<div class="group section"><a href="#admin"><span class="g-ico">${ICON.shield}</span><span class="grow"><b>Admin panel</b><span class="small muted">Members, requests, Motomart, birthdays, Pookie</span></span>${ICON.chev}</a></div>` : ''}
+
+        <h2 class="group-title">Appearance</h2>
+        <div class="seg" role="radiogroup" aria-label="Theme">${[['light', 'Light'], ['dark', 'Dark'], ['system', 'Auto']].map(([k, l]) => `<button role="radio" aria-selected="${theme === k}" aria-checked="${theme === k}" data-act="theme" data-t="${k}">${l}</button>`).join('')}</div>
+
+        <h2 class="group-title">Notifications</h2>
+        <div class="card" id="notif-card"><p id="push-state">Checking…</p><div id="push-btn" style="margin-top:10px"></div></div>
+        <div class="group" style="margin-top:10px">
+            ${[['birthday', 'Birthdays'], ['motomart', 'New Motomart posts'], ['member', 'New members on the app']].map(([k, l]) => `<label class="toggle-row"><span class="grow">${l}</span><span class="switch-only"><input type="checkbox" data-pref="${k}"${(m.notify || {})[k] !== false ? ' checked' : ''}></span></label>`).join('')}
+        </div>
+        <p class="small muted" style="margin:8px 4px 0">RWB announcements always come through.</p>
+
+        <h2 class="group-title">App</h2>
+        <div class="group">
+            ${isStandalone() ? '' : `<button data-act="install"><span class="g-ico">${ICON.dl}</span><span class="grow"><b>Install the app</b><span class="small muted">${isIOS() ? 'Safari → Share → Add to Home Screen' : 'Add RWB to your home screen'}</span></span>${ICON.chev}</button>`}
+            <a href="../privacy.html" target="_blank" rel="noopener"><span class="g-ico">${ICON.shield}</span><span class="grow"><b>Privacy</b></span>${ICON.out}</a>
+            <button data-act="out" class="danger-row"><span class="grow"><b>Sign out</b></span></button>
+        </div>
+        <p class="small muted" style="text-align:center;margin-top:24px">RWB App, free for every warrior</p>`;
     actions = {
         out: async () => { await disablePush(true).catch(() => {}); api.signOut(); },
+        theme: el => { setTheme(el.dataset.t); app.querySelectorAll('[data-act=theme]').forEach(b => { const on = b === el; b.setAttribute('aria-selected', on); b.setAttribute('aria-checked', on); }); },
         'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); drawPushState(); }),
         'push-off': b => busy(b, async () => { await disablePush(); toast('Notifications are off on this phone'); drawPushState(); }),
         'push-test': b => busy(b, async () => { await api.testPush(); toast('Test sent. It should arrive in a few seconds.'); }),
-        install: async () => { if (installEvt) { installEvt.prompt(); await installEvt.userChoice; installEvt = null; render(); } else toast('Use your browser menu: “Install app” or “Add to Home screen”'); },
+        install: () => installEvt ? (async () => { installEvt.prompt(); await installEvt.userChoice; installEvt = null; render(); })() : installSheet(),
         edit: () => openSheet('My details', `<form id="mf">
-            <p class="small muted">Name and WhatsApp number can be changed by an admin.</p>
+            <p class="small muted">Your name and WhatsApp number can only be changed by an admin.</p>
             <label>Nickname<input name="nickname" value="${esc(m.nickname || '')}" maxlength="40"></label>
             <div class="grid2"><label>Date of birth<input type="date" name="dob" value="${esc(m.dob && !m.dob.startsWith('1904') ? m.dob : '')}"></label>
                 <label>Blood group<select name="blood_group">${['', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(b => `<option${(m.blood_group || '').replace(/\s/g, '').toUpperCase().startsWith(b) && b ? ' selected' : ''} value="${b}">${b || '–'}</option>`).join('')}</select></label></div>
-            <div class="grid2"><label>Bike<input name="bike" value="${esc(m.bike || '')}"></label><label>Bike number<input name="vrn" value="${esc(m.vrn || '')}"></label></div>
+            <div class="grid2"><label>Bike<input name="bike" value="${esc(m.bike || '')}"></label><label>Registration<input name="vrn" value="${esc(m.vrn || '')}"></label></div>
             <label>Locality<input name="locality" value="${esc(m.locality || '')}"></label>
             <label>Hometown<input name="hideout" value="${esc(m.hideout || '')}"></label>
             <div class="grid2"><label>Emergency contact<input name="emergency_phone" inputmode="tel" value="${esc(m.emergency_phone || '')}"></label><label>Other mobile<input name="alt_phone" inputmode="tel" value="${esc(m.alt_phone || '')}"></label></div>
-            <button class="btn block">Save</button></form>`, body => {
+            <button class="btn block">Save details</button></form>`, body => {
             body.querySelector('#mf').onsubmit = e => {
                 e.preventDefault();
                 const d = Object.fromEntries(new FormData(e.target)); Object.keys(d).forEach(k => d[k] = d[k].trim() || null);
                 if (!d.dob && m.dob?.startsWith('1904')) delete d.dob;   /* keep "year unknown" birthday */
                 if (!d.blood_group && m.blood_group) delete d.blood_group;
-                busy(e.submitter, async () => { state.me = await api.updateMe(d); closeSheet(); render(); toast('Saved'); });
+                busy(e.submitter, async () => { state.me = await api.updateMe(d); closeSheet(); render(); toast('Details saved'); });
             };
         })
     };
@@ -738,6 +795,16 @@ async function adminBdays() {
         <section class="section"><h2>Next 7 days</h2>${later.length ? `<div class="list">${later.map(b => `<div class="card row"><div class="grow"><b>${esc(b.full_name)}</b><p class="small muted">${fmtDayMonth(b.day)}</p></div></div>`).join('')}</div>` : '<p class="muted">None in the coming week.</p>'}</section>`;
 }
 
+/* =================== Theme =================== */
+const getTheme = () => { try { return localStorage.getItem('rwb-theme') || 'light'; } catch { return 'light'; } };
+function setTheme(t) {
+    try { localStorage.setItem('rwb-theme', t); } catch { /* ignore */ }
+    document.documentElement.dataset.theme = t;
+    const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+    const m = document.getElementById('theme-color'); if (m) m.content = dark ? '#121110' : '#f7f7f5';
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => getTheme() === 'system' && setTheme('system'));
+
 /* =================== Push notifications =================== */
 const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 const b64ToBytes = s => { const p = '='.repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, c => c.charCodeAt(0)); };
@@ -763,7 +830,14 @@ async function drawPushState() {
     let on = false;
     if (pushSupported()) { const reg = await navigator.serviceWorker.getRegistration(); on = !!(reg && await reg.pushManager.getSubscription()) && Notification.permission === 'granted'; }
     if (!pushSupported()) { st.textContent = isIOS() && !isStandalone() ? 'On iPhone, notifications work after you add RWB to your Home Screen and open it from there.' : 'This browser does not support notifications.'; btn.innerHTML = ''; return; }
-    if (Notification.permission === 'denied') { st.textContent = 'Notifications are blocked for this site. Allow them in your browser or phone settings.'; btn.innerHTML = ''; return; }
+    if (Notification.permission === 'denied') {
+        st.innerHTML = 'Notifications are blocked on this phone. The app can\'t ask again, so allow them once in your settings:';
+        btn.innerHTML = isIOS() ? `<ol class="steps"><li>Open iPhone <b>Settings → Notifications</b></li><li>Find <b>RWB</b> and turn on <b>Allow Notifications</b></li><li>Come back here and tap <b>Turn on</b></li></ol><button class="btn sm" data-act="push-on" style="margin-top:10px">Turn on</button>`
+            : `<p class="small" style="margin:4px 0 6px"><b>Using the RWB app (downloaded APK)</b></p><ol class="steps"><li>Open phone <b>Settings → Apps → RWB → Notifications</b></li><li>Turn on <b>Allow notifications</b></li></ol>
+               <p class="small" style="margin:12px 0 6px"><b>Using Chrome</b></p><ol class="steps"><li>Tap the icon left of <b>roninwb.in</b> in the address bar</li><li><b>Permissions → Notifications → Allow</b></li></ol>
+               <p class="small muted" style="margin-top:10px">Then close and reopen the app, and come back to this page.</p>`;
+        return;
+    }
     st.textContent = on ? 'On for this phone.' : 'Off for this phone.';
     btn.innerHTML = on ? `<div class="btns">${isAdmin() ? '<button class="btn sm ghost" data-act="push-test">Send test</button>' : ''}<button class="btn sm ghost" data-act="push-off">Turn off</button></div>` : '<button class="btn block" data-act="push-on">Turn on notifications</button>';
 }
@@ -788,12 +862,12 @@ async function viewNews() {
     const news = await load.news(true);
     try { if (news[0]) localStorage.setItem('rwb-news-seen', String(Math.max(...news.map(n => n.id)))); } catch { /* ignore */ }
     app.innerHTML = top('News') + `
-        ${isAdmin() ? `<details class="howto section" style="margin-top:0"><summary>📣 Post an announcement</summary>
+        ${isAdmin() ? `<details class="howto" style="margin-bottom:6px"><summary>Post an announcement</summary>
             <form id="ann" style="padding-bottom:16px"><label>Title<input name="title" required maxlength="120" placeholder="e.g. Sunday breakfast ride"></label>
             <label>Message<textarea name="body" maxlength="1000" placeholder="Meeting point, time, anything members should know"></textarea></label>
             <p class="small muted">Goes to everyone's feed and as a notification to every phone that has them on.</p>
             <button class="btn block">Send to all members</button></form></details>` : ''}
-        <section class="section"><div class="list">${news.length ? news.map(n => newsCard(n, isAdmin())).join('') : '<div class="card empty"><b>No news yet</b>Announcements, birthdays and new Motomart posts show up here.</div>'}</div></section>`;
+        <section class="section">${news.length ? `<div class="group">${news.map(n => newsRow(n, isAdmin())).join('')}</div>` : '<div class="card empty"><b>No news yet</b>Announcements, birthdays and new Motomart posts show up here.</div>'}</section>`;
     actions = { 'del-news': b => { if (confirmBox('Delete this from the feed?')) busy(b, async () => { await api.deleteNews(Number(b.dataset.id)); render(); }); } };
     const f = $('#ann');
     if (f) f.onsubmit = e => {
@@ -1090,7 +1164,11 @@ async function adminAI() {
     $('#admin-body').innerHTML = `<div class="card"><h3>Teach Pookie</h3>
         <p class="small muted" style="margin:4px 0 12px">Anything written here, Pookie knows and trusts. For example: patron service centres with area and phone, RWB ride rules, the sticker process, recommended oil brands, tyre pressures your coordinators use, upcoming ride details. Members never see this text directly.</p>
         <form id="ainotes"><textarea name="notes" rows="12" maxlength="8000" placeholder="e.g. Patron service centres:\n- Example Motors, Salt Lake Sector 5 (10% off for RWB members)\n\nRide rules: helmet and riding jacket compulsory on all RWB rides…">${esc(notes)}</textarea>
-        <button class="btn block">Save notes</button></form></div>`;
+        <button class="btn block">Save notes</button></form></div>
+        <div class="card section"><h3>Is Pookie working?</h3>
+        <p class="small muted" style="margin:4px 0 12px">Runs a quick test of every step (settings, Gemini key, models) and shows what happened. Doesn't use anyone's daily questions.</p>
+        <button class="btn ghost block" id="diag">Run a check</button><pre id="diag-out" class="diag" hidden></pre></div>`;
+    $('#diag').onclick = e => busy(e.target, async () => { const out = $('#diag-out'); out.hidden = false; out.textContent = 'Checking… (up to 30 seconds)'; out.textContent = (await api.diagnoseAI()).filter(Boolean).join('\n'); });
     $('#ainotes').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { await api.saveChatNotes(e.target.notes.value.trim()); toast('Saved. Pookie will use this from the next question.'); }); };
 }
 
@@ -1115,6 +1193,6 @@ async function boot() {
     try { api = await createApi(); }
     catch { app.innerHTML = `<section class="signin"><h1>Can't load</h1><p class="lead">Please check your internet connection.</p><button class="btn block" onclick="location.reload()">Try again</button></section>`; return; }
     if (location.hash === '#install') { history.replaceState(null, '', location.pathname); setTimeout(installSheet, 1200); }
-    api.onAuthChange(ev => { chat.msgs = null; chat.left = null; Object.assign(state, { me: null, services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null }); if (ev === 'SIGNED_OUT') location.hash = ''; boot(); });
+    api.onAuthChange(ev => { chat.msgs = null; chat.left = null; Object.assign(state, { me: null, services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null }); if (ev === 'SIGNED_OUT') history.replaceState(null, '', location.pathname); boot(); });
     boot();
 })();
