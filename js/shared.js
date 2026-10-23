@@ -18,7 +18,7 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
   <button class="icon-btn nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false"><span></span><span></span></button>
 </header>`);
     document.body.insertAdjacentHTML('beforeend', `
-<footer class="footer"><p>Copyright of this website is reserved by Ronin Warriors of Bengal. roninwb.in</p><p class="footer-link"><a href="team-guide.html">Team guide</a> for admins and coordinators</p></footer>
+<footer class="footer"><p>Copyright of this website is reserved by Ronin Warriors of Bengal. roninwb.in</p><p class="footer-link"><a href="team-guide.html">Team guide</a> for admins and coordinators · <a href="privacy.html">Privacy policy</a></p></footer>
 <dialog id="dialog" aria-label="Details"><button class="dialog-close" aria-label="Close">✕</button><div id="dialog-body"></div></dialog>`);
 })();
 
