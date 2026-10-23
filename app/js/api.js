@@ -4,7 +4,7 @@
    - Demo (sample data in this browser) when it does not */
 
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
-const BILL_BUCKET = 'bills';
+const BILL_BUCKET = 'bills', PHOTO_BUCKET = 'motomart';
 
 export async function createApi() {
     const c = typeof APP_CONFIG !== 'undefined' ? APP_CONFIG : {};
@@ -85,6 +85,40 @@ async function supabaseApi(url, key) {
         },
         deleteFuel: async rec => must(await sb.from('fuel_logs').delete().eq('id', rec.id)),
 
+        /* ---- Motomart ---- */
+        myId: uid,
+        listings: async () => must(await sb.from('listings').select('*').order('published_at', { ascending: false, nullsFirst: true }).order('created_at', { ascending: false })),
+        photoUrl: path => sb.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl,
+        async saveListing(rec, newFiles = [], removed = []) {
+            const me = await uid(), added = [];
+            try {
+                for (const f of newFiles) {
+                    const path = `${me}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+                    must(await sb.storage.from(PHOTO_BUCKET).upload(path, f, { contentType: 'image/jpeg', upsert: false }));
+                    added.push(path);
+                }
+                const { id, user_id, created_at, updated_at, published_at, status, reject_reason, ...row } = rec;
+                row.photos = [...(rec.photos || []).filter(p => !removed.includes(p)), ...added];
+                const saved = id ? must(await sb.from('listings').update(row).eq('id', id).select().single())
+                                 : must(await sb.from('listings').insert(row).select().single());
+                if (removed.length) await sb.storage.from(PHOTO_BUCKET).remove(removed);
+                return saved;
+            } catch (e) { if (added.length) await sb.storage.from(PHOTO_BUCKET).remove(added); throw e; }
+        },
+        setListingStatus: async (id, status, reason = null) => must(await sb.from('listings').update({ status, reject_reason: reason }).eq('id', id).select().single()),
+        async deleteListing(rec) {
+            must(await sb.from('listings').delete().eq('id', rec.id));
+            if (rec.photos?.length) await sb.storage.from(PHOTO_BUCKET).remove(rec.photos);
+        },
+
+        /* ---- Announcements + push ---- */
+        news: async () => must(await sb.from('notifications').select('*').order('created_at', { ascending: false }).limit(40)),
+        announce: async (title, body) => must(await sb.rpc('admin_announce', { p_title: title, p_body: body })),
+        deleteNews: async id => must(await sb.from('notifications').delete().eq('id', id)),
+        savePush: async (endpoint, p256dh, auth) => must(await sb.rpc('save_push_subscription', { p_endpoint: endpoint, p_p256dh: p256dh, p_auth: auth })),
+        deletePush: async endpoint => must(await sb.rpc('delete_push_subscription', { p_endpoint: endpoint })),
+        testPush: async () => must(await sb.rpc('admin_test_push')),
+
         admin: {
             stats: async () => must(await sb.rpc('admin_stats')),
             requests: async () => must(await sb.rpc('admin_list_requests')),
@@ -100,6 +134,8 @@ async function supabaseApi(url, key) {
             update: async (id, p) => must(await sb.rpc('admin_update_member', { p_member_id: id, p })),
             setRole: async (id, role) => must(await sb.rpc('admin_set_role', { p_member_id: id, p_role: role })),
             async remove(id) {
+                const photos = must(await sb.rpc('admin_listing_photos', { p_member_id: id })) || [];
+                if (photos.length) await sb.storage.from(PHOTO_BUCKET).remove(photos);
                 const files = must(await sb.rpc('admin_begin_removal', { p_member_id: id })) || [];
                 if (files.length) must(await sb.storage.from(BILL_BUCKET).remove(files));
                 return must(await sb.rpc('admin_remove_member', { p_member_id: id }));
@@ -110,7 +146,7 @@ async function supabaseApi(url, key) {
 
 /* ======================= Demo (sample data in this browser) ======================= */
 function demoApi() {
-    const KEY = 'rwb-app-demo-v1';
+    const KEY = 'rwb-app-demo-v2';
     const iso = d => d.toISOString().slice(0, 10);
     const daysAgo = n => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
     const today = new Date();
@@ -138,7 +174,20 @@ function demoApi() {
             fuel.push({ id: id++, fill_date: daysAgo(70 - i * 10), odometer_km: odo, litres: l, amount: Math.round(l * 104.9), full_tank: full, trip_a_km: i === 0 ? null : full ? (i === 2 ? 392 : dist) : null, notes: '' });
         });
         const requests = [{ id: 1, email: 'newrider@example.com', full_name: 'Kunal Das', phone: '9000000010', dob: '1998-08-21', vrn: 'WB 26 KL 3333', locality: 'Kalyani', created_at: daysAgo(1), match_member_id: null, match_name: null, match_linked: false }];
-        return { signedIn: false, members, services, fuel, requests, nextId: 100 };
+        const pic = (bg, label) => 'demo:data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600"><rect width="100%" height="100%" fill="${bg}"/><text x="50%" y="52%" text-anchor="middle" font-family="sans-serif" font-size="54" font-weight="700" fill="#fff">${label}</text></svg>`);
+        const L = (id, o) => ({ id, user_id: 'u2', size: '', age: '', condition: 'Good', reason: '', details: '', seller_name: 'Arjun Sen', seller_phone: '9000000002', status: 'live', reject_reason: null, created_at: daysAgo(id), published_at: daysAgo(id), ...o });
+        const listings = [
+            L(1, { product_name: 'Axor Apex helmet', category: 'Helmet', size: 'L', age: '8 months', condition: 'Like new', reason: 'Upgraded to a modular', price: 4500, photos: [pic('#3d5a80', 'HELMET'), pic('#293241', 'SIDE')] }),
+            L(2, { product_name: 'Rynox Stealth Evo jacket', category: 'Riding jacket', size: 'XL', age: '1 year', condition: 'Good', reason: 'Size does not fit anymore', price: 6200, photos: [pic('#6d597a', 'JACKET')], user_id: 'me', seller_name: 'Demo Rider', seller_phone: '9000000001' }),
+            L(3, { product_name: 'Ronin 225 crash guard', category: 'Bike protection', age: '6 months', condition: 'Good', reason: 'Sold the bike', price: 1800, photos: [pic('#b56576', 'GUARD')], status: 'sold' }),
+            L(4, { product_name: 'Phone mount with charger', category: 'Electronics', age: '3 months', condition: 'Like new', reason: 'Got a new one as a gift', price: 900, photos: [pic('#e56b6f', 'MOUNT')], status: 'pending', published_at: null, user_id: 'u4', seller_name: 'Rahul Ghosh', seller_phone: '9000000004' })
+        ];
+        const news = [
+            { id: 1, kind: 'announcement', title: 'Sunday breakfast ride ☕', body: 'Meet at Nicco Park gate, 6:00 AM sharp. Route to Kolaghat. Full tank please!', url: '#news', audience: 'all', created_at: new Date(Date.now() - 36e5 * 5).toISOString() },
+            { id: 2, kind: 'motomart', title: 'New on RWB Motomart', body: 'Axor Apex helmet · ₹4,500', url: '#motomart/1', audience: 'all', created_at: new Date(Date.now() - 36e5 * 26).toISOString() },
+            { id: 3, kind: 'member', title: 'A new Ronin joined the app 🏍️', body: 'Say hello to Rahul Ghosh!', url: '#home', audience: 'all', created_at: new Date(Date.now() - 36e5 * 50).toISOString() }
+        ];
+        return { signedIn: false, members, services, fuel, requests, listings, news, nextId: 100 };
     }
     let db; try { db = JSON.parse(localStorage.getItem(KEY)); } catch { /* storage blocked */ }
     if (!db) db = seed();
@@ -185,6 +234,24 @@ function demoApi() {
         fuel: () => wait([...db.fuel].sort((a, b) => a.odometer_km - b.odometer_km || a.fill_date.localeCompare(b.fill_date))),
         async saveFuel(rec) { if (rec.id) Object.assign(db.fuel.find(s => s.id === rec.id), rec); else db.fuel.push({ ...rec, id: nid() }); save(); return wait(rec); },
         async deleteFuel(rec) { db.fuel = db.fuel.filter(s => s.id !== rec.id); save(); },
+
+        myId: async () => 'me',
+        listings: () => wait([...db.listings].filter(l => ['live', 'sold'].includes(l.status) || l.user_id === 'me' || ['admin', 'superadmin'].includes(me().role)).sort((a, b) => String(b.published_at || '9').localeCompare(String(a.published_at || '9')))),
+        photoUrl: path => path.startsWith('demo:') ? path.slice(5) : path,
+        async saveListing(rec, newFiles = [], removed = []) {
+            const added = await Promise.all(newFiles.map(f => new Promise(r => { const fr = new FileReader(); fr.onload = () => r('demo:' + fr.result); fr.readAsDataURL(f); })));
+            const photos = [...(rec.photos || []).filter(p => !removed.includes(p)), ...added];
+            if (rec.id) { const l = db.listings.find(x => x.id === rec.id); Object.assign(l, rec, { photos }); if (l.status === 'rejected') l.status = 'pending'; }
+            else db.listings.push({ ...rec, photos, id: nid(), user_id: 'me', status: 'pending', created_at: new Date().toISOString(), published_at: null });
+            save(); return wait(rec);
+        },
+        async setListingStatus(id, status, reason = null) { const l = db.listings.find(x => x.id === id); if (status === 'live' && !l.published_at) l.published_at = new Date().toISOString(); Object.assign(l, { status, reject_reason: reason }); save(); return wait(l); },
+        async deleteListing(rec) { db.listings = db.listings.filter(l => l.id !== rec.id); save(); },
+        news: () => wait([...db.news].sort((a, b) => b.created_at.localeCompare(a.created_at))),
+        async announce(title, body) { db.news.push({ id: nid(), kind: 'announcement', title, body, url: '#news', audience: 'all', created_at: new Date().toISOString() }); save(); },
+        async deleteNews(id) { db.news = db.news.filter(n => n.id !== id); save(); },
+        savePush: async () => 'saved', deletePush: async () => 'deleted',
+        async testPush() { db.news.push({ id: nid(), kind: 'admin', title: 'Test notification ✅', body: 'Push notifications are working on this phone.', url: '#news', audience: 'admins', created_at: new Date().toISOString() }); save(); },
 
         admin: {
             stats: () => wait({ members: db.members.length, on_app: db.members.filter(m => m.user_id).length, pending: db.requests.length, admins: db.members.filter(m => m.role !== 'member').length }),

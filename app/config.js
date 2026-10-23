@@ -6,6 +6,13 @@ const APP_CONFIG = {
     SUPABASE_URL: 'https://hcowcybshljgkeixudry.supabase.co',
     SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhjb3djeWJzaGxqZ2tlaXh1ZHJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3NDI2MjMsImV4cCI6MjEwODMxODYyM30.LLYjaairRQZ3-Ddwo9kschTeVXjEv84n45RrqEUhi0g',
 
+    /* Public key for push notifications (safe to publish; the private half lives only in the database) */
+    VAPID_PUBLIC_KEY: 'BEoWMKShMPZthuoPUr7VZKT7Ig6F3-W5WSwAjCbkGkeXrFB8WXpXZRZDTcoE4omiwn20Gqa9Gg59zaQJbSOadmI',
+
+    /* Motomart categories, shown in the sell form and as filters */
+    MOTOMART_CATEGORIES: ['Helmet', 'Riding jacket', 'Riding pants', 'Riding shoes / boots', 'Gloves', 'Bike protection',
+        'Bike accessories', 'Rider accessories', 'Luggage', 'Electronics', 'Spare parts', 'Other'],
+
     /* Shown in the Service record form. Add or rename freely. */
     SERVICE_ITEMS: [
         'Engine oil change', 'Oil filter', 'Air filter', 'Spark plug',

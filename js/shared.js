@@ -12,7 +12,7 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 <header class="nav" id="nav">
   <a href="${home ? '#home' : 'index.html'}" class="nav-brand"><img src="assets/logo.png" alt="" width="40" height="40"><span>RWB</span></a>
   <nav class="nav-links" id="nav-links" aria-label="Main">
-    ${link(base + '#join', 'Social')}${link(base + '#events', 'Events')}${link(base + '#gallery', 'Gallery')}${link('maintenance.html', 'Maintenance', 'maintenance')}${link('accessories.html', 'Accessories', 'accessories')}${link(base + '#market', 'Marketplace')}${link(base + '#warriors', 'Warriors')}${link(base + '#about', 'About')}
+    ${link(base + '#join', 'Social')}${link(base + '#events', 'Events')}${link(base + '#gallery', 'Gallery')}${link('maintenance.html', 'Maintenance', 'maintenance')}${link('accessories.html', 'Accessories', 'accessories')}${link(base + '#market', 'Marketplace')}${link(base + '#warriors', 'Warriors')}${link(base + '#app', 'App')}${link(base + '#about', 'About')}
   </nav>
   <a href="#" class="btn btn-sm join-link" target="_blank" rel="noopener">Join us</a>
   <button class="icon-btn nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false"><span></span><span></span></button>

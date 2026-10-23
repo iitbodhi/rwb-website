@@ -62,7 +62,9 @@ function wishText(people) {
 const load = {
     services: async (force) => (state.services = !force && state.services || await api.services()),
     fuel: async (force) => (state.fuel = !force && state.fuel || await api.fuel()),
-    bdays: async () => (state.bdays ??= await api.birthdays(isAdmin() ? 7 : 0).catch(() => []))
+    bdays: async () => (state.bdays ??= await api.birthdays(isAdmin() ? 7 : 0).catch(() => [])),
+    listings: async (force) => (state.listings = !force && state.listings || await api.listings()),
+    news: async (force) => (state.news = !force && state.news || await api.news().catch(() => []))
 };
 
 /* ---------- mileage maths ----------
@@ -89,20 +91,28 @@ function mileageStats(logs) {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { home: viewHome, service: viewService, mileage: viewMileage, guides: viewGuides, me: viewMe, admin: viewAdmin };
+const ROUTES = { home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews };
 async function render() {
-    const name = (location.hash.slice(1) || 'home').split('?')[0];
+    const [name, param] = (location.hash.slice(1) || 'home').split('?')[0].split('/');
+    state.param = param || null;
     const view = ROUTES[name] || viewHome;
     if (name === 'admin' && !isAdmin()) { location.hash = '#home'; return; }
+    if (name === 'admin' && param) state.adminTab = param;
     tabbar.hidden = false;
-    tabbar.querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.tab === name || (name === 'admin' && a.dataset.tab === 'me')));
+    tabbar.querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.tab === name));
     tabbar.querySelectorAll('a[aria-current]').forEach(a => a.setAttribute('aria-current', 'page'));
     try { await view(); } catch (e) { app.innerHTML = top('Oops') + `<div class="card empty"><b>Could not load</b>${esc(e.message)}<p style="margin-top:12px"><button class="btn sm" onclick="location.reload()">Try again</button></p></div>`; }
 }
 window.addEventListener('hashchange', () => { closeSheet(); render(); window.scrollTo(0, 0); });
 
 const demoBar = () => api?.demo ? `<div class="demo-bar">Demo mode: sample data, saved only on this device. <button data-act="reset-demo">Reset</button></div>` : '';
-const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/icon-192.png" alt=""><h1>${esc(title)}</h1>${right}</header>`;
+const BELL = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>';
+const seenNews = () => { try { return Number(localStorage.getItem('rwb-news-seen') || 0); } catch { return 0; } };
+const unread = () => (state.news || []).some(n => n.id > seenNews());
+const initials = m => (m?.full_name || '?').split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/icon-192.png" alt=""><h1>${esc(title)}</h1>${right}
+    <a class="icon-btn bell" href="#news" aria-label="Announcements${unread() ? ' (new)' : ''}">${BELL}${unread() ? '<i class="dot"></i>' : ''}</a>
+    <a class="avatar" href="#me" aria-label="My profile">${esc(initials(state.me))}</a></header>`;
 
 /* delegated clicks: each screen sets its own actions */
 let actions = {};
@@ -111,7 +121,7 @@ app.addEventListener('click', e => {
     const fn = actions[el.dataset.act] || globalActions[el.dataset.act]; if (fn) { e.preventDefault(); fn(el); }
 });
 const globalActions = {
-    'reset-demo': () => { if (confirmBox('Reset the demo data?')) { api.resetDemo(); Object.assign(state, { services: null, fuel: null, bdays: null, adminMembers: null }); boot(); } },
+    'reset-demo': () => { if (confirmBox('Reset the demo data?')) { api.resetDemo(); Object.assign(state, { services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null }); boot(); } },
     'add-service': () => serviceForm(),
     'add-fuel': () => fuelForm(),
     'wish': () => window.open(waShare(wishText(state.bdays.filter(b => b.day === todayISO()))), '_blank', 'noopener')
@@ -179,6 +189,9 @@ async function viewHome() {
     if (due?.next_due_km) { const left = due.next_due_km - odoNow; dueText = left > 0 ? km(left) : 'Due now'; dueSub = left > 0 ? `to next service (${km(due.next_due_km)})` : `next service was at ${km(due.next_due_km)}`; }
     else if (due?.next_due_date) { dueText = fmtDayMonth(due.next_due_date); dueSub = 'Next service date'; }
 
+    const [news, listings] = await Promise.all([load.news(), load.listings().catch(() => [])]);
+    const fresh = listings.filter(l => l.status === 'live').slice(0, 4);
+    const pushAsk = pushSupported() && Notification.permission === 'default' && !localStorage.getItem('rwb-push-dismissed');
     app.innerHTML = top('RWB', isAdmin() ? '<a class="btn sm ghost" href="#admin">Admin</a>' : '') + `
         <div class="hero"><h2>Hi, ${esc(firstName(state.me))}</h2><p>${esc([state.me.bike, state.me.vrn].filter(Boolean).join(' · ') || 'Ride safe, Ronin.')}</p></div>
         ${today.length ? `<section class="section"><div class="card bday"><h3>🎂 Birthdays today</h3>
@@ -190,16 +203,28 @@ async function viewHome() {
             <div class="stat"><b>${last ? km(last.odometer_km).replace(' km', '') : '–'}</b><span>Last service (km)</span></div>
             <div class="stat"><b>${rs(spent)}</b><span>Service spend ${yr}</span></div>
         </div></section>
+        ${pushAsk ? `<section class="section"><div class="card"><h3>🔔 Turn on notifications</h3><p class="small muted" style="margin-bottom:12px">Get birthdays, new Motomart posts and RWB announcements on this phone.</p><div class="btns"><button class="btn sm" data-act="push-on">Turn on</button><button class="btn sm ghost" data-act="push-later">Not now</button></div></div></section>` : ''}
+        ${news.length ? `<section class="section"><h2>Latest from RWB <a href="#news">See all</a></h2>${newsCard(news[0])}</section>` : ''}
         <section class="section"><div class="btns"><button class="btn" data-act="add-fuel">＋ Fuel fill-up</button><button class="btn ghost" data-act="add-service">＋ Service</button></div></section>
-        ${isAdmin() ? `<section class="section"><a class="card tap row" href="#admin" style="text-decoration:none"><div class="grow"><h3>Admin panel</h3><p class="muted small" id="admin-hint">Members, access requests, birthdays</p></div><span class="kmpl">›</span></a></section>` : ''}
+        ${isAdmin() ? `<section class="section"><a class="card tap row" href="#admin" style="text-decoration:none"><div class="grow"><h3>Admin panel</h3><p class="muted small" id="admin-hint">Members, access requests, Motomart, birthdays</p></div><span class="kmpl">›</span></a></section>` : ''}
+        <section class="section"><h2>Fresh on Motomart <a href="#motomart">See all</a></h2>${fresh.length ? `<div class="mm-grid">${fresh.map(listingCard).join('')}</div>` : '<div class="card empty"><b>Nothing for sale yet</b>Selling gear? Post it on Motomart.<p style="margin-top:10px"><a class="btn sm" href="#motomart">Open Motomart</a></p></div>'}</section>
         <section class="section"><h2>Explore</h2><div class="list">
             <a class="card tap row" href="#guides" data-guide="maint" style="text-decoration:none"><div class="grow"><h3>Ronin maintenance</h3><p class="muted small">Service guides and how-tos from our coordinators</p></div><span class="kmpl">›</span></a>
             <a class="card tap row" href="#guides" data-guide="acc" style="text-decoration:none"><div class="grow"><h3>Recommended gear</h3><p class="muted small">Accessories rated by RWB</p></div><span class="kmpl">›</span></a>
             <a class="card tap row" href="https://roninwb.in" target="_blank" rel="noopener" style="text-decoration:none"><div class="grow"><h3>roninwb.in</h3><p class="muted small">Rides, events, gallery and the team</p></div><span class="kmpl">↗</span></a>
         </div></section>`;
-    actions = {};
+    actions = {
+        'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); render(); }),
+        'push-later': () => { try { localStorage.setItem('rwb-push-dismissed', '1'); } catch { /* ignore */ } render(); },
+        listing: el => location.hash = '#motomart/' + el.dataset.id
+    };
     app.querySelectorAll('[data-guide]').forEach(a => a.addEventListener('click', () => state.guideTab = a.dataset.guide));
-    if (isAdmin()) api.admin.stats().then(s => { const h = $('#admin-hint'); if (h && s.pending) h.innerHTML = `<b style="color:var(--orange)">${s.pending} access request${s.pending > 1 ? 's' : ''} waiting</b>`; }).catch(() => {});
+    if (isAdmin()) api.admin.stats().then(s => {
+        const h = $('#admin-hint'), mm = listings.filter(l => l.status === 'pending').length, parts = [];
+        if (s.pending) parts.push(`${s.pending} access request${s.pending > 1 ? 's' : ''}`);
+        if (mm) parts.push(`${mm} Motomart post${mm > 1 ? 's' : ''}`);
+        if (h && parts.length) h.innerHTML = `<b style="color:var(--orange)">${parts.join(' and ')} waiting</b>`;
+    }).catch(() => {});
 }
 
 /* =================== Service records =================== */
@@ -259,18 +284,22 @@ async function showBill(s) {
 async function compressBill(file) {
     if (file.type === 'application/pdf') { if (file.size > 2e6) throw new Error('That PDF is over 2 MB. Please upload a photo of the bill instead.'); return file; }
     if (!file.type.startsWith('image/')) throw new Error('Please choose a photo or a PDF.');
+    return compressImage(file, 1600, 250e3);
+}
+async function compressImage(file, maxSide = 1400, target = 220e3) {
+    if (!file.type.startsWith('image/')) throw new Error('Please choose a photo.');
     const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Could not read that photo. Try a JPG or PNG.')); i.src = URL.createObjectURL(file); });
-    let max = 1600, q = 0.72, blob;
+    let max = maxSide, q = 0.72, blob;
     for (let tries = 0; tries < 6; tries++) {
         const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
         const cv = document.createElement('canvas'); cv.width = Math.round(img.naturalWidth * scale); cv.height = Math.round(img.naturalHeight * scale);
         const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(img, 0, 0, cv.width, cv.height);
         blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', q));
-        if (blob.size <= 250e3) break;
+        if (blob.size <= target) break;
         max = Math.round(max * 0.82); q = Math.max(0.5, q - 0.05);
     }
     URL.revokeObjectURL(img.src);
-    return new File([blob], 'bill.jpg', { type: 'image/jpeg' });
+    return new File([blob], 'photo.jpg', { type: 'image/jpeg' });
 }
 
 function serviceForm(s = null) {
@@ -535,11 +564,19 @@ function viewMe() {
             </dl>
             <button class="btn ghost block" data-act="edit">Edit my details</button></div>
         ${isAdmin() ? '<a class="card tap row section" href="#admin" style="text-decoration:none;display:flex"><div class="grow"><h3>Admin panel</h3><p class="small muted">Members, access requests, birthdays</p></div><span class="kmpl">›</span></a>' : ''}
+        <div class="card section" id="notif-card"><h3>Notifications</h3><p class="small muted" id="push-state" style="margin-bottom:12px">Checking…</p>
+            <div id="push-btn"></div>
+            <fieldset style="margin-top:14px"><legend>Tell me about</legend>
+                ${[['birthday', 'Birthdays'], ['motomart', 'New Motomart posts'], ['member', 'New members on the app']].map(([k, l]) => `<label class="switch">${l}<input type="checkbox" data-pref="${k}"${(m.notify || {})[k] !== false ? ' checked' : ''}></label>`).join('')}
+                <p class="small muted">RWB announcements always come through.</p></fieldset></div>
         ${isStandalone() ? '' : `<div class="card section"><h3>Install the app</h3><p class="small muted" style="margin-bottom:12px">${isIOS() ? 'In Safari, tap the Share button, then “Add to Home Screen”.' : 'Add RWB to your home screen. It opens like any other app and uses almost no space.'}</p>${!isIOS() ? '<button class="btn block" data-act="install">Install RWB app</button>' : ''}</div>`}
         <div class="section btns"><button class="btn ghost" data-act="out">Sign out</button></div>
         <p class="small muted section" style="text-align:center">RWB App · free for every Ronin · <a href="https://roninwb.in" target="_blank" rel="noopener">roninwb.in</a></p>`;
     actions = {
-        out: () => api.signOut(),
+        out: async () => { await disablePush(true).catch(() => {}); api.signOut(); },
+        'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); drawPushState(); }),
+        'push-off': b => busy(b, async () => { await disablePush(); toast('Notifications are off on this phone'); drawPushState(); }),
+        'push-test': b => busy(b, async () => { await api.testPush(); toast('Test sent. It should arrive in a few seconds.'); }),
         install: async () => { if (installEvt) { installEvt.prompt(); await installEvt.userChoice; installEvt = null; render(); } else toast('Use your browser menu: “Install app” or “Add to Home screen”'); },
         edit: () => openSheet('My details', `<form id="mf">
             <p class="small muted">Name and WhatsApp number can be changed by an admin.</p>
@@ -560,6 +597,11 @@ function viewMe() {
             };
         })
     };
+    app.querySelectorAll('[data-pref]').forEach(cb => cb.onchange = async () => {
+        const notify = { birthday: true, motomart: true, member: true, ...(state.me.notify || {}), [cb.dataset.pref]: cb.checked };
+        try { state.me = await api.updateMe({ notify }); toast('Saved'); } catch (e) { cb.checked = !cb.checked; toast(e.message, true); }
+    });
+    drawPushState();
 }
 
 /* =================== Admin =================== */
@@ -568,13 +610,15 @@ async function viewAdmin() {
     const tab = state.adminTab;
     app.innerHTML = top('Admin', '<a class="btn sm ghost" href="#me">Done</a>') + `
         <div class="stats"><div class="stat"><b>${s.members}</b><span>Members</span></div><div class="stat"><b>${s.on_app}</b><span>On the app</span></div><div class="stat ${s.pending ? 'accent' : ''}"><b>${s.pending}</b><span>Waiting</span></div></div>
-        <div class="seg section" role="tablist">
+        <div class="seg section scroll" role="tablist">
             <button role="tab" aria-selected="${tab === 'requests'}" data-act="tab" data-tab="requests">Requests${s.pending ? ` (${s.pending})` : ''}</button>
+            <button role="tab" aria-selected="${tab === 'motomart'}" data-act="tab" data-tab="motomart">Motomart<span id="mm-count"></span></button>
             <button role="tab" aria-selected="${tab === 'members'}" data-act="tab" data-tab="members">Members</button>
             <button role="tab" aria-selected="${tab === 'bdays'}" data-act="tab" data-tab="bdays">Birthdays</button></div>
         <div id="admin-body"><p class="muted">Loading…</p></div>`;
     actions = { tab: el => { state.adminTab = el.dataset.tab; viewAdmin(); } };
-    try { await ({ requests: adminRequests, members: adminMembers, bdays: adminBdays })[tab](); }
+    load.listings(true).then(ls => { const n = ls.filter(l => l.status === 'pending').length; const c = $('#mm-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
+    try { await ({ requests: adminRequests, motomart: adminMotomart, members: adminMembers, bdays: adminBdays })[tab](); }
     catch (e) { $('#admin-body').innerHTML = `<div class="card empty"><b>Could not load</b>${esc(e.message)}</div>`; }
 }
 async function adminRequests() {
@@ -668,6 +712,233 @@ async function adminBdays() {
         <section class="section"><h2>Next 7 days</h2>${later.length ? `<div class="list">${later.map(b => `<div class="card row"><div class="grow"><b>${esc(b.full_name)}</b><p class="small muted">${fmtDayMonth(b.day)}</p></div></div>`).join('')}</div>` : '<p class="muted">None in the coming week.</p>'}</section>`;
 }
 
+/* =================== Push notifications =================== */
+const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const b64ToBytes = s => { const p = '='.repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+async function enablePush() {
+    if (!pushSupported()) throw new Error(isIOS() ? 'On iPhone: first add RWB to your Home Screen (Share → Add to Home Screen), open it from there, then turn on notifications.' : 'This browser does not support notifications. Try Chrome.');
+    if (!C.VAPID_PUBLIC_KEY) throw new Error('Notifications are not set up yet.');
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') throw new Error('Notifications are blocked. Allow them for roninwb.in in your browser or phone settings, then try again.');
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription() || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(C.VAPID_PUBLIC_KEY) });
+    const j = sub.toJSON();
+    await api.savePush(j.endpoint, j.keys.p256dh, j.keys.auth);
+}
+async function disablePush(quiet = false) {
+    if (!pushSupported()) return;
+    const reg = await navigator.serviceWorker.getRegistration(); if (!reg) return;
+    const sub = await reg.pushManager.getSubscription(); if (!sub) return;
+    await api.deletePush(sub.endpoint).catch(e => { if (!quiet) throw e; });
+    await sub.unsubscribe();
+}
+async function drawPushState() {
+    const st = $('#push-state'), btn = $('#push-btn'); if (!st) return;
+    let on = false;
+    if (pushSupported()) { const reg = await navigator.serviceWorker.getRegistration(); on = !!(reg && await reg.pushManager.getSubscription()) && Notification.permission === 'granted'; }
+    if (!pushSupported()) { st.textContent = isIOS() && !isStandalone() ? 'On iPhone, notifications work after you add RWB to your Home Screen and open it from there.' : 'This browser does not support notifications.'; btn.innerHTML = ''; return; }
+    if (Notification.permission === 'denied') { st.textContent = 'Notifications are blocked for this site. Allow them in your browser or phone settings.'; btn.innerHTML = ''; return; }
+    st.textContent = on ? 'On for this phone.' : 'Off for this phone.';
+    btn.innerHTML = on ? `<div class="btns">${isAdmin() ? '<button class="btn sm ghost" data-act="push-test">Send test</button>' : ''}<button class="btn sm ghost" data-act="push-off">Turn off</button></div>` : '<button class="btn block" data-act="push-on">Turn on notifications</button>';
+}
+
+/* =================== Announcements =================== */
+const KIND_ICON = { announcement: '📣', birthday: '🎂', motomart: '🛒', member: '🏍️', admin: '🛡️' };
+function timeAgo(iso) {
+    const s = (Date.now() - new Date(iso)) / 1000;
+    if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + ' min ago'; if (s < 86400) return Math.floor(s / 3600) + ' h ago';
+    if (s < 7 * 86400) return Math.floor(s / 86400) + ' d ago';
+    const d = new Date(iso); return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+const linkify = t => esc(t).replace(/https?:\/\/[^\s<]+/g, u => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`).replace(/\n/g, '<br>');
+function newsCard(n, del = false) {
+    const go = n.url && n.url !== '#news' && n.url.startsWith('#');
+    return `<article class="card news ${n.kind}"><div class="row" style="align-items:flex-start"><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || '📣'}</span>
+        <div class="grow"><h3>${esc(n.title)}</h3>${n.body ? `<p>${linkify(n.body)}</p>` : ''}
+        <p class="small muted" style="margin-top:6px">${timeAgo(n.created_at)}${n.audience === 'admins' ? ' · admins only' : ''}${go ? ` · <a href="${esc(n.url)}">Open</a>` : ''}</p></div>
+        ${del ? `<button class="icon-btn" data-act="del-news" data-id="${n.id}" aria-label="Delete">🗑</button>` : ''}</div></article>`;
+}
+async function viewNews() {
+    const news = await load.news(true);
+    try { if (news[0]) localStorage.setItem('rwb-news-seen', String(Math.max(...news.map(n => n.id)))); } catch { /* ignore */ }
+    app.innerHTML = top('News') + `
+        ${isAdmin() ? `<details class="howto section" style="margin-top:0"><summary>📣 Post an announcement</summary>
+            <form id="ann" style="padding-bottom:16px"><label>Title<input name="title" required maxlength="120" placeholder="e.g. Sunday breakfast ride"></label>
+            <label>Message<textarea name="body" maxlength="1000" placeholder="Meeting point, time, anything members should know"></textarea></label>
+            <p class="small muted">Goes to everyone's feed and as a notification to every phone that has them on.</p>
+            <button class="btn block">Send to all members</button></form></details>` : ''}
+        <section class="section"><div class="list">${news.length ? news.map(n => newsCard(n, isAdmin())).join('') : '<div class="card empty"><b>No news yet</b>Announcements, birthdays and new Motomart posts show up here.</div>'}</div></section>`;
+    actions = { 'del-news': b => { if (confirmBox('Delete this from the feed?')) busy(b, async () => { await api.deleteNews(Number(b.dataset.id)); render(); }); } };
+    const f = $('#ann');
+    if (f) f.onsubmit = e => {
+        e.preventDefault(); const d = Object.fromEntries(new FormData(f));
+        if (!confirmBox(`Send “${d.title}” to all members?`)) return;
+        busy(e.submitter, async () => { await api.announce(d.title.trim(), d.body.trim()); toast('Announcement sent'); render(); });
+    };
+}
+
+/* =================== Motomart =================== */
+const CATS = C.MOTOMART_CATEGORIES || ['Helmet', 'Riding jacket', 'Riding pants', 'Riding shoes / boots', 'Gloves', 'Bike protection', 'Bike accessories', 'Rider accessories', 'Luggage', 'Electronics', 'Spare parts', 'Other'];
+const CONDITIONS = ['Brand new (unused)', 'Like new', 'Good', 'Fair', 'Needs repair'];
+const mmState = { cat: 'all', status: 'all', mine: false, q: '' };
+const price = n => '₹' + Number(n).toLocaleString('en-IN');
+const photo = (l, i = 0) => l.photos?.[i] ? api.photoUrl(l.photos[i]) : '';
+const mine = l => l.user_id === state.myId;
+
+function listingCard(l) {
+    const img = photo(l);
+    return `<button class="mm-card tap" data-act="listing" data-id="${l.id}">
+        <div class="mm-img">${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : '<span>No photo</span>'}${l.status !== 'live' ? `<span class="mm-flag ${l.status}">${{ sold: 'Sold', pending: 'Waiting for approval', rejected: 'Not approved' }[l.status]}</span>` : ''}</div>
+        <div class="mm-body"><b class="mm-price">${price(l.price)}</b><span class="mm-name">${esc(l.product_name)}</span><span class="small muted">${esc([l.condition, l.size && 'Size ' + l.size].filter(Boolean).join(' · ') || l.category)}</span></div></button>`;
+}
+
+async function viewMotomart() {
+    state.myId ??= await api.myId();
+    const all = await load.listings(true);
+    const q = mmState.q.trim().toLowerCase();
+    const shown = all.filter(l => (mmState.mine ? mine(l) : (['live', 'sold'].includes(l.status) || mine(l))) &&
+        (mmState.cat === 'all' || l.category === mmState.cat) && (mmState.status === 'all' || l.status === mmState.status) &&
+        (!q || (l.product_name + ' ' + l.category + ' ' + (l.details || '')).toLowerCase().includes(q)));
+    const cats = CATS.filter(c => all.some(l => l.category === c));
+    app.innerHTML = top('Motomart') + `
+        <p class="muted small" style="margin:-6px 0 12px">Used gear from fellow Ronins. Tap an item to see photos and message the seller on WhatsApp.</p>
+        <input class="search" type="search" id="mmq" placeholder="Search helmets, jackets, guards…" value="${esc(mmState.q)}" aria-label="Search Motomart">
+        <div class="chips hscroll" style="margin-bottom:10px">${['all', ...cats].map(c => `<button class="chip" data-act="cat" data-cat="${esc(c)}" aria-pressed="${mmState.cat === c}">${c === 'all' ? 'All' : esc(c)}</button>`).join('')}</div>
+        <div class="row" style="margin-bottom:14px;gap:8px">
+            <select id="mms" aria-label="Show" style="flex:1"><option value="all">Live and sold</option><option value="live"${mmState.status === 'live' ? ' selected' : ''}>Only available</option><option value="sold"${mmState.status === 'sold' ? ' selected' : ''}>Only sold</option></select>
+            <button class="chip" data-act="mine" aria-pressed="${mmState.mine}">My posts</button></div>
+        ${shown.length ? `<div class="mm-grid">${shown.map(listingCard).join('')}</div>` : `<div class="card empty"><b>${all.length ? 'Nothing matches' : 'Nothing for sale yet'}</b>${mmState.mine ? 'You haven’t posted anything yet.' : 'Be the first to sell something.'}</div>`}
+        <button class="btn fab" data-act="sell">＋ Sell something</button>`;
+    actions = {
+        cat: el => { mmState.cat = el.dataset.cat; viewMotomart(); },
+        mine: () => { mmState.mine = !mmState.mine; mmState.status = 'all'; viewMotomart(); },
+        sell: () => listingForm(),
+        listing: el => listingDetail(all.find(l => String(l.id) === el.dataset.id))
+    };
+    $('#mms').onchange = e => { mmState.status = e.target.value; viewMotomart(); };
+    let t; $('#mmq').oninput = e => { clearTimeout(t); t = setTimeout(() => { mmState.q = e.target.value; viewMotomart().then(() => { const i = $('#mmq'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }); }, 300); };
+    if (state.param) { const l = all.find(x => String(x.id) === state.param); if (l) listingDetail(l); else toast('That post is no longer available', true); }
+}
+
+function sellPostText(l) {
+    return `📌 *RWB MOTOMART*\n\nProduct Name: ${l.product_name}\nSize: ${l.size || '–'}\nCategory: ${l.category}\nAge: ${l.age || '–'}\nCondition: ${l.condition || '–'}\nReason for Selling: ${l.reason || '–'}\nSelling Price: ${price(l.price)}\nSeller Name: ${l.seller_name}\nSeller Phone: ${l.seller_phone}${l.details ? `\n\n${l.details}` : ''}\n\n👉 Photos & contact in the RWB App: https://roninwb.in/app/#motomart/${l.id}`;
+}
+async function shareListing(l) {
+    const text = sellPostText(l);
+    try {   /* phones that can share photos straight into WhatsApp */
+        if (navigator.canShare && l.photos?.length) {
+            const files = await Promise.all(l.photos.slice(0, 4).map(async (p, i) => new File([await (await fetch(api.photoUrl(p))).blob()], `rwb-motomart-${l.id}-${i + 1}.jpg`, { type: 'image/jpeg' })));
+            if (navigator.canShare({ files, text })) { await navigator.share({ files, text }); return; }
+        }
+    } catch (e) { if (e.name === 'AbortError') return; }
+    window.open(waShare(text), '_blank', 'noopener');
+}
+
+function listingDetail(l) {
+    const own = mine(l), adm = isAdmin();
+    const contact = `Hi ${l.seller_name.split(' ')[0]}, I saw your ${l.product_name} (${price(l.price)}) on RWB Motomart. Is it still available?`;
+    const fact = (k, v) => v ? `<dt>${k}</dt><dd>${esc(v)}</dd>` : '';
+    openSheet(l.product_name, `
+        ${l.photos?.length ? `<div class="gallery">${l.photos.map((p, i) => `<img src="${esc(api.photoUrl(p))}" alt="Photo ${i + 1} of ${esc(l.product_name)}">`).join('')}</div>${l.photos.length > 1 ? `<p class="small muted" style="text-align:center;margin-top:4px">Swipe for ${l.photos.length} photos</p>` : ''}` : ''}
+        <div class="row" style="margin:12px 0 4px;justify-content:space-between"><b class="mm-price" style="font-size:1.9rem">${price(l.price)}</b>
+            <span class="badge ${l.status === 'live' ? 'ok' : l.status === 'sold' ? '' : 'orange'}">${{ live: 'Available', sold: 'Sold', pending: 'Waiting for approval', rejected: 'Not approved' }[l.status]}</span></div>
+        ${l.status === 'rejected' && l.reject_reason ? `<p class="warn" style="margin:8px 0">Admin note: ${esc(l.reject_reason)}. Edit the post to send it again.</p>` : ''}
+        ${l.status === 'pending' && own ? '<p class="warn" style="margin:8px 0">An admin will check and publish your post, usually within 24 hours.</p>' : ''}
+        <dl class="facts">${fact('Category', l.category)}${fact('Size', l.size)}${fact('Age', l.age)}${fact('Condition', l.condition)}${fact('Reason', l.reason)}${fact('Seller', l.seller_name)}${fact('Posted', l.published_at ? fmtDate(String(l.published_at).slice(0, 10)) : '')}</dl>
+        ${l.details ? `<p style="margin-bottom:16px">${linkify(l.details)}</p>` : ''}
+        <div class="list">
+            ${!own && l.status === 'live' ? `<a class="btn wa block" href="${waTo(l.seller_phone, contact)}" target="_blank" rel="noopener">Message seller on WhatsApp</a>` : ''}
+            ${adm && l.status === 'pending' ? `<div class="btns"><button class="btn ghost" data-x="reject">Reject</button><button class="btn" data-x="approve">Approve</button></div>` : ''}
+            ${own && ['live', 'sold'].includes(l.status) ? `<button class="btn ${l.status === 'live' ? '' : 'ghost'} block" data-x="toggle">${l.status === 'live' ? 'Mark as sold' : 'Put back on sale'}</button>` : ''}
+            ${(own || adm) && l.status !== 'rejected' ? '<button class="btn ghost block" data-x="share">Share to WhatsApp group</button>' : ''}
+            ${own ? '<button class="btn ghost block" data-x="edit">Edit post</button>' : ''}
+            ${own || adm ? '<button class="btn danger block" data-x="del">Delete post</button>' : ''}
+        </div>`, body => {
+        const on = (x, fn) => { const b = body.querySelector(`[data-x=${x}]`); if (b) b.onclick = () => fn(b); };
+        const after = async msg => { await load.listings(true); closeSheet(); render(); toast(msg); };
+        on('approve', b => busy(b, async () => { await api.setListingStatus(l.id, 'live'); await after('Approved. It’s live and members are notified.'); }));
+        on('reject', b => { const r = window.prompt('Reason (the seller will see this):', 'Please add clearer photos'); if (r === null) return; busy(b, async () => { await api.setListingStatus(l.id, 'rejected', r.trim() || null); await after('Rejected'); }); });
+        on('toggle', b => busy(b, async () => { await api.setListingStatus(l.id, l.status === 'live' ? 'sold' : 'live'); await after(l.status === 'live' ? 'Marked as sold 🎉' : 'Back on sale'); }));
+        on('share', b => busy(b, () => shareListing(l)));
+        on('edit', () => listingForm(l));
+        on('del', b => { if (confirmBox('Delete this post and its photos?')) busy(b, async () => { await api.deleteListing(l); await after('Deleted'); }); });
+    });
+}
+
+function listingForm(l = null) {
+    const r = l ? { ...l } : { seller_name: state.me.full_name, seller_phone: state.me.phone || '', photos: [] };
+    let kept = [...(r.photos || [])], removed = [], added = [];
+    const MAX = 5;
+    openSheet(l ? 'Edit post' : 'Sell on Motomart', `<form id="lf">
+        ${l ? '' : '<p class="small muted">Your post goes live after an admin approves it, usually within 24 hours. Members can then message you on WhatsApp.</p>'}
+        <fieldset><legend>Photos <span class="hint muted small">(1 to ${MAX}, clear and well lit)</span></legend>
+            <div class="thumbs" id="thumbs"></div>
+            <label class="file-pick"><input type="file" accept="image/*" multiple id="pics"><span>📷 Add photos</span></label></fieldset>
+        <label>Product name<input name="product_name" required maxlength="120" placeholder="e.g. Axor Apex helmet, matte black" value="${esc(r.product_name || '')}"></label>
+        <div class="grid2">
+            <label>Category<select name="category" required><option value="">Choose…</option>${CATS.map(c => `<option${c === r.category ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
+            <label>Size<input name="size" maxlength="60" placeholder="L / 42 / Free size" value="${esc(r.size || '')}"></label>
+        </div>
+        <div class="grid2">
+            <label>Age<input name="age" maxlength="60" placeholder="e.g. 8 months" value="${esc(r.age || '')}"></label>
+            <label>Condition<select name="condition" required><option value="">Choose…</option>${CONDITIONS.map(c => `<option${c === r.condition ? ' selected' : ''}>${c}</option>`).join('')}</select></label>
+        </div>
+        <label>Reason for selling<input name="reason" maxlength="300" value="${esc(r.reason || '')}"></label>
+        <label>Selling price (₹)<input name="price" type="number" required min="0" step="1" inputmode="numeric" value="${esc(r.price ?? '')}"></label>
+        <label>More details <span class="hint">optional</span><textarea name="details" maxlength="1000" placeholder="Bill available? Any scratches? Pickup area?">${esc(r.details || '')}</textarea></label>
+        <div class="grid2">
+            <label>Seller name<input name="seller_name" required maxlength="80" value="${esc(r.seller_name || '')}"></label>
+            <label>Seller WhatsApp<input name="seller_phone" required inputmode="tel" value="${esc(r.seller_phone || '')}"></label>
+        </div>
+        <button class="btn block">${l ? (l.status === 'rejected' ? 'Save and send for approval' : 'Save changes') : 'Send for approval'}</button>
+    </form>`, body => {
+        const thumbs = body.querySelector('#thumbs');
+        const draw = () => {
+            thumbs.innerHTML = [...kept.map(p => ({ src: api.photoUrl(p), k: 'k:' + p })), ...added.map((f, i) => ({ src: f.url, k: 'a:' + i }))]
+                .map(t => `<div class="thumb"><img src="${esc(t.src)}" alt=""><button type="button" aria-label="Remove photo" data-k="${esc(t.k)}">✕</button></div>`).join('');
+            body.querySelector('.file-pick').hidden = kept.length + added.length >= MAX;
+        };
+        thumbs.onclick = e => {
+            const k = e.target.closest('button')?.dataset.k; if (!k) return;
+            if (k.startsWith('k:')) { const p = k.slice(2); kept = kept.filter(x => x !== p); removed.push(p); }
+            else { const i = Number(k.slice(2)); URL.revokeObjectURL(added[i].url); added.splice(i, 1); }
+            draw();
+        };
+        body.querySelector('#pics').onchange = async e => {
+            const files = [...e.target.files].slice(0, MAX - kept.length - added.length); e.target.value = '';
+            for (const f of files) {
+                try { const c = await compressImage(f); added.push({ file: c, url: URL.createObjectURL(c) }); draw(); }
+                catch (err) { toast(err.message, true); }
+            }
+        };
+        draw();
+        body.querySelector('#lf').onsubmit = e => {
+            e.preventDefault();
+            if (kept.length + added.length === 0) return toast('Please add at least one photo', true);
+            const d = Object.fromEntries(new FormData(e.target));
+            const phone = d.seller_phone.replace(/\D/g, '').slice(-10);
+            if (phone.length !== 10) return toast('Seller WhatsApp needs 10 digits', true);
+            const rec = { id: l?.id, photos: kept.concat(removed), product_name: d.product_name.trim(), category: d.category, size: d.size.trim() || null, age: d.age.trim() || null,
+                condition: d.condition, reason: d.reason.trim() || null, price: Number(d.price), details: d.details.trim() || null, seller_name: d.seller_name.trim(), seller_phone: phone };
+            busy(e.submitter, async () => {
+                await api.saveListing(rec, added.map(a => a.file), removed);
+                added.forEach(a => URL.revokeObjectURL(a.url));
+                await load.listings(true); closeSheet();
+                if (location.hash.startsWith('#motomart')) render(); else location.hash = '#motomart';
+                toast(l && l.status !== 'rejected' ? 'Saved' : 'Sent to admins for approval 👍');
+            });
+        };
+    });
+}
+
+async function adminMotomart() {
+    const pend = (await load.listings(true)).filter(l => l.status === 'pending');
+    $('#admin-body').innerHTML = pend.length ? `<p class="small muted" style="margin-bottom:10px">Check photos, price and details, then approve. Members are notified when a post goes live. You can then share it to the WhatsApp group from the post.</p><div class="mm-grid">${pend.map(listingCard).join('')}</div>`
+        : '<div class="card empty"><b>All clear</b>No Motomart posts waiting for approval.</div>';
+    state.myId ??= await api.myId();
+    actions.listing = el => listingDetail(pend.find(l => String(l.id) === el.dataset.id));
+}
+
 /* =================== Boot =================== */
 async function boot() {
     try {
@@ -676,6 +947,7 @@ async function boot() {
         const status = await api.linkAccount();
         if (status !== 'member') return viewAccess(status, sess);
         state.me = await api.me();
+        await load.news(true);
         await render();
     } catch (e) {
         tabbar.hidden = true;
@@ -684,9 +956,9 @@ async function boot() {
 }
 
 (async () => {
-    if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
     try { api = await createApi(); }
     catch { app.innerHTML = `<section class="signin"><h1>Can't load</h1><p class="lead">Please check your internet connection.</p><button class="btn block" onclick="location.reload()">Try again</button></section>`; return; }
-    api.onAuthChange(ev => { Object.assign(state, { me: null, services: null, fuel: null, bdays: null, adminMembers: null }); if (ev === 'SIGNED_OUT') location.hash = ''; boot(); });
+    api.onAuthChange(ev => { Object.assign(state, { me: null, services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null }); if (ev === 'SIGNED_OUT') location.hash = ''; boot(); });
     boot();
 })();

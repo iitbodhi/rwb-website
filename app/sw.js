@@ -1,6 +1,6 @@
 /* RWB App service worker: keeps the app shell available offline and loads it fast.
    Bump VERSION whenever app files change so phones pick up the new version. */
-const VERSION = 'rwb-app-v2';
+const VERSION = 'rwb-app-v3';
 const SHELL = ['./', 'index.html', 'config.js', 'css/app.css', 'js/app.js', 'js/api.js', '../js/data.js',
     'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
@@ -29,4 +29,21 @@ self.addEventListener('fetch', e => {
         })));
     }
     /* everything else (Supabase, Google Sheets, Drive) goes straight to the network */
+});
+
+/* ---------- push notifications ---------- */
+self.addEventListener('push', e => {
+    let d = {}; try { d = e.data ? e.data.json() : {}; } catch { d = { title: 'RWB', body: e.data && e.data.text() }; }
+    e.waitUntil(self.registration.showNotification(d.title || 'RWB', {
+        body: d.body || '', tag: d.tag, data: { url: d.url || '#home' },
+        icon: 'icons/icon-192.png', badge: 'icons/badge-96.png'
+    }));
+});
+self.addEventListener('notificationclick', e => {
+    e.notification.close();
+    const target = new URL('./' + (e.notification.data?.url || '#home'), self.registration.scope).href;
+    e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+        for (const c of list) if (c.url.startsWith(self.registration.scope)) { c.navigate(target).catch(() => {}); return c.focus(); }
+        return clients.openWindow(target);
+    }));
 });

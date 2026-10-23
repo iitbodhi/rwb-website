@@ -106,3 +106,15 @@ SUPABASE_ANON_KEY: 'eyJ...',
 - Service items list and birthday wish text: `app/config.js`
 - Maintenance guides and accessories: the same Google Drive folder and Sheet as the website (from `js/data.js`)
 - After changing any file in `app/`, bump `VERSION` in `app/sw.js` (e.g. `rwb-app-v2`) so phones pick up the new version.
+
+---
+
+# Phase 2: Motomart, announcements and push notifications
+
+1. **SQL Editor → New query** → paste all of `supabase/phase2.sql` → **Run**.
+2. **SQL Editor → New query** → paste the private keys file you were given (`4-push-keys-PRIVATE.sql`) → **Run**. Then delete that file. It must never go on GitHub.
+3. **Edge Functions → Deploy a new function → Via Editor** → name it exactly `send-push` → replace the sample code with `supabase/functions/send-push/index.ts` → **Deploy**.
+4. On your phone: open the app → tap your initials (top right) → **Turn on notifications** → **Send test**.
+
+How it works: every new announcement, approved Motomart post, birthday (8:00 AM daily), new member or access request is saved in the `notifications` table. The database then calls `send-push`, which sends the notification to every phone that turned it on (members can choose which kinds they want).
+iPhone users get notifications only after adding the app to their Home Screen (iOS 16.4 or later).
