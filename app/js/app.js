@@ -265,7 +265,7 @@ const currentOdo = () => latestOdo(state.services || [], state.fuel || [])?.km ?
 /* ---------- next service, from the TVS Ronin service chart (owner's manual) ----------
    1st free: 750–1,000 km or 30–45 days · 2nd free: 5,500–6,000 km or 6 months · 3rd free: 11,500–12,000 km or 12 months
    then every 6,000 km or 6 months, whichever comes first. Worked out automatically; riders can't edit it. */
-const addMonths = (iso, n) => { const d = new Date(iso + 'T00:00:00'); const day = d.getDate(); d.setMonth(d.getMonth() + n); if (d.getDate() < day) d.setDate(0); return d.toISOString().slice(0, 10); };
+const addMonths = (iso, n) => { const [y, m, d] = iso.split('-').map(Number); const t = (m - 1) + n, Y = y + Math.floor(t / 12), M = ((t % 12) + 12) % 12; const last = new Date(Date.UTC(Y, M + 1, 0)).getUTCDate(); return `${Y}-${String(M + 1).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`; };   /* pure date maths: no time-zone slips */
 const ORD = ['1st', '2nd', '3rd'];
 function nextService(services = [], odo = 0) {
     const last = [...services].filter(s => s.odometer_km > 0).sort((a, b) => b.service_date.localeCompare(a.service_date) || b.odometer_km - a.odometer_km)[0];
@@ -584,6 +584,82 @@ function bindCentrePicker(body) {
     };
 }
 
+/* ---------- Spends + mileage over time: two panels on one shared time axis (no second y-scale) ---------- */
+const PERIODS = { week: ['Weekly', 12], month: ['Monthly', 12], quarter: ['3 months', 8], half: ['6 months', 6], year: ['Yearly', 5] };
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function bucketOf(iso, per) {
+    const [y, m, d] = iso.split('-').map(Number);
+    if (per === 'week') { const dt = new Date(Date.UTC(y, m - 1, d)); dt.setUTCDate(dt.getUTCDate() - ((dt.getUTCDay() + 6) % 7)); return dt.toISOString().slice(0, 10); }
+    const mm = per === 'month' ? m - 1 : per === 'quarter' ? Math.floor((m - 1) / 3) * 3 : per === 'half' ? (m > 6 ? 6 : 0) : 0;
+    return `${y}-${String(mm + 1).padStart(2, '0')}-01`;
+}
+function stepBack(key, per) {
+    if (per === 'week') { const dt = new Date(key + 'T00:00:00Z'); dt.setUTCDate(dt.getUTCDate() - 7); return dt.toISOString().slice(0, 10); }
+    return addMonths(key, -({ month: 1, quarter: 3, half: 6, year: 12 }[per]));
+}
+function bucketLabel(key, per, long = false) {
+    const [y, m, d] = key.split('-').map(Number), yy = String(y).slice(2);
+    if (per === 'week') return long ? `Week of ${d} ${MON[m - 1]} ${y}` : `${d} ${MON[m - 1]}`;
+    if (per === 'month') return long ? `${MON[m - 1]} ${y}` : `${MON[m - 1]}${m === 1 ? ' ' + yy : ''}`;
+    if (per === 'quarter') return long ? `${MON[m - 1]}–${MON[m + 1]} ${y}` : `Q${(m + 2) / 3} '${yy}`;
+    if (per === 'half') return long ? (m === 1 ? `Jan–Jun ${y}` : `Jul–Dec ${y}`) : `${m === 1 ? 'H1' : 'H2'} '${yy}`;
+    return String(y);
+}
+function trendData(logs, svcs, tnks, per) {
+    const n = PERIODS[per][1], keys = [bucketOf(todayISO(), per)];
+    while (keys.length < n) keys.unshift(stepBack(keys[0], per));
+    const B = new Map(keys.map(k => [k, { key: k, fuel: 0, service: 0, dist: 0, litres: 0, has: false }]));
+    for (const f of logs) { const b = B.get(bucketOf(f.fill_date, per)); if (b && f.amount != null) { b.fuel += Number(f.amount); b.has = true; } }
+    for (const s of svcs) { const b = B.get(bucketOf(s.service_date, per)); if (b && s.cost != null) { b.service += Number(s.cost); b.has = true; } }
+    for (const t of tnks) { const b = B.get(bucketOf(t.end.fill_date, per)); if (b) { b.dist += t.dist; b.litres += t.litres; b.has = true; } }
+    let rows = [...B.values()];
+    const first = rows.findIndex(r => r.has);
+    rows = first < 0 ? [] : rows.slice(Math.min(first, rows.length - 2 < 0 ? 0 : first));
+    return rows.map(r => ({ ...r, spend: r.fuel + r.service, kmpl: r.litres ? r.dist / r.litres : null }));
+}
+const rsShort = v => v >= 1e5 ? '₹' + (v / 1e5).toFixed(v >= 1e6 ? 0 : 1) + 'L' : v >= 1000 ? '₹' + (v / 1000).toFixed(v >= 1e4 ? 0 : 1).replace(/\.0$/, '') + 'k' : '₹' + Math.round(v);
+function drawTrend(el, logs, svcs, tnks) {
+    let per = 'month'; try { per = localStorage.getItem('rwb-trend') || 'month'; } catch { /* ignore */ }
+    if (!PERIODS[per]) per = 'month';
+    const rows = trendData(logs, svcs, tnks, per);
+    let active = rows.length - 1; while (active > 0 && !rows[active].has) active--;
+    const W = 600, L = 46, Rp = 10, H1 = 116, GAP = 44, H2 = 92, TOP = 24, AX = 22, H = TOP + H1 + GAP + H2 + AX;
+    const n = rows.length, slot = n ? (W - L - Rp) / n : 0, cx = i => L + slot * (i + .5);
+    const maxS = Math.max(1, ...rows.map(r => r.spend)), niceS = (() => { const p = 10 ** Math.floor(Math.log10(maxS)); return Math.ceil(maxS / p / (maxS / p > 5 ? 2 : 1)) * p * (maxS / p > 5 ? 2 : 1); })();
+    const ys = v => TOP + H1 - (v / niceS) * H1;
+    const km = rows.filter(r => r.kmpl != null).map(r => r.kmpl);
+    const lo = km.length ? Math.floor(Math.min(...km) - 2) : 0, hi = km.length ? Math.ceil(Math.max(...km) + 2) : 1;
+    const top2 = TOP + H1 + GAP, ym = v => top2 + H2 - (v - lo) / (hi - lo) * H2;
+    const bw = Math.min(28, slot * .56), every = Math.ceil(n / 6);
+    const pts = rows.map((r, i) => r.kmpl == null ? null : [cx(i), ym(r.kmpl)]);
+    const path = pts.filter(Boolean).map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('');
+    const svg = n ? `<svg class="tchart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Spends and mileage, ${PERIODS[per][0].toLowerCase()}">
+        <rect class="t-band" id="t-band" x="${cx(active) - Math.min(slot, 70) / 2}" y="${TOP - 6}" width="${Math.min(slot, 70)}" height="${H - AX - TOP + 8}" rx="8"/>
+        <text class="t-title" x="0" y="11">Spent (₹)</text>
+        ${[0, .5, 1].map(f => `<line class="t-grid" x1="${L}" x2="${W - Rp}" y1="${ys(niceS * f)}" y2="${ys(niceS * f)}"/><text class="t-tick" x="${L - 6}" y="${ys(niceS * f) + 4}" text-anchor="end">${f ? rsShort(niceS * f) : '0'}</text>`).join('')}
+        ${rows.map((r, i) => r.spend ? `<path class="t-bar" d="M${cx(i) - bw / 2} ${ys(0)}V${ys(r.spend) + 4}q0 -4 4 -4h${bw - 8}q4 0 4 4V${ys(0)}z"/>` : '').join('')}
+        <text class="t-title" x="0" y="${top2 - 18}">Mileage (km/l)</text>
+        ${km.length ? [lo, (lo + hi) / 2, hi].map(v => `<line class="t-grid" x1="${L}" x2="${W - Rp}" y1="${ym(v)}" y2="${ym(v)}"/><text class="t-tick" x="${L - 6}" y="${ym(v) + 4}" text-anchor="end">${Math.round(v)}</text>`).join('') : `<text class="t-tick" x="${(L + W) / 2}" y="${top2 + H2 / 2}" text-anchor="middle">No full-tank readings in this range</text>`}
+        <path class="t-line" d="${path}"/>
+        ${pts.map(p => p ? `<circle class="t-dot" cx="${p[0]}" cy="${p[1]}" r="4.5"/>` : '').join('')}
+        ${rows.map((r, i) => i % every === (n - 1) % every ? `<text class="t-x" x="${cx(i)}" y="${H - 6}" text-anchor="middle">${bucketLabel(r.key, per)}</text>` : '').join('')}
+        ${rows.map((r, i) => `<rect class="t-hit" data-i="${i}" x="${cx(i) - slot / 2}" y="0" width="${slot}" height="${H}"/>`).join('')}
+    </svg>` : '<p class="muted small" style="padding:8px 0">No spends or fill-ups yet.</p>';
+    el.innerHTML = `<div class="seg scroll t-seg" role="tablist" aria-label="Period">${Object.entries(PERIODS).map(([k, [lab]]) => `<button role="tab" aria-selected="${k === per}" data-per="${k}">${lab}</button>`).join('')}</div>
+        <div class="t-read" id="t-read" aria-live="polite"></div>${svg}
+        <div class="t-key"><span><i class="k-bar"></i>Spent on fuel + service (₹)</span><span><i class="k-line"></i>Mileage (km/l)</span></div>
+        ${n ? `<details class="t-table"><summary>Show as table</summary><table><thead><tr><th>Period</th><th>Fuel</th><th>Service</th><th>km/l</th></tr></thead><tbody>${[...rows].reverse().filter(r => r.has).map(r => `<tr><td>${bucketLabel(r.key, per, true)}</td><td>${rs(r.fuel)}</td><td>${rs(r.service)}</td><td>${r.kmpl ? r.kmpl.toFixed(1) : '–'}</td></tr>`).join('')}</tbody></table></details>` : ''}`;
+    const read = () => {
+        const r = rows[active]; if (!r) return;
+        el.querySelector('#t-read').innerHTML = `<b>${bucketLabel(r.key, per, true)}</b><span><i class="k-bar"></i>${rs(r.spend)}${r.spend ? ` <span class="muted">(fuel ${rs(r.fuel)} · service ${rs(r.service)})</span>` : ''}</span><span><i class="k-line"></i>${r.kmpl ? r.kmpl.toFixed(1) + ' km/l' : '<span class="muted">no full-tank reading</span>'}</span>`;
+        const band = el.querySelector('#t-band'); if (band) band.setAttribute('x', cx(active) - Math.min(slot, 70) / 2);
+    };
+    read();
+    const pick = e => { const t = e.target.closest('.t-hit'); if (t) { active = Number(t.dataset.i); read(); } };
+    const sv = el.querySelector('svg'); if (sv) { sv.addEventListener('pointermove', pick); sv.addEventListener('click', pick); }
+    el.querySelectorAll('[data-per]').forEach(b => b.onclick = () => { try { localStorage.setItem('rwb-trend', b.dataset.per); } catch { /* ignore */ } drawTrend(el, logs, svcs, tnks); });
+}
+
 /* =================== Mileage =================== */
 const HOWTO = `<details class="howto" id="howto"><summary>How to track mileage with Trip A</summary>
     <ol>
@@ -599,7 +675,7 @@ const HOWTO = `<details class="howto" id="howto"><summary>How to track mileage w
 </details>`;
 
 async function viewMileage() {
-    const logs = await load.fuel(), ms = mileageStats(logs);
+    const [logs, svcs] = await Promise.all([load.fuel(), load.services()]), ms = mileageStats(logs);
     const byEnd = new Map(ms.tanks.map(t => [t.end.id, t]));
     const f1 = v => v == null ? '–' : v.toFixed(1);
     app.innerHTML = top('Mileage') + HOWTO + `
@@ -609,12 +685,12 @@ async function viewMileage() {
             <div class="stat"><b>${f1(ms.best)}</b><span>Best tank</span></div>
             <div class="stat"><b>${ms.cpk ? '₹' + ms.cpk.toFixed(2) : '–'}</b><span>Fuel cost / km</span></div>
         </div></section>
-        ${ms.tanks.length >= 2 ? `<section class="section"><h2>Trend</h2><div class="card">${chart(ms.tanks, ms.avg)}</div></section>` : ''}
+        ${logs.length || svcs.length ? `<section class="section"><h2>Spends and mileage</h2><div class="card trend" id="trend"></div></section>` : ''}
         <section class="section"><h2>Fill-ups</h2>${logs.length ? `<div class="list">${[...logs].reverse().map(f => fuelCard(f, byEnd.get(f.id))).join('')}</div>` :
             `<div class="card empty"><b>No fill-ups yet</b>Fill to full, add the litres and your Trip A reading here, then reset Trip A. Your mileage shows straight away.</div>`}</section>
         <button class="btn fab" data-act="add-fuel">＋ Add fuel</button>`;
-    if (logs.length < 2) $('#howto').open = true;
     actions = { open: el => fuelForm(logs.find(f => String(f.id) === el.dataset.id)) };
+    if ($('#trend')) drawTrend($('#trend'), logs, svcs, ms.tanks);
 }
 function fuelCard(f, t) {
     const p = parts(f.fill_date);

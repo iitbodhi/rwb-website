@@ -599,3 +599,32 @@ button.dial:active{transform:scale(.985)}
 .cp-other{display:grid;gap:8px;margin-top:8px}
 .cp-item .grow{flex:1 1 auto}
 .svc-alert{margin-top:-14px}
+
+/* spends + mileage chart */
+:root{--c-spend:#d4501a;--c-mile:#2a6fd6}
+:root[data-theme=dark]{--c-spend:#e8662e;--c-mile:#4a8ae6}
+@media (prefers-color-scheme:dark){:root[data-theme=system]{--c-spend:#e8662e;--c-mile:#4a8ae6}}
+.trend{padding:12px 12px 10px}
+.t-seg{margin-bottom:10px}
+.t-seg button{font-size:.78rem;padding:7px 10px}
+.t-read{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;min-height:42px;font-size:.84rem;margin:0 2px 6px}
+.t-read b{width:100%;font-size:.9rem}
+.t-read i,.t-key i{display:inline-block;vertical-align:middle;margin-right:6px}
+.k-bar{width:10px;height:10px;border-radius:3px;background:var(--c-spend)}
+.k-line{width:14px;height:2px;border-radius:2px;background:var(--c-mile);position:relative}
+.k-line::after{content:"";position:absolute;left:3px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--c-mile)}
+.tchart{width:100%;height:auto;display:block;touch-action:pan-y}
+.t-grid{stroke:var(--line);stroke-width:1}
+.t-tick,.t-x{fill:var(--muted);font:11px var(--body)}
+.t-title{fill:var(--stone);font:600 11px var(--body);letter-spacing:.06em;text-transform:uppercase}
+.t-bar{fill:var(--c-spend)}
+.t-line{fill:none;stroke:var(--c-mile);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.t-dot{fill:var(--c-mile);stroke:var(--card);stroke-width:2}
+.t-band{fill:var(--paper-2);opacity:.7;transition:x .15s}
+.t-hit{fill:transparent;cursor:pointer}
+.t-key{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.76rem;color:var(--muted);margin:6px 2px 0}
+.t-table{margin-top:8px;font-size:.8rem}
+.t-table summary{color:var(--muted);cursor:pointer}
+.t-table table{width:100%;border-collapse:collapse;margin-top:6px}
+.t-table th,.t-table td{text-align:right;padding:5px 4px;border-top:1px solid var(--line)}
+.t-table th:first-child,.t-table td:first-child{text-align:left}
