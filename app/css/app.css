@@ -628,3 +628,36 @@ button.dial:active{transform:scale(.985)}
 .t-table table{width:100%;border-collapse:collapse;margin-top:6px}
 .t-table th,.t-table td{text-align:right;padding:5px 4px;border-top:1px solid var(--line)}
 .t-table th:first-child,.t-table td:first-child{text-align:left}
+
+/* three leaderboards */
+.board-seg{margin-bottom:12px}
+.board-seg button{font-size:.82rem;padding:7px 6px}
+.pod-sub{font-size:.68rem;color:var(--muted);line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.board-list .km{display:grid;justify-items:end;gap:1px}
+.board-list .km small{font:500 .7rem var(--body);color:var(--muted);letter-spacing:0}
+.kmpl-tag{font-weight:600;color:var(--c-mile)}
+/* you vs RWB */
+.vs-head{display:flex;align-items:center;gap:12px}
+.vs-head .grow{display:grid;gap:2px}
+.vs-big{flex:none;font:800 1.5rem/1 var(--display);padding:8px 10px;border-radius:12px;font-variant-numeric:tabular-nums}
+.vs-big.up{background:var(--ok-soft);color:var(--ok)}
+.vs-big.down{background:var(--orange-soft);color:var(--orange-dk)}
+.vs-scale{position:relative;height:8px;border-radius:99px;margin:18px 6px 6px;background:linear-gradient(90deg,var(--paper-2),color-mix(in srgb,var(--c-mile) 35%,var(--paper-2)))}
+.vs-mark{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;transform:translate(-50%,-50%);border:3px solid var(--card)}
+.vs-mark.you{background:var(--c-spend);z-index:1;width:18px;height:18px}
+.vs-mark.avg{background:var(--muted)}
+.vs-ends{display:flex;justify-content:space-between;margin:0 2px}
+.vs-legend{display:flex;gap:14px;margin:6px 2px 0;color:var(--muted)}
+.vs-legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.vs-legend i.you{background:var(--c-spend)}.vs-legend i.avg{background:var(--muted)}
+.vs-stats{display:grid;grid-template-columns:repeat(3,1fr);margin-top:12px;border-top:1px solid var(--line);padding-top:10px;text-align:center}
+.vs-stats div + div{border-left:1px solid var(--line)}
+.vs-stats b{display:block;font:700 1.05rem/1.2 var(--display);font-variant-numeric:tabular-nums}
+.vs-stats span{font-size:.7rem;color:var(--muted)}
+/* tips */
+.tips{margin-top:12px}
+.tips-grid{display:grid;gap:12px;padding-bottom:14px}
+@media (min-width:560px){.tips-grid{grid-template-columns:1fr 1fr}}
+.tips h4{font:700 .72rem var(--body);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px}
+.tips h4.do{color:var(--ok)}.tips h4.dont{color:var(--bad)}
+.tips ul{padding-left:18px;display:grid;gap:5px;font-size:.86rem}

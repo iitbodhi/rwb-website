@@ -260,6 +260,14 @@ function odoSheet() {
         };
     });
 }
+function syncKmpl(fuel) {
+    if (!state.me || !fuel) return;
+    const ms = mileageStats(fuel), v = ms.avg && ms.avg >= 5 && ms.avg <= 120 ? Math.round(ms.avg * 100) / 100 : null, t = ms.tanks.length;
+    const cur = state.me.avg_kmpl == null ? null : Number(state.me.avg_kmpl);
+    if (cur === v && (state.me.kmpl_tanks ?? 0) === t) return;
+    Object.assign(state.me, { avg_kmpl: v, kmpl_tanks: t }); state.board = null; state.dir = null;
+    api.updateMe({ avg_kmpl: v, kmpl_tanks: t }).catch(() => { /* boards catch up next time */ });
+}
 const currentOdo = () => latestOdo(state.services || [], state.fuel || [])?.km ?? '';
 
 /* ---------- next service, from the TVS Ronin service chart (owner's manual) ----------
@@ -328,6 +336,7 @@ function newsRow(n, del = false) {
 
 async function viewHome() {
     const [services, fuel, bdays, news, listings] = await Promise.all([load.services(), load.fuel(), load.bdays(), load.news(), load.listings().catch(() => [])]);
+    syncKmpl(fuel);
     const today = bdays.filter(b => b.day === todayISO());
     const fresh = listings.filter(l => l.status === 'live').slice(0, 8);
     let pushAsk = false; try { pushAsk = pushSupported() && Notification.permission === 'default' && !localStorage.getItem('rwb-push-dismissed'); } catch { /* ignore */ }
@@ -584,6 +593,44 @@ function bindCentrePicker(body) {
     };
 }
 
+/* ---------- how my mileage compares with other warriors ---------- */
+async function drawVs(el, mine) {
+    if (!el) return;
+    const rows = state.board ??= await api.boards().catch(() => []);
+    const others = rows.filter(r => !r.is_me && r.kmpl > 0).map(r => Number(r.kmpl));
+    if (!mine) { el.innerHTML = '<p class="small muted">Add a full-tank fill-up with your Trip A reading to see how your mileage compares with other warriors.</p>'; return; }
+    if (others.length < 2) { el.innerHTML = `<p class="small muted">Your average is <b>${kmplTxt(mine)}</b>. Comparison appears once a few more warriors log full-tank fill-ups.</p>`; return; }
+    const avg = others.reduce((a, b) => a + b, 0) / others.length, best = Math.max(mine, ...others), worst = Math.min(mine, ...others);
+    const diff = (mine - avg) / avg * 100, all = [...others, mine].sort((a, b) => b - a), rank = all.indexOf(mine) + 1;
+    const better = all.filter(v => v < mine).length / (all.length - 1) * 100;
+    const pos = v => ((v - worst) / Math.max(.1, best - worst) * 100).toFixed(1);
+    const good = diff >= 0;
+    el.innerHTML = `<div class="vs-head"><span class="vs-big ${good ? 'up' : 'down'}">${good ? '▲' : '▼'} ${Math.abs(diff).toFixed(0)}%</span>
+            <span class="grow"><b>${good ? 'Better' : 'Lower'} than the RWB average</b><span class="small muted">You get ${kmplTxt(mine)} · RWB average ${kmplTxt(avg)}</span></span></div>
+        <div class="vs-scale" aria-hidden="true"><span class="vs-mark avg" style="left:${pos(avg)}%"></span><span class="vs-mark you" style="left:${pos(mine)}%"></span></div>
+        <div class="vs-ends small muted"><span>${kmplTxt(worst)}</span><span>${kmplTxt(best)}</span></div>
+        <div class="vs-legend small"><span><i class="you"></i>You</span><span><i class="avg"></i>RWB average</span></div>
+        <div class="vs-stats"><div><b>#${rank}</b><span>of ${all.length} Mileage Warriors</span></div><div><b>${better.toFixed(0)}%</b><span>of riders you beat</span></div><div><b>${kmplTxt(best)}</b><span>best in RWB</span></div></div>`;
+}
+const TIPS = `<details class="howto tips"><summary>Tips to get more km/l</summary>
+    <div class="tips-grid">
+        <div><h4 class="do">Do</h4><ul>
+            <li>Keep tyre pressure at the value on your owner's manual or swingarm sticker. Check it cold, every week.</li>
+            <li>Ride smooth: gentle throttle, early upshifts, steady cruising instead of sprint-and-brake.</li>
+            <li>Cruise in top gear at a steady, moderate speed on highways.</li>
+            <li>Clean and lube the chain every 500–700 km, and keep its slack right.</li>
+            <li>Service on time: fresh oil, a clean air filter and a healthy spark plug all help.</li>
+            <li>Read the road ahead and roll off early instead of braking hard.</li>
+        </ul></div>
+        <div><h4 class="dont">Don't</h4><ul>
+            <li>Don't rev hard in low gears or hold the bike at high RPM.</li>
+            <li>Don't ride with the clutch half-pressed or the brake dragging.</li>
+            <li>Don't idle for long at signals or while waiting; switch off.</li>
+            <li>Don't carry weight you don't need, and keep luggage tight and low.</li>
+            <li>Don't judge mileage from one tank. Compare full-tank to full-tank over a few fills.</li>
+        </ul></div>
+    </div></details>`;
+
 /* ---------- Spends + mileage over time: two panels on one shared time axis (no second y-scale) ---------- */
 const PERIODS = { week: ['Weekly', 12], month: ['Monthly', 12], quarter: ['3 months', 8], half: ['6 months', 6], year: ['Yearly', 5] };
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -676,6 +723,7 @@ const HOWTO = `<details class="howto" id="howto"><summary>How to track mileage w
 
 async function viewMileage() {
     const [logs, svcs] = await Promise.all([load.fuel(), load.services()]), ms = mileageStats(logs);
+    syncKmpl(logs);
     const byEnd = new Map(ms.tanks.map(t => [t.end.id, t]));
     const f1 = v => v == null ? '–' : v.toFixed(1);
     app.innerHTML = top('Mileage') + HOWTO + `
@@ -685,12 +733,15 @@ async function viewMileage() {
             <div class="stat"><b>${f1(ms.best)}</b><span>Best tank</span></div>
             <div class="stat"><b>${ms.cpk ? '₹' + ms.cpk.toFixed(2) : '–'}</b><span>Fuel cost / km</span></div>
         </div></section>
+        <section class="section"><h2>You vs RWB</h2><div class="card vs" id="vs"><p class="small muted">Comparing…</p></div></section>
+        ${TIPS}
         ${logs.length || svcs.length ? `<section class="section"><h2>Spends and mileage</h2><div class="card trend" id="trend"></div></section>` : ''}
         <section class="section"><h2>Fill-ups</h2>${logs.length ? `<div class="list">${[...logs].reverse().map(f => fuelCard(f, byEnd.get(f.id))).join('')}</div>` :
             `<div class="card empty"><b>No fill-ups yet</b>Fill to full, add the litres and your Trip A reading here, then reset Trip A. Your mileage shows straight away.</div>`}</section>
         <button class="btn fab" data-act="add-fuel">＋ Add fuel</button>`;
     actions = { open: el => fuelForm(logs.find(f => String(f.id) === el.dataset.id)) };
     if ($('#trend')) drawTrend($('#trend'), logs, svcs, ms.tanks);
+    drawVs($('#vs'), ms.avg);
 }
 function fuelCard(f, t) {
     const p = parts(f.fill_date);
@@ -882,7 +933,7 @@ function viewMe() {
         <p class="small muted" style="margin:8px 4px 0">RWB announcements always come through.</p>
 
         <h2 class="group-title">Privacy</h2>
-        <div class="group"><label class="toggle-row"><span class="grow">Show me on the odometer leaderboard<span class="small muted">Other members see your name, photo and km</span></span><span class="switch-only"><input type="checkbox" id="lb"${m.show_on_leaderboard !== false ? ' checked' : ''}></span></label></div>
+        <div class="group"><label class="toggle-row"><span class="grow">Show me on the leaderboards<span class="small muted">Other members see your name, photo, km, average mileage and how many services you've logged</span></span><span class="switch-only"><input type="checkbox" id="lb"${m.show_on_leaderboard !== false ? ' checked' : ''}></span></label></div>
 
         <h2 class="group-title">App</h2>
         <div class="group">
@@ -922,7 +973,7 @@ function viewMe() {
         try { state.me = await api.updateMe({ notify }); toast('Saved'); } catch (e) { cb.checked = !cb.checked; toast(e.message, true); }
     });
     $('#lb').onchange = async e => {
-        try { state.me = await api.updateMe({ show_on_leaderboard: e.target.checked }); state.board = null; toast(e.target.checked ? 'You\'re on the leaderboard' : 'Hidden from the leaderboard'); }
+        try { state.me = await api.updateMe({ show_on_leaderboard: e.target.checked }); state.board = null; state.dir = null; toast(e.target.checked ? 'You\'re on the leaderboards' : 'Hidden from the leaderboards'); }
         catch (err) { e.target.checked = !e.target.checked; toast(err.message, true); }
     };
     $('#pic').onchange = async e => {
@@ -995,7 +1046,7 @@ async function adminMembers() {
         $('#mcount').textContent = `${hits.length} ${state.memberFilter === 'app' ? 'on the app' : state.memberFilter === 'admins' ? 'in the RWB team' : 'member' + (hits.length === 1 ? '' : 's')}`;
         $('#ml').innerHTML = hits.slice(0, limit).map(m => `<button class="card tap row member-row" data-act="member" data-id="${m.id}">${face(m, 'avatar sm')}
             <div class="grow"><div class="who">${esc(m.full_name)} ${roleBadge(m)}</div>
-            <div class="meta">${esc([m.phone, m.vrn, m.locality].filter(Boolean).join(' · '))}</div></div>
+            <div class="meta">${m.avg_kmpl ? `<b class="kmpl-tag">${kmplTxt(m.avg_kmpl)}</b> · ` : ''}${esc([m.phone, m.vrn, m.locality].filter(Boolean).join(' · '))}</div></div>
             ${m.user_id ? '<span class="badge ok">On app</span>' : ''}</button>`).join('') || '<div class="card empty">No one matches.</div>';
         $('#more').hidden = hits.length <= limit;
     };
@@ -1480,25 +1531,37 @@ async function adminAI() {
     $('#ainotes').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { await api.saveChatNotes(e.target.notes.value.trim()); toast('Saved. Pookie will use this from the next question.'); }); };
 }
 
-/* =================== RWB: leaderboard + members =================== */
+/* =================== RWB: three leaderboards + members =================== */
 const MEDAL = ['🥇', '🥈', '🥉'];
 const kmTxt = n => Number(n).toLocaleString('en-IN') + ' km';
+const kmplTxt = v => Number(v).toFixed(1) + ' km/l';
+const BOARDS = {
+    mileage: { title: 'Mileage Warriors', sub: 'Best average km/l, from full-tank fill-ups', has: r => r.kmpl > 0, val: r => Number(r.kmpl), big: r => kmplTxt(r.kmpl), small: r => r.km ? kmTxt(r.km) : '', empty: 'Add a full-tank fill-up with your Trip A reading to get on this board.' },
+    service: { title: 'Service Warriors', sub: 'Most services logged in the app', has: r => r.services > 0, val: r => r.services * 1e5 + (r.last_service ? Date.parse(r.last_service) / 864e5 : 0), big: r => `${r.services} service${r.services === 1 ? '' : 's'}`, small: r => [r.kmpl ? kmplTxt(r.kmpl) : '', r.last_service ? 'last ' + fmtDayMonth(r.last_service) : ''].filter(Boolean).join(' · '), empty: 'Log your services to get on this board.' },
+    road: { title: 'Road Warriors', sub: 'Most km on the odometer', has: r => r.km > 0, val: r => r.km, big: r => kmTxt(r.km), small: r => r.kmpl ? kmplTxt(r.kmpl) : '', empty: 'Update your odometer on Home, or add a fill-up or service, to get on this board.' }
+};
+const rankBoard = (rows, key) => rows.filter(BOARDS[key].has).sort((a, b) => BOARDS[key].val(b) - BOARDS[key].val(a) || a.full_name.localeCompare(b.full_name)).map((r, i) => ({ ...r, rank: i + 1 }));
 async function viewCrew() {
-    const board = state.board ??= await api.leaderboard().catch(() => []);
+    const raw = state.board ??= await api.boards().catch(() => api.leaderboard().then(rs => rs.map(r => ({ ...r, services: 0, kmpl: null }))).catch(() => []));
+    let key = 'mileage'; try { key = localStorage.getItem('rwb-board') || 'mileage'; } catch { /* ignore */ }
+    if (!BOARDS[key]) key = 'mileage';
+    const B = BOARDS[key], board = rankBoard(raw, key);
     const me = board.find(r => r.is_me), top3 = board.slice(0, 3), rest = board.slice(3, state.boardAll ? board.length : 10);
     const podium = top3.length ? `<div class="podium">${[top3[1], top3[0], top3[2]].map((r, i) => r ? `<div class="pod p${[2, 1, 3][i]}${r.is_me ? ' me' : ''}">
-            ${face(r, 'avatar pod-face')}<span class="pod-medal">${MEDAL[r.rank - 1]}</span><b>${esc(r.nickname || r.full_name.split(' ')[0])}</b><span class="pod-km">${kmTxt(r.km)}</span></div>` : '<div></div>').join('')}</div>` : '';
+            ${face(r, 'avatar pod-face')}<span class="pod-medal">${MEDAL[r.rank - 1]}</span><b>${esc(r.nickname || r.full_name.split(' ')[0])}</b><span class="pod-km">${B.big(r)}</span><span class="pod-sub">${esc(B.small(r))}</span></div>` : '<div></div>').join('')}</div>` : '';
     app.innerHTML = top('RWB') + `
         <section class="board card">
-            <div class="row" style="justify-content:space-between;margin-bottom:6px"><h2 class="board-title">Warrior leaderboard</h2><span class="small muted">${board.length} rider${board.length === 1 ? '' : 's'}</span></div>
-            ${board.length ? podium + (rest.length ? `<ol class="board-list" start="4">${rest.map(r => `<li class="${r.is_me ? 'me' : ''}"><span class="rk">${r.rank}</span>${face(r, 'avatar sm')}<span class="grow"><b>${esc(r.full_name)}</b><span class="small muted">${esc(r.bike || '')}</span></span><span class="num km">${kmTxt(r.km)}</span></li>`).join('')}</ol>` : '')
+            <div class="seg board-seg" role="tablist" aria-label="Leaderboard">${Object.entries(BOARDS).map(([k, b]) => `<button role="tab" aria-selected="${k === key}" data-act="board" data-b="${k}">${b.title.replace(' Warriors', '')}</button>`).join('')}</div>
+            <div class="row" style="justify-content:space-between;align-items:baseline;margin-bottom:2px"><h2 class="board-title">${B.title}</h2><span class="small muted">${board.length} rider${board.length === 1 ? '' : 's'}</span></div>
+            <p class="small muted" style="margin-bottom:6px">${B.sub}</p>
+            ${board.length ? podium + (rest.length ? `<ol class="board-list" start="4">${rest.map(r => `<li class="${r.is_me ? 'me' : ''}"><span class="rk">${r.rank}</span>${face(r, 'avatar sm')}<span class="grow"><b>${esc(r.full_name)}</b><span class="small muted">${esc(r.bike || '')}</span></span><span class="num km">${B.big(r)}<small>${esc(B.small(r))}</small></span></li>`).join('')}</ol>` : '')
                 + (board.length > 10 ? `<button class="link-btn" data-act="board-all" style="margin-top:10px">${state.boardAll ? 'Show top 10' : `Show all ${board.length}`}</button>` : '')
-                + (me && me.rank > 10 && !state.boardAll ? `<p class="board-me">You're <b>#${me.rank}</b> with ${kmTxt(me.km)}</p>` : '')
-                + (!me ? `<p class="small muted" style="margin-top:10px">${state.me.show_on_leaderboard === false ? 'You\'re hidden from the leaderboard (Me → Privacy).' : 'Add a fill-up or a service with your odometer reading to join the board.'}</p>` : '')
-              : '<p class="muted">No odometer readings yet. Add a fill-up or a service to start the board.</p>'}
+                + (me && me.rank > 10 && !state.boardAll ? `<p class="board-me">You're <b>#${me.rank}</b> with ${B.big(me)}</p>` : '')
+                + (!me ? `<p class="small muted" style="margin-top:10px">${state.me.show_on_leaderboard === false ? 'You\'re hidden from the leaderboards (Me → Privacy).' : B.empty}</p>` : '')
+              : `<p class="muted" style="margin-top:8px">${B.empty}</p>`}
         </section>
         <section class="section"><h2>Members</h2><div id="crew-body"><p class="muted">Loading…</p></div></section>`;
-    actions = { 'board-all': () => { state.boardAll = !state.boardAll; viewCrew(); } };
+    actions = { 'board-all': () => { state.boardAll = !state.boardAll; viewCrew(); }, board: el => { try { localStorage.setItem('rwb-board', el.dataset.b); } catch { /* ignore */ } state.boardAll = false; viewCrew(); } };
     if (isAdmin()) {   /* admins get their full member tools here too */
         $('#crew-body').id = 'admin-body';
         await adminMembers(); return;
@@ -1508,7 +1571,7 @@ async function viewCrew() {
     const name = m => `${esc(m.full_name)}${m.nickname ? ` <span class="muted" style="font-weight:400">“${esc(m.nickname)}”</span>` : ''}`;
     $('#crew-body').innerHTML = (team.length ? `<div class="team card"><h3 class="team-title">RWB team <span class="small muted">for help or emergencies</span></h3>
             ${team.map(m => `<div class="row member-row team-row">${face(m, 'avatar sm')}
-                <div class="grow"><div class="who">${name(m)} ${roleBadge(m)}</div><div class="meta">${esc(m.phone ? m.phone.replace(/(\d{5})(\d{5})/, '$1 $2') : '')}${m.vrn ? ` · ${esc(m.vrn)}` : ''}</div></div>
+                <div class="grow"><div class="who">${name(m)} ${roleBadge(m)}</div><div class="meta">${esc(m.phone ? m.phone.replace(/(\d{5})(\d{5})/, '$1 $2') : '')}${m.vrn ? ` · ${esc(m.vrn)}` : ''}${m.avg_kmpl ? ` · <b class="kmpl-tag">${kmplTxt(m.avg_kmpl)}</b>` : ''}</div></div>
                 ${m.phone ? `<a class="icon-btn call" href="tel:+91${esc(m.phone)}" aria-label="Call ${esc(m.full_name)}">${ICON_PHONE}</a><a class="icon-btn wa-btn" href="${waTo(m.phone)}" target="_blank" rel="noopener" aria-label="WhatsApp ${esc(m.full_name)}">${ICON_WA}</a>` : ''}</div>`).join('')}</div>` : '')
         + `<input class="search" type="search" id="cq" placeholder="Search name, bike number or place" value="${esc(state.crewSearch || '')}" aria-label="Search members">
         <p class="small muted" id="ccount" style="margin:-4px 0 10px"></p><div class="list" id="cl"></div><button class="btn ghost block section" id="cmore" hidden>Show more</button>`;
@@ -1520,7 +1583,7 @@ async function viewCrew() {
         $('#ccount').textContent = q ? `${hits.length} found${qv.length >= 4 && !hits.length ? '. That bike isn\'t registered with RWB.' : ''}` : `${all.length} members in RWB`;
         $('#cl').innerHTML = hits.slice(0, limit).map(m => `<div class="card row member-row">${face(m, 'avatar sm')}
             <div class="grow"><div class="who">${name(m)} ${roleBadge(m)}</div>
-            <div class="meta">${esc([m.bike, m.locality].filter(Boolean).join(', ') || 'RWB member')}</div></div>
+            <div class="meta">${m.avg_kmpl ? `<b class="kmpl-tag">${kmplTxt(m.avg_kmpl)}</b> · ` : ''}${esc([m.bike, m.locality].filter(Boolean).join(', ') || 'RWB member')}</div></div>
             ${m.vrn ? `<span class="vrn">${esc(m.vrn)}</span>` : ''}</div>`).join('') || (q ? '<div class="card empty">No one matches.</div>' : '');
         $('#cmore').hidden = hits.length <= limit;
     };
@@ -1548,7 +1611,14 @@ async function boot() {
 }
 
 (async () => {
-    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+        const hadSW = !!navigator.serviceWorker.controller;
+        navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => {});
+        /* a new version just installed: reload once so the rider sees it straight away */
+        let reloaded = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadSW && !reloaded && !$('dialog#sheet[open]')) { reloaded = true; location.reload(); } });
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') navigator.serviceWorker.getRegistration().then(r => r && r.update()).catch(() => {}); });
+    }
     try { api = await createApi(); }
     catch { app.innerHTML = `<section class="signin"><h1>Can't load</h1><p class="lead">Please check your internet connection.</p><button class="btn block" onclick="location.reload()">Try again</button></section>`; return; }
     if (location.hash === '#install') { history.replaceState(null, '', location.pathname); setTimeout(installSheet, 1200); }

@@ -61,6 +61,7 @@ async function supabaseApi(url, key) {
         birthdays: async (days = 0) => must(await sb.rpc('birthdays', { p_days: days })),
         directory: async () => must(await sb.rpc('member_directory')),
         leaderboard: async () => must(await sb.rpc('odometer_leaderboard')),
+        boards: async () => must(await sb.rpc('warrior_boards')),
         centres: async () => must(await sb.from('service_centres').select('id,name,area,pincode').order('name')),
         addCentre: async (name, area, pincode) => must(await sb.rpc('add_service_centre', { p_name: name, p_area: area || null, p_pincode: pincode || null })),
         deleteCentre: async id => must(await sb.from('service_centres').delete().eq('id', id)),
@@ -286,7 +287,14 @@ function demoApi() {
         me: () => wait(me()),
         async updateMe(f) { Object.assign(me(), f); save(); return wait(me()); },
         async setAvatar(file) { me().avatar_url = file ? await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); }) : null; save(); return wait(me()); },
-        directory: () => wait(db.members.map(m => ({ id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url, bike: m.bike, vrn: m.vrn, locality: m.locality, role: m.role, phone: ['superadmin', 'admin', 'coordinator'].includes(m.role) ? m.phone : null, on_app: !!m.user_id })).sort((a, b) => a.full_name.localeCompare(b.full_name))),
+        directory: () => wait(db.members.map(m => ({ id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url, bike: m.bike, vrn: m.vrn, locality: m.locality, role: m.role, phone: ['superadmin', 'admin', 'coordinator'].includes(m.role) ? m.phone : null, on_app: !!m.user_id, avg_kmpl: m.user_id === 'me' ? m.avg_kmpl : ({ 2: 41.9, 3: 44.6, 4: 36.8, 5: 38.2 })[m.id] ?? null })).sort((a, b) => a.full_name.localeCompare(b.full_name))),
+        async boards() {
+            const myKm = Math.max(0, me().odo_km || 0, ...db.fuel.map(f => f.odometer_km), ...db.services.map(x => x.odometer_km));
+            const rows = [['Rahul Ghosh', 'Rocket', 18420, 36.8, 5, 'TVS Ronin 225'], ['Arjun Sen', 'Sultan', 11250, 41.9, 3, 'TVS Ronin 225'], ['Sourav Paul', '', 5310, 38.2, 1, 'TVS Apache RTR 200 4V'], ['Priya Dutta', '', 2400, 44.6, 2, 'TVS Ronin 225'], ['Kaustabh Roy', 'Pookie', 26100, 34.1, 7, 'TVS Ronin 225']]
+                .map(([n, k, km, kmpl, sv, b], i) => ({ member_id: 100 + i, full_name: n, nickname: k, km, kmpl, services: sv, last_service: '2026-0' + (i + 3) + '-1' + i, bike: b, is_me: false }));
+            if (me().show_on_leaderboard !== false) rows.push({ member_id: 1, full_name: me().full_name, nickname: me().nickname, avatar_url: me().avatar_url, km: myKm || null, kmpl: me().avg_kmpl ?? null, services: db.services.length, last_service: db.services.map(x => x.service_date).sort().at(-1) || null, bike: me().bike, is_me: true });
+            return wait(rows);
+        },
         async leaderboard() {
             const myKm = Math.max(0, me().odo_km || 0, ...db.fuel.map(f => f.odometer_km), ...db.services.map(x => x.odometer_km));
             const rows = [['Rahul Ghosh', 'Rocket', 18420, 'TVS Ronin 225'], ['Arjun Sen', 'Sultan', 11250, 'TVS Ronin 225'], ['Sourav Paul', '', 5310, 'TVS Apache RTR 200 4V']].map(([n, k, km, b]) => ({ full_name: n, nickname: k, km, bike: b, is_me: false }));

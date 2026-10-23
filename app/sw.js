@@ -1,11 +1,11 @@
 /* RWB App service worker: keeps the app shell available offline and loads it fast.
    Bump VERSION whenever app files change so phones pick up the new version. */
-const VERSION = 'rwb-app-v21';
+const VERSION = 'rwb-app-v22';
 const SHELL = ['./', 'index.html', 'config.js', 'css/app.css', 'js/app.js', 'js/api.js', '../js/data.js',
     'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
-    e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+    e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
     e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim()));
@@ -13,9 +13,10 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
     const url = new URL(e.request.url);
     if (e.request.method !== 'GET') return;
-    /* our own files: network first (always fresh), fall back to cache when offline */
+    /* our own files: network first, always asking the server for the newest copy (never the browser's
+       10-minute HTTP cache), falling back to the saved copy when offline */
     if (url.origin === location.origin) {
-        e.respondWith(fetch(e.request).then(r => {
+        e.respondWith(fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }).then(r => {
             if (r.ok) { const copy = r.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
             return r;
         }).catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('index.html'))));
