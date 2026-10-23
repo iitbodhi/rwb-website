@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ronin Accessories · Ronin Warriors of Bengal</title>
+<meta name="description" content="Accessories and gear recommended by Ronin Warriors of Bengal, with an RWB score for each.">
+<meta name="theme-color" content="#f7f7f5">
+<link rel="icon" href="assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,800;1,800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="accessories">
+<main>
+<section class="wrap page-head">
+  <h1>Ronin Accessories</h1>
+  <p>Gear our coordinators have tried. The RWB score shows how strongly we recommend each product.</p>
+</section>
+<section class="wrap page-body">
+  <div class="toolbar" id="acc-toolbar" hidden>
+    <div class="menu" data-menu="filter"><button type="button" class="chip" aria-haspopup="true" aria-expanded="false">Filter</button><div class="menu-panel" role="menu" aria-label="Filter by category" hidden></div></div>
+    <div class="menu" data-menu="sort"><button type="button" class="chip" aria-haspopup="true" aria-expanded="false">Sort</button><div class="menu-panel" role="menu" aria-label="Sort products" hidden></div></div>
+    <button type="button" class="clear" id="acc-clear" hidden>Clear</button>
+  </div>
+  <p class="count" id="acc-count" aria-live="polite"></p>
+  <div class="accs" id="acc-list" aria-live="polite"><p class="muted">Loading recommendations…</p></div>
+</section>
+</main>
+<script src="js/data.js"></script>
+<script src="js/shared.js"></script>
+<script src="js/accessories.js"></script>
+</body>
+</html>
