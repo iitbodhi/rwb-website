@@ -110,7 +110,7 @@ const BELL = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke
 const seenNews = () => { try { return Number(localStorage.getItem('rwb-news-seen') || 0); } catch { return 0; } };
 const unread = () => (state.news || []).some(n => n.id > seenNews());
 const initials = m => (m?.full_name || '?').split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/icon-192.png" alt=""><h1>${esc(title)}</h1>${right}
+const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1>${right}
     <a class="icon-btn bell" href="#news" aria-label="Announcements${unread() ? ' (new)' : ''}">${BELL}${unread() ? '<i class="dot"></i>' : ''}</a>
     <a class="avatar" href="#me" aria-label="My profile">${esc(initials(state.me))}</a></header>`;
 
@@ -132,7 +132,7 @@ const G_ICON = '<svg viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V2
 function viewSignIn() {
     tabbar.hidden = true;
     app.innerHTML = `${demoBar()}<section class="signin">
-        <img src="icons/icon-512.png" alt="Ronin Warriors of Bengal">
+        <img src="icons/logo-384.png" alt="Ronin Warriors of Bengal">
         <div><h1>RWB App</h1><p class="lead">For members of Ronin Warriors of Bengal. Sign in with the Google account you used on the RWB join form.</p></div>
         <button class="btn gbtn block" data-act="google">${G_ICON} Continue with Google</button>
         <p class="small muted">Not a member yet? <a href="${esc(SITE.JOIN_FORM_URL || 'https://roninwb.in')}" target="_blank" rel="noopener">Join RWB</a> first, or sign in and ask the admins for access.</p>
@@ -144,14 +144,14 @@ async function viewAccess(status, sess) {
     tabbar.hidden = true;
     const req = status === 'pending' || status === 'rejected' ? await api.myRequest().catch(() => null) : null;
     if (status === 'pending') {
-        app.innerHTML = `${demoBar()}<section class="signin"><img src="icons/icon-192.png" alt="">
+        app.innerHTML = `${demoBar()}<section class="signin"><img src="icons/logo-128.png" alt="">
             <div><h1>Request sent</h1><p class="lead">Thanks${req ? ', ' + esc(firstName(req)) : ''}! An RWB admin will check your details and let you in, usually within a day.</p></div>
             <button class="btn block" data-act="recheck">Check again</button>
             <button class="btn ghost block" data-act="out">Sign out</button></section>`;
         actions = { recheck: b => busy(b, boot), out: () => api.signOut() };
         return;
     }
-    app.innerHTML = `${demoBar()}<header class="top"><img class="logo" src="icons/icon-192.png" alt=""><h1>Almost there</h1></header>
+    app.innerHTML = `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>Almost there</h1></header>
         ${status === 'rejected' ? '<p class="warn">Your earlier request was not approved. If you think this is a mistake, message an RWB admin on WhatsApp, or send the details again.</p><br>' : ''}
         <p>We couldn't find <b>${esc(sess.email)}</b> in the RWB members list. Maybe you used a different email on the join form.</p>
         <p class="muted" style="margin:8px 0 18px">Fill this in and an admin will link you to your membership. Use the WhatsApp number you're in the RWB group with.</p>
@@ -620,14 +620,17 @@ async function viewAdmin() {
     const s = await api.admin.stats();
     const tab = state.adminTab;
     app.innerHTML = top('Admin', '<a class="btn sm ghost" href="#me">Done</a>') + `
-        <div class="stats"><div class="stat"><b>${s.members}</b><span>Members</span></div><div class="stat"><b>${s.on_app}</b><span>On the app</span></div><div class="stat ${s.pending ? 'accent' : ''}"><b>${s.pending}</b><span>Waiting</span></div></div>
+        <div class="stats">
+            <button class="stat tap" data-act="mfilter" data-f="all"><b>${s.members}</b><span>Members ›</span></button>
+            <button class="stat tap" data-act="mfilter" data-f="app"><b>${s.on_app}</b><span>On the app ›</span></button>
+            <button class="stat tap ${s.pending ? 'accent' : ''}" data-act="tab" data-tab="requests"><b>${s.pending}</b><span>Waiting ›</span></button></div>
         <div class="seg section scroll" role="tablist">
             <button role="tab" aria-selected="${tab === 'requests'}" data-act="tab" data-tab="requests">Requests${s.pending ? ` (${s.pending})` : ''}</button>
             <button role="tab" aria-selected="${tab === 'motomart'}" data-act="tab" data-tab="motomart">Motomart<span id="mm-count"></span></button>
             <button role="tab" aria-selected="${tab === 'members'}" data-act="tab" data-tab="members">Members</button>
             <button role="tab" aria-selected="${tab === 'bdays'}" data-act="tab" data-tab="bdays">Birthdays</button></div>
         <div id="admin-body"><p class="muted">Loading…</p></div>`;
-    actions = { tab: el => { state.adminTab = el.dataset.tab; viewAdmin(); } };
+    actions = { tab: el => { state.adminTab = el.dataset.tab; viewAdmin(); }, mfilter: el => { state.adminTab = 'members'; state.memberFilter = el.dataset.f; state.adminSearch = ''; viewAdmin(); } };
     load.listings(true).then(ls => { const n = ls.filter(l => l.status === 'pending').length; const c = $('#mm-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
     try { await ({ requests: adminRequests, motomart: adminMotomart, members: adminMembers, bdays: adminBdays })[tab](); }
     catch (e) { $('#admin-body').innerHTML = `<div class="card empty"><b>Could not load</b>${esc(e.message)}</div>`; }
@@ -649,12 +652,16 @@ async function adminRequests() {
 async function adminMembers() {
     state.adminMembers ??= await api.admin.members();
     const all = state.adminMembers;
-    $('#admin-body').innerHTML = `<input class="search" type="search" id="mq" placeholder="Search name, number or bike no." value="${esc(state.adminSearch)}" aria-label="Search members"><p class="small muted" id="mcount" style="margin:-4px 0 10px"></p><div class="list" id="ml"></div><button class="btn ghost block section" id="more" hidden>Show more</button>`;
+    const F = { all: 'Everyone', app: 'On the app', admins: 'Admins' };
+    state.memberFilter ||= 'all';
+    $('#admin-body').innerHTML = `<div class="chips" style="margin-bottom:10px">${Object.entries(F).map(([k, v]) => `<button class="chip" data-act="mf" data-f="${k}" aria-pressed="${state.memberFilter === k}">${v}</button>`).join('')}</div>
+    ${state.memberFilter !== 'all' && state.me.role === 'superadmin' ? '<p class="small muted" style="margin-bottom:10px">Tap a person to make them an admin or remove their admin rights.</p>' : ''}<input class="search" type="search" id="mq" placeholder="Search name, number or bike no." value="${esc(state.adminSearch)}" aria-label="Search members"><p class="small muted" id="mcount" style="margin:-4px 0 10px"></p><div class="list" id="ml"></div><button class="btn ghost block section" id="more" hidden>Show more</button>`;
     let limit = 50;
     const draw = () => {
         const q = state.adminSearch.trim().toLowerCase(), qd = q.replace(/\D/g, '');
-        const hits = all.filter(m => !q || m.full_name.toLowerCase().includes(q) || (m.nickname || '').toLowerCase().includes(q) || (qd.length >= 3 && (m.phone || '').includes(qd)) || (m.vrn || '').toLowerCase().replace(/\s/g, '').includes(q.replace(/\s/g, '')));
-        $('#mcount').textContent = `${hits.length} member${hits.length === 1 ? '' : 's'}`;
+        const pool = all.filter(m => state.memberFilter === 'app' ? m.user_id : state.memberFilter === 'admins' ? m.role !== 'member' : true);
+        const hits = pool.filter(m => !q || m.full_name.toLowerCase().includes(q) || (m.nickname || '').toLowerCase().includes(q) || (qd.length >= 3 && (m.phone || '').includes(qd)) || (m.vrn || '').toLowerCase().replace(/\s/g, '').includes(q.replace(/\s/g, '')));
+        $('#mcount').textContent = `${hits.length} ${state.memberFilter === 'app' ? 'on the app' : state.memberFilter === 'admins' ? (hits.length === 1 ? 'admin' : 'admins') : 'member' + (hits.length === 1 ? '' : 's')}`;
         $('#ml').innerHTML = hits.slice(0, limit).map(m => `<button class="card tap row member-row" data-act="member" data-id="${m.id}">
             <div class="grow"><div class="who">${esc(m.full_name)} ${m.role !== 'member' ? `<span class="badge orange">${m.role === 'superadmin' ? 'Super admin' : 'Admin'}</span>` : ''}</div>
             <div class="meta">${esc([m.phone, m.vrn, m.locality].filter(Boolean).join(' · '))}</div></div>
@@ -665,6 +672,7 @@ async function adminMembers() {
     $('#more').onclick = () => { limit += 100; draw(); };
     draw();
     actions.member = el => memberSheet(all.find(m => String(m.id) === el.dataset.id));
+    actions.mf = el => { state.memberFilter = el.dataset.f; adminMembers(); };
 }
 function memberSheet(m) {
     const superA = state.me.role === 'superadmin', self = m.user_id && m.user_id === state.me.user_id;
@@ -962,7 +970,7 @@ async function boot() {
         await render();
     } catch (e) {
         tabbar.hidden = true;
-        app.innerHTML = `<section class="signin"><img src="icons/icon-192.png" alt=""><div><h1>Can't connect</h1><p class="lead">${esc(e.message || 'Please check your internet connection.')}</p></div><button class="btn block" onclick="location.reload()">Try again</button></section>`;
+        app.innerHTML = `<section class="signin"><img src="icons/logo-128.png" alt=""><div><h1>Can't connect</h1><p class="lead">${esc(e.message || 'Please check your internet connection.')}</p></div><button class="btn block" onclick="location.reload()">Try again</button></section>`;
     }
 }
 

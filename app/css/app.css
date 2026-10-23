@@ -218,3 +218,4 @@ dl.facts dd{font-weight:500;overflow-wrap:anywhere}
 .list > *,.card,.row > *{min-width:0}
 #app{overflow-x:clip}
 .member-row .who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stat.tap{text-align:left;font:inherit;color:inherit;cursor:pointer;width:auto}

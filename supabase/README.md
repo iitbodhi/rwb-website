@@ -118,3 +118,13 @@ SUPABASE_ANON_KEY: 'eyJ...',
 
 How it works: every new announcement, approved Motomart post, birthday (8:00 AM daily), new member or access request is saved in the `notifications` table. The database then calls `send-push`, which sends the notification to every phone that turned it on (members can choose which kinds they want).
 iPhone users get notifications only after adding the app to their Home Screen (iOS 16.4 or later).
+
+---
+
+# Automatic sync from the Google join form
+
+1. **SQL Editor → New query** → paste `supabase/form-sync.sql` plus the line that sets `sheet_secret` (from the private file you were given) → **Run**.
+2. Open the Google Sheet with the join form responses → **Extensions → Apps Script** → paste `tools/form-sync.gs` with `SYNC_SECRET` filled in → **Save**.
+3. Pick **setup** in the function list → **Run** → allow access. It copies anyone missing, then every new form submission reaches the app automatically.
+
+Members removed by an admin are not re-added from old rows; if they fill the form again later, they come back.
