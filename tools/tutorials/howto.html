@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>RWB how-to</title>
+<style>/*CSS*/
+/* --- Instagram story layout: keep words out of the top ~230px and bottom ~320px (Instagram's own buttons) --- */
+.topbar{top:56px}.prog{top:168px}
+.cap{top:226px}
+.cap .step{font-size:30px}
+.cap h1{font-size:84px;margin-top:12px}
+.phone{top:398px;width:494px;height:1010px;margin-left:-247px;border-radius:68px}
+.screen{left:18px;top:18px;transform:scale(1.1540);border-radius:40px}
+.sub{position:absolute;left:60px;right:60px;bottom:330px;min-height:128px;display:grid;place-items:center;text-align:center;padding:20px 32px;border-radius:30px;background:rgba(10,9,8,.86);border:1px solid rgba(255,255,255,.14);font:600 39px/1.27 'Barlow';color:#fff;z-index:30;box-shadow:0 20px 50px -20px rgba(0,0,0,.9)}
+.cover{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;text-align:center;padding:0 80px 120px}
+.cover .badge{width:300px;height:300px;border-radius:50%;display:grid;place-items:center;font-size:150px;background:radial-gradient(circle at 35% 30%,#f08a52,#c94512);box-shadow:0 0 0 14px rgba(232,102,46,.18),0 40px 90px -20px rgba(232,102,46,.7)}
+.cover .kicker{font:800 34px/1 'Barlow';letter-spacing:.18em;color:var(--o);text-transform:uppercase;margin-top:64px}
+.cover h2{font:800 150px/.9 'Barlow Condensed';text-transform:uppercase;margin-top:18px}
+.cover p{font:500 46px/1.25 'Barlow';color:#d8d2cb;margin-top:26px;max-width:18ch}
+.cover .who{margin-top:52px;display:flex;align-items:center;gap:18px;font:700 30px 'Barlow';padding:14px 28px 14px 14px;border-radius:99px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15)}
+.cover .who img{width:64px;height:64px;border-radius:50%}
+.end h2{font-size:110px}
+</style></head><body>
+<div id="v"><i class="glow g1"></i><i class="glow g2"></i>
+  <div class="topbar"><img src="" alt=""><div class="brand">RWB App<small>How to</small></div><span class="pill" id="pill"></span></div>
+  <div class="prog"><i id="bar"></i></div>
+  <div id="stage"></div>
+  <div class="sub" id="sub"></div>
+</div>
+<script>/*data*/</script>
+<script>
+const { SHOTS, PLAN, CFG, LOGO } = window;
+document.querySelector('.topbar img').src = LOGO;
+document.getElementById('pill').textContent = CFG.title;
+const stage = document.getElementById('stage');
+const S = PLAN.scenes.map(p => ({ ...p }));
+const steps = S.filter(s => s.kind === 'app').length;
+S.forEach((s, si) => {
+  if (s.kind === 'card') s.html = `<div class="cover"><div class="badge">${CFG.icon}</div><div class="kicker">RWB App · How to</div><h2>${CFG.title}</h2><p>${CFG.tag}</p><span class="who"><img src="${LOGO}">Ronin Warriors of Bengal</span></div>`;
+  else if (s.kind === 'end') s.html = `<div class="cover end"><img src="${LOGO}" style="width:240px;height:240px;border-radius:50%;box-shadow:0 30px 80px -10px rgba(232,102,46,.55)"><h2 style="margin-top:44px">Ride <em style="font-style:normal;color:var(--o)">safe!</em></h2><p>Get the app: <b style="color:#fff">roninwb.in/app</b></p></div>`;
+  else {
+    const sc = SHOTS[s.idx], raw = sc.beats.reduce((a, b) => a + b.hold, 0), k = (s.dur - .25) / raw;
+    let t = .1; s.beats = sc.beats.map(b => { const o = { ...b, hold: b.hold * k, at: t }; o.tapAt = b.tap ? o.at + Math.max(.32, Math.min(1.0, o.hold * .55)) : null; t += o.hold; return o; });
+    s.html = `<div class="cap"><div class="step">Step ${s.idx + 1} of ${steps}</div><h1>${sc.cap.title}</h1></div><div class="phone"><div class="screen">${s.beats.map((b, bi) => `<div class="layer" data-b="${bi}"><img src="${b.img}">${b.overlay || ''}</div>`).join('')}<div class="ripple"></div><div class="finger"></div></div></div>`;
+  }
+  stage.insertAdjacentHTML('beforeend', `<div class="scene" data-s="${si}">${s.html}</div>`);
+});
+const scenes = [...stage.querySelectorAll('.scene')];
+let acc0 = 0; window.SCENES = S.map(s => { const o = { start: acc0, dur: s.dur, sents: s.sents }; acc0 += s.dur; return o; });
+const TOTAL = acc0; window.TOTAL = TOTAL;
+const ease = x => x < 0 ? 0 : x > 1 ? 1 : 1 - Math.pow(1 - x, 3), cl = x => Math.max(0, Math.min(1, x));
+const subEl = document.getElementById('sub');
+window.render = t => {
+  let acc = 0, si = 0;
+  for (; si < S.length - 1 && t >= acc + S[si].dur; si++) acc += S[si].dur;
+  const s = S[si], lt = t - acc, sc = scenes[si];
+  document.getElementById('bar').style.width = (t / TOTAL * 100).toFixed(2) + '%';
+  scenes.forEach((x, i) => { if (i !== si) x.style.opacity = 0; });
+  const first = si === 0, fin = first ? 1 : ease(lt / .4), fout = si < S.length - 1 ? cl((s.dur - lt) / .3) : 1;
+  sc.style.opacity = Math.min(fin, fout);
+  const c = sc.querySelector('.cap'); if (c) c.style.transform = `translateY(${(1 - fin) * 26}px)`;
+  const cv = sc.querySelector('.cover'); if (cv && !first) cv.style.transform = `scale(${.94 + .06 * fin})`;
+  let cur = null; s.sents.forEach(x => { if (lt >= x.t - .1) cur = x; });
+  const txt = cur && lt <= cur.t + cur.d + .5 ? cur.text : '';
+  if (subEl.dataset.txt !== txt) { subEl.dataset.txt = txt; subEl.innerHTML = txt ? `<span>${txt}</span>` : ''; }
+  subEl.style.opacity = txt ? Math.min(1, cl((lt - cur.t + .1) / .2)) * Math.min(fin, fout) : 0;
+  if (s.beats) {
+    let bi = 0; s.beats.forEach((b, i) => { if (lt >= b.at) bi = i; });
+    const layers = sc.querySelectorAll('.layer'), fade = cl((lt - s.beats[bi].at) / .2);
+    layers.forEach((l, i) => { l.style.opacity = i === bi ? (bi ? fade : 1) : i === bi - 1 ? 1 : 0; l.style.zIndex = i === bi ? 2 : 1; });
+    const b = s.beats[bi], f = sc.querySelector('.finger'), r = sc.querySelector('.ripple');
+    if (b.tap) {
+      const [x, y] = b.tap, ta = b.tapAt, pre = Math.min(.7, ta - b.at + .05), p = ease((lt - (ta - pre)) / (pre * .75));
+      f.style.left = (x + (1 - p) * 60) + 'px'; f.style.top = (y + (1 - p) * 110) + 'px';
+      const vis = lt >= ta - pre && lt <= ta + .35; f.style.opacity = vis ? Math.min(cl((lt - (ta - pre)) / .15), cl((ta + .35 - lt) / .15)) : 0;
+      f.style.transform = `scale(${lt >= ta && lt <= ta + .16 ? .8 : 1})`;
+      const rp = (lt - ta) / .45; r.style.left = x + 'px'; r.style.top = y + 'px'; r.style.opacity = rp >= 0 && rp <= 1 ? 1 - rp : 0; r.style.transform = `scale(${1 + rp * 2.4})`;
+    } else { f.style.opacity = 0; r.style.opacity = 0; }
+  }
+};
+render(0);
+</script></body></html>
