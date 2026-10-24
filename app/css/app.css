@@ -661,3 +661,19 @@ button.dial:active{transform:scale(.985)}
 .tips h4{font:700 .72rem var(--body);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px}
 .tips h4.do{color:var(--ok)}.tips h4.dont{color:var(--bad)}
 .tips ul{padding-left:18px;display:grid;gap:5px;font-size:.86rem}
+
+/* RWB brand button: big raised logo in the middle of the bottom bar, no label */
+.tabbar{overflow:visible}
+.tabbar a.tab-brand{overflow:visible;justify-content:flex-start}
+.tabbar a.tab-brand::before{display:none}
+.brand-ring{position:relative;display:grid;place-items:center;width:64px;height:64px;margin-top:-24px;border-radius:50%;
+  background:var(--paper);box-shadow:0 0 0 1px var(--hair),0 10px 24px -8px rgba(0,0,0,.45),0 0 0 4px var(--paper);transition:transform .2s cubic-bezier(.2,.8,.2,1.2),box-shadow .2s}
+.brand-ring::after{content:"";position:absolute;inset:-4px;border-radius:50%;padding:2px;background:conic-gradient(from 210deg,var(--orange),#f59a5c,var(--orange),#7a2a0c,var(--orange));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:.55;transition:opacity .2s}
+.tabbar .brand-ring .tab-logo{width:56px;height:56px;border-radius:50%;opacity:1;box-shadow:none;object-fit:cover}
+.tabbar a.tab-brand:active .brand-ring{transform:scale(.94)}
+.tabbar a.tab-brand[aria-current=page] .brand-ring{transform:translateY(-2px);box-shadow:0 0 0 1px var(--hair),0 12px 28px -8px color-mix(in srgb,var(--orange) 70%,transparent),0 0 0 4px var(--paper)}
+.tabbar a.tab-brand[aria-current=page] .brand-ring::after{opacity:1;animation:brand-spin 6s linear infinite}
+@keyframes brand-spin{to{transform:rotate(360deg)}}
+@media (max-width:360px){.brand-ring{width:56px;height:56px;margin-top:-20px}.tabbar .brand-ring .tab-logo{width:49px;height:49px}}
+@media (prefers-reduced-motion:reduce){.brand-ring::after{animation:none!important}}
