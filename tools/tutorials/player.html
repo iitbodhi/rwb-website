@@ -1,0 +1,162 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>RWB how-to</title><style>
+:root{--o:#e8662e;--o2:#d4501a;--ink:#0e0d0c;--paper:#f6f4f1;--muted:#a49d95}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1080px;height:1920px;overflow:hidden;background:#0e0d0c}
+body{font:500 34px/1.3 'Barlow',sans-serif;color:#fff;-webkit-font-smoothing:antialiased}
+#v{position:relative;width:1080px;height:1920px;overflow:hidden;background:radial-gradient(120% 60% at 20% 0%,#3a1e10 0%,#151210 48%,#0e0d0c 100%)}
+.glow{position:absolute;border-radius:50%;filter:blur(10px)}
+.g1{width:900px;height:900px;left:-300px;top:-300px;background:radial-gradient(closest-side,rgba(232,102,46,.28),transparent)}
+.g2{width:900px;height:900px;right:-380px;bottom:120px;background:radial-gradient(closest-side,rgba(120,90,220,.16),transparent)}
+.top{position:absolute;left:64px;right:64px;top:64px;display:flex;align-items:center;gap:20px}
+.top img{width:84px;height:84px;border-radius:50%}
+.top .brand{font:800 40px/1 'Barlow Condensed';letter-spacing:.06em;text-transform:uppercase}
+.top .brand small{display:block;font:600 26px/1.2 'Barlow';letter-spacing:.04em;text-transform:none;color:var(--muted);margin-top:6px}
+.pill{margin-left:auto;font:700 28px/1 'Barlow';padding:14px 24px;border-radius:99px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14)}
+.prog{position:absolute;left:64px;right:64px;top:180px;height:8px;border-radius:9px;background:rgba(255,255,255,.1);overflow:hidden}
+.prog i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,var(--o2),#f59a5c);border-radius:9px}
+.cap{position:absolute;left:64px;right:64px;top:226px;height:380px}
+.cap .step{font:800 30px/1 'Barlow';letter-spacing:.14em;color:var(--o);text-transform:uppercase}
+.cap h1{font:800 88px/.95 'Barlow Condensed';text-transform:uppercase;margin-top:18px;letter-spacing:.005em}
+.cap p{font:500 38px/1.3 'Barlow';color:#d8d2cb;margin-top:22px;max-width:30ch}
+.cap p b{color:#fff}
+.cap p .warn{color:#f6b26b}
+/* phone */
+.phone{position:absolute;left:50%;top:640px;width:612px;height:1300px;margin-left:-306px;border-radius:84px;background:#1d1b1a;box-shadow:0 0 0 3px #3a3633,0 40px 90px -20px rgba(0,0,0,.9),0 0 120px -30px rgba(232,102,46,.4)}
+.screen{position:absolute;left:18px;top:18px;width:390px;height:844px;transform-origin:0 0;transform:scale(1.4769);border-radius:44px;overflow:hidden;background:#fff}
+.layer{position:absolute;inset:0;opacity:0}
+.finger{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;background:rgba(255,255,255,.55);border:4px solid #fff;box-shadow:0 6px 24px rgba(0,0,0,.45);opacity:0;z-index:20;pointer-events:none}
+.ripple{position:absolute;width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:50%;border:4px solid var(--o);opacity:0;z-index:19}
+.hl{position:absolute;border:3px solid var(--o);border-radius:14px;box-shadow:0 0 0 6px rgba(232,102,46,.25);opacity:0;z-index:18}
+/* intro / outro cards */
+.card{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;text-align:center;padding:0 90px;opacity:0}
+.card img.logo{width:300px;height:300px;border-radius:50%;box-shadow:0 0 0 10px rgba(255,255,255,.06),0 30px 80px -10px rgba(232,102,46,.55)}
+.card h2{font:800 120px/.92 'Barlow Condensed';text-transform:uppercase;margin-top:60px}
+.card h2 em{font-style:normal;color:var(--o)}
+.card p{font:500 44px/1.3 'Barlow';color:#d8d2cb;margin-top:30px;max-width:22ch}
+.card .tag{margin-top:50px;font:700 34px/1 'Barlow';padding:20px 34px;border-radius:99px;background:var(--o);color:#fff}
+.check{width:220px;height:220px;border-radius:50%;background:#1f9d55;display:grid;place-items:center;font:800 130px/1 'Barlow';box-shadow:0 30px 80px -10px rgba(31,157,85,.6)}
+/* ---------- drawn phone UI (390 x 844 space) ---------- */
+.sb{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 26px 0 30px;font:600 15px/1 -apple-system,'Inter',sans-serif;color:#111}
+.sb.dark{color:#fff}
+.sb i{font-style:normal;letter-spacing:1px}
+.ui{font-family:'Inter','Roboto',sans-serif;color:#1c1b1f}
+.abar{margin:6px 12px;height:44px;border-radius:22px;background:#eef0f4;display:flex;align-items:center;gap:10px;padding:0 16px;font-size:15px;color:#333}
+.abar .lock{width:14px;height:14px;border-radius:3px;border:2px solid #666}
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.42)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:24px 24px 0 0;padding:26px 24px 34px}
+.dlg{position:absolute;left:28px;right:28px;top:50%;transform:translateY(-50%);background:#f3eef6;border-radius:28px;padding:26px 24px 18px;color:#1c1b1f}
+.dlg h3{font:600 21px/1.3 'Inter';margin-bottom:12px}
+.dlg p{font:400 15px/1.5 'Inter';color:#45444a}
+.dlg .acts{display:flex;justify-content:flex-end;gap:26px;margin-top:22px;font:600 15px 'Inter';color:#6750a4}
+.ios-dlg{position:absolute;left:52px;right:52px;top:50%;transform:translateY(-50%);background:rgba(242,242,247,.97);border-radius:16px;text-align:center;overflow:hidden;color:#000}
+.ios-dlg h3{font:600 17px/1.3 -apple-system,'Inter';padding:20px 16px 4px}
+.ios-dlg p{font:400 13px/1.4 'Inter';padding:0 16px 18px;color:#333}
+.ios-dlg .acts{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #c8c7cc}
+.ios-dlg .acts span{padding:12px 0;font:400 17px 'Inter';color:#0a7aff}
+.ios-dlg .acts span + span{border-left:1px solid #c8c7cc;font-weight:600}
+.web{position:absolute;left:0;right:0;top:100px;bottom:0;overflow:hidden}
+.web.full{top:0}
+.web img{width:390px;display:block}
+.snack{position:absolute;left:14px;right:14px;bottom:24px;background:#313033;color:#f4eff4;border-radius:8px;padding:16px 18px;display:flex;justify-content:space-between;font:400 15px 'Inter'}
+.snack b{color:#d0bcff;font-weight:600}
+.home{position:absolute;inset:0;background:linear-gradient(160deg,#4a6fa5,#9b5c8f 55%,#e08a4f)}
+.grid{position:absolute;left:26px;right:26px;top:80px;display:grid;grid-template-columns:repeat(4,1fr);gap:26px 0;justify-items:center}
+.app{display:grid;justify-items:center;gap:6px;font:500 12px 'Inter';color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4)}
+.app i{width:62px;height:62px;border-radius:15px;display:block;background:rgba(255,255,255,.3)}
+.app img{width:62px;height:62px;border-radius:15px;display:block;background:#fff}
+.dock{position:absolute;left:14px;right:14px;bottom:24px;height:96px;border-radius:30px;background:rgba(255,255,255,.28);display:flex;justify-content:space-around;align-items:center}
+.compass{width:62px;height:62px;border-radius:15px;background:linear-gradient(#fff,#e9eef5);display:grid;place-items:center}
+.compass b{width:48px;height:48px;border-radius:50%;background:conic-gradient(#1e88ff,#22c1ff,#1e88ff);position:relative}
+.compass b::after{content:"";position:absolute;left:21px;top:6px;width:6px;height:36px;background:linear-gradient(#ff3b30 50%,#fff 50%);transform:rotate(45deg);border-radius:3px}
+.chromebar{position:absolute;left:0;right:0;bottom:0;height:84px;background:rgba(249,249,249,.97);border-top:1px solid #ddd}
+.chromebar .url{margin:8px 14px;height:38px;border-radius:12px;background:#e4e4e8;display:flex;align-items:center;justify-content:center;font:500 15px 'Inter';color:#111}
+.chromebar .tools{display:flex;justify-content:space-around;color:#0a7aff;font:400 22px 'Inter';margin-top:2px}
+.share-ico{width:22px;height:26px;position:relative;display:inline-block}
+.share-ico::before{content:"";position:absolute;left:2px;right:2px;bottom:0;height:16px;border:2.4px solid #0a7aff;border-top:0;border-radius:0 0 3px 3px}
+.share-ico::after{content:"↑";position:absolute;left:0;right:0;top:-8px;text-align:center;font:700 20px 'Inter';color:#0a7aff}
+.ios-sheet{position:absolute;left:8px;right:8px;bottom:8px;top:240px;background:#f2f2f7;border-radius:14px;padding:14px;color:#000}
+.ios-sheet .head{display:flex;gap:12px;align-items:center;padding:4px 4px 14px;border-bottom:1px solid #d8d8dd}
+.ios-sheet .head img{width:44px;height:44px;border-radius:10px}
+.ios-sheet .rows{margin-top:14px;background:#fff;border-radius:12px;overflow:hidden}
+.ios-sheet .rows div{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;font:400 16px 'Inter';border-top:1px solid #e5e5ea}
+.ios-sheet .rows div:first-child{border-top:0}
+.ios-sheet .rows span.ic{font-size:17px;color:#333}
+.kbd{position:absolute;left:0;right:0;bottom:0;height:290px;background:#d1d4db;display:grid;grid-template-rows:repeat(4,1fr);gap:10px;padding:12px 4px 40px}
+.kbd div{display:flex;justify-content:center;gap:6px}
+.kbd span{width:32px;background:#fff;border-radius:6px;box-shadow:0 1px 0 #888;display:grid;place-items:center;font:400 20px 'Inter';color:#000}
+.kbd span.go{width:88px;background:#0a7aff;color:#fff;font-size:16px}
+.toggle{width:52px;height:32px;border-radius:16px;background:#79747e;position:relative}
+.toggle::after{content:"";position:absolute;left:6px;top:6px;width:20px;height:20px;border-radius:50%;background:#fff}
+.toggle.on{background:#6750a4}.toggle.on::after{left:26px}
+.acct{display:flex;align-items:center;gap:14px;padding:14px 4px;border-top:1px solid #eee;font:400 15px 'Inter'}
+.acct i{width:40px;height:40px;border-radius:50%;background:#7b5cf0;color:#fff;display:grid;place-items:center;font:600 16px 'Inter';font-style:normal}
+
+.layer img.shot{width:390px;height:844px;display:block}
+.card .kicker{font:800 34px/1 'Barlow';letter-spacing:.16em;color:var(--o);text-transform:uppercase;margin-top:56px}
+.card h2{margin-top:18px}
+</style></head><body>
+<div id="v"><i class="glow g1"></i><i class="glow g2"></i>
+  <div class="top"><img src="file:///tmp/claude-0/-home-claude/298ce0ef-b0f8-5ec3-a03d-16ae7e00049c/scratchpad/tut/img/logo-384.png" alt=""><div class="brand">RWB App<small>How to</small></div><span class="pill" id="pill"></span></div>
+  <div class="prog"><i id="bar"></i></div>
+  <div class="cap" id="cap"><div class="step" id="cstep"></div><h1 id="ctitle"></h1><p id="csub"></p></div>
+  <div class="phone" id="phone"><div class="screen" id="screen"></div></div>
+  <div id="cards"></div>
+</div>
+<script>/*data*/</script><script>
+const V = new URLSearchParams(location.search).get('v');
+const D = window.TUT;
+document.getElementById('pill').textContent = D.title;
+const SC = [{ dur: 3.4, card: `<img class="logo" src="file:///tmp/claude-0/-home-claude/298ce0ef-b0f8-5ec3-a03d-16ae7e00049c/scratchpad/tut/img/logo-384.png"><p class="kicker">How to use</p><h2>${D.title.replace(/^(\S+)/, '<em>$1</em>')}</h2><p>${D.intro}</p>` }];
+for (const s of D.scenes) {
+  let t = 0; const beats = s.beats.map(b => { const o = { ...b, at: t, tapAt: b.tap ? t + Math.min(.95, b.hold - .55) : null }; t += b.hold; return o; });
+  SC.push({ dur: t, cap: s.cap, beats });
+}
+SC.push({ dur: 3.6, card: `<div class="check">✓</div><h2>That's <em>it!</em></h2><p>${D.outro}</p><span class="tag">Questions? Ask Pookie or any RWB admin</span>` });
+const TOTAL = SC.reduce((a, s) => a + s.dur, 0); window.TOTAL = TOTAL;
+const screen = document.getElementById('screen'), cards = document.getElementById('cards'), $ = id => document.getElementById(id);
+SC.forEach((s, si) => {
+  if (s.card) { cards.insertAdjacentHTML('beforeend', `<div class="card" data-s="${si}">${s.card}</div>`); return; }
+  s.beats.forEach((b, bi) => screen.insertAdjacentHTML('beforeend', `<div class="layer" data-s="${si}" data-b="${bi}"><img class="shot" src="file:///tmp/claude-0/-home-claude/298ce0ef-b0f8-5ec3-a03d-16ae7e00049c/scratchpad/tut2/${b.img}">${b.overlay || ''}</div>`));
+});
+screen.insertAdjacentHTML('beforeend', '<div class="ripple" id="rip"></div><div class="finger" id="fing"></div>');
+const ease = x => x < 0 ? 0 : x > 1 ? 1 : 1 - Math.pow(1 - x, 3), cl = x => Math.max(0, Math.min(1, x));
+const layers = [...screen.querySelectorAll('.layer')];
+window.render = t => {
+  let acc = 0, si = 0;
+  for (; si < SC.length - 1 && t >= acc + SC[si].dur; si++) acc += SC[si].dur;
+  const s = SC[si], lt = t - acc;
+  $('bar').style.width = (t / TOTAL * 100).toFixed(2) + '%';
+  const inA = ease(lt / .45), outA = si < SC.length - 1 ? cl((s.dur - lt) / .3) : 1;
+  cards.querySelectorAll('.card').forEach(c => { const on = Number(c.dataset.s) === si; c.style.opacity = on ? Math.min(inA, outA) : 0; c.style.transform = on ? `translateY(${(1 - inA) * 40}px) scale(${.96 + .04 * inA})` : ''; });
+  const isCard = !!s.card;
+  $('cap').style.opacity = isCard ? 0 : 1; $('phone').style.opacity = isCard ? 0 : 1;
+  if (isCard) return;
+  const pin = si === 1 ? ease(lt / .6) : 1;
+  $('phone').style.transform = `translateY(${(1 - pin) * 260}px)`; $('phone').style.opacity = pin;
+  /* caption: animate only when the caption changes */
+  $('cstep').textContent = s.cap.step; $('ctitle').textContent = s.cap.title; $('csub').innerHTML = s.cap.sub;
+  const cin = ease(lt / .45), cout = cl((s.dur - lt) / .25);
+  $('cap').style.opacity = Math.min(cin, si < SC.length - 2 ? cout : 1); $('cap').style.transform = `translateY(${(1 - cin) * 30}px)`;
+  let bi = 0; s.beats.forEach((b, i) => { if (lt >= b.at) bi = i; });
+  /* screens: the current beat fades in over the previous one (the last screen of the previous scene carries over) */
+  const prev = bi > 0 ? [si, bi - 1] : (SC[si - 1] && SC[si - 1].beats ? [si - 1, SC[si - 1].beats.length - 1] : null);
+  const fade = cl((lt - s.beats[bi].at) / .2);
+  layers.forEach(l => {
+    const ls = +l.dataset.s, lb = +l.dataset.b;
+    if (ls === si && lb === bi) { l.style.opacity = prev ? fade : 1; l.style.zIndex = 2; }
+    else if (prev && ls === prev[0] && lb === prev[1]) { l.style.opacity = 1; l.style.zIndex = 1; }
+    else l.style.opacity = 0;
+  });
+  const b = s.beats[bi], f = $('fing'), r = $('rip');
+  if (b.tap) {
+    const [x, y] = b.tap, ta = b.tapAt, p = ease((lt - (ta - .75)) / .55);
+    f.style.left = (x + (1 - p) * 60) + 'px'; f.style.top = (y + (1 - p) * 120) + 'px';
+    const vis = lt >= ta - .75 && lt <= ta + .4;
+    f.style.opacity = vis ? Math.min(cl((lt - (ta - .75)) / .2), cl((ta + .4 - lt) / .18)) : 0;
+    f.style.transform = `scale(${lt >= ta && lt <= ta + .18 ? .8 : 1})`;
+    const rp = (lt - ta) / .5; r.style.left = x + 'px'; r.style.top = y + 'px';
+    r.style.opacity = rp >= 0 && rp <= 1 ? 1 - rp : 0; r.style.transform = `scale(${1 + rp * 2.4})`;
+  } else { f.style.opacity = 0; r.style.opacity = 0; }
+};
+render(0);
+</script></body></html>
