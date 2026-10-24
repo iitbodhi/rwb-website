@@ -16,6 +16,8 @@ const TEAM_ORDER = { superadmin: 0, admin: 1, coordinator: 2 };
 const isTeam = m => m.role in TEAM_ORDER;
 const roleBadge = m => isTeam(m) ? `<span class="badge ${m.role === 'coordinator' ? 'coord' : 'orange'}">${ROLE[m.role]}</span>` : '';
 const teamFirst = list => [...list].sort((a, b) => (TEAM_ORDER[a.role] ?? 3) - (TEAM_ORDER[b.role] ?? 3) || a.full_name.localeCompare(b.full_name));
+/* joined (through the form or approved in the app) in the last 7 days: shown to admins so they can add them to the WhatsApp group */
+const isNewMember = m => { const t = Date.parse(m?.joined_at || ''); return t > 0 && Date.now() - t < 7 * 864e5; };
 const vrnKey = v => (v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /* ---------- formatting ---------- */
@@ -227,7 +229,13 @@ async function viewAccess(status, sess) {
                 <label>Date of birth<input name="dob" type="date" value="${esc(req?.dob || '')}"></label>
                 <label>Bike number<input name="vrn" placeholder="WB 00 AA 0000" value="${esc(req?.vrn || '')}"></label>
             </div>
-            <label>Locality<input name="locality" value="${esc(req?.locality || '')}"></label>
+            <div class="grid2">
+                <label>Your bike<select name="bike">${['TVS Ronin 225', 'Other bike', 'No bike yet'].map(b => `<option${(req?.bike || 'TVS Ronin 225') === b ? ' selected' : ''}>${b}</option>`).join('')}</select></label>
+                <label>Blood group<select name="blood_group">${['', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(b => `<option${(req?.blood_group || '') === b ? ' selected' : ''} value="${b}">${b || 'Choose…'}</option>`).join('')}</select></label>
+            </div>
+            <label>Current locality<input name="locality" placeholder="Area, city" value="${esc(req?.locality || '')}"></label>
+            <label>Hometown<input name="hideout" placeholder="Permanent hometown" value="${esc(req?.hideout || '')}"></label>
+            <label>Emergency contact number<input name="emergency_phone" inputmode="tel" placeholder="Family member or friend" value="${esc(req?.emergency_phone || '')}"></label>
             <button class="btn block">Send to admins</button>
             <button type="button" class="btn ghost block" data-act="out">Use a different Google account</button>
         </form>`;
@@ -1415,31 +1423,39 @@ async function adminRequests() {
     $('#admin-body').innerHTML = reqs.length ? `<div class="list">${reqs.map(r => `<div class="card">
         <h3>${esc(r.full_name)}</h3>
         <dl class="facts"><dt>Google</dt><dd>${esc(r.email || '–')}</dd><dt>WhatsApp</dt><dd><a href="${waTo(r.phone)}" target="_blank" rel="noopener">${esc(r.phone)}</a></dd>
-            ${r.vrn ? `<dt>Bike no.</dt><dd>${esc(r.vrn)}</dd>` : ''}${r.locality ? `<dt>Locality</dt><dd>${esc(r.locality)}</dd>` : ''}${r.dob ? `<dt>Birthday</dt><dd>${fmtDayMonth(r.dob)}</dd>` : ''}<dt>Asked</dt><dd>${fmtDate(String(r.created_at).slice(0, 10))}</dd></dl>
+            ${r.bike ? `<dt>Bike</dt><dd>${esc(r.bike)}</dd>` : ''}${r.vrn ? `<dt>Bike no.</dt><dd>${esc(r.vrn)}</dd>` : ''}${r.locality ? `<dt>Locality</dt><dd>${esc(r.locality)}</dd>` : ''}${r.hideout ? `<dt>Hometown</dt><dd>${esc(r.hideout)}</dd>` : ''}${r.blood_group ? `<dt>Blood group</dt><dd>${esc(r.blood_group)}</dd>` : ''}${r.emergency_phone ? `<dt>Emergency</dt><dd>${esc(r.emergency_phone)}</dd>` : ''}${r.dob ? `<dt>Birthday</dt><dd>${fmtDayMonth(r.dob)}</dd>` : ''}<dt>Asked</dt><dd>${fmtDate(String(r.created_at).slice(0, 10))}</dd></dl>
         <p class="${r.match_member_id ? (r.match_linked ? 'warn' : 'badge ok') : 'badge'}" style="margin-bottom:12px">${r.match_member_id ? (r.match_linked ? `⚠ This number belongs to ${esc(r.match_name)}, who is already on the app with another account.` : `✓ Matches sheet entry: ${esc(r.match_name)}`) : 'Not in the members sheet: approving adds them as a new member'}</p>
         <div class="btns"><button class="btn ghost" data-act="reject" data-id="${r.id}">Reject</button><button class="btn" data-act="approve" data-id="${r.id}">Approve</button></div></div>`).join('')}</div>`
         : '<div class="card empty"><b>All clear</b>No one is waiting for access.</div>';
     Object.assign(actions, {
-        approve: b => busy(b, async () => { await api.admin.approve(Number(b.dataset.id)); state.adminMembers = null; toast('Approved'); viewAdmin(); }),
+        approve: b => busy(b, async () => { await api.admin.approve(Number(b.dataset.id)); state.adminMembers = null; toast('Approved. Added to the RWB contact sheet.'); viewAdmin(); }),
         reject: b => { if (confirmBox('Reject this request?')) busy(b, async () => { await api.admin.reject(Number(b.dataset.id)); toast('Rejected'); viewAdmin(); }); }
     });
 }
 async function adminMembers() {
     state.adminMembers ??= await api.admin.members();
     const all = state.adminMembers;
-    const F = { all: 'Everyone', app: 'On the app', admins: 'RWB team' };
-    state.memberFilter ||= 'all';
+    const nNew = all.filter(isNewMember).length;
+    const F = { all: 'Everyone', new: `New${nNew ? ` (${nNew})` : ''}`, app: 'On the app', admins: 'RWB team' };
+    state.memberFilter ||= 'all'; state.memberSort ||= 'team';
+    const SORTS = { team: 'Team, A–Z', new: 'Newest first', old: 'Oldest first' };
     $('#admin-body').innerHTML = `<div class="chips" style="margin-bottom:10px">${Object.entries(F).map(([k, v]) => `<button class="chip" data-act="mf" data-f="${k}" aria-pressed="${state.memberFilter === k}">${v}</button>`).join('')}</div>
-    ${state.memberFilter === 'admins' ? `<p class="small muted" style="margin-bottom:10px">Tap a person to ${state.me.role === 'superadmin' ? 'make them an admin or a coordinator' : 'make them a coordinator'} or change their role. Coordinators can approve Motomart posts.</p>` : ''}<input class="search" type="search" id="mq" placeholder="Search name, number, bike no. or place" value="${esc(state.adminSearch)}" aria-label="Search members"><p class="small muted" id="mcount" style="margin:-4px 0 10px"></p><div class="list" id="ml"></div><button class="btn ghost block section" id="more" hidden>Show more</button>`;
+    ${state.memberFilter === 'admins' ? `<p class="small muted" style="margin-bottom:10px">Tap a person to ${state.me.role === 'superadmin' ? 'make them an admin or a coordinator' : 'make them a coordinator'} or change their role. Coordinators can approve Motomart posts.</p>` : ''}${state.memberFilter === 'new' ? '<p class="small muted" style="margin-bottom:10px">Joined in the last 7 days, through the join form or the app. Add them to the RWB WhatsApp group; the <b>New Member</b> tag goes away after 7 days.</p>' : ''}
+    <div class="row" style="gap:8px;margin-bottom:12px"><input class="search" type="search" id="mq" placeholder="Search name, number, bike no. or place" value="${esc(state.adminSearch)}" aria-label="Search members" style="margin:0;flex:1">
+        <select id="msort" aria-label="Sort" style="width:auto;flex:none;max-width:44%">${Object.entries(SORTS).map(([k, v]) => `<option value="${k}"${state.memberSort === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>
+    <p class="small muted" id="mcount" style="margin:-4px 0 10px"></p><div class="list" id="ml"></div><button class="btn ghost block section" id="more" hidden>Show more</button>`;
     let limit = 50;
     const draw = () => {
         const q = state.adminSearch.trim().toLowerCase(), qd = q.replace(/\D/g, '');
-        const pool = teamFirst(all.filter(m => state.memberFilter === 'app' ? m.user_id : state.memberFilter === 'admins' ? isTeam(m) : true));
+        const picked = all.filter(m => state.memberFilter === 'app' ? m.user_id : state.memberFilter === 'admins' ? isTeam(m) : state.memberFilter === 'new' ? isNewMember(m) : true);
+        const jt = m => Date.parse(m.joined_at || m.created_at || 0) || 0;
+        const sort = state.memberFilter === 'new' && state.memberSort === 'team' ? 'new' : state.memberSort;
+        const pool = sort === 'new' ? [...picked].sort((a, b) => jt(b) - jt(a)) : sort === 'old' ? [...picked].sort((a, b) => jt(a) - jt(b)) : teamFirst(picked);
         const hits = pool.filter(m => !q || m.full_name.toLowerCase().includes(q) || (m.nickname || '').toLowerCase().includes(q) || (qd.length >= 3 && (m.phone || '').includes(qd)) || (vrnKey(q).length >= 2 && vrnKey(m.vrn).includes(vrnKey(q))) || (m.locality || '').toLowerCase().includes(q) || (m.hideout || '').toLowerCase().includes(q));
-        $('#mcount').textContent = `${hits.length} ${state.memberFilter === 'app' ? 'on the app' : state.memberFilter === 'admins' ? 'in the RWB team' : 'member' + (hits.length === 1 ? '' : 's')}`;
+        $('#mcount').textContent = `${hits.length} ${state.memberFilter === 'app' ? 'on the app' : state.memberFilter === 'admins' ? 'in the RWB team' : state.memberFilter === 'new' ? 'new in the last 7 days' : 'member' + (hits.length === 1 ? '' : 's')}`;
         $('#ml').innerHTML = hits.slice(0, limit).map(m => `<button class="card tap row member-row" data-act="member" data-id="${m.id}">${face(m, 'avatar sm')}
-            <div class="grow"><div class="who">${esc(m.full_name)} ${roleBadge(m)}</div>
-            <div class="meta">${m.avg_kmpl ? `<b class="kmpl-tag">${kmplTxt(m.avg_kmpl)}</b> · ` : ''}${esc([m.phone, m.vrn, m.locality].filter(Boolean).join(' · '))}</div></div>
+            <div class="grow"><div class="who">${esc(m.full_name)} ${roleBadge(m)}${isNewMember(m) ? ' <span class="badge new-tag">New Member</span>' : ''}</div>
+            <div class="meta">${sort !== 'team' || isNewMember(m) ? `<span class="joined">Joined ${fmtDate(String(m.joined_at || m.created_at).slice(0, 10))}</span> · ` : ''}${m.avg_kmpl ? `<b class="kmpl-tag">${kmplTxt(m.avg_kmpl)}</b> · ` : ''}${esc([m.phone, m.vrn, m.locality].filter(Boolean).join(' · '))}</div></div>
             ${m.user_id ? '<span class="badge ok">On app</span>' : ''}</button>`).join('') || '<div class="card empty">No one matches.</div>';
         $('#more').hidden = hits.length <= limit;
     };
@@ -1448,12 +1464,13 @@ async function adminMembers() {
     draw();
     actions.member = el => memberSheet(all.find(m => String(m.id) === el.dataset.id));
     actions.mf = el => { state.memberFilter = el.dataset.f; adminMembers(); };
+    $('#msort').onchange = e => { state.memberSort = e.target.value; limit = 50; draw(); };
 }
 function memberSheet(m) {
     const superA = state.me.role === 'superadmin', self = m.user_id && m.user_id === state.me.user_id;
     const canRemove = !self && m.role !== 'superadmin' && (m.role !== 'admin' || superA);
     openSheet(m.full_name, `
-        ${m.avatar_url ? `<img class="member-photo" src="${esc(m.avatar_url)}" alt="">` : ''}<div class="tags" style="margin:0 0 10px">${m.user_id ? '<span class="badge ok">On the app</span>' : '<span class="badge">Not on the app yet</span>'}${roleBadge(m)}</div>
+        ${m.avatar_url ? `<img class="member-photo" src="${esc(m.avatar_url)}" alt="">` : ''}<div class="tags" style="margin:0 0 10px">${m.user_id ? '<span class="badge ok">On the app</span>' : '<span class="badge">Not on the app yet</span>'}${roleBadge(m)}${isNewMember(m) ? '<span class="badge new-tag">New Member</span>' : ''}</div>
         <dl class="facts">
             <dt>WhatsApp</dt><dd>${esc(m.phone || '–')}</dd><dt>Email</dt><dd>${esc(m.email || '–')}</dd>
             <dt>Birthday</dt><dd>${m.dob ? fmtDayMonth(m.dob) : '–'}</dd><dt>Bike</dt><dd>${esc([m.bike, m.vrn].filter(Boolean).join(' · ') || '–')}</dd>

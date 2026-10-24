@@ -48,7 +48,7 @@ async function supabaseApi(url, key) {
         async signOut() { await sb.auth.signOut(); },
 
         linkAccount: async () => must(await sb.rpc('link_account')),
-        requestAccess: async f => must(await sb.rpc('request_access', { p_full_name: f.full_name, p_phone: f.phone, p_dob: f.dob || null, p_vrn: f.vrn || null, p_locality: f.locality || null })),
+        requestAccess: async f => must(await sb.rpc('request_access', { p_full_name: f.full_name, p_phone: f.phone, p_dob: f.dob || null, p_vrn: f.vrn || null, p_locality: f.locality || null, p_bike: f.bike || null, p_blood_group: f.blood_group || null, p_hideout: f.hideout || null, p_emergency_phone: f.emergency_phone || null })),
         myRequest: async () => must(await sb.from('link_requests').select('*').maybeSingle()),
         me: async () => must(await sb.from('members').select('*').eq('user_id', await uid()).single()),
         updateMe: async f => must(await sb.from('members').update(f).eq('user_id', await uid()).select().single()),

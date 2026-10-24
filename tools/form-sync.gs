@@ -1,11 +1,16 @@
 /**
- * RWB App: send every new join-form registration to the app automatically.
+ * RWB App ⇄ RWB contact sheet (the Google Sheet with the join form responses)
  *
- * Where this goes: the Google Sheet that collects the RWB join form responses
- *   → Extensions → Apps Script → paste this whole file → fill in SYNC_SECRET → Save
- *   → choose "setup" in the function list at the top → Run → allow access.
- * That's it: "setup" copies anyone missing from the app now, and then
- * every new form submission reaches the app within seconds.
+ * 1. Sheet → app: every new join-form registration reaches the app within seconds.
+ * 2. App → sheet: members approved in the app get a new row here, and changes members make in
+ *    the app (Me → Edit) update their row. Rows added by the app say "RWB App" in the "Added via" column.
+ *
+ * SET-UP (once):
+ *   a) In this Google Sheet: Extensions → Apps Script → replace everything with this file → fill in SYNC_SECRET → Save.
+ *   b) Choose "setup" in the function list at the top → Run → allow access.
+ *   c) Deploy → New deployment → ⚙ Select type: Web app → Execute as: Me → Who has access: Anyone → Deploy.
+ *      Copy the Web app URL (ends in /exec) and paste it into sheet-sync.sql before running that in Supabase.
+ *   If you change this file later: Deploy → Manage deployments → ✏️ → Version: New version → Deploy (same URL).
  */
 const SUPABASE_URL = 'https://hcowcybshljgkeixudry.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhjb3djeWJzaGxqZ2tlaXh1ZHJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3NDI2MjMsImV4cCI6MjEwODMxODYyM30.LLYjaairRQZ3-Ddwo9kschTeVXjEv84n45RrqEUhi0g';
@@ -114,3 +119,75 @@ function birthday_(val) {
   if (y < 1930 || y > new Date().getFullYear() - 10) y = 1904;
   return y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
 }
+
+
+/* ======================= App → sheet ======================= */
+const ADDED_VIA = 'Added via', UPDATED_IN_APP = 'Updated in app';
+
+/** Open the web-app link in a browser to check it's running. */
+function doGet() { return json_({ ok: true, service: 'RWB sheet sync' }); }
+
+/** The app calls this when a member is approved in the app or changes their details. */
+function doPost(e) {
+  let body;
+  try { body = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: 'bad request' }); }
+  if (!body || body.secret !== SYNC_SECRET) return json_({ ok: false, error: 'not allowed' });
+  const m = body.member || {};
+  if (!m.phone || !m.full_name) return json_({ ok: false, error: 'missing name or number' });
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const sheet = responsesSheet_();
+    const col = columns_(sheet);
+    const last = sheet.getLastRow();
+    const phones = last > 1 && col.phone !== undefined ? sheet.getRange(2, col.phone + 1, last - 1, 1).getValues().map(r => String(r[0]).replace(/\D/g, '').slice(-10)) : [];
+    const find = p => { const i = p ? phones.indexOf(String(p).replace(/\D/g, '').slice(-10)) : -1; return i < 0 ? 0 : i + 2; };
+    const rowNo = find(body.old_phone) || find(m.phone);
+    const vals = sheetValues_(m);
+    if (rowNo) {
+      /* only filled-in values are written, so answers already in the sheet are never blanked */
+      Object.keys(vals).forEach(k => { if (col[k] !== undefined && vals[k] !== '') sheet.getRange(rowNo, col[k] + 1).setValue(vals[k]); });
+      sheet.getRange(rowNo, col.updated + 1).setValue(new Date());
+      return json_({ ok: true, result: 'updated', row: rowNo });
+    }
+    const row = new Array(sheet.getLastColumn()).fill('');
+    Object.keys(vals).forEach(k => { if (col[k] !== undefined) row[col[k]] = vals[k]; });
+    if (col.joined_at !== undefined) row[col.joined_at] = m.joined_at ? new Date(m.joined_at) : new Date();
+    row[col.added] = 'RWB App';
+    sheet.appendRow(row);
+    return json_({ ok: true, result: 'added', row: sheet.getLastRow() });
+  } finally { lock.releaseLock(); }
+}
+
+/** Column numbers (0-based) for each field, adding "Added via" / "Updated in app" at the end if missing. */
+function columns_(sheet) {
+  let heads = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  [ADDED_VIA, UPDATED_IN_APP].forEach(h => {
+    if (!heads.some(x => String(x).trim().toLowerCase() === h.toLowerCase())) {
+      sheet.getRange(1, heads.length + 1).setValue(h); heads = heads.concat(h);
+    }
+  });
+  const col = {};
+  heads.forEach((h, i) => {
+    const t = String(h).trim().toLowerCase();
+    Object.keys(COLUMNS).forEach(k => { if (col[k] === undefined && t.indexOf(COLUMNS[k]) === 0) col[k] = i; });
+    if (t === ADDED_VIA.toLowerCase()) col.added = i;
+    if (t === UPDATED_IN_APP.toLowerCase()) col.updated = i;
+  });
+  return col;
+}
+
+/* App member → the values written in the sheet (same style as the form answers) */
+function sheetValues_(m) {
+  const t = v => v == null ? '' : String(v);
+  let dob = '';
+  if (m.dob) { const p = String(m.dob).split('-'); dob = p[0] === '1904' ? p[2] + '/' + p[1] : p[2] + '/' + p[1] + '/' + p[0]; }
+  const bike = t(m.bike);
+  return {
+    full_name: t(m.full_name), dob: dob, phone: t(m.phone), email: t(m.email), vrn: t(m.vrn),
+    blood_group: t(m.blood_group), locality: t(m.locality), hideout: t(m.hideout),
+    emergency_phone: t(m.emergency_phone), alt_phone: t(m.alt_phone),
+    bike: /ronin/i.test(bike) ? 'Yes' : bike
+  };
+}
+
+function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
