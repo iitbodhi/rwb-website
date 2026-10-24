@@ -821,3 +821,43 @@ mark{background:rgba(232,102,46,.25);color:inherit;border-radius:3px;padding:0 1
 .vid-tile b{font-size:.98rem;margin-top:6px}
 .vid-tile:active .vid-cover{transform:scale(.98)}
 .vid-player{display:block;width:100%;max-height:72vh;aspect-ratio:9/16;border-radius:16px;background:#000;object-fit:contain}
+
+/* ---------- polish round: Pookie, quick actions, news, Motomart, gear ---------- */
+.pookie-fab{touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;animation:pookieFloat 3.2s ease-in-out infinite;cursor:grab}
+.pookie-fab::after{content:"";position:absolute;inset:-6px;border-radius:22px;border:2px solid rgba(124,108,246,.45);animation:pookiePulse 3.2s ease-out infinite;pointer-events:none}
+.pookie-fab.dragging{animation:none;cursor:grabbing;transform:scale(1.08);box-shadow:0 18px 40px -10px rgba(60,40,200,.65)}
+.pookie-fab.dragging::after{display:none}
+.pookie-fab.snapping{transition:left .3s cubic-bezier(.3,1.3,.5,1),top .3s ease}
+@keyframes pookieFloat{0%,100%{translate:0 0}50%{translate:0 -6px}}
+@keyframes pookiePulse{0%{opacity:.9;transform:scale(.92)}70%,100%{opacity:0;transform:scale(1.18)}}
+@media (prefers-reduced-motion:reduce){.pookie-fab,.pookie-fab::after{animation:none}}
+.quick span{position:relative}
+.quick .dot{position:absolute;top:8px;right:8px}
+/* Latest from RWB: compact rows on Home */
+.news-mini > a.news-row.mini{align-items:center!important;padding-top:10px;padding-bottom:10px;gap:12px}
+.news-row.mini .news-ico{width:30px;height:30px;border-radius:9px;font-size:.9rem}
+.news-row.mini b{display:block;font-size:.9rem;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.news-row.mini .news-line{display:block;font-size:.76rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.news-row.mini .chev{margin-top:0}
+/* Motomart: smaller, tidier cards */
+.mm-grid{grid-template-columns:repeat(3,1fr);gap:8px}
+.mm-card{border-radius:14px}
+.mm-img{aspect-ratio:1;font-size:.7rem}
+.mm-flag{left:5px;top:5px;font-size:.6rem;padding:2px 6px}
+.mm-body{padding:6px 8px 8px;gap:1px}
+.mm-price{font-size:.95rem}
+.mm-name{font-size:.74rem;line-height:1.22;font-weight:600}
+.mm-body .small{font-size:.66rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.strip{grid-auto-columns:112px;gap:8px}
+.mm-intro{font-size:.8rem}
+#mmq{padding-top:10px;padding-bottom:10px;font-size:.9rem}
+#mms{padding-top:8px;padding-bottom:8px;font-size:.84rem}
+body[data-route=motomart] .chip{font-size:.76rem;padding:5px 11px}
+body[data-route=motomart] .btn.fab{font-size:.88rem;padding:11px 18px}
+/* Recommended gear: product pictures */
+.acc .acc-thumb{position:relative;width:84px;height:84px;border-radius:12px;background:#fff;overflow:hidden;display:grid;place-items:center}
+.acc .acc-thumb img{position:absolute;inset:6px;width:calc(100% - 12px);height:calc(100% - 12px);object-fit:contain}
+.acc .acc-thumb .acc-ph{font-size:2rem;opacity:.85;filter:saturate(.9)}
+.acc .acc-thumb:has(img) .acc-ph{display:none}
+.acc .acc-thumb:not(:has(img)){background:var(--paper-2)}
+.card.guide.acc{grid-template-columns:84px 1fr;gap:14px;align-items:center}

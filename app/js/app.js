@@ -179,7 +179,6 @@ const PLAY_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" s
 const docsAlert = () => (state.docs || []).some(d => docStatus(d).level !== 'ok' && docStatus(d).level !== 'none');
 const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1>${right}
     <a class="icon-btn bell vid-btn" href="#videos" aria-label="How-to videos">${PLAY_ICON}</a>
-    <a class="icon-btn bell docs-btn" href="#docs" aria-label="My documents${docsAlert() ? ' (something needs renewing)' : ''}">${DOC_ICON}${docsAlert() ? '<i class="dot dot-red"></i>' : ''}</a>
     <a class="icon-btn bell" href="#news" aria-label="Announcements${unread() ? ' (new)' : ''}">${BELL}${unread() ? '<i class="dot"></i>' : ''}</a>
     <a href="#me" aria-label="My profile" class="avatar-link">${face(state.me)}</a></header>`;
 
@@ -406,8 +405,10 @@ function cluster(services, fuel) {
     </section>`;
 }
 
-function newsRow(n, del = false) {
+function newsRow(n, del = false, compact = false) {
     const href = n.url && n.url.startsWith('#') ? n.url : '#news';
+    if (compact) return `<a class="news-row mini ${n.kind}" href="${esc(href)}"><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || '📣'}</span>
+        <span class="grow"><b>${esc(n.title)}</b><span class="news-line">${n.body ? esc(n.body) + ' · ' : ''}${shortAgo(n.created_at)}${n.audience === 'admins' ? ' · admins' : n.audience === 'moderators' ? ' · team' : ''}</span></span>${ICON.chev}</a>`;
     return `<a class="news-row ${n.kind}" href="${esc(href)}"><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || '📣'}</span>
         <span class="grow"><b>${esc(n.title)}</b>${n.body ? `<span class="news-body">${esc(n.body)}</span>` : ''}<span class="small muted">${timeAgo(n.created_at)}${n.audience === 'admins' ? ', admins only' : n.audience === 'moderators' ? ', team only' : ''}</span></span>
         ${del ? `<button class="icon-btn del" data-act="del-news" data-id="${n.id}" aria-label="Delete">✕</button>` : ICON.chev}</a>`;
@@ -431,14 +432,14 @@ async function viewHome() {
             <button data-act="add-fuel"><span>${ICON.fuel}</span>Add fuel</button>
             <button data-act="add-service"><span>${ICON.wrench}</span>Log service</button>
             <button data-act="sell"><span>${ICON.tag}</span>Sell gear</button>
-            <a href="#chat"><span>${ICON.chat}</span>Ask Pookie</a>
+            <a href="#docs" aria-label="Documents${docsAlert() ? ' (something needs renewing)' : ''}"><span>${DOC_ICON}${docsAlert() ? '<i class="dot dot-red"></i>' : ''}</span>Documents</a>
         </nav>
         ${isMod() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
         ${docWarn ? `<a class="banner doc-warn ${docWarn.st.level}" href="#docs"><span class="b-ico">📄</span><span class="grow"><b>${esc(docName(docWarn.d))}</b> ${docWarn.st.days < 0 ? `expired on ${fmtDate(docWarn.d.expiry_date)}` : docWarn.st.days === 0 ? 'expires today' : `expires in ${docWarn.st.days} day${docWarn.st.days === 1 ? '' : 's'}`}. Renew it and update My documents.</span>${ICON.chev}</a>` : ''}
         ${nextEvt ? `<a class="banner evt-banner" href="#events/${nextEvt.id}"><span class="evt-mini">${evtTile(nextEvt)}</span><span class="grow"><b>${esc(nextEvt.title)}</b><span class="small muted">${esc(evtWhen(nextEvt, true))}${nextEvt.location ? ' · ' + esc(nextEvt.location) : ''}</span></span>${evd.mine[nextEvt.id] ? `<span class="evt-me ${evd.mine[nextEvt.id].status}">${RSVP_TXT[evd.mine[nextEvt.id].status]}</span>` : '<span class="evt-me ask">RSVP</span>'}</a>` : ''}
         ${today.length ? `<div class="banner bday"><span class="b-ico">🎂</span><span class="grow"><b>${esc(names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : names[0])}</b> ${names.length > 1 ? 'have' : 'has'} a birthday today</span><button class="btn sm wa" data-act="wish">Wish</button></div>` : ''}
         ${pushAsk ? `<div class="banner"><span class="b-ico">🔔</span><span class="grow">Get birthdays, Motomart posts and ride news as notifications</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
-        ${feed.length ? `<section class="section"><h2>Latest from RWB <span class="h-acts">${feed.some(n => !STICKY(n)) ? '<button data-act="clear-feed">Clear</button>' : ''}<a href="#news">See all</a></span></h2><div class="group">${feed.slice(0, 3).map(n => newsRow(n)).join('')}</div></section>` : ''}
+        ${feed.length ? `<section class="section"><h2>Latest from RWB <span class="h-acts">${feed.some(n => !STICKY(n)) ? '<button data-act="clear-feed">Clear</button>' : ''}<a href="#news">See all</a></span></h2><div class="group news-mini">${feed.slice(0, 3).map(n => newsRow(n, false, true)).join('')}</div></section>` : ''}
         <section class="section"><h2>Fresh on Motomart <a href="#motomart">See all</a></h2>
             ${fresh.length ? `<div class="strip">${fresh.map(listingCard).join('')}</div>` : `<a class="group-row-card" href="#motomart"><span class="g-ico">${ICON.tag}</span><span class="grow"><b>Nothing for sale yet</b><span class="small muted">Selling old gear? Post it here for fellow riders.</span></span>${ICON.chev}</a>`}</section>
         <section class="section"><h2>Explore</h2><div class="group">
@@ -1344,6 +1345,28 @@ async function drawMaint() {
     $('#gq').oninput = draw; draw();
     actions.pdf = el => { const p = state.guides.find(g => g.id === el.dataset.id); openSheet(pdfTitle(p.name), `<iframe class="pdf" src="https://drive.google.com/file/d/${esc(p.id)}/preview" title="${esc(pdfTitle(p.name))}"></iframe><a class="btn ghost block" style="margin-top:12px" href="https://drive.google.com/file/d/${esc(p.id)}/view" target="_blank" rel="noopener">Open in Google Drive</a>`); };
 }
+/* Product pictures: the sheet's "image" column wins; otherwise the store page's preview picture is looked up
+   (free link-preview service, same as roninwb.in) and remembered on the phone for a week. */
+const ACC_ICON = { helmet: '⛑️', jacket: '🧥', glove: '🧤', boot: '🥾', light: '💡', lamp: '💡', fog: '💡', phone: '📱', mount: '📱', lock: '🔒', cover: '🛡️', guard: '🛡️', bag: '🎒', luggage: '🎒', intercom: '🎧', camera: '📷', tyre: '🛞', tire: '🛞', oil: '🛢️', chain: '⛓️', clean: '🧽', care: '🧽' };
+const accIcon = c => { const k = String(c || '').toLowerCase(); return Object.entries(ACC_ICON).find(([w]) => k.includes(w))?.[1] || '🏍️'; };
+const accJobs = new Map();
+function accPreview(url) {
+    const key = 'rwb-pv:' + url;
+    try { const c = JSON.parse(localStorage.getItem(key)); if (c && Date.now() - c.t < (c.img ? 7 * 864e5 : 36e5)) return Promise.resolve(c.img); } catch { /* ignore */ }
+    if (!accJobs.has(url)) accJobs.set(url, (async () => {
+        let img = '';
+        try { const j = await (await fetch('https://api.microlink.io/?url=' + encodeURIComponent(url))).json(); const u = j?.data?.image?.url || ''; if (/^https:\/\//i.test(u)) img = u; } catch { /* no preview */ }
+        try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), img })); } catch { /* ignore */ }
+        return img;
+    })());
+    return accJobs.get(url);
+}
+const accObs = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(async e => {
+    if (!e.isIntersecting) return; accObs.unobserve(e.target);
+    const box = e.target, src = await accPreview(box.dataset.link); if (!src) return;
+    const im = new Image(); im.alt = ''; im.referrerPolicy = 'no-referrer'; im.decoding = 'async';
+    im.onload = () => { box.prepend(im); box.classList.add('has-img'); }; im.src = src;
+}), { rootMargin: '200px' }) : { observe() {} };
 async function drawAcc() {
     const box = $('#guide-body');
     if (!state.acc) {
@@ -1360,11 +1383,12 @@ async function drawAcc() {
         <div class="list">${list.length ? list.map(i => {
             const sc = Math.max(0, Math.min(5, parseFloat(i.score) || 0)), link = safeLink(i.link), img = i.image ? driveImg(i.image) : '';
             const price = i.price ? (/^[\d,.]+$/.test(i.price) ? '₹' + i.price : i.price) : '';
-            return `<article class="card guide"><div class="thumb">${img ? `<img src="${esc(img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : 'GEAR'}</div>
+            return `<article class="card guide acc"><div class="thumb acc-thumb"${!img && link ? ` data-link="${esc(link)}"` : ''}>${img ? `<img src="${esc(img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span class="acc-ph">${accIcon(i.category)}</span></div>
                 <div style="min-width:0">${i.category ? `<span class="badge">${esc(i.category)}</span>` : ''}<h3 style="margin-top:4px">${esc(i.name)}</h3>
                 <p class="small"><span class="stars" style="--s:${sc}" aria-label="RWB score ${sc} of 5">★★★★★</span> <span class="muted">${sc}/5</span>${price ? ` · <b>${esc(price)}</b>` : ''}</p>
                 ${link ? `<a class="btn sm ghost" style="margin-top:8px" href="${esc(link)}" target="_blank" rel="noopener noreferrer">View product ↗</a>` : ''}</div></article>`;
         }).join('') : '<div class="card empty"><b>Coming soon</b>Recommended gear will be listed here.</div>'}</div>`;
+    box.querySelectorAll('.acc-thumb[data-link]').forEach(t => accObs.observe(t));
     $('#asort').onchange = e => { state.accSort = e.target.value; drawAcc(); };
     actions.cat = el => { state.accCat = el.dataset.cat; drawAcc(); };
 }
@@ -1711,6 +1735,12 @@ async function drawPushState() {
 /* =================== Announcements =================== */
 const STICKY = n => n.kind === 'announcement' || n.kind === 'event';   /* only admins can remove these */
 const KIND_ICON = { event: '📅', announcement: '📣', birthday: '🎂', motomart: '🛒', member: '🏍️', admin: '🛡️' };
+function shortAgo(iso) {
+    const s = (Date.now() - new Date(iso)) / 1000;
+    if (s < 60) return 'now'; if (s < 3600) return Math.floor(s / 60) + 'm'; if (s < 86400) return Math.floor(s / 3600) + 'h';
+    if (s < 7 * 86400) return Math.floor(s / 86400) + 'd';
+    const d = new Date(iso); return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
 function timeAgo(iso) {
     const s = (Date.now() - new Date(iso)) / 1000;
     if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + ' min ago'; if (s < 86400) return Math.floor(s / 3600) + ' h ago';
@@ -2065,7 +2095,7 @@ async function viewCrew() {
     let key = 'mileage'; try { key = localStorage.getItem('rwb-board') || 'mileage'; } catch { /* ignore */ }
     if (!BOARDS[key]) key = 'mileage';
     const B = BOARDS[key], board = rankBoard(raw, key);
-    const me = board.find(r => r.is_me), top3 = board.slice(0, 3), rest = board.slice(3, state.boardAll ? board.length : 10);
+    const me = board.find(r => r.is_me), top3 = board.slice(0, 3), rest = board.slice(3, 6);
     const podium = top3.length ? `<div class="podium">${[top3[1], top3[0], top3[2]].map((r, i) => r ? `<div class="pod p${[2, 1, 3][i]}${r.is_me ? ' me' : ''}">
             ${face(r, 'avatar pod-face')}<span class="pod-medal">${MEDAL[r.rank - 1]}</span><b>${esc(r.nickname || r.full_name.split(' ')[0])}</b><span class="pod-km">${B.big(r)}</span><span class="pod-sub">${esc(B.small(r))}</span></div>` : '<div></div>').join('')}</div>` : '';
     app.innerHTML = top('RWB') + `
@@ -2074,8 +2104,7 @@ async function viewCrew() {
             <div class="row" style="justify-content:space-between;align-items:baseline;margin-bottom:2px"><h2 class="board-title">${B.title}</h2><span class="small muted">${board.length} rider${board.length === 1 ? '' : 's'}</span></div>
             <p class="small muted" style="margin-bottom:6px">${B.sub}</p>
             ${board.length ? podium + (rest.length ? `<ol class="board-list" start="4">${rest.map(r => `<li class="${r.is_me ? 'me' : ''}"><span class="rk">${r.rank}</span>${face(r, 'avatar sm')}<span class="grow"><b>${esc(r.full_name)}</b><span class="small muted">${esc(r.bike || '')}</span></span><span class="num km">${B.big(r)}<small>${esc(B.small(r))}</small></span></li>`).join('')}</ol>` : '')
-                + (board.length > 10 ? `<button class="link-btn" data-act="board-all" style="margin-top:10px">${state.boardAll ? 'Show top 10' : `Show all ${board.length}`}</button>` : '')
-                + (me && me.rank > 10 && !state.boardAll ? `<p class="board-me">You're <b>#${me.rank}</b> with ${B.big(me)}</p>` : '')
+                + (me && me.rank > 6 ? `<p class="board-me">You're <b>#${me.rank}</b> of ${board.length} with ${B.big(me)}</p>` : '')
                 + (!me ? `<p class="small muted" style="margin-top:10px">${state.me.show_on_leaderboard === false ? 'You\'re hidden from the leaderboards (Me → Privacy).' : B.empty}</p>` : '')
               : `<p class="muted" style="margin-top:8px">${B.empty}</p>`}
         </section>
@@ -2114,6 +2143,11 @@ const ICON_PHONE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" 
 const ICON_WA = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.8-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2s.2-1.1.2-1.2-.2-.2-.4-.3z"/></svg>';
 
 /* =================== Boot =================== */
+function hideBoot() {
+    const b = document.getElementById('boot'); if (!b || b.dataset.out) return;
+    b.dataset.out = '1'; const wait = Math.max(0, 900 - (performance.now() - (window.BOOT_T || 0)));
+    setTimeout(() => { b.classList.add('out'); setTimeout(() => b.remove(), 600); }, wait);
+}
 async function boot() {
     try {
         const sess = await api.session();
@@ -2126,8 +2160,51 @@ async function boot() {
     } catch (e) {
         tabbar.hidden = true;
         app.innerHTML = `<section class="signin"><img src="icons/logo-128.png" alt=""><div><h1>Can't connect</h1><p class="lead">${esc(e.message || 'Please check your internet connection.')}</p></div><button class="btn block" onclick="location.reload()">Try again</button></section>`;
-    }
+    } finally { hideBoot(); }
 }
+
+/* =================== Pookie bubble: floats gently; drag it anywhere with a finger, it sticks to the nearest side =================== */
+(function pookieDrag() {
+    const fab = document.getElementById('pookie-fab'); if (!fab) return;
+    const KEY = 'rwb-pookie-pos', M = 12;
+    const bounds = () => {
+        const tab = document.getElementById('tabbar'), tb = tab && !tab.hidden ? tab.getBoundingClientRect().top : innerHeight;
+        return { minY: 76, maxY: Math.max(140, tb - fab.offsetHeight - 14), maxX: innerWidth - fab.offsetWidth - M };
+    };
+    const place = (x, y) => { const b = bounds(); fab.style.left = Math.min(Math.max(M, x), b.maxX) + 'px'; fab.style.top = Math.min(Math.max(b.minY, y), b.maxY) + 'px'; fab.style.right = 'auto'; fab.style.bottom = 'auto'; };
+    const restore = () => {
+        let p = null; try { p = JSON.parse(localStorage.getItem(KEY)); } catch { /* ignore */ }
+        if (!p) { fab.removeAttribute('style'); return; }
+        const b = bounds(); place(p.side === 'left' ? M : b.maxX, b.minY + p.y * (b.maxY - b.minY));
+    };
+    let start = null, moved = false;
+    fab.addEventListener('pointerdown', e => {
+        const r = fab.getBoundingClientRect(); start = { x: e.clientX, y: e.clientY, dx: e.clientX - r.left, dy: e.clientY - r.top }; moved = false;
+        fab.setPointerCapture(e.pointerId);
+    });
+    fab.addEventListener('pointermove', e => {
+        if (!start) return;
+        if (!moved && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 8) return;
+        if (!moved) { moved = true; fab.classList.add('dragging'); }
+        place(e.clientX - start.dx, e.clientY - start.dy);
+    });
+    const end = () => {
+        if (!start) return; start = null;
+        if (!moved) return;
+        fab.classList.remove('dragging'); fab.classList.add('snapping');
+        const r = fab.getBoundingClientRect(), b = bounds(), side = r.left + r.width / 2 < innerWidth / 2 ? 'left' : 'right';
+        place(side === 'left' ? M : b.maxX, r.top);
+        const y = (Math.min(Math.max(b.minY, r.top), b.maxY) - b.minY) / Math.max(1, b.maxY - b.minY);
+        try { localStorage.setItem(KEY, JSON.stringify({ side, y: Math.round(y * 1000) / 1000 })); } catch { /* ignore */ }
+        setTimeout(() => fab.classList.remove('snapping'), 320);
+    };
+    fab.addEventListener('pointerup', end); fab.addEventListener('pointercancel', end);
+    /* a drag is not a tap */
+    fab.addEventListener('click', e => { if (moved) { e.preventDefault(); moved = false; } });
+    addEventListener('resize', restore);
+    addEventListener('hashchange', () => setTimeout(restore, 60));
+    restore();
+})();
 
 (async () => {
     if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
