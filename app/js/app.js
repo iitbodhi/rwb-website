@@ -95,7 +95,8 @@ const load = {
     fuel: async (force) => (state.fuel = !force && state.fuel || await api.fuel()),
     bdays: async () => (state.bdays ??= await api.birthdays(isAdmin() ? 7 : 0).catch(() => [])),
     listings: async (force) => (state.listings = !force && state.listings || await api.listings()),
-    news: async (force) => (state.news = !force && state.news || await api.news().catch(() => []))
+    news: async (force) => (state.news = !force && state.news || await api.news().catch(() => [])),
+    docs: async (force) => (state.docs = !force && state.docs || await api.docs().catch(() => []))
 };
 
 /* ---------- mileage maths ----------
@@ -123,7 +124,7 @@ function mileageStats(logs) {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, crew: viewCrew };
+const ROUTES = { docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, crew: viewCrew };
 /* screens render one after another, so the screen the rider tapped last always wins */
 let renderChain = Promise.resolve();
 function render() { renderChain = renderChain.then(doRender, doRender); return renderChain; }
@@ -148,7 +149,10 @@ const unread = () => (state.news || []).some(n => n.id > seenNews());
 const initials = m => (m?.full_name || '?').split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 /* profile photo if the member added one, otherwise their initials */
 const face = (m, cls = 'avatar') => `<span class="${cls}">${m?.avatar_url ? `<img src="${esc(m.avatar_url)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<i>${esc(initials(m))}</i></span>`;
+const DOC_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/><path d="M8 13.5h8M8 16.5h5"/></svg>';
+const docsAlert = () => (state.docs || []).some(d => docStatus(d).level !== 'ok' && docStatus(d).level !== 'none');
 const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1>${right}
+    <a class="icon-btn bell docs-btn" href="#docs" aria-label="My documents${docsAlert() ? ' (something needs renewing)' : ''}">${DOC_ICON}${docsAlert() ? '<i class="dot dot-red"></i>' : ''}</a>
     <a class="icon-btn bell" href="#news" aria-label="Announcements${unread() ? ' (new)' : ''}">${BELL}${unread() ? '<i class="dot"></i>' : ''}</a>
     <a href="#me" aria-label="My profile" class="avatar-link">${face(state.me)}</a></header>`;
 
@@ -327,7 +331,8 @@ function newsRow(n, del = false) {
 }
 
 async function viewHome() {
-    const [services, fuel, bdays, news, listings] = await Promise.all([load.services(), load.fuel(), load.bdays(), load.news(), load.listings().catch(() => [])]);
+    const [services, fuel, bdays, news, listings, docs] = await Promise.all([load.services(), load.fuel(), load.bdays(), load.news(), load.listings().catch(() => []), load.docs()]);
+    const docWarn = docs.map(d => ({ d, st: docStatus(d) })).filter(x => x.st.level === 'bad' || x.st.level === 'warn').sort((a, b) => a.st.days - b.st.days)[0];
     syncKmpl(fuel);
     const today = bdays.filter(b => b.day === todayISO());
     const fresh = listings.filter(l => l.status === 'live').slice(0, 8);
@@ -345,6 +350,7 @@ async function viewHome() {
             <a href="#chat"><span>${ICON.chat}</span>Ask Pookie</a>
         </nav>
         ${isMod() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
+        ${docWarn ? `<a class="banner doc-warn ${docWarn.st.level}" href="#docs"><span class="b-ico">📄</span><span class="grow"><b>${esc(docName(docWarn.d))}</b> ${docWarn.st.days < 0 ? `expired on ${fmtDate(docWarn.d.expiry_date)}` : docWarn.st.days === 0 ? 'expires today' : `expires in ${docWarn.st.days} day${docWarn.st.days === 1 ? '' : 's'}`}. Renew it and update My documents.</span>${ICON.chev}</a>` : ''}
         ${today.length ? `<div class="banner bday"><span class="b-ico">🎂</span><span class="grow"><b>${esc(names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : names[0])}</b> ${names.length > 1 ? 'have' : 'has'} a birthday today</span><button class="btn sm wa" data-act="wish">Wish</button></div>` : ''}
         ${pushAsk ? `<div class="banner"><span class="b-ico">🔔</span><span class="grow">Get birthdays, Motomart posts and ride news as notifications</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
         ${feed.length ? `<section class="section"><h2>Latest from RWB <span class="h-acts">${feed.some(n => n.kind !== 'announcement') ? '<button data-act="clear-feed">Clear</button>' : ''}<a href="#news">See all</a></span></h2><div class="group">${feed.slice(0, 3).map(n => newsRow(n)).join('')}</div></section>` : ''}
@@ -697,6 +703,105 @@ function drawTrend(el, logs, svcs, tnks) {
     const pick = e => { const t = e.target.closest('.t-hit'); if (t) { active = Number(t.dataset.i); read(); } };
     const sv = el.querySelector('svg'); if (sv) { sv.addEventListener('pointermove', pick); sv.addEventListener('click', pick); }
     el.querySelectorAll('[data-per]').forEach(b => b.onclick = () => { try { localStorage.setItem('rwb-trend', b.dataset.per); } catch { /* ignore */ } drawTrend(el, logs, svcs, tnks); });
+}
+
+/* =================== My documents (private to each rider) =================== */
+const DOC_KINDS = {
+    dl: { name: 'Driving licence', short: 'DL', icon: '🪪', expiry: 'Valid till', number: 'DL number' },
+    rc: { name: 'Registration (RC)', short: 'RC', icon: '📘', expiry: 'Registration valid till', number: 'Registration number' },
+    puc: { name: 'Pollution (PUC)', short: 'PUC', icon: '🌫️', expiry: 'Valid till', number: 'Certificate number' },
+    insurance: { name: 'Insurance', short: 'Insurance', icon: '🛡️', expiry: 'Policy end date', number: 'Policy number' },
+    other: { name: 'Other document', short: 'Other', icon: '📄', expiry: 'Expiry date (if any)', number: 'Number (if any)' }
+};
+const docName = d => d.kind === 'other' ? (d.title || 'Document') : DOC_KINDS[d.kind].name;
+function docStatus(d) {
+    if (!d?.expiry_date) return { level: 'none', days: Infinity, text: '' };
+    const days = Math.round((new Date(d.expiry_date) - new Date(todayISO())) / 864e5);
+    if (days < 0) return { level: 'bad', days, text: 'Expired' };
+    if (days <= 30) return { level: 'warn', days, text: days === 0 ? 'Expires today' : `${days} day${days === 1 ? '' : 's'} left` };
+    return { level: 'ok', days, text: 'Valid' };
+}
+async function viewDocs() {
+    const docs = await load.docs(true);
+    const slot = k => docs.find(d => d.kind === k);
+    const card = (d, k) => {
+        const K = DOC_KINDS[k || d.kind], st = docStatus(d);
+        return `<button class="doc-card ${d ? 'has' : 'empty'} ${st.level}" data-act="${d ? 'doc' : 'doc-new'}" data-id="${d?.id ?? ''}" data-kind="${k || d.kind}">
+            <span class="doc-ico">${K.icon}</span>
+            <span class="grow"><b>${esc(d ? docName(d) : K.name)}</b>
+                <span class="small muted">${d ? esc([d.doc_number, d.expiry_date ? `${K.expiry.replace(' (if any)', '')} ${fmtDate(d.expiry_date)}` : ''].filter(Boolean).join(' · ') || `${d.files.length} page${d.files.length === 1 ? '' : 's'}`) : 'Tap to add'}</span></span>
+            ${d ? (st.text ? `<span class="doc-chip ${st.level}">${st.text}</span>` : '') : '<span class="doc-add">＋</span>'}</button>`;
+    };
+    const others = docs.filter(d => d.kind === 'other');
+    app.innerHTML = top('Documents') + `
+        <p class="doc-lock"><span>🔒</span>Only you can see these. Not admins, not other members.</p>
+        <section class="section"><h2>Your bike papers</h2><div class="doc-grid">${['dl', 'rc', 'puc', 'insurance'].map(k => card(slot(k), k)).join('')}</div></section>
+        <section class="section"><h2>Other documents</h2>${others.length ? `<div class="doc-grid">${others.map(d => card(d)).join('')}</div>` : ''}
+            <button class="btn ghost block" data-act="doc-new" data-kind="other" style="margin-top:${others.length ? 10 : 0}px">＋ Add another document</button>
+            <p class="small muted" style="margin-top:10px">For example: Aadhaar, PAN, service warranty, extended warranty or a ride permit. Photos are kept sharp enough to read; PDFs up to 3 MB.</p></section>`;
+    actions = {
+        doc: el => docView(docs.find(d => String(d.id) === el.dataset.id)),
+        'doc-new': el => docForm({ kind: el.dataset.kind, files: [] })
+    };
+}
+async function docView(d) {
+    const K = DOC_KINDS[d.kind], st = docStatus(d);
+    openSheet(docName(d), `
+        ${st.text ? `<p class="doc-chip ${st.level}" style="display:inline-block;margin-bottom:10px">${st.level === 'bad' ? `Expired on ${fmtDate(d.expiry_date)}` : st.level === 'warn' ? `${st.text} · renew soon` : `Valid till ${fmtDate(d.expiry_date)}`}</p>` : ''}
+        <dl class="facts">${d.doc_number ? `<dt>${K.number.replace(' (if any)', '')}</dt><dd>${esc(d.doc_number)}</dd>` : ''}${d.expiry_date ? `<dt>${K.expiry.replace(' (if any)', '')}</dt><dd>${fmtDate(d.expiry_date)}</dd>` : ''}${d.notes ? `<dt>Notes</dt><dd>${esc(d.notes)}</dd>` : ''}</dl>
+        <div class="doc-pages" id="pages">${d.files.length ? d.files.map((_, i) => `<div class="doc-page" data-i="${i}"><p class="small muted">Loading page ${i + 1}…</p></div>`).join('') : '<p class="muted small">No pages attached.</p>'}</div>
+        <div class="btns" style="margin-top:14px"><button class="btn ghost" data-x="edit">Edit</button><button class="btn danger" data-x="del">Delete</button></div>`, async body => {
+        body.querySelector('[data-x=edit]').onclick = () => docForm(d);
+        body.querySelector('[data-x=del]').onclick = e => { if (confirmBox(`Delete ${docName(d)} and its pages?`)) busy(e.target, async () => { await api.deleteDoc(d); await load.docs(true); closeSheet(); render(); toast('Deleted'); }); };
+        for (const [i, path] of d.files.entries()) {
+            const box = body.querySelector(`.doc-page[data-i="${i}"]`);
+            try {
+                const url = await api.docUrl(path), pdf = /\.pdf$/i.test(path) || url.startsWith('data:application/pdf');
+                if (box) box.innerHTML = (pdf ? `<iframe class="pdf" src="${esc(url)}" title="Page ${i + 1}"></iframe>` : `<img src="${esc(url)}" alt="${esc(docName(d))}, page ${i + 1}">`)
+                    + `<a class="small link-btn" href="${esc(url)}" target="_blank" rel="noopener" download>Open full size</a>`;
+            } catch { if (box) box.innerHTML = '<p class="small muted">Could not load this page. Check your internet.</p>'; }
+        }
+    });
+}
+function docForm(d) {
+    const K = DOC_KINDS[d.kind], editing = !!d.id;
+    let keep = [...(d.files || [])], add = [], drop = [];
+    openSheet(editing ? `Edit ${docName(d)}` : `Add ${K.name.toLowerCase()}`, `<form id="docf">
+        ${d.kind === 'other' ? `<label>Name<input name="title" required maxlength="80" placeholder="e.g. Aadhaar card" value="${esc(d.title || '')}"></label>` : ''}
+        <label>${K.number}<input name="doc_number" maxlength="60" autocapitalize="characters" value="${esc(d.doc_number || '')}"></label>
+        <label>${K.expiry}<input type="date" name="expiry_date" value="${esc(d.expiry_date || '')}"></label>
+        <fieldset><legend>Photos or PDF <span class="hint muted small">(up to 4 pages, e.g. front and back)</span></legend>
+            <div class="thumbs" id="dthumbs"></div>
+            <label class="file-pick"><input type="file" accept="image/*,.heic,.heif,application/pdf" multiple id="dpick"><span>📷 Add page</span></label></fieldset>
+        <label>Notes<input name="notes" maxlength="500" placeholder="Anything to remember (optional)" value="${esc(d.notes || '')}"></label>
+        <button class="btn block">${editing ? 'Save changes' : 'Save document'}</button></form>`, body => {
+        const f = body.querySelector('#docf'), thumbs = body.querySelector('#dthumbs');
+        const draw = () => {
+            thumbs.innerHTML = [...keep.map((p, i) => `<div class="thumb"><div class="doc-thumb">${/\.pdf$/i.test(p) ? 'PDF' : 'Page ' + (i + 1)}</div><button type="button" data-k="${i}" aria-label="Remove page">✕</button></div>`),
+                ...add.map((x, i) => `<div class="thumb">${x.type === 'application/pdf' ? '<div class="doc-thumb">PDF</div>' : `<img src="${x.url}" alt="">`}<button type="button" data-a="${i}" aria-label="Remove page">✕</button></div>`)].join('');
+        };
+        draw();
+        thumbs.onclick = e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.k != null) { drop.push(keep[b.dataset.k]); keep.splice(b.dataset.k, 1); } else { URL.revokeObjectURL(add[b.dataset.a].url); add.splice(b.dataset.a, 1); } draw(); };
+        body.querySelector('#dpick').onchange = async e => {
+            for (const fl of [...e.target.files]) {
+                if (keep.length + add.length >= 4) { toast('Up to 4 pages per document', true); break; }
+                try {
+                    let out;
+                    if (fl.type === 'application/pdf') { if (fl.size > 3e6) throw new Error('That PDF is over 3 MB. Add photos of the pages instead.'); out = fl; }
+                    else out = await compressImage(fl, 2200, 480e3);      /* sharper than bills so small print stays readable */
+                    add.push(Object.assign(out, { url: URL.createObjectURL(out) }));
+                } catch (err) { toast(err.message, true); }
+            }
+            e.target.value = ''; draw();
+        };
+        f.onsubmit = e => {
+            e.preventDefault();
+            const v = Object.fromEntries(new FormData(f));
+            if (!keep.length && !add.length && !v.doc_number.trim()) { toast('Add a photo of the document or at least its number', true); return; }
+            const rec = { id: d.id, kind: d.kind, title: d.kind === 'other' ? v.title.trim() : null, doc_number: v.doc_number.trim().toUpperCase() || null, expiry_date: v.expiry_date || null, notes: v.notes.trim() || null, files: keep };
+            busy(e.submitter, async () => { await api.saveDoc(rec, add, drop); await load.docs(true); closeSheet(); location.hash === '#docs' ? render() : (location.hash = '#docs'); toast('Saved'); });
+        };
+    });
 }
 
 /* =================== Mileage =================== */

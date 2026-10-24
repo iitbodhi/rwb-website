@@ -682,3 +682,30 @@ button.dial:active{transform:scale(.985)}
 .tabbar a.tab-brand{justify-content:center}
 .tabbar a.tab-brand[aria-current=page] .brand-ring{transform:translateY(-1px)}
 @media (max-width:360px){.brand-ring{margin-top:-10px}}
+
+/* My documents */
+.top .docs-btn{position:relative}
+.top .bell .dot.dot-red{background:#ef5b4c}
+.doc-lock{display:flex;gap:8px;align-items:center;font-size:.82rem;color:var(--muted);background:var(--surface);border:1px solid var(--hair);border-radius:12px;padding:9px 12px;margin-top:4px}
+.doc-grid{display:grid;gap:10px}
+@media (min-width:560px){.doc-grid{grid-template-columns:1fr 1fr}}
+.doc-card{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:13px 14px;border-radius:var(--r);background:var(--surface);border:1px solid var(--hair);box-shadow:var(--lift);cursor:pointer;color:inherit;font:inherit}
+.doc-card .grow{display:grid;gap:2px;min-width:0}
+.doc-card .grow b{font-weight:600;font-size:.95rem}
+.doc-card .grow .small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doc-card.empty{border-style:dashed;box-shadow:none;background:transparent}
+.doc-card.warn{border-color:rgba(242,163,58,.6)}
+.doc-card.bad{border-color:rgba(239,91,76,.65)}
+.doc-ico{flex:none;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:1.3rem;background:var(--paper-2)}
+.doc-card.has .doc-ico{background:var(--orange-soft)}
+.doc-add{flex:none;color:var(--orange);font-weight:700;font-size:1.2rem}
+.doc-chip{flex:none;font:700 .66rem/1 var(--body);letter-spacing:.05em;text-transform:uppercase;padding:6px 9px;border-radius:999px;background:var(--ok-soft);color:var(--ok)}
+.doc-chip.warn{background:rgba(242,163,58,.16);color:#c77b12}
+.doc-chip.bad{background:rgba(239,91,76,.16);color:var(--bad)}
+.doc-pages{display:grid;gap:12px}
+.doc-page img{width:100%;border-radius:12px;border:1px solid var(--line);background:#fff}
+.doc-page .link-btn{display:inline-block;margin-top:6px}
+.doc-thumb{width:100%;height:100%;border-radius:10px;background:var(--paper-2);display:grid;place-items:center;font:600 .75rem var(--body);color:var(--muted)}
+.banner.doc-warn.warn{border-color:rgba(242,163,58,.6)}
+.banner.doc-warn.bad{border-color:rgba(239,91,76,.65)}
+.doc-card .grow{flex:1 1 auto}

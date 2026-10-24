@@ -90,6 +90,28 @@ async function supabaseApi(url, key) {
         },
         billUrl: async path => must(await sb.storage.from(BILL_BUCKET).createSignedUrl(path, 600)).signedUrl,
 
+        /* ---- My documents (private) ---- */
+        docs: async () => must(await sb.from('documents').select('*').order('created_at')),
+        async saveDoc(rec, add = [], drop = []) {
+            const me = await uid(), files = (rec.files || []).filter(f => !drop.includes(f));
+            for (const file of add) {
+                const ext = file.type === 'application/pdf' ? 'pdf' : 'jpg';
+                const path = `${me}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+                must(await sb.storage.from('docs').upload(path, file, { contentType: file.type, upsert: false }));
+                files.push(path);
+            }
+            const { id, user_id, created_at, ...row } = { ...rec, files, updated_at: new Date().toISOString() };
+            const saved = id ? must(await sb.from('documents').update(row).eq('id', id).select().single())
+                             : must(await sb.from('documents').insert(row).select().single());
+            if (drop.length) await sb.storage.from('docs').remove(drop).catch(() => {});
+            return saved;
+        },
+        async deleteDoc(rec) {
+            if (rec.files?.length) await sb.storage.from('docs').remove(rec.files).catch(() => {});
+            must(await sb.from('documents').delete().eq('id', rec.id));
+        },
+        docUrl: async path => must(await sb.storage.from('docs').createSignedUrl(path, 900)).signedUrl,
+
         fuel: async () => must(await sb.from('fuel_logs').select('*').order('odometer_km', { ascending: true }).order('fill_date', { ascending: true })),
         async saveFuel(rec) {
             const { id, user_id, created_at, ...row } = rec;
@@ -212,6 +234,8 @@ async function supabaseApi(url, key) {
                 if (photos.length) await sb.storage.from(PHOTO_BUCKET).remove(photos);
                 const files = must(await sb.rpc('admin_begin_removal', { p_member_id: id })) || [];
                 if (files.length) must(await sb.storage.from(BILL_BUCKET).remove(files));
+                const docs = await sb.rpc('admin_removal_docs', { p_member_id: id }).then(r => r.data || []).catch(() => []);
+                if (docs.length) await sb.storage.from('docs').remove(docs).catch(() => {});
                 return must(await sb.rpc('admin_remove_member', { p_member_id: id }));
             }
         }
@@ -321,6 +345,17 @@ function demoApi() {
         },
         async deleteService(rec) { db.services = db.services.filter(s => s.id !== rec.id); save(); },
         async removeBill(rec) { const s = db.services.find(x => x.id === rec.id); s.bill_path = null; save(); return wait(s); },
+        docs: () => wait([...(db.docs ||= [])]),
+        async saveDoc(rec, add = [], drop = []) {
+            const files = (rec.files || []).filter(f => !drop.includes(f));
+            for (const f of add) files.push('demo:' + await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(f); }));
+            db.docs ||= [];
+            const row = { ...rec, files };
+            if (rec.id) Object.assign(db.docs.find(d => d.id === rec.id), row); else db.docs.push({ ...row, id: nid() });
+            save(); return wait(row);
+        },
+        async deleteDoc(rec) { db.docs = db.docs.filter(d => d.id !== rec.id); save(); },
+        docUrl: async path => path.slice(5),
         billUrl: async path => path.startsWith('demo:') ? path.slice(5) : 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="100%" height="100%" fill="#fff"/><text x="40" y="80" font-family="sans-serif" font-size="32">Sample bill</text><text x="40" y="140" font-family="sans-serif" font-size="20" fill="#666">Your uploaded bill shows here.</text></svg>'),
 
         fuel: () => wait([...db.fuel].sort((a, b) => a.odometer_km - b.odometer_km || a.fill_date.localeCompare(b.fill_date))),
