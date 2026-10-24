@@ -90,6 +90,26 @@ async function supabaseApi(url, key) {
         },
         billUrl: async path => must(await sb.storage.from(BILL_BUCKET).createSignedUrl(path, 600)).signedUrl,
 
+        /* ---- Events ---- */
+        events: async () => must(await sb.from('events').select('*').order('starts_at')),
+        eventCounts: async () => must(await sb.rpc('event_counts')) || [],
+        myRsvps: async () => must(await sb.from('event_rsvps').select('event_id,status,guests').eq('user_id', await uid())),
+        eventPeople: async id => must(await sb.rpc('event_people', { p_event: id })) || [],
+        async rsvp(eventId, status, guests = 0) { return must(await sb.from('event_rsvps').upsert({ event_id: eventId, user_id: await uid(), status, guests }, { onConflict: 'event_id,user_id' }).select().single()); },
+        async saveEvent(rec) {
+            const { id, created_by, created_at, updated_at, reminded_at, ...row } = rec;
+            return id ? must(await sb.from('events').update(row).eq('id', id).select().single())
+                      : must(await sb.from('events').insert(row).select().single());
+        },
+        deleteEvent: async id => must(await sb.from('events').delete().eq('id', id)),
+        expenses: async id => must(await sb.from('event_expenses').select('*').eq('event_id', id).order('created_at')),
+        async saveExpense(rec) {
+            const { id, created_by, created_at, ...row } = rec;
+            return id ? must(await sb.from('event_expenses').update(row).eq('id', id).select().single())
+                      : must(await sb.from('event_expenses').insert(row).select().single());
+        },
+        deleteExpense: async id => must(await sb.from('event_expenses').delete().eq('id', id)),
+
         /* ---- My documents (private) ---- */
         docs: async () => must(await sb.from('documents').select('*').order('created_at')),
         async saveDoc(rec, add = [], drop = []) {
@@ -292,6 +312,7 @@ function demoApi() {
     const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { /* ignore */ } };
     const clone = x => JSON.parse(JSON.stringify(x));
     const nid = () => ++db.nextId;
+    const personOf = uidv => { const m = db.members.find(x => x.user_id === uidv) || {}; return { full_name: m.full_name || 'Rider', nickname: m.nickname || '', avatar_url: m.avatar_url || null }; };
     const me = () => db.members.find(m => m.user_id === 'me');
     const wait = (v) => new Promise(r => setTimeout(() => r(clone(v)), 120));
     const authFns = [];
@@ -345,6 +366,36 @@ function demoApi() {
         },
         async deleteService(rec) { db.services = db.services.filter(s => s.id !== rec.id); save(); },
         async removeBill(rec) { const s = db.services.find(x => x.id === rec.id); s.bill_path = null; save(); return wait(s); },
+        /* events (demo) */
+        events() {
+            if (!db.events) {
+                const at = (d, h, m = 0) => { const x = new Date(); x.setDate(x.getDate() + d); x.setHours(h, m, 0, 0); return x.toISOString(); };
+                db.events = [
+                    { id: 501, title: 'Sunday breakfast ride', description: 'Meet at Nicco Park gate. Full tank please! Route: Kolkata to Kolaghat and back.', starts_at: at(1, 6), ends_at: at(1, 11), location: 'Nicco Park, Salt Lake', map_url: null, call_link: null, reminder_minutes: 60, allow_guests: true, status: 'live', created_by: 'u4' },
+                    { id: 502, title: 'Night ride to Princep Ghat', description: 'Easy city ride, chai at the end.', starts_at: at(9, 21, 30), ends_at: null, location: 'Princep Ghat', reminder_minutes: 60, allow_guests: false, status: 'live', created_by: 'u4' },
+                    { id: 503, title: 'Mandarmani overnighter', description: 'Two days, one night by the sea.', starts_at: at(-12, 5), ends_at: at(-11, 18), location: 'Mandarmani', reminder_minutes: 1440, allow_guests: true, status: 'live', created_by: 'u4' }];
+                db.rsvps = [{ event_id: 501, user_id: 'u2', status: 'going', guests: 0 }, { event_id: 501, user_id: 'u4', status: 'going', guests: 1 }, { event_id: 501, user_id: 'u5', status: 'maybe', guests: 0 },
+                    { event_id: 503, user_id: 'me', status: 'going', guests: 0 }, { event_id: 503, user_id: 'u2', status: 'going', guests: 0 }, { event_id: 503, user_id: 'u4', status: 'going', guests: 1 }];
+                db.expenses = [{ id: 601, event_id: 503, kind: 'expense', title: 'Hotel (2 rooms)', amount: 3200, paid_by: 'u4', split: [{ u: 'me', w: 1 }, { u: 'u2', w: 1 }, { u: 'u4', w: 2 }], created_by: 'u4', created_at: at(-12, 20) },
+                    { id: 602, event_id: 503, kind: 'expense', title: 'Dinner', amount: 1440, paid_by: 'me', split: [{ u: 'me', w: 1 }, { u: 'u2', w: 1 }, { u: 'u4', w: 2 }], created_by: 'me', created_at: at(-12, 22) },
+                    { id: 603, event_id: 503, kind: 'expense', title: 'Fuel top-up for the group', amount: 600, paid_by: 'u2', split: [{ u: 'me', w: 1 }, { u: 'u2', w: 1 }], created_by: 'u2', created_at: at(-11, 9) }];
+                save();
+            }
+            return wait([...db.events].sort((a, b) => a.starts_at.localeCompare(b.starts_at)));
+        },
+        eventCounts() {
+            const out = {}; for (const r of db.rsvps || []) { const o = out[r.event_id] ||= { event_id: r.event_id, going: 0, maybe: 0, guests: 0, faces: [] }; if (r.status === 'going') { o.going++; o.guests += r.guests; if (o.faces.length < 4) o.faces.push({ full_name: personOf(r.user_id).full_name, avatar_url: personOf(r.user_id).avatar_url }); } if (r.status === 'maybe') o.maybe++; }
+            return wait(Object.values(out));
+        },
+        myRsvps: () => wait((db.rsvps || []).filter(r => r.user_id === 'me')),
+        eventPeople: id => wait((db.rsvps || []).filter(r => r.event_id === id).map(r => ({ ...personOf(r.user_id), user_id: r.user_id, status: r.status, guests: r.guests }))),
+        async rsvp(eventId, status, guests = 0) { db.rsvps ||= []; const e = db.events.find(x => x.id === eventId); if (!e.allow_guests || status !== 'going') guests = 0; const r = db.rsvps.find(x => x.event_id === eventId && x.user_id === 'me'); if (r) Object.assign(r, { status, guests }); else db.rsvps.push({ event_id: eventId, user_id: 'me', status, guests }); save(); return wait({ status, guests }); },
+        async saveEvent(rec) { let row; if (rec.id) { row = db.events.find(e => e.id === rec.id); Object.assign(row, rec); } else { row = { status: 'live', ...rec, id: nid(), created_by: 'me' }; db.events.push(row); } save(); return wait(row); },
+        async deleteEvent(id) { db.events = db.events.filter(e => e.id !== id); save(); },
+        expenses: id => wait((db.expenses || []).filter(x => x.event_id === id)),
+        async saveExpense(rec) { db.expenses ||= []; if (rec.id) Object.assign(db.expenses.find(x => x.id === rec.id), rec); else db.expenses.push({ ...rec, id: nid(), created_by: 'me', created_at: new Date().toISOString() }); save(); return wait(rec); },
+        async deleteExpense(id) { db.expenses = db.expenses.filter(x => x.id !== id); save(); },
+
         docs: () => wait([...(db.docs ||= [])]),
         async saveDoc(rec, add = [], drop = []) {
             const files = (rec.files || []).filter(f => !drop.includes(f));

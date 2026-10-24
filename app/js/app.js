@@ -124,7 +124,7 @@ function mileageStats(logs) {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, crew: viewCrew };
+const ROUTES = { docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, crew: viewCrew, events: viewEvents };
 /* screens render one after another, so the screen the rider tapped last always wins */
 let renderChain = Promise.resolve();
 function render() { renderChain = renderChain.then(doRender, doRender); return renderChain; }
@@ -136,6 +136,8 @@ async function doRender() {
     if (name === 'admin' && !isAdmin()) { location.hash = '#home'; return; }
     if (name === 'admin' && param) state.adminTab = param;
     tabbar.hidden = false;
+    if (name !== 'chat') state.cameFrom = name;
+    document.body.dataset.route = name;
     tabbar.querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.tab === name));
     tabbar.querySelectorAll('a[aria-current]').forEach(a => a.setAttribute('aria-current', 'page'));
     try { await view(); } catch (e) { app.innerHTML = top('Oops') + `<div class="card empty"><b>Could not load</b>${esc(e.message)}<p style="margin-top:12px"><button class="btn sm" onclick="location.reload()">Try again</button></p></div>`; }
@@ -166,6 +168,7 @@ const globalActions = {
     'reset-demo': () => { if (confirmBox('Reset the demo data?')) { api.resetDemo(); Object.assign(state, { services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null, board: null, dir: null }); boot(); } },
     'add-service': () => serviceForm(),
     'add-fuel': () => fuelForm(),
+    'chat-close': () => { if (history.length > 1 && state.cameFrom) history.back(); else location.hash = '#home'; },
     'odo': () => odoSheet(),
     'wish': () => wishSheet(state.bdays.filter(b => b.day === todayISO()))
 };
@@ -331,7 +334,8 @@ function newsRow(n, del = false) {
 }
 
 async function viewHome() {
-    const [services, fuel, bdays, news, listings, docs] = await Promise.all([load.services(), load.fuel(), load.bdays(), load.news(), load.listings().catch(() => []), load.docs()]);
+    const [services, fuel, bdays, news, listings, docs, evd] = await Promise.all([load.services(), load.fuel(), load.bdays(), load.news(), load.listings().catch(() => []), load.docs(), loadEvents().catch(() => null)]);
+    const nextEvt = evd ? evd.events.filter(e => e.status === 'live' && !evtPast(e) && new Date(e.starts_at) - Date.now() < 14 * 864e5)[0] : null;
     const docWarn = docs.map(d => ({ d, st: docStatus(d) })).filter(x => x.st.level === 'bad' || x.st.level === 'warn').sort((a, b) => a.st.days - b.st.days)[0];
     syncKmpl(fuel);
     const today = bdays.filter(b => b.day === todayISO());
@@ -340,7 +344,7 @@ async function viewHome() {
     const names = today.map(b => b.full_name.split(' ')[0]);
     /* "Clear" hides birthdays, Motomart and member updates on this phone; admin announcements stay until an admin deletes them */
     let clearedAt = 0; try { clearedAt = Number(localStorage.getItem('rwb-feed-cleared') || 0); } catch { /* ignore */ }
-    const feed = news.filter(n => n.kind === 'announcement' || n.id > clearedAt);
+    const feed = news.filter(n => STICKY(n) || n.id > clearedAt);
     app.innerHTML = top(`Hi, ${firstName(state.me)}`) + `
         ${cluster(services, fuel)}
         <nav class="quick" aria-label="Quick actions">
@@ -351,9 +355,10 @@ async function viewHome() {
         </nav>
         ${isMod() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
         ${docWarn ? `<a class="banner doc-warn ${docWarn.st.level}" href="#docs"><span class="b-ico">📄</span><span class="grow"><b>${esc(docName(docWarn.d))}</b> ${docWarn.st.days < 0 ? `expired on ${fmtDate(docWarn.d.expiry_date)}` : docWarn.st.days === 0 ? 'expires today' : `expires in ${docWarn.st.days} day${docWarn.st.days === 1 ? '' : 's'}`}. Renew it and update My documents.</span>${ICON.chev}</a>` : ''}
+        ${nextEvt ? `<a class="banner evt-banner" href="#events/${nextEvt.id}"><span class="evt-mini">${evtTile(nextEvt)}</span><span class="grow"><b>${esc(nextEvt.title)}</b><span class="small muted">${esc(evtWhen(nextEvt, true))}${nextEvt.location ? ' · ' + esc(nextEvt.location) : ''}</span></span>${evd.mine[nextEvt.id] ? `<span class="evt-me ${evd.mine[nextEvt.id].status}">${RSVP_TXT[evd.mine[nextEvt.id].status]}</span>` : '<span class="evt-me ask">RSVP</span>'}</a>` : ''}
         ${today.length ? `<div class="banner bday"><span class="b-ico">🎂</span><span class="grow"><b>${esc(names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : names[0])}</b> ${names.length > 1 ? 'have' : 'has'} a birthday today</span><button class="btn sm wa" data-act="wish">Wish</button></div>` : ''}
         ${pushAsk ? `<div class="banner"><span class="b-ico">🔔</span><span class="grow">Get birthdays, Motomart posts and ride news as notifications</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
-        ${feed.length ? `<section class="section"><h2>Latest from RWB <span class="h-acts">${feed.some(n => n.kind !== 'announcement') ? '<button data-act="clear-feed">Clear</button>' : ''}<a href="#news">See all</a></span></h2><div class="group">${feed.slice(0, 3).map(n => newsRow(n)).join('')}</div></section>` : ''}
+        ${feed.length ? `<section class="section"><h2>Latest from RWB <span class="h-acts">${feed.some(n => !STICKY(n)) ? '<button data-act="clear-feed">Clear</button>' : ''}<a href="#news">See all</a></span></h2><div class="group">${feed.slice(0, 3).map(n => newsRow(n)).join('')}</div></section>` : ''}
         <section class="section"><h2>Fresh on Motomart <a href="#motomart">See all</a></h2>
             ${fresh.length ? `<div class="strip">${fresh.map(listingCard).join('')}</div>` : `<a class="group-row-card" href="#motomart"><span class="g-ico">${ICON.tag}</span><span class="grow"><b>Nothing for sale yet</b><span class="small muted">Selling old gear? Post it here for fellow riders.</span></span>${ICON.chev}</a>`}</section>
         <section class="section"><h2>Explore</h2><div class="group">
@@ -365,7 +370,7 @@ async function viewHome() {
         'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); render(); }),
         'push-later': () => { try { localStorage.setItem('rwb-push-dismissed', '1'); } catch { /* ignore */ } render(); },
         sell: () => listingForm(),
-        'clear-feed': () => { try { localStorage.setItem('rwb-feed-cleared', String(Math.max(0, ...news.map(n => n.id)))); } catch { /* ignore */ } render(); toast('Cleared. Admin announcements stay until an admin removes them.'); },
+        'clear-feed': () => { try { localStorage.setItem('rwb-feed-cleared', String(Math.max(0, ...news.map(n => n.id)))); } catch { /* ignore */ } render(); toast('Cleared. Announcements and events stay until an admin removes them.'); },
         listing: el => location.hash = '#motomart/' + el.dataset.id
     };
     app.querySelectorAll('[data-guide]').forEach(a => a.addEventListener('click', () => state.guideTab = a.dataset.guide));
@@ -703,6 +708,234 @@ function drawTrend(el, logs, svcs, tnks) {
     const pick = e => { const t = e.target.closest('.t-hit'); if (t) { active = Number(t.dataset.i); read(); } };
     const sv = el.querySelector('svg'); if (sv) { sv.addEventListener('pointermove', pick); sv.addEventListener('click', pick); }
     el.querySelectorAll('[data-per]').forEach(b => b.onclick = () => { try { localStorage.setItem('rwb-trend', b.dataset.per); } catch { /* ignore */ } drawTrend(el, logs, svcs, tnks); });
+}
+
+/* =================== Events (like WhatsApp events) + expense splitter =================== */
+const RSVP_TXT = { going: 'Going', maybe: 'Maybe', no: "Can't go" };
+const REMINDERS = [[null, 'No reminder'], [0, 'At start time'], [15, '15 minutes before'], [30, '30 minutes before'], [60, '1 hour before'], [120, '2 hours before'], [1440, '1 day before']];
+const evtPast = e => new Date(e.ends_at || new Date(new Date(e.starts_at).getTime() + 6 * 36e5)) < new Date();
+const tfmt = (iso, o) => new Date(iso).toLocaleString('en-IN', o);
+const evtTime = iso => tfmt(iso, { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase();
+function evtWhen(e, short = false) {
+    const day = tfmt(e.starts_at, short ? { weekday: 'short', day: 'numeric', month: 'short' } : { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    if (!e.ends_at) return `${day}, ${evtTime(e.starts_at)}`;
+    const sameDay = new Date(e.starts_at).toDateString() === new Date(e.ends_at).toDateString();
+    return `${day}, ${evtTime(e.starts_at)} – ${sameDay ? '' : tfmt(e.ends_at, { day: 'numeric', month: 'short' }) + ', '}${evtTime(e.ends_at)}`;
+}
+const evtTile = e => `<span class="evt-tile${e.status === 'cancelled' ? ' off' : ''}"><i>${tfmt(e.starts_at, { month: 'short' }).toUpperCase()}</i><b>${tfmt(e.starts_at, { day: 'numeric' })}</b></span>`;
+const mapsUrl = e => e.map_url || (e.location ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(e.location) : '');
+const toLocalInput = iso => { if (!iso) return ''; const d = new Date(iso); return new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16); };
+async function loadEvents(force) {
+    if (!force && state.evd && Date.now() - state.evd.at < 60e3) return state.evd;
+    const [events, counts, mine] = await Promise.all([api.events(), api.eventCounts().catch(() => []), api.myRsvps().catch(() => [])]);
+    return state.evd = { at: Date.now(), events, counts: Object.fromEntries(counts.map(c => [c.event_id, c])), mine: Object.fromEntries(mine.map(r => [r.event_id, r])) };
+}
+async function viewEvents() {
+    const d = await loadEvents(true);
+    if (state.param) { const e = d.events.find(x => String(x.id) === state.param); if (e) return eventPage(e); toast('That event is no longer available', true); }
+    const tab = state.evtTab || 'up';
+    const up = d.events.filter(e => !evtPast(e)), past = d.events.filter(evtPast).reverse();
+    const list = tab === 'up' ? up : past;
+    app.innerHTML = top('Events') + `
+        ${isMod() ? '<button class="btn block evt-create" data-act="evt-new">＋ Create event</button>' : ''}
+        <div class="seg" role="tablist" style="margin-top:${isMod() ? 14 : 0}px"><button role="tab" aria-selected="${tab === 'up'}" data-act="evt-tab" data-t="up">Upcoming${up.length ? ` (${up.length})` : ''}</button><button role="tab" aria-selected="${tab === 'past'}" data-act="evt-tab" data-t="past">Past</button></div>
+        ${list.length ? `<div class="list">${list.map(e => eventCard(e, d)).join('')}</div>`
+            : `<div class="card empty"><b>${tab === 'up' ? 'No upcoming events' : 'No past events yet'}</b>${tab === 'up' ? (isMod() ? 'Create a ride or meet-up and every member gets a notification.' : 'Rides and meet-ups posted by the RWB team show up here.') : ''}</div>`}`;
+    actions = { evt: el => location.hash = '#events/' + el.dataset.id, 'evt-new': () => eventForm(), 'evt-tab': el => { state.evtTab = el.dataset.t; viewEvents(); } };
+}
+function faceStack(faces = [], more = 0) {
+    return `<span class="faces">${faces.map(f => face(f, 'avatar xs')).join('')}${more > 0 ? `<span class="avatar xs more">+${more}</span>` : ''}</span>`;
+}
+function eventCard(e, d) {
+    const c = d.counts[e.id] || { going: 0, maybe: 0, guests: 0, faces: [] }, me = d.mine[e.id];
+    const n = c.going + c.guests;
+    return `<button class="card tap evt-card${e.status === 'cancelled' ? ' cancelled' : ''}" data-act="evt" data-id="${e.id}">
+        ${evtTile(e)}
+        <span class="grow"><b>${esc(e.title)}</b><span class="small muted">${esc(evtWhen(e, true))}</span>${e.location ? `<span class="small muted">📍 ${esc(e.location)}</span>` : ''}
+            <span class="evt-meta">${e.status === 'cancelled' ? '<span class="badge">Cancelled</span>' : `${n ? faceStack(c.faces, c.going - c.faces.length) : ''}<span class="small muted">${n ? `${n} going` : 'Be the first to join'}${c.maybe ? ` · ${c.maybe} maybe` : ''}</span>`}</span></span>
+        ${me ? `<span class="evt-me ${me.status}">${RSVP_TXT[me.status]}</span>` : ''}</button>`;
+}
+async function eventPage(e) {
+    const d = state.evd, me = d.mine[e.id], mod = isMod(), myUid = state.myId ??= await api.myId();
+    const people = await api.eventPeople(e.id).catch(() => []);
+    const going = people.filter(p => p.status === 'going'), maybe = people.filter(p => p.status === 'maybe'), no = people.filter(p => p.status === 'no');
+    const guests = going.reduce((a, p) => a + p.guests, 0);
+    const inGroup = me && me.status !== 'no';
+    const live = e.status === 'live', past = evtPast(e);
+    const ppl = (list, label) => list.length ? `<details class="evt-people"${label === 'Going' ? ' open' : ''}><summary><b>${label}</b> <span class="muted">${list.length}${label === 'Going' && guests ? ` + ${guests} guest${guests > 1 ? 's' : ''}` : ''}</span></summary>
+        <div class="evt-plist">${list.map(p => `<div class="row">${face(p, 'avatar sm')}<span class="grow">${esc(p.full_name)}${p.user_id === myUid ? ' <span class="muted">(you)</span>' : ''}</span>${p.guests ? '<span class="badge">+1 guest</span>' : ''}</div>`).join('')}</div></details>` : '';
+    app.innerHTML = top('Events') + `
+        <a class="back-link" href="#events">‹ All events</a>
+        <section class="card evt-hero${live ? '' : ' cancelled'}">
+            <div class="row" style="align-items:flex-start">${evtTile(e)}<span class="grow"><h2 class="evt-title">${esc(e.title)}</h2>${!live ? '<span class="badge">Cancelled</span>' : past ? '<span class="badge">Ended</span>' : ''}</span></div>
+            <div class="evt-facts">
+                <p><span>🗓</span>${esc(evtWhen(e))}</p>
+                ${e.location ? `<p><span>📍</span><span>${esc(e.location)}${mapsUrl(e) ? ` · <a href="${esc(mapsUrl(e))}" target="_blank" rel="noopener">Open in Maps</a>` : ''}</span></p>` : ''}
+                ${e.call_link ? `<p><span>📞</span><a href="${esc(e.call_link)}" target="_blank" rel="noopener">Join the call</a></p>` : ''}
+                ${e.reminder_minutes != null ? `<p><span>⏰</span>Reminder ${esc(REMINDERS.find(r => r[0] === e.reminder_minutes)?.[1].toLowerCase() || '')} for people going</p>` : ''}
+            </div>
+            ${e.description ? `<p class="evt-desc">${linkify(e.description)}</p>` : ''}
+            ${live && !past ? `<div class="evt-rsvp" role="group" aria-label="Your response">${['going', 'maybe', 'no'].map(k => `<button class="${me?.status === k ? 'on ' + k : ''}" data-act="rsvp" data-s="${k}" aria-pressed="${me?.status === k}">${{ going: '✓ Going', maybe: '? Maybe', no: "✕ Can't go" }[k]}</button>`).join('')}</div>
+                ${e.allow_guests && me?.status === 'going' ? `<label class="switch" style="margin-top:10px">Bringing a guest (+1)<input type="checkbox" id="evt-guest"${me.guests ? ' checked' : ''}></label>` : ''}` : ''}
+            <div class="btns evt-actions"><button class="btn sm ghost" data-act="evt-share">Share</button>${live && !past ? `<a class="btn sm ghost" href="${esc(gcalUrl(e))}" target="_blank" rel="noopener">Add to calendar</a>` : ''}</div>
+        </section>
+        <section class="section"><h2>Who's coming</h2><div class="card">${people.length ? ppl(going, 'Going') + ppl(maybe, 'Maybe') + ppl(no, "Can't go") : '<p class="muted small">No responses yet.</p>'}</div></section>
+        <section class="section" id="exp-sec"><h2>Expenses</h2><div id="exp-body">${inGroup || mod ? '<p class="muted small">Loading…</p>' : `<div class="card empty"><b>Split costs with the group</b>Respond Going or Maybe to see and add shared expenses for this event.</div>`}</div></section>
+        ${mod ? `<section class="section"><h2>Organiser</h2><div class="btns">${live ? '<button class="btn ghost" data-act="evt-edit">Edit</button><button class="btn ghost" data-act="evt-cancel">Cancel event</button>' : ''}<button class="btn danger" data-act="evt-del">Delete</button></div></section>` : ''}`;
+    actions = {
+        rsvp: b => busy(b, async () => { await api.rsvp(e.id, b.dataset.s, b.dataset.s === 'going' ? (me?.guests || 0) : 0); await loadEvents(true); toast(b.dataset.s === 'going' ? "You're going 🏍️" : b.dataset.s === 'maybe' ? 'Marked as maybe' : 'Marked as can\'t go'); render(); }),
+        'evt-share': () => window.open(waShare(`📅 *${e.title}*\n🗓 ${evtWhen(e)}${e.location ? `\n📍 ${e.location}${mapsUrl(e) ? ' ' + mapsUrl(e) : ''}` : ''}${e.description ? `\n\n${e.description}` : ''}\n\n👉 RSVP in the RWB App: https://roninwb.in/app/#events/${e.id}`), '_blank', 'noopener'),
+        'evt-edit': () => eventForm(e),
+        'evt-cancel': b => { if (confirmBox(`Cancel “${e.title}”? Everyone gets a notification.`)) busy(b, async () => { await api.saveEvent({ id: e.id, status: 'cancelled' }); await loadEvents(true); toast('Event cancelled'); render(); }); },
+        'evt-del': b => { if (confirmBox(`Delete “${e.title}” with its RSVPs and expenses? This can't be undone.`)) busy(b, async () => { await api.deleteEvent(e.id); await loadEvents(true); location.hash = '#events'; toast('Deleted'); }); }
+    };
+    const g = $('#evt-guest'); if (g) g.onchange = () => busy(null, async () => { await api.rsvp(e.id, 'going', g.checked ? 1 : 0); await loadEvents(true); toast(g.checked ? 'Guest added' : 'Guest removed'); render(); });
+    if (inGroup || mod) drawExpenses(e, people, myUid);
+}
+function gcalUrl(e) {
+    const z = iso => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const end = e.ends_at || new Date(new Date(e.starts_at).getTime() + 2 * 36e5).toISOString();
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(e.title)}&dates=${z(e.starts_at)}/${z(end)}&details=${encodeURIComponent((e.description || '') + '\n\nhttps://roninwb.in/app/#events/' + e.id)}&location=${encodeURIComponent(e.location || '')}`;
+}
+function eventForm(e = null) {
+    const r = e ? { ...e } : { reminder_minutes: 60, allow_guests: false };
+    const start = toLocalInput(r.starts_at), end = toLocalInput(r.ends_at);
+    openSheet(e ? 'Edit event' : 'Create event', `<form id="evf" class="evt-form">
+        <input name="title" class="evt-name" required maxlength="100" placeholder="Event name" value="${esc(r.title || '')}" aria-label="Event name">
+        <textarea name="description" maxlength="2000" placeholder="Description (optional)" aria-label="Description">${esc(r.description || '')}</textarea>
+        <div class="grid2"><label>Date<input type="date" name="d1" required value="${start.slice(0, 10)}"></label><label>Time<input type="time" name="t1" required value="${start.slice(11, 16)}"></label></div>
+        <label class="switch">Add end time<input type="checkbox" id="has-end"${end ? ' checked' : ''}></label>
+        <div class="grid2" id="end-wrap"${end ? '' : ' hidden'}><label>End date<input type="date" name="d2" value="${end.slice(0, 10)}"></label><label>End time<input type="time" name="t2" value="${end.slice(11, 16)}"></label></div>
+        <label>Location<input name="location" maxlength="200" placeholder="e.g. Nicco Park gate, Salt Lake" value="${esc(r.location || '')}"></label>
+        <label>Google Maps link <span class="hint">(optional; we'll search the location if empty)</span><input name="map_url" type="url" inputmode="url" placeholder="https://maps.app.goo.gl/…" value="${esc(r.map_url || '')}"></label>
+        <label>Call link <span class="hint">(optional, WhatsApp or Meet)</span><input name="call_link" type="url" inputmode="url" placeholder="https://call.whatsapp.com/…" value="${esc(r.call_link || '')}"></label>
+        <label>Reminder<select name="reminder">${REMINDERS.map(([v, t]) => `<option value="${v ?? ''}"${v === r.reminder_minutes ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label class="switch"><span>Allow guests<span class="hint" style="display:block">People can bring one additional guest</span></span><input type="checkbox" name="allow_guests"${r.allow_guests ? ' checked' : ''}></label>
+        <button class="btn block">${e ? 'Save changes' : 'Publish event'}</button>
+        ${e ? '' : '<p class="small muted" style="text-align:center">Every member gets a notification.</p>'}</form>`, body => {
+        const f = body.querySelector('#evf'), he = body.querySelector('#has-end');
+        he.onchange = () => { body.querySelector('#end-wrap').hidden = !he.checked; if (he.checked && !f.d2.value) f.d2.value = f.d1.value; };
+        if (!e) setTimeout(() => f.title.focus(), 60);
+        f.onsubmit = ev => {
+            ev.preventDefault();
+            const v = Object.fromEntries(new FormData(f));
+            const starts = new Date(`${v.d1}T${v.t1}`), ends = he.checked && v.d2 && v.t2 ? new Date(`${v.d2}T${v.t2}`) : null;
+            if (isNaN(starts)) { toast('Pick a date and time', true); return; }
+            if (ends && ends <= starts) { toast('The end time must be after the start', true); return; }
+            if (!e && starts < new Date(Date.now() - 36e5) && !confirmBox('This event is in the past. Publish anyway?')) return;
+            const rec = { id: e?.id, title: v.title.trim(), description: v.description.trim() || null, starts_at: starts.toISOString(), ends_at: ends ? ends.toISOString() : null,
+                location: v.location.trim() || null, map_url: v.map_url.trim() || null, call_link: v.call_link.trim() || null,
+                reminder_minutes: v.reminder === '' ? null : Number(v.reminder), allow_guests: !!f.allow_guests.checked };
+            busy(ev.submitter, async () => { const saved = await api.saveEvent(rec); await loadEvents(true); closeSheet(); toast(e ? 'Saved. Members are told if the time or place changed.' : 'Published. Members are notified.'); location.hash = '#events/' + (e?.id ?? saved?.id ?? ''); render(); });
+        };
+    });
+}
+
+/* ---------- expense splitter ---------- */
+const paise = v => Math.round(Number(v) * 100);
+const rsP = p => '₹' + (Math.abs(p) / 100).toLocaleString('en-IN', { minimumFractionDigits: p % 100 ? 2 : 0, maximumFractionDigits: 2 });
+function balancesOf(exps) {
+    const bal = new Map(), add = (u, v) => bal.set(u, (bal.get(u) || 0) + v);
+    for (const x of exps) {
+        const amt = paise(x.amount), W = x.split.reduce((a, s) => a + s.w, 0);
+        add(x.paid_by, amt);
+        let given = 0; const parts = x.split.map(s => { const p = Math.floor(amt * s.w / W); given += p; return [s.u, p]; });
+        for (let i = 0; given < amt; i = (i + 1) % parts.length) { parts[i][1]++; given++; }     /* leftover paise, one each */
+        parts.forEach(([u, p]) => add(u, -p));
+    }
+    return bal;
+}
+/* fewest payments: repeatedly settle the biggest debtor with the biggest creditor (at most one fewer payment than people) */
+function settleUp(bal) {
+    const cr = [...bal].filter(([, v]) => v > 0).map(([u, v]) => ({ u, v })), dr = [...bal].filter(([, v]) => v < 0).map(([u, v]) => ({ u, v: -v })), out = [];
+    while (cr.length && dr.length) {
+        cr.sort((a, b) => b.v - a.v); dr.sort((a, b) => b.v - a.v);
+        const c = cr[0], d = dr[0], amt = Math.min(c.v, d.v);
+        if (amt > 0) out.push({ from: d.u, to: c.u, amt });
+        c.v -= amt; d.v -= amt;
+        if (!c.v) cr.shift(); if (!d.v) dr.shift();
+    }
+    return out;
+}
+async function drawExpenses(e, people, myUid) {
+    const box = $('#exp-body'); if (!box) return;
+    let exps; try { exps = await api.expenses(e.id); } catch (err) { box.innerHTML = `<p class="muted small">${esc(err.message)}</p>`; return; }
+    const names = Object.fromEntries(people.map(p => [p.user_id, p.user_id === myUid ? 'You' : (p.nickname || p.full_name.split(' ')[0])]));
+    const nm = u => names[u] || 'Someone';
+    const crowd = people.filter(p => p.status !== 'no');
+    const bal = balancesOf(exps), mine = bal.get(myUid) || 0;
+    const spent = exps.filter(x => x.kind === 'expense').reduce((a, x) => a + paise(x.amount), 0);
+    const myShare = exps.filter(x => x.kind === 'expense').reduce((a, x) => { const W = x.split.reduce((s, y) => s + y.w, 0), me = x.split.find(y => y.u === myUid); return a + (me ? paise(x.amount) * me.w / W : 0); }, 0);
+    const transfers = settleUp(bal);
+    box.innerHTML = `<div class="card exp-sum">
+            <div class="exp-stats"><div><b>${rsP(spent)}</b><span>group spent</span></div><div><b>${rsP(Math.round(myShare))}</b><span>your share</span></div>
+                <div><b class="${mine > 0 ? 'pos' : mine < 0 ? 'neg' : ''}">${mine ? rsP(mine) : '₹0'}</b><span>${mine > 0 ? 'you get back' : mine < 0 ? 'you owe' : 'all settled'}</span></div></div>
+            <div class="btns"><button class="btn" data-act="exp-add">＋ Add expense</button><button class="btn ghost" data-act="exp-settle"${exps.length ? '' : ' disabled'}>Settle up</button></div></div>
+        ${exps.length ? `<div class="group" style="margin-top:10px">${[...exps].reverse().map(x => x.kind === 'settlement'
+            ? `<div class="exp-row settle"><span class="exp-ico">🤝</span><span class="grow"><b>${esc(nm(x.paid_by))} paid ${esc(nm(x.split[0].u))}</b><span class="small muted">Settlement · ${tfmt(x.created_at, { day: 'numeric', month: 'short' })}</span></span><span class="num">${rsP(paise(x.amount))}</span>${x.created_by === myUid || isMod() ? `<button class="icon-btn" data-act="exp-del" data-id="${x.id}" aria-label="Undo this payment">✕</button>` : ''}</div>`
+            : `<button class="exp-row" data-act="exp-open" data-id="${x.id}"><span class="exp-ico">🧾</span><span class="grow"><b>${esc(x.title || 'Expense')}</b><span class="small muted">${esc(nm(x.paid_by))} paid · split ${x.split.length} way${x.split.length > 1 ? 's' : ''}${x.split.some(s => s.w > 1) ? ' (with guests)' : ''}</span></span><span class="num">${rsP(paise(x.amount))}</span></button>`).join('')}</div>`
+            : '<p class="small muted" style="margin-top:10px">No expenses yet. Add fuel, food, hotel or anything the group shares, and choose who it’s split between.</p>'}`;
+    actions['exp-add'] = () => expenseForm(e, crowd, myUid);
+    actions['exp-open'] = el => { const x = exps.find(y => String(y.id) === el.dataset.id); if (x) expenseView(e, x, crowd, myUid, nm); };
+    actions['exp-del'] = el => { if (confirmBox('Undo this payment?')) busy(el, async () => { await api.deleteExpense(Number(el.dataset.id)); drawExpenses(e, people, myUid); }); };
+    actions['exp-settle'] = () => settleSheet(e, bal, transfers, people, myUid, nm, spent);
+}
+function expenseView(e, x, crowd, myUid, nm) {
+    const W = x.split.reduce((a, s) => a + s.w, 0), canEdit = x.created_by === myUid || isMod();
+    openSheet(x.title || 'Expense', `<p class="exp-amt">${rsP(paise(x.amount))}</p><p class="muted small" style="margin-bottom:12px">Paid by <b>${esc(nm(x.paid_by))}</b> · added ${tfmt(x.created_at, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</p>
+        <div class="group">${x.split.map(s => `<div><span class="grow">${esc(nm(s.u))}${s.w > 1 ? ` <span class="muted small">(+${s.w - 1} guest)</span>` : ''}</span><span class="num">${rsP(Math.round(paise(x.amount) * s.w / W))}</span></div>`).join('')}</div>
+        ${canEdit ? '<div class="btns" style="margin-top:14px"><button class="btn ghost" data-x="edit">Edit</button><button class="btn danger" data-x="del">Delete</button></div>' : ''}`, body => {
+        if (!canEdit) return;
+        body.querySelector('[data-x=edit]').onclick = () => expenseForm(e, crowd, myUid, x);
+        body.querySelector('[data-x=del]').onclick = ev => { if (confirmBox('Delete this expense?')) busy(ev.target, async () => { await api.deleteExpense(x.id); closeSheet(); render(); toast('Deleted'); }); };
+    });
+}
+function expenseForm(e, crowd, myUid, x = null) {
+    const w = p => 1 + (p.guests || 0);
+    const inSplit = new Set(x ? x.split.map(s => s.u) : crowd.map(p => p.user_id));
+    openSheet(x ? 'Edit expense' : 'Add expense', `<form id="exf">
+        <label>What was it for?<input name="title" required maxlength="80" placeholder="e.g. Breakfast at Kolaghat" value="${esc(x?.title || '')}"></label>
+        <div class="grid2"><label>Amount (₹)<input name="amount" type="number" required min="1" max="1000000" step="0.01" inputmode="decimal" value="${x ? x.amount : ''}"></label>
+            <label>Paid by<select name="paid_by">${crowd.map(p => `<option value="${p.user_id}"${(x ? x.paid_by : myUid) === p.user_id ? ' selected' : ''}>${esc(p.user_id === myUid ? 'You' : p.full_name)}</option>`).join('')}</select></label></div>
+        <fieldset><legend>Split between <button type="button" class="link-btn" id="all" style="margin-left:8px">All</button> <button type="button" class="link-btn" id="none" style="margin-left:8px">None</button></legend>
+            <div class="split-list">${crowd.map(p => `<label class="split-row"><input type="checkbox" value="${p.user_id}"${inSplit.has(p.user_id) ? ' checked' : ''}>${face(p, 'avatar xs')}<span class="grow">${esc(p.user_id === myUid ? 'You' : p.full_name)}${p.guests ? ' <span class="muted small">+1 guest, 2 shares</span>' : ''}</span><span class="num small muted" data-share></span></label>`).join('')}</div></fieldset>
+        <p class="calc" id="each"></p>
+        <button class="btn block">${x ? 'Save changes' : 'Add expense'}</button></form>`, body => {
+        const f = body.querySelector('#exf'), boxes = [...body.querySelectorAll('.split-row input')];
+        const upd = () => {
+            const amt = paise(f.amount.value || 0), chosen = crowd.filter(p => boxes.find(b => b.value === p.user_id).checked), W = chosen.reduce((a, p) => a + w(p), 0);
+            boxes.forEach(b => { const p = crowd.find(q => q.user_id === b.value); b.closest('label').querySelector('[data-share]').textContent = b.checked && amt && W ? rsP(Math.round(amt * w(p) / W)) : ''; });
+            body.querySelector('#each').textContent = chosen.length && amt ? `Split ${chosen.length} way${chosen.length > 1 ? 's' : ''}` : '';
+        };
+        f.oninput = upd; upd();
+        body.querySelector('#all').onclick = () => { boxes.forEach(b => b.checked = true); upd(); };
+        body.querySelector('#none').onclick = () => { boxes.forEach(b => b.checked = false); upd(); };
+        f.onsubmit = ev => {
+            ev.preventDefault();
+            const chosen = crowd.filter(p => boxes.find(b => b.value === p.user_id).checked);
+            if (!chosen.length) { toast('Pick at least one person', true); return; }
+            const rec = { id: x?.id, event_id: e.id, kind: 'expense', title: f.title.value.trim(), amount: Math.round(Number(f.amount.value) * 100) / 100, paid_by: f.paid_by.value, split: chosen.map(p => ({ u: p.user_id, w: w(p) })) };
+            busy(ev.submitter, async () => { await api.saveExpense(rec); closeSheet(); render(); toast(x ? 'Saved' : 'Expense added'); });
+        };
+    });
+}
+function settleSheet(e, bal, transfers, people, myUid, nm, spent) {
+    const full = u => (people.find(p => p.user_id === u)?.full_name) || 'Someone';
+    const lines = [...bal].filter(([, v]) => v).sort((a, b) => b[1] - a[1]);
+    const shareText = () => `💸 *${e.title}*: settle up\nGroup spent ${rsP(spent)}\n\n${transfers.length ? transfers.map(t => `• ${full(t.from)} → ${full(t.to)}: *${rsP(t.amt)}*`).join('\n') : 'Everyone is settled ✅'}\n\nDetails in the RWB App: https://roninwb.in/app/#events/${e.id}`;
+    openSheet('Settle up', `
+        <p class="small muted" style="margin-bottom:10px">The fewest payments that clear everyone's balance.</p>
+        ${transfers.length ? `<div class="group">${transfers.map((t, i) => `<div class="xfer"><span class="grow"><b>${esc(nm(t.from))}</b> <span class="muted">pays</span> <b>${esc(nm(t.to))}</b></span><span class="num">${rsP(t.amt)}</span>${t.from === myUid || t.to === myUid || isMod() ? `<button class="btn sm ghost" data-paid="${i}">Mark paid</button>` : ''}</div>`).join('')}</div>`
+            : '<div class="card empty"><b>All settled ✅</b>Nobody owes anything.</div>'}
+        ${lines.length ? `<details class="tech" style="margin-top:12px"><summary>Everyone's balance</summary><div class="group" style="margin-top:8px">${lines.map(([u, v]) => `<div><span class="grow">${esc(full(u))}</span><span class="num ${v > 0 ? 'pos' : 'neg'}">${v > 0 ? 'gets ' : 'owes '}${rsP(v)}</span></div>`).join('')}</div></details>` : ''}
+        <button class="btn wa block" id="xshare" style="margin-top:14px">Share on WhatsApp</button>`, body => {
+        body.querySelector('#xshare').onclick = () => window.open(waShare(shareText()), '_blank', 'noopener');
+        body.querySelectorAll('[data-paid]').forEach(b => b.onclick = () => {
+            const t = transfers[Number(b.dataset.paid)];
+            if (!confirmBox(`Record that ${full(t.from)} paid ${full(t.to)} ${rsP(t.amt)}?`)) return;
+            busy(b, async () => { await api.saveExpense({ event_id: e.id, kind: 'settlement', title: 'Settlement', amount: t.amt / 100, paid_by: t.from, split: [{ u: t.to, w: 1 }] }); closeSheet(); render(); toast('Payment recorded'); });
+        });
+    });
 }
 
 /* =================== My documents (private to each rider) =================== */
@@ -1288,7 +1521,8 @@ async function drawPushState() {
 }
 
 /* =================== Announcements =================== */
-const KIND_ICON = { announcement: '📣', birthday: '🎂', motomart: '🛒', member: '🏍️', admin: '🛡️' };
+const STICKY = n => n.kind === 'announcement' || n.kind === 'event';   /* only admins can remove these */
+const KIND_ICON = { event: '📅', announcement: '📣', birthday: '🎂', motomart: '🛒', member: '🏍️', admin: '🛡️' };
 function timeAgo(iso) {
     const s = (Date.now() - new Date(iso)) / 1000;
     if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + ' min ago'; if (s < 86400) return Math.floor(s / 3600) + ' h ago';
@@ -1307,8 +1541,8 @@ async function viewNews() {
     const all = await load.news(true);
     try { if (all[0]) localStorage.setItem('rwb-news-seen', String(Math.max(...all.map(n => n.id)))); } catch { /* ignore */ }
     let clearedAt = 0; try { clearedAt = Number(localStorage.getItem('rwb-feed-cleared') || 0); } catch { /* ignore */ }
-    const news = all.filter(n => n.kind === 'announcement' || n.id > clearedAt);
-    const canClear = news.some(n => n.kind !== 'announcement');
+    const news = all.filter(n => STICKY(n) || n.id > clearedAt);
+    const canClear = news.some(n => !STICKY(n));
     app.innerHTML = top('News', canClear ? `<button class="icon-btn clear-btn" data-act="clear-news" aria-label="Clear notifications" title="Clear">${ICON_CLEAR}</button>` : '') + `
         ${isAdmin() ? `<details class="howto" style="margin-bottom:6px"><summary>Post an announcement</summary>
             <form id="ann" style="padding-bottom:16px"><label>Title<input name="title" required maxlength="120" placeholder="e.g. Sunday breakfast ride"></label>
@@ -1317,7 +1551,7 @@ async function viewNews() {
             <button class="btn block">Send to all members</button></form></details>` : ''}
         <section class="section">${news.length ? `<div class="group">${news.map(n => newsRow(n, isAdmin())).join('')}</div>` : `<div class="card empty"><b>${all.length ? 'All caught up' : 'No news yet'}</b>Announcements, birthdays and new Motomart posts show up here.</div>`}</section>`;
     actions = {
-        'clear-news': () => { try { localStorage.setItem('rwb-feed-cleared', String(Math.max(0, ...all.map(n => n.id)))); } catch { /* ignore */ } render(); toast('Cleared. Admin announcements stay.'); }, 'del-news': b => { if (confirmBox('Delete this from the feed?')) busy(b, async () => { await api.deleteNews(Number(b.dataset.id)); render(); }); } };
+        'clear-news': () => { try { localStorage.setItem('rwb-feed-cleared', String(Math.max(0, ...all.map(n => n.id)))); } catch { /* ignore */ } render(); toast('Cleared. Announcements and events stay.'); }, 'del-news': b => { if (confirmBox('Delete this from the feed?')) busy(b, async () => { await api.deleteNews(Number(b.dataset.id)); render(); }); } };
     const f = $('#ann');
     if (f) f.onsubmit = e => {
         e.preventDefault(); const d = Object.fromEntries(new FormData(f));
@@ -1533,7 +1767,7 @@ function riderContext() {
 async function viewChat() {
     loadChat();
     await Promise.all([load.services().catch(() => []), load.fuel().catch(() => [])]);
-    app.innerHTML = top('Pookie', chat.msgs.length ? '<button class="btn sm ghost" data-act="clear">New chat</button>' : '') + `
+    app.innerHTML = top('Pookie', (chat.msgs.length ? '<button class="btn sm ghost" data-act="clear">New chat</button>' : '') + '<button class="icon-btn chat-close" data-act="chat-close" aria-label="Close Pookie">✕</button>') + `
         <div id="chatlog" class="chatlog" aria-live="polite"></div>
         <form id="ask" class="askbar">
             <div id="att" class="att" hidden></div>
