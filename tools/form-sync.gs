@@ -4,6 +4,8 @@
  * 1. Sheet → app: every new join-form registration reaches the app within seconds.
  * 2. App → sheet: members approved in the app get a new row here, and changes members make in
  *    the app (Me → Edit) update their row. Rows added by the app say "RWB App" in the "Added via" column.
+ * 3. A member removed by an admin in the app is removed from this sheet. Their row is first copied to a
+ *    "Removed members" tab (with the date), so nothing is lost by mistake.
  *
  * SET-UP (once):
  *   a) In this Google Sheet: Extensions → Apps Script → replace everything with this file → fill in SYNC_SECRET → Save.
@@ -132,6 +134,7 @@ function doPost(e) {
   let body;
   try { body = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: 'bad request' }); }
   if (!body || body.secret !== SYNC_SECRET) return json_({ ok: false, error: 'not allowed' });
+  if (body.action === 'delete') return removeRows_(body.phone, body.full_name);
   const m = body.member || {};
   if (!m.phone || !m.full_name) return json_({ ok: false, error: 'missing name or number' });
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
@@ -155,6 +158,26 @@ function doPost(e) {
     row[col.added] = 'RWB App';
     sheet.appendRow(row);
     return json_({ ok: true, result: 'added', row: sheet.getLastRow() });
+  } finally { lock.releaseLock(); }
+}
+
+/** Removes every row with this WhatsApp number (people sometimes filled the form twice), keeping a copy. */
+function removeRows_(phone, name) {
+  const p10 = String(phone || '').replace(/\D/g, '').slice(-10);
+  if (p10.length !== 10) return json_({ ok: false, error: 'missing number' });
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const sheet = responsesSheet_(), col = columns_(sheet), last = sheet.getLastRow(), width = sheet.getLastColumn();
+    if (last < 2 || col.phone === undefined) return json_({ ok: true, result: 'not found' });
+    const data = sheet.getRange(2, 1, last - 1, width).getValues();
+    const rows = data.map((r, i) => String(r[col.phone]).replace(/\D/g, '').slice(-10) === p10 ? i + 2 : 0).filter(Boolean);
+    if (!rows.length) return json_({ ok: true, result: 'not found' });
+    const ss = SpreadsheetApp.getActive();
+    let bin = ss.getSheetByName('Removed members');
+    if (!bin) { bin = ss.insertSheet('Removed members'); bin.appendRow(['Removed on'].concat(sheet.getRange(1, 1, 1, width).getValues()[0])); }
+    rows.forEach(r => bin.appendRow([new Date()].concat(data[r - 2])));
+    rows.reverse().forEach(r => sheet.deleteRow(r));      // bottom-up so row numbers stay right
+    return json_({ ok: true, result: 'removed', rows: rows.length, name: name || '' });
   } finally { lock.releaseLock(); }
 }
 

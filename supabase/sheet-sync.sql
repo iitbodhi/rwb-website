@@ -2,6 +2,7 @@
 -- RWB App: keep the RWB contact sheet (Google Form responses) up to date from the app
 --   • a member approved in the app gets a new row in the sheet
 --   • changes a member makes in Me (or an admin makes) update their row
+--   • a member removed by an admin is removed from the sheet (a copy goes to a "Removed members" tab)
 --   • the app's join request asks the same questions as the join form
 --
 -- BEFORE RUNNING: paste your Apps Script web-app link on the line marked ★ below.
@@ -124,5 +125,23 @@ exception when others then
 end $$;
 drop trigger if exists members_to_sheet on public.members;
 create trigger members_to_sheet after insert or update on public.members for each row execute function private.sheet_push();
+
+-- 4. A member removed by an admin (on the app or not) is removed from the sheet too
+create or replace function private.sheet_remove() returns trigger
+language plpgsql security definer set search_path = public, private as $$
+declare u text; s text;
+begin
+  select value into u from private.config where key = 'sheet_webhook_url';
+  select value into s from private.config where key = 'sheet_secret';
+  if u is null or u not like 'https://%' or s is null or old.phone is null then return old; end if;
+  perform net.http_post(url := u,
+    body := jsonb_build_object('secret', s, 'action', 'delete', 'phone', old.phone, 'full_name', old.full_name),
+    headers := jsonb_build_object('Content-Type', 'application/json'), timeout_milliseconds := 8000);
+  return old;
+exception when others then
+  return old;
+end $$;
+drop trigger if exists members_off_sheet on public.members;
+create trigger members_off_sheet after delete on public.members for each row execute function private.sheet_remove();
 
 notify pgrst, 'reload schema';
