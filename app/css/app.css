@@ -807,3 +807,6 @@ mark{background:rgba(232,102,46,.25);color:inherit;border-radius:3px;padding:0 1
 .gone-card.left{background:rgba(242,163,58,.14);color:#8a520b}
 .gone-card.removed{background:rgba(239,91,76,.12);color:var(--bad)}
 :root[data-theme=dark] .gone-card.left{color:#f2b766}
+
+/* join-form questions */
+.req{color:var(--orange);font-weight:700}

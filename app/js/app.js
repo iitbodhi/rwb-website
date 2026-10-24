@@ -197,6 +197,67 @@ const globalActions = {
 };
 
 /* =================== Sign in / access =================== */
+/* =================== Member details: the same questions as the RWB join form =================== */
+/* Titles, order and required answers match the Google join form, so the app, the form and the contact sheet stay uniform. */
+const JOIN_REQUIRED = ['full_name', 'dob', 'phone', 'bike', 'vrn', 'blood_group', 'locality', 'emergency_phone'];
+const BLOOD = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+const RONIN = [['TVS Ronin 225', 'Yes'], ['No Ronin yet', 'Not yet']];
+const normBlood = s => {
+    const t = String(s || '').toUpperCase().replace(/\s/g, ''), g = t.match(/^(AB|A|B|O)/);
+    const sign = /NEG|-|−/.test(t) ? '-' : /POS|\+/.test(t) ? '+' : '';
+    return g && sign ? g[1] + sign : String(s || '');
+};
+/* mode: 'join' (app join request), 'me' (Me → Edit), 'admin' (admin edits a member: only name and number required) */
+function joinFields(v = {}, mode = 'join') {
+    v = v || {};
+    const need = k => mode === 'admin' ? k === 'full_name' || k === 'phone' : JOIN_REQUIRED.includes(k);
+    const rq = k => need(k) ? ' required' : '';
+    const L = (k, title, input, hint = '') => `<label><span>${title}${need(k) ? ' <span class="req">*</span>' : ''}</span>${input}${hint ? `<small class="hint">${hint}</small>` : ''}</label>`;
+    const val = k => esc(v[k] || '');
+    const tel = (k, ph) => `<input name="${k}" inputmode="tel" autocomplete="off" placeholder="${ph}"${rq(k)} value="${val(k)}">`;
+    const sel = (k, opts, cur) => {
+        const list = cur && !opts.some(o => o[0] === cur) ? [[cur, cur], ...opts] : opts;
+        return `<select name="${k}"${rq(k)}><option value="">Choose…</option>${list.map(o => `<option value="${esc(o[0])}"${o[0] === cur ? ' selected' : ''}>${esc(o[1])}</option>`).join('')}</select>`;
+    };
+    const dob = v.dob && !String(v.dob).startsWith('1904') ? String(v.dob).slice(0, 10) : '';
+    return [
+        mode !== 'me' ? L('full_name', 'Full Name', `<input name="full_name" autocomplete="name"${rq('full_name')} value="${val('full_name')}">`) : '',
+        mode !== 'join' ? L('nickname', 'Nickname', `<input name="nickname" maxlength="40" value="${val('nickname')}">`, 'Optional, only used in the app') : '',
+        L('dob', 'Date of Birth', `<input type="date" name="dob" max="${todayISO()}"${rq('dob')} value="${esc(dob)}">`, v.dob && !dob && mode === 'me' ? 'Only your birthday was saved so far. Please add the year too.' : ''),
+        mode !== 'me' ? L('phone', 'WhatsApp No.', tel('phone', '10-digit number'), mode === 'join' ? 'The number you\'re in the RWB WhatsApp group with' : '') : '',
+        L('alt_phone', 'Mobile No. (alternative)', tel('alt_phone', 'Optional')),
+        L('bike', 'Do you own a Ronin bike?', sel('bike', RONIN, v.bike || (mode === 'join' ? 'TVS Ronin 225' : ''))),
+        L('vrn', 'VRN please', `<input name="vrn" autocapitalize="characters" placeholder="WB 02 AB 1234"${rq('vrn')} value="${val('vrn')}">`, 'Your Ronin\'s registration number'),
+        L('blood_group', 'Blood group', sel('blood_group', BLOOD.map(b => [b, b]), normBlood(v.blood_group))),
+        L('locality', 'Current Locality', `<input name="locality" placeholder="Area, city"${rq('locality')} value="${val('locality')}">`),
+        L('hideout', 'Permanent Hideout', `<input name="hideout" placeholder="Home town"${rq('hideout')} value="${val('hideout')}">`),
+        L('emergency_phone', 'In case of emergency, contact (number)', tel('emergency_phone', '10-digit number'), 'A family member or friend we can call')
+    ].join('');
+}
+/* Form → clean values (trimmed; VRN in capitals) */
+function joinData(form) {
+    const d = Object.fromEntries(new FormData(form));
+    Object.keys(d).forEach(k => d[k] = String(d[k]).replace(/\s+/g, ' ').trim());
+    if (d.vrn) d.vrn = d.vrn.toUpperCase();
+    return d;
+}
+/* Returns a message for the first problem, or '' when everything is fine */
+function joinCheck(d, mode, ownPhone) {
+    const n = x => String(x || '').replace(/\D/g, '');
+    const need = k => mode === 'admin' ? k === 'full_name' || k === 'phone' : JOIN_REQUIRED.includes(k);
+    const names = { full_name: 'Full Name', dob: 'Date of Birth', phone: 'WhatsApp No.', bike: 'Do you own a Ronin bike?', vrn: 'VRN', blood_group: 'Blood group', locality: 'Current Locality', emergency_phone: 'the emergency contact number' };
+    for (const k of Object.keys(names)) if (k in d && need(k) && !d[k]) return `Please fill in ${names[k]}`;
+    if ('full_name' in d && d.full_name.length < 3) return 'Please enter your full name';
+    if ('phone' in d && n(d.phone).length < 10) return 'WhatsApp No. needs a 10-digit number';
+    if (d.alt_phone && n(d.alt_phone).length < 10) return 'Mobile No. (alternative) needs a 10-digit number';
+    if (d.emergency_phone && n(d.emergency_phone).length < 10) return 'The emergency contact needs a 10-digit number';
+    const own = n(d.phone || ownPhone).slice(-10);
+    if (d.emergency_phone && own && n(d.emergency_phone).slice(-10) === own) return 'The emergency contact should be someone else\'s number';
+    if (d.vrn && d.vrn.replace(/[^A-Z0-9]/g, '').length < 6) return 'Please check the VRN (for example WB 02 AB 1234)';
+    if (d.dob && (d.dob > todayISO() || d.dob < '1930-01-01')) return 'Please check the Date of Birth';
+    return '';
+}
+
 const G_ICON = '<svg viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
 function viewSignIn() {
     tabbar.hidden = true;
@@ -225,27 +286,15 @@ async function viewAccess(status, sess) {
         <p>We couldn't find <b>${esc(sess.email)}</b> in the RWB members list. Maybe you used a different email on the join form.</p>
         <p class="muted" style="margin:8px 0 18px">Fill this in and an admin will link you to your membership. Use the WhatsApp number you're in the RWB group with.</p>
         <form id="req">
-            <label>Full name<input name="full_name" required autocomplete="name" value="${esc(req?.full_name || sess.name || '')}"></label>
-            <label>WhatsApp number<input name="phone" required inputmode="tel" autocomplete="tel" placeholder="10-digit number" value="${esc(req?.phone || '')}"></label>
-            <div class="grid2">
-                <label>Date of birth<input name="dob" type="date" value="${esc(req?.dob || '')}"></label>
-                <label>Bike number<input name="vrn" placeholder="WB 00 AA 0000" value="${esc(req?.vrn || '')}"></label>
-            </div>
-            <div class="grid2">
-                <label>Your bike<select name="bike">${['TVS Ronin 225', 'Other bike', 'No bike yet'].map(b => `<option${(req?.bike || 'TVS Ronin 225') === b ? ' selected' : ''}>${b}</option>`).join('')}</select></label>
-                <label>Blood group<select name="blood_group">${['', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(b => `<option${(req?.blood_group || '') === b ? ' selected' : ''} value="${b}">${b || 'Choose…'}</option>`).join('')}</select></label>
-            </div>
-            <label>Current locality<input name="locality" placeholder="Area, city" value="${esc(req?.locality || '')}"></label>
-            <label>Hometown<input name="hideout" placeholder="Permanent hometown" value="${esc(req?.hideout || '')}"></label>
-            <label>Emergency contact number<input name="emergency_phone" inputmode="tel" placeholder="Family member or friend" value="${esc(req?.emergency_phone || '')}"></label>
+            ${joinFields({ ...req, full_name: req?.full_name || sess.name || '' }, 'join')}
             <button class="btn block">Send to admins</button>
             <button type="button" class="btn ghost block" data-act="out">Use a different Google account</button>
         </form>`;
     actions = { out: () => api.signOut() };
     $('#req').addEventListener('submit', e => {
         e.preventDefault();
-        const f = Object.fromEntries(new FormData(e.target));
-        if (f.phone.replace(/\D/g, '').length < 10) return toast('Please enter a 10-digit WhatsApp number', true);
+        const f = joinData(e.target), err = joinCheck(f, 'join');
+        if (err) return toast(err, true);
         busy(e.submitter, async () => { await api.requestAccess(f); boot(); });
     });
 }
@@ -1352,20 +1401,14 @@ function viewMe() {
         'push-test': b => busy(b, async () => { await api.testPush(); toast('Test sent. It should arrive in a few seconds.'); }),
         install: () => installEvt ? (async () => { installEvt.prompt(); await installEvt.userChoice; installEvt = null; render(); })() : installSheet(),
         edit: () => openSheet('My details', `<form id="mf">
-            <p class="small muted">Your name and WhatsApp number can only be changed by an admin.</p>
-            <label>Nickname<input name="nickname" value="${esc(m.nickname || '')}" maxlength="40"></label>
-            <div class="grid2"><label>Date of birth<input type="date" name="dob" value="${esc(m.dob && !m.dob.startsWith('1904') ? m.dob : '')}"></label>
-                <label>Blood group<select name="blood_group">${['', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(b => `<option${(m.blood_group || '').replace(/\s/g, '').toUpperCase().startsWith(b) && b ? ' selected' : ''} value="${b}">${b || '–'}</option>`).join('')}</select></label></div>
-            <div class="grid2"><label>Bike<input name="bike" value="${esc(m.bike || '')}"></label><label>Registration<input name="vrn" value="${esc(m.vrn || '')}"></label></div>
-            <label>Locality<input name="locality" value="${esc(m.locality || '')}"></label>
-            <label>Hometown<input name="hideout" value="${esc(m.hideout || '')}"></label>
-            <div class="grid2"><label>Emergency contact<input name="emergency_phone" inputmode="tel" value="${esc(m.emergency_phone || '')}"></label><label>Other mobile<input name="alt_phone" inputmode="tel" value="${esc(m.alt_phone || '')}"></label></div>
+            <p class="small muted" style="margin-bottom:10px">Your Full Name and WhatsApp No. can only be changed by an admin. <span class="req">*</span> marks answers every member needs.</p>
+            ${joinFields(m, 'me')}
             <button class="btn block">Save details</button></form>`, body => {
             body.querySelector('#mf').onsubmit = e => {
                 e.preventDefault();
-                const d = Object.fromEntries(new FormData(e.target)); Object.keys(d).forEach(k => d[k] = d[k].trim() || null);
-                if (!d.dob && m.dob?.startsWith('1904')) delete d.dob;   /* keep "year unknown" birthday */
-                if (!d.blood_group && m.blood_group) delete d.blood_group;
+                const d = joinData(e.target), err = joinCheck(d, 'me', m.phone);
+                if (err) return toast(err, true);
+                Object.keys(d).forEach(k => d[k] = d[k] || null);
                 busy(e.submitter, async () => { state.me = await api.updateMe(d); closeSheet(); render(); toast('Details saved'); });
             };
         })
@@ -1425,7 +1468,7 @@ async function adminRequests() {
     $('#admin-body').innerHTML = reqs.length ? `<div class="list">${reqs.map(r => `<div class="card">
         <h3>${esc(r.full_name)}</h3>
         <dl class="facts"><dt>Google</dt><dd>${esc(r.email || '–')}</dd><dt>WhatsApp</dt><dd><a href="${waTo(r.phone)}" target="_blank" rel="noopener">${esc(r.phone)}</a></dd>
-            ${r.bike ? `<dt>Bike</dt><dd>${esc(r.bike)}</dd>` : ''}${r.vrn ? `<dt>Bike no.</dt><dd>${esc(r.vrn)}</dd>` : ''}${r.locality ? `<dt>Locality</dt><dd>${esc(r.locality)}</dd>` : ''}${r.hideout ? `<dt>Hometown</dt><dd>${esc(r.hideout)}</dd>` : ''}${r.blood_group ? `<dt>Blood group</dt><dd>${esc(r.blood_group)}</dd>` : ''}${r.emergency_phone ? `<dt>Emergency</dt><dd>${esc(r.emergency_phone)}</dd>` : ''}${r.dob ? `<dt>Birthday</dt><dd>${fmtDayMonth(r.dob)}</dd>` : ''}<dt>Asked</dt><dd>${fmtDate(String(r.created_at).slice(0, 10))}</dd></dl>
+            ${r.bike ? `<dt>Bike</dt><dd>${esc(r.bike)}</dd>` : ''}${r.vrn ? `<dt>Bike no.</dt><dd>${esc(r.vrn)}</dd>` : ''}${r.locality ? `<dt>Locality</dt><dd>${esc(r.locality)}</dd>` : ''}${r.hideout ? `<dt>Hometown</dt><dd>${esc(r.hideout)}</dd>` : ''}${r.blood_group ? `<dt>Blood group</dt><dd>${esc(r.blood_group)}</dd>` : ''}${r.emergency_phone ? `<dt>Emergency</dt><dd>${esc(r.emergency_phone)}</dd>` : ''}${r.alt_phone ? `<dt>Alt. mobile</dt><dd>${esc(r.alt_phone)}</dd>` : ''}${r.dob ? `<dt>Birthday</dt><dd>${fmtDayMonth(r.dob)}</dd>` : ''}<dt>Asked</dt><dd>${fmtDate(String(r.created_at).slice(0, 10))}</dd></dl>
         <p class="${r.match_member_id ? (r.match_linked ? 'warn' : 'badge ok') : 'badge'}" style="margin-bottom:12px">${r.match_member_id ? (r.match_status && r.match_status !== 'active' ? `↩ ${esc(r.match_name)} ${r.match_status === 'left' ? 'left' : 'was removed'}${r.match_removed_at ? ' on ' + fmtDate(String(r.match_removed_at).slice(0, 10)) : ''}. Approving restores them as a new member.` : r.match_linked ? `⚠ This number belongs to ${esc(r.match_name)}, who is already on the app with another account.` : `✓ Matches sheet entry: ${esc(r.match_name)}`) : 'Not in the members sheet: approving adds them as a new member'}</p>
         <div class="btns"><button class="btn ghost" data-act="reject" data-id="${r.id}">Reject</button><button class="btn" data-act="approve" data-id="${r.id}">Approve</button></div></div>`).join('')}</div>`
         : '<div class="card empty"><b>All clear</b>No one is waiting for access.</div>';
@@ -1536,16 +1579,13 @@ function goneSheet(m) {
 }
 function memberEdit(m) {
     openSheet('Edit ' + firstName(m), `<form id="ae">
-        <label>Full name<input name="full_name" required value="${esc(m.full_name)}"></label>
-        <label>Nickname<input name="nickname" value="${esc(m.nickname || '')}"></label>
-        <div class="grid2"><label>WhatsApp<input name="phone" inputmode="tel" required value="${esc(m.phone || '')}"></label><label>Date of birth<input type="date" name="dob" value="${esc(m.dob || '')}"></label></div>
-        <div class="grid2"><label>Bike<input name="bike" value="${esc(m.bike || '')}"></label><label>Bike number<input name="vrn" value="${esc(m.vrn || '')}"></label></div>
-        <div class="grid2"><label>Blood group<input name="blood_group" value="${esc(m.blood_group || '')}"></label><label>Locality<input name="locality" value="${esc(m.locality || '')}"></label></div>
+        ${joinFields(m, 'admin')}
         <button class="btn block">Save</button></form>`, body => {
         body.querySelector('#ae').onsubmit = e => {
             e.preventDefault();
-            const d = Object.fromEntries(new FormData(e.target));
-            if (d.phone.replace(/\D/g, '').length < 10) return toast('WhatsApp number needs 10 digits', true);
+            const d = joinData(e.target), err = joinCheck(d, 'admin');
+            if (err) return toast(err, true);
+            if (!d.dob && m.dob?.startsWith('1904')) delete d.dob;   /* keep a "year unknown" birthday */
             busy(e.submitter, async () => { await api.admin.update(m.id, d); Object.assign(m, d, { phone: d.phone.replace(/\D/g, '').slice(-10), dob: d.dob || null }); toast('Saved'); memberSheet(m); adminMembers(); });
         };
     });

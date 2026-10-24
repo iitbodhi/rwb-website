@@ -252,4 +252,47 @@ function addMissingFromApp() {
   } finally { lock.releaseLock(); }
 }
 
+/* ======================= Join form: same required questions as the app ======================= */
+const FORM_ID = '1Grrq_WyGn7I_0-QsluloFMHJ9ENdOmhAJllpIiXym34';
+/* Question title starts with → required? (the same answers the app asks for) */
+const FORM_REQUIRED = {
+  'full name': true, 'date of birth': true, 'whatsapp no': true, 'do you own a ronin bike': true, 'vrn': true,
+  'blood group': true, 'current locality': true, 'in case of emergency': true,
+  'permanent hideout': false, 'mobile no. (alternative)': false
+};
+/**
+ * Run once from the editor: choose "fixJoinForm" → Run → allow access to Google Forms.
+ * Marks the questions above as required (or optional) on the RWB join form and checks that the phone
+ * answers look like real numbers. Question titles and order are not changed. The log lists every question.
+ */
+function fixJoinForm() {
+  const form = FormApp.openById(FORM_ID);
+  const phoneCheck = FormApp.createTextValidation().setHelpText('Please enter a 10-digit mobile number')
+    .requireTextMatchesPattern('^[+]?[0-9][0-9 ()-]{8,16}[0-9]$').build();
+  const seen = {};
+  form.getItems().forEach((item, i) => {
+    const title = String(item.getTitle()).trim(), t = title.toLowerCase();
+    const key = Object.keys(FORM_REQUIRED).find(k => t.indexOf(k) === 0);
+    let typed = null;
+    switch (item.getType()) {
+      case FormApp.ItemType.TEXT: typed = item.asTextItem(); break;
+      case FormApp.ItemType.PARAGRAPH_TEXT: typed = item.asParagraphTextItem(); break;
+      case FormApp.ItemType.MULTIPLE_CHOICE: typed = item.asMultipleChoiceItem(); break;
+      case FormApp.ItemType.LIST: typed = item.asListItem(); break;
+      case FormApp.ItemType.CHECKBOX: typed = item.asCheckboxItem(); break;
+      case FormApp.ItemType.DATE: typed = item.asDateItem(); break;
+    }
+    let note = '';
+    if (key && typed) {
+      typed.setRequired(FORM_REQUIRED[key]); seen[key] = true;
+      note = FORM_REQUIRED[key] ? 'REQUIRED' : 'optional';
+      if (/whatsapp no|in case of emergency|mobile no/.test(key) && item.getType() === FormApp.ItemType.TEXT) { typed.setValidation(phoneCheck); note += ' + number check'; }
+    }
+    console.log((i + 1) + '. ' + title + '  [' + item.getType() + ']' + (note ? '  → ' + note : ''));
+  });
+  const missing = Object.keys(FORM_REQUIRED).filter(k => !seen[k]);
+  if (missing.length) console.log('Not found on the form (check the titles): ' + missing.join(', '));
+  console.log('Email is collected by the form itself (Settings → Responses → Collect email addresses).');
+}
+
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
