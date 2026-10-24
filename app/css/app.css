@@ -677,3 +677,8 @@ button.dial:active{transform:scale(.985)}
 @keyframes brand-spin{to{transform:rotate(360deg)}}
 @media (max-width:360px){.brand-ring{width:56px;height:56px;margin-top:-20px}.tabbar .brand-ring .tab-logo{width:49px;height:49px}}
 @media (prefers-reduced-motion:reduce){.brand-ring::after{animation:none!important}}
+/* brand button: sits lower, only peeking above the bar */
+.brand-ring{margin-top:-12px}
+.tabbar a.tab-brand{justify-content:center}
+.tabbar a.tab-brand[aria-current=page] .brand-ring{transform:translateY(-1px)}
+@media (max-width:360px){.brand-ring{margin-top:-10px}}
