@@ -58,6 +58,25 @@ const confirmBox = (msg) => window.confirm(msg);
 
 /* ---------- WhatsApp ---------- */
 const waShare = text => `https://wa.me/?text=${encodeURIComponent(text)}`;
+/* Phones with both WhatsApp and WhatsApp Business: on Android we open the app the rider chose (regular
+   WhatsApp by default) instead of letting the phone pick. If that app isn't installed, the normal link opens. */
+const isAndroid = /Android/i.test(navigator.userAgent);
+const WA_APPS = { wa: ['WhatsApp', 'com.whatsapp'], biz: ['WhatsApp Business', 'com.whatsapp.w4b'], ask: ['Let my phone decide', null] };
+const waPref = () => { try { const v = localStorage.getItem('rwb-wa-app'); return WA_APPS[v] ? v : 'wa'; } catch { return 'wa'; } };
+function waIntent(url) {
+    const pkg = WA_APPS[waPref()][1];
+    if (!isAndroid || !pkg) return url;
+    const u = new URL(url), phone = u.pathname.replace(/\D/g, ''), text = u.searchParams.get('text') || '';
+    const q = [phone && 'phone=' + phone, text && 'text=' + encodeURIComponent(text)].filter(Boolean).join('&');
+    return `intent://send/?${q}#Intent;scheme=whatsapp;package=${pkg};S.browser_fallback_url=${encodeURIComponent(url)};end`;
+}
+function openWA(url) { const i = waIntent(url); if (i !== url) location.href = i; else window.open(url, '_blank', 'noopener'); }
+/* every WhatsApp link in the app goes through the chosen app */
+document.addEventListener('click', e => {
+    const a = e.target.closest('a[href^="https://wa.me/"]');
+    if (!a || !isAndroid || waPref() === 'ask') return;
+    e.preventDefault(); openWA(a.href);
+}, true);
 const waTo = (phone, text = '') => `https://wa.me/91${String(phone).replace(/\D/g, '').slice(-10)}${text ? '?text=' + encodeURIComponent(text) : ''}`;
 const andList = a => a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a.at(-1) : a[0] || '';
 /* Birthday wishes: everyone writes their own. The RWB team (admins, coordinators) also get 3 ready-made
@@ -84,7 +103,7 @@ function wishSheet(people) {
         body.querySelector('#wish-go').onclick = () => {
             const txt = own.value.trim();
             if (!txt) { toast('Type your wish first', true); own.focus(); return; }
-            window.open(waShare(txt), '_blank', 'noopener'); closeSheet();
+            openWA(waShare(txt)); closeSheet();
         };
     });
 }
@@ -784,7 +803,7 @@ async function eventPage(e) {
         ${mod ? `<section class="section"><h2>Organiser</h2><div class="btns">${live ? '<button class="btn ghost" data-act="evt-edit">Edit</button><button class="btn ghost" data-act="evt-cancel">Cancel event</button>' : ''}<button class="btn danger" data-act="evt-del">Delete</button></div></section>` : ''}`;
     actions = {
         rsvp: b => busy(b, async () => { await api.rsvp(e.id, b.dataset.s, b.dataset.s === 'going' ? (me?.guests || 0) : 0); await loadEvents(true); toast(b.dataset.s === 'going' ? "You're going 🏍️" : b.dataset.s === 'maybe' ? 'Marked as maybe' : 'Marked as can\'t go'); render(); }),
-        'evt-share': () => window.open(waShare(`📅 *${e.title}*\n🗓 ${evtWhen(e)}${e.location ? `\n📍 ${e.location}${mapsUrl(e) ? ' ' + mapsUrl(e) : ''}` : ''}${e.description ? `\n\n${e.description}` : ''}\n\n👉 RSVP in the RWB App: https://roninwb.in/app/#events/${e.id}`), '_blank', 'noopener'),
+        'evt-share': () => openWA(waShare(`📅 *${e.title}*\n🗓 ${evtWhen(e)}${e.location ? `\n📍 ${e.location}${mapsUrl(e) ? ' ' + mapsUrl(e) : ''}` : ''}${e.description ? `\n\n${e.description}` : ''}\n\n👉 RSVP in the RWB App: https://roninwb.in/app/#events/${e.id}`)),
         'evt-edit': () => eventForm(e),
         'evt-cancel': b => { if (confirmBox(`Cancel “${e.title}”? Everyone gets a notification.`)) busy(b, async () => { await api.saveEvent({ id: e.id, status: 'cancelled' }); await loadEvents(true); toast('Event cancelled'); render(); }); },
         'evt-del': b => { if (confirmBox(`Delete “${e.title}” with its RSVPs and expenses? This can't be undone.`)) busy(b, async () => { await api.deleteEvent(e.id); await loadEvents(true); location.hash = '#events'; toast('Deleted'); }); }
@@ -929,7 +948,7 @@ function settleSheet(e, bal, transfers, people, myUid, nm, spent) {
             : '<div class="card empty"><b>All settled ✅</b>Nobody owes anything.</div>'}
         ${lines.length ? `<details class="tech" style="margin-top:12px"><summary>Everyone's balance</summary><div class="group" style="margin-top:8px">${lines.map(([u, v]) => `<div><span class="grow">${esc(full(u))}</span><span class="num ${v > 0 ? 'pos' : 'neg'}">${v > 0 ? 'gets ' : 'owes '}${rsP(v)}</span></div>`).join('')}</div></details>` : ''}
         <button class="btn wa block" id="xshare" style="margin-top:14px">Share on WhatsApp</button>`, body => {
-        body.querySelector('#xshare').onclick = () => window.open(waShare(shareText()), '_blank', 'noopener');
+        body.querySelector('#xshare').onclick = () => openWA(waShare(shareText()));
         body.querySelectorAll('[data-paid]').forEach(b => b.onclick = () => {
             const t = transfers[Number(b.dataset.paid)];
             if (!confirmBox(`Record that ${full(t.from)} paid ${full(t.to)} ${rsP(t.amt)}?`)) return;
@@ -1255,6 +1274,10 @@ function viewMe() {
         <h2 class="group-title">Appearance</h2>
         <div class="seg" role="radiogroup" aria-label="Theme">${[['light', 'Light'], ['dark', 'Dark'], ['system', 'Auto']].map(([k, l]) => `<button role="radio" aria-selected="${theme === k}" aria-checked="${theme === k}" data-act="theme" data-t="${k}">${l}</button>`).join('')}</div>
 
+        ${isAndroid ? `<h2 class="group-title">WhatsApp</h2>
+        <div class="group"><label class="toggle-row"><span class="grow">Open WhatsApp links in<span class="small muted">For phones with both WhatsApp and WhatsApp Business</span></span>
+            <select id="wa-app" style="width:auto;min-height:38px">${Object.entries(WA_APPS).map(([k, [l]]) => `<option value="${k}"${waPref() === k ? ' selected' : ''}>${l}</option>`).join('')}</select></label></div>` : ''}
+
         <h2 class="group-title">Notifications</h2>
         <div class="card" id="notif-card"><p id="push-state">Checking…</p><div id="push-btn" style="margin-top:10px"></div></div>
         <div class="group" style="margin-top:10px">
@@ -1302,6 +1325,7 @@ function viewMe() {
         const notify = { birthday: true, motomart: true, member: true, ...(state.me.notify || {}), [cb.dataset.pref]: cb.checked };
         try { state.me = await api.updateMe({ notify }); toast('Saved'); } catch (e) { cb.checked = !cb.checked; toast(e.message, true); }
     });
+    const wa = $('#wa-app'); if (wa) wa.onchange = () => { try { localStorage.setItem('rwb-wa-app', wa.value); } catch { /* ignore */ } toast(`WhatsApp links open in ${WA_APPS[wa.value][0] === 'Let my phone decide' ? 'whichever app your phone picks' : WA_APPS[wa.value][0]}`); };
     $('#lb').onchange = async e => {
         try { state.me = await api.updateMe({ show_on_leaderboard: e.target.checked }); state.board = null; state.dir = null; toast(e.target.checked ? 'You\'re on the leaderboards' : 'Hidden from the leaderboards'); }
         catch (err) { e.target.checked = !e.target.checked; toast(err.message, true); }
@@ -1621,7 +1645,7 @@ async function shareListing(l) {
             if (navigator.canShare({ files, text })) { await navigator.share({ files, text }); return; }
         }
     } catch (e) { if (e.name === 'AbortError') return; }
-    window.open(waShare(text), '_blank', 'noopener');
+    openWA(waShare(text));
 }
 
 function listingDetail(l) {
