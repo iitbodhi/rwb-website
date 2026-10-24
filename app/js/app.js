@@ -60,39 +60,31 @@ const confirmBox = (msg) => window.confirm(msg);
 const waShare = text => `https://wa.me/?text=${encodeURIComponent(text)}`;
 const waTo = (phone, text = '') => `https://wa.me/91${String(phone).replace(/\D/g, '').slice(-10)}${text ? '?text=' + encodeURIComponent(text) : ''}`;
 const andList = a => a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a.at(-1) : a[0] || '';
-/* Ready-made birthday wishes. {names} becomes the birthday riders' names. Each phone starts on a different one. */
-const WISHES = [
-    ['Classic', '🎂 Happy Birthday {names}! 🏍️\n\nWishing you many more miles of open roads, safe rides and endless adventures. Have a great one!\n\n— Ronin Warriors of Bengal 🧡'],
-    ['Rider', 'Happy Birthday {names}! 🎉\nMay your tank stay full, your chain stay lubed and your roads stay twisty. Ride safe, Warrior! 🏍️💨'],
-    ['Short & sweet', 'Happy Birthday {names}! 🎂 Have a fantastic day! 🧡'],
-    ['Road trip', '🎂 Happy Birthday {names}!\nHere\'s to another year of sunrise rides, chai stops and hills that call your name. See you on the next ride! 🌄'],
+/* Birthday wishes: everyone writes their own. The RWB team (admins, coordinators) also get 3 ready-made
+   messages for the official club wish; tapping one fills the box so it can still be edited. */
+const TEAM_WISHES = [
+    ['Club wish', '🎂 Happy Birthday {names}! 🏍️\n\nWishing you many more miles of open roads, safe rides and endless adventures. Have a great one!\n\n— Ronin Warriors of Bengal 🧡'],
     ['Brotherhood', 'Happy Birthday {names}! 🙌\nProud to ride with you. Wishing you health, happiness and a thousand more kilometres with the RWB family. 🧡🏍️'],
-    ['Fun', 'Happy Birthday {names}! 🥳\nOne more year older, zero kilometres slower. Cake first, then a ride! 🎂🏍️'],
-    ['Bengali', 'শুভ জন্মদিন {names}! 🎂\nNew year, new roads, same Ronin spirit. Have a great day! 🧡'],
-    ['Safe miles', 'Happy Birthday {names}! 🎂\nWishing you a year of safe miles, smooth roads and great memories. Keep riding, keep shining! ✨🏍️']
+    ['Short', 'Happy Birthday {names}! 🎂 Have a fantastic day! 🧡']
 ];
 function wishSheet(people) {
     if (!people.length) return;
-    let pick = 0; try { pick = (Number(localStorage.getItem('rwb-wish-pick')) || Math.floor(Math.random() * WISHES.length)) % WISHES.length; } catch { /* ignore */ }
-    const names = andList(people.map(b => b.full_name));
-    const build = tpl => tpl.replaceAll('{names}', names);
-    openSheet('Send birthday wishes', `
-        <p class="small muted" style="margin-bottom:12px">Pick a message for <b>${esc(names)}</b> or write your own, then choose the RWB group in WhatsApp.</p>
-        <div class="wish-list" role="radiogroup" aria-label="Message">
-            ${WISHES.map(([k, t], i) => `<label class="wish-opt"><input type="radio" name="w" value="${i}"${i === pick ? ' checked' : ''}><span><b>${esc(k)}</b><span class="wish-prev">${esc(t.replaceAll('{names}', names))}</span></span></label>`).join('')}
-            <label class="wish-opt"><input type="radio" name="w" value="custom"><span><b>Write my own</b><span class="wish-prev">Your own words</span></span></label>
-        </div>
-        <textarea id="wish-own" maxlength="1000" placeholder="Write your wish…" hidden></textarea>
-        <button class="btn wa block" id="wish-go" style="margin-top:14px">Send on WhatsApp</button>`, body => {
+    const names = andList(people.map(b => b.full_name)), team = isMod();
+    openSheet(`Wish ${people.length > 1 ? 'them' : firstName(people[0])}`, `
+        <p class="small muted" style="margin-bottom:10px">Write a wish for <b>${esc(names)}</b>, then choose the RWB group in WhatsApp.</p>
+        ${team ? `<p class="small muted" style="margin-bottom:6px">Team templates (tap to use, then edit if you like)</p><div class="chips" style="margin-bottom:10px">${TEAM_WISHES.map(([k], i) => `<button type="button" class="chip" data-tpl="${i}">${esc(k)}</button>`).join('')}</div>` : ''}
+        <textarea id="wish-own" maxlength="1000" placeholder="Type your wish…" aria-label="Your birthday wish"></textarea>
+        <button class="btn wa block" id="wish-go" style="margin-top:12px">Send on WhatsApp</button>`, body => {
         const own = body.querySelector('#wish-own');
-        const sel = () => body.querySelector('input[name=w]:checked').value;
-        body.querySelectorAll('input[name=w]').forEach(r => r.onchange = () => { own.hidden = sel() !== 'custom'; if (!own.hidden) { own.value ||= `Happy Birthday ${names}! `; own.focus(); } });
+        setTimeout(() => own.focus(), 60);
+        body.querySelectorAll('[data-tpl]').forEach(c => c.onclick = () => {
+            body.querySelectorAll('[data-tpl]').forEach(x => x.setAttribute('aria-pressed', x === c));
+            own.value = TEAM_WISHES[Number(c.dataset.tpl)][1].replaceAll('{names}', names); own.focus();
+        });
         body.querySelector('#wish-go').onclick = () => {
-            const v = sel();
-            const txt = v === 'custom' ? own.value.trim() : WISHES[Number(v)][1];
-            if (!txt) { toast('Write a message first', true); return; }
-            try { if (v !== 'custom') localStorage.setItem('rwb-wish-pick', String((Number(v) + 1) % WISHES.length)); } catch { /* ignore */ }
-            window.open(waShare(build(txt)), '_blank', 'noopener'); closeSheet();
+            const txt = own.value.trim();
+            if (!txt) { toast('Type your wish first', true); own.focus(); return; }
+            window.open(waShare(txt), '_blank', 'noopener'); closeSheet();
         };
     });
 }
