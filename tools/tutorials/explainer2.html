@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>RWB member management, simple</title>
+<style>/*CSS*/
+/* --- simple edition --- */
+.cap h1{font-size:92px}
+.cap p{font-size:40px}
+.mg{top:620px;height:1060px}
+.mg svg{height:1060px}
+.phone{top:610px;width:504px;height:1040px;margin-left:-252px;border-radius:70px}
+.screen{left:18px;top:18px;transform:scale(1.1896);border-radius:40px}
+.sub{position:absolute;left:56px;right:56px;bottom:60px;min-height:150px;display:grid;place-items:center;text-align:center;padding:22px 34px;border-radius:30px;background:rgba(10,9,8,.82);border:1px solid rgba(255,255,255,.12);font:600 40px/1.28 'Barlow';color:#fff;z-index:30;box-shadow:0 20px 50px -20px rgba(0,0,0,.9)}
+.sub span{display:block}
+.big{position:absolute;left:70px;right:70px;display:grid;grid-template-columns:120px 1fr;gap:28px;align-items:center;padding:30px 34px;border-radius:32px;background:rgba(255,255,255,.07);border:3px solid rgba(255,255,255,.14)}
+.big .i{font-size:84px;line-height:1;text-align:center}
+.big b{display:block;font:800 52px/1.02 'Barlow Condensed';text-transform:uppercase}
+.big span{display:block;font:500 32px/1.3 'Barlow';color:#d6cfc8;margin-top:6px}
+.big.g{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 15%,#151210)}
+.big.r{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 15%,#151210)}
+.big.o{border-color:var(--o);background:color-mix(in srgb,var(--o) 15%,#151210)}
+.big.b{border-color:var(--db);background:color-mix(in srgb,var(--db) 16%,#151210)}
+.st b{font-size:46px}.st span{font-size:31px}
+.cross{position:absolute;font:800 120px/1 'Barlow';color:var(--bad);text-shadow:0 6px 30px rgba(0,0,0,.6)}
+.tick{position:absolute;font:800 110px/1 'Barlow';color:var(--ok);text-shadow:0 6px 30px rgba(0,0,0,.6)}
+</style></head><body>
+<div id="v"><i class="glow g1"></i><i class="glow g2"></i>
+  <div class="topbar"><img src="" alt=""><div class="brand">RWB App<small>For admins</small></div><span class="pill">Members, made simple</span></div>
+  <div class="prog"><i id="bar"></i></div>
+  <div class="chap"><span id="chap"></span><span id="chapn"></span></div>
+  <div id="stage"></div>
+  <div class="sub" id="sub"></div>
+</div>
+<script>/*data*/</script>
+<script>
+const SHOTS = window.SHOTS || [], LOGO = window.LOGO, VO = window.VO || {};
+document.querySelector('.topbar img').src = LOGO;
+const cap = (step, title, sub) => `<div class="cap"><div class="step">${step}</div><h1>${title}</h1><p>${sub}</p></div>`;
+/* appear at a time: number (seconds) or 's2' / 's2+0.6' = when sentence 2 of the voice-over starts */
+const A = (t, fx = 'up', d = .55) => `data-a="${t}" data-fx="${fx}" data-d="${d}"`;
+const node = (cls, x, y, w, ico, title, sub, t) => `<div class="node ${cls}" style="left:${x}px;top:${y}px;width:${w}px" ${A(t, 'pop')}><span class="ico">${ico}</span><b>${title}</b><small>${sub}</small></div>`;
+const st = (cls, ico, title, sub, t) => `<div class="st ${cls}" ${A(t, 'left')}><span class="n">${ico}</span><div><b>${title}</b>${sub ? `<span>${sub}</span>` : ''}</div></div>`;
+const big = (cls, y, ico, title, sub, t) => `<div class="big ${cls}" style="top:${y}px" ${A(t, 'left')}><span class="i">${ico}</span><div><b>${title}</b>${sub ? `<span>${sub}</span>` : ''}</div></div>`;
+const MK = id => `<defs><marker id="${id}" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="3.2" markerHeight="3.2" orient="auto"><path d="M0 0L10 5L0 10z" fill="#fff"/></marker></defs>`;
+
+const S = [];
+S.push({ id: 'intro', chap: '', html: `<div class="card" style="padding-bottom:200px"><img class="logo" src="${LOGO}"><p class="kicker">For RWB admins</p><h2>Managing <em>members</em></h2><p>The simple guide: joining, finding new members, and leaving.</p></div>` });
+
+S.push({ id: 'list', chap: 'The big idea', html: cap('The big idea', 'One member list', 'Shown in the app. Copied to the Google Sheet. <b>Automatically.</b>') + `<div class="mg">
+  <svg viewBox="0 0 1080 1060">${MK('m1')}
+    <path id="l1" class="draw" ${A('s2', 'draw', .7)} d="M440 255 L290 522" stroke="#e8662e" stroke-width="8" fill="none" marker-end="url(#m1)"/>
+    <path id="l2" class="draw" ${A('s3', 'draw', .7)} d="M640 255 L790 522" stroke="#22a565" stroke-width="8" fill="none" marker-end="url(#m1)"/>
+    <circle r="13" fill="#ffc29f" data-path="l1" data-a="s2+.6" data-d="1.3" data-loop="1"/><circle r="13" fill="#8ff0b8" data-path="l2" data-a="s3+.6" data-d="1.3" data-loop="1"/></svg>
+  ${node('db', 290, 40, 500, '🗄️', 'Member list', 'every RWB member, in one place', 's1')}
+  ${node('app', 60, 530, 440, '📱', 'The app', 'shows the list', 's2')}
+  ${node('sheet', 580, 530, 440, '📊', 'Google Sheet', 'keeps a copy', 's3')}
+  ${big('g', 850, '✋', 'No copying by hand', '', 's4')}</div>` });
+
+S.push({ id: 'notapp', chap: 'The big idea', html: cap('The big idea', 'Member ≠ app user', 'Everyone in the list is a member, <b>with or without the app</b>.') + `<div class="mg">
+  <div class="box" style="left:50px;top:10px;width:980px;height:600px;border-color:#3d86f0;background:rgba(61,134,240,.06)" ${A('s0', 'pop')}></div>
+  <span class="lbl" style="left:80px;top:30px;background:#3d86f0;font-size:28px" ${A('s0+.3', 'fade')}>🗄️ All RWB members</span>
+  <div class="box" style="left:520px;top:130px;width:470px;height:440px;border-color:#2fbf71;border-style:solid;background:rgba(47,191,113,.08)" ${A('s1', 'pop')}></div>
+  <span class="lbl" style="left:550px;top:150px;background:#1f9d55;font-size:28px" ${A('s1+.3', 'fade')}>📱 Have the app</span>
+  ${['AS|Arjun', 'PD|Priya', 'KD|Kunal'].map((n, i) => `<div class="chipp" style="left:560px;top:${240 + i * 105}px" ${A(`s1+${.5 + i * .25}`, 'pop')}><i>${n.split('|')[0]}</i>${n.split('|')[1]}</div>`).join('')}
+  ${['SP|Sourav', 'RB|Riya', 'TM|Tanmay', 'AK|Avik'].map((n, i) => `<div class="chipp" style="left:90px;top:${130 + i * 110}px" ${A(`s0+${.6 + i * .25}`, 'pop')}><i>${n.split('|')[0]}</i>${n.split('|')[1]}</div>`).join('')}
+  ${big('g', 680, '👍', 'All of them are members', '', 's2')}
+  ${big('b', 880, '🗑️', 'Deleted the app?', 'Still a member.', 's3')}</div>` });
+
+S.push({ id: 'way1', chap: 'Joining', html: cap('Joining · Way 1', 'The join form', 'The usual way. <b>Nothing for you to do.</b>') + `<div class="mg">
+  ${big('', 20, '📝', 'Rider fills the join form', 'on roninwb.in', 's1')}
+  ${big('b', 250, '🗄️', 'Added to the member list', 'in seconds, with a green <span class="tag" style="display:inline-block;margin:0">New Member</span> tag', 's2')}
+  ${big('o', 480, '🔔', 'You get a notification', '“New RWB registration”', 's3')}
+  ${big('g', 710, '😌', 'Nothing to do', '', 's4')}</div>` });
+
+S.push({ id: 'way2', chap: 'Joining', html: cap('Joining · Way 2', 'From the app', 'You just <b>check and approve</b>.') + `<div class="mg">
+  ${big('', 20, '📱', 'Rider sends a join request', 'from the app', 's0')}
+  ${big('o', 250, '🔔', 'You get a notification', '+ a banner on Home', 's1')}
+  ${big('b', 480, '👆', 'Check, then tap Approve', '', 's2')}
+  ${big('g', 710, '✅', 'Added to the list + Sheet', '', 's3')}</div>` });
+
+S.push({ id: 'approve', chap: 'Joining', app: [0], cap: ['In the app', 'Approve a request', 'Home banner → check the details → <b>Approve</b>.'] });
+
+S.push({ id: 'find', chap: 'New members', html: cap('New members', 'Add them to WhatsApp', 'RWB tab → <b>New</b>. Everyone from the last 7 days.') + `<div class="mg">
+  <div class="mini" style="top:0;height:760px" ${A('s1', 'pop')}><div class="hd">RWB · Members</div>
+    <div class="chips"><span>Everyone</span><span class="on">New (3)</span><span>On the app</span></div>
+    ${[['KD', 'Kunal Das', 'Joined today'], ['PD', 'Priya Dutta', 'Joined yesterday'], ['SP', 'Sourav Paul', 'Joined 4 days ago']].map((r, i) => `<div class="row" ${A(`s2+${i * .4}`, 'left')}><i>${r[0]}</i><span>${r[1]}<small>${r[2]}</small></span><span class="nt">New Member</span></div>`).join('')}</div>
+  <div class="wa" style="left:830px;top:180px" ${A('s2+1.4', 'pop')}>💬</div>
+  ${big('g', 800, '⏳', 'The tag goes away after 7 days', '', 's3')}</div>` });
+
+S.push({ id: 'findapp', chap: 'New members', app: [1, 2], cap: ['In the app', 'New → tap → WhatsApp', 'Message them or add their number to the group. <b>Once a week.</b>'] });
+
+S.push({ id: 'edit', chap: 'Editing', html: cap('Editing details', 'Edit in the app', 'Never in the sheet.') + `<div class="mg">
+  <svg viewBox="0 0 1080 1060">${MK('m2')}
+    <path id="e1" class="draw" ${A('s1', 'draw', .7)} d="M420 150 L640 150" stroke="#2fbf71" stroke-width="9" fill="none" marker-end="url(#m2)"/>
+    <path id="e2" class="draw" ${A('s2', 'draw', .7)} d="M640 400 L420 400" stroke="#ef5b4c" stroke-width="9" fill="none" stroke-dasharray="1" marker-end="url(#m2)"/>
+    <circle r="14" fill="#8ff0b8" data-path="e1" data-a="s1+.6" data-d="1.2" data-loop="1"/></svg>
+  ${node('app', 40, 40, 380, '✏️', 'The app', 'edit here', 's0')}
+  ${node('sheet', 660, 40, 380, '📊', 'Google Sheet', 'updates by itself', 's1')}
+  <span class="tick" style="left:490px;top:20px" ${A('s1+.5', 'pop')}>✓</span>
+  <span class="cross" style="left:490px;top:330px" ${A('s2+.5', 'pop')}>✕</span>
+  <span class="lbl" style="left:330px;top:470px;font-size:28px" ${A('s2+.6', 'fade')}>sheet changes don't reach the app</span>
+  ${big('o', 640, '👉', 'Always edit in the app', 'Tap the member → Edit details', 's3')}</div>` });
+
+S.push({ id: 'remove', chap: 'Leaving', html: cap('When someone leaves', 'Remove from RWB', 'Four quick steps.') + `<div class="mg">
+  ${big('', 20, '👤', 'Open their profile', '', 's1')}
+  ${big('r', 250, '🚪', 'Tap Remove from RWB', '', 's1+1.2')}
+  ${big('o', 480, '☝️', 'Left, or Removed?', 'pick one', 's2')}
+  ${big('b', 710, '✍️', 'Add a short note', 'so other admins know why', 's3')}</div>` });
+
+S.push({ id: 'results', chap: 'Leaving', html: cap('When someone leaves', 'What happens next', 'All automatic.') + `<div class="mg">
+  ${big('', 20, '👥', 'Gone from the member list', '', 's1')}
+  ${big('r', 250, '📱', 'App login + data deleted', '', 's2')}
+  ${big('g', 480, '📊', 'Sheet row moves', 'to the “Removed members” tab', 's3')}
+  ${big('b', 710, '👀', 'Admins still see them', 'under Left / removed', 's4')}</div>` });
+
+S.push({ id: 'removeapp', chap: 'Leaving', app: [3], cap: ['In the app', 'Remove from RWB', 'Pick the reason, add a note, type <b>REMOVE</b>.'] });
+
+S.push({ id: 'donts', chap: 'Leaving', html: cap('Careful', 'These do NOT remove anyone', 'Only the app button does.') + `<div class="mg">
+  ${big('r', 20, '🚫', 'Deleting a row in the sheet', '', 's1')}
+  ${big('r', 250, '📵', 'Uninstalling the app', '', 's2')}
+  ${big('g', 560, '✅', 'Use Remove from RWB', 'in the app, every time', 's3')}</div>` });
+
+S.push({ id: 'back', chap: 'Leaving', app: [4], cap: ['Made a mistake?', 'Restore them', 'Left / removed → tap the name → <b>Restore</b>.'] });
+
+S.push({ id: 'rules', chap: 'Summary', html: cap('Summary', 'Four simple habits', 'That\'s all it takes.') + `<div class="mg">
+  ${big('o', 20, '1', 'Approve requests daily', '', 's1')}
+  ${big('g', 250, '2', 'Check New weekly', '+ add them to WhatsApp', 's2')}
+  ${big('b', 480, '3', 'Edit only in the app', '', 's3')}
+  ${big('r', 710, '4', 'Remove only with the button', 'Remove from RWB', 's4')}</div>` });
+
+S.push({ id: 'outro', chap: '', html: `<div class="card" style="padding-bottom:200px"><div class="check">✓</div><h2>Thank <em>you!</em></h2><p>Ride safe, warriors.</p><span class="tagx">Questions? Ask Bodhi</span></div>` });
+
+/* ======================= engine ======================= */
+const stage = document.getElementById('stage');
+S.forEach((s, si) => {
+  const vo = VO[s.id] || { dur: 5, sents: [] };
+  s.sents = vo.sents;
+  if (s.app) {
+    let beats = [], t = 0;
+    s.app.forEach(i => SHOTS[i].beats.forEach(b => beats.push({ ...b })));
+    const raw = beats.reduce((a, b) => a + b.hold, 0), want = vo.dur - .3, k = Math.max(1, want / raw);
+    beats.forEach(b => { b.hold *= k; b.at = t + .3; b.tapAt = b.tap ? b.at + Math.min(1.1, b.hold - .6) : null; t += b.hold; });
+    s.beats = beats; s.dur = Math.max(vo.dur, t + .5);
+    s.html = cap(...s.cap) + `<div class="phone"><div class="screen">${beats.map((b, bi) => `<div class="layer" data-b="${bi}"><img src="${b.img}">${b.overlay || ''}</div>`).join('')}<div class="ripple"></div><div class="finger"></div></div></div>`;
+  } else s.dur = vo.dur;
+  stage.insertAdjacentHTML('beforeend', `<div class="scene" data-s="${si}">${s.html}</div>`);
+});
+const scenes = [...stage.querySelectorAll('.scene')];
+let acc0 = 0; window.SCENES = S.map(s => { const o = { id: s.id, start: acc0, dur: s.dur, sents: s.sents }; acc0 += s.dur; return o; });
+const TOTAL = acc0; window.TOTAL = TOTAL;
+const chaps = [...new Set(S.map(s => s.chap).filter(Boolean))];
+const ease = x => x < 0 ? 0 : x > 1 ? 1 : 1 - Math.pow(1 - x, 3), cl = x => Math.max(0, Math.min(1, x));
+const at = (s, v) => { const m = String(v).match(/^s(\d+)([+-][\d.]+)?$/); if (!m) return +v; const se = s.sents[+m[1]]; return (se ? se.t : 0) + (m[2] ? +m[2] : 0); };
+scenes.forEach((sc, i) => {
+  sc.querySelectorAll('[data-a]').forEach(el => el.dataset.at = at(S[i], el.dataset.a));
+  sc.querySelectorAll('path.draw').forEach(p => { const L = p.getTotalLength(); p.style.strokeDasharray = L; p.dataset.len = L; });
+});
+const subEl = document.getElementById('sub');
+window.render = t => {
+  let acc = 0, si = 0;
+  for (; si < S.length - 1 && t >= acc + S[si].dur; si++) acc += S[si].dur;
+  const s = S[si], lt = t - acc, sc = scenes[si];
+  document.getElementById('bar').style.width = (t / TOTAL * 100).toFixed(2) + '%';
+  document.getElementById('chap').textContent = s.chap; document.getElementById('chapn').textContent = s.chap ? `${chaps.indexOf(s.chap) + 1} / ${chaps.length}` : '';
+  scenes.forEach((x, i) => { if (i !== si) x.style.opacity = 0; });
+  const fin = ease(lt / .5), fout = si < S.length - 1 ? cl((s.dur - lt) / .35) : 1;
+  sc.style.opacity = Math.min(fin, fout);
+  const c = sc.querySelector('.cap'); if (c) c.style.transform = `translateY(${(1 - fin) * 30}px)`;
+  /* subtitles: the sentence being spoken (kept until the next one starts) */
+  let cur = null; s.sents.forEach(x => { if (lt >= x.t - .1) cur = x; });
+  const txt = cur && lt <= cur.t + cur.d + .6 ? cur.text : '';
+  if (subEl.dataset.txt !== txt) { subEl.dataset.txt = txt; subEl.innerHTML = txt ? `<span>${txt}</span>` : ''; }
+  subEl.style.opacity = txt ? Math.min(1, cl((lt - cur.t + .1) / .2)) * Math.min(fin, fout) : 0;
+  sc.querySelectorAll('[data-a]').forEach(el => {
+    if (el.dataset.path) return;
+    const a = +el.dataset.at, d = +el.dataset.d || .55, fx = el.dataset.fx, p = ease((lt - a) / d);
+    if (fx === 'draw') { el.style.strokeDashoffset = el.dataset.len * (1 - cl((lt - a) / d)); el.style.opacity = lt >= a ? 1 : 0; return; }
+    el.style.opacity = p;
+    el.style.transform = fx === 'up' ? `translateY(${(1 - p) * 40}px)` : fx === 'left' ? `translateX(${-(1 - p) * 70}px)` : fx === 'pop' ? `scale(${.86 + .14 * p})` : '';
+  });
+  sc.querySelectorAll('circle[data-path]').forEach(el => {
+    const path = sc.querySelector('#' + el.dataset.path), a = +el.dataset.at, d = +el.dataset.d;
+    if (lt < a) { el.style.opacity = 0; return; }
+    const f = ((lt - a) / d) % 1, L = path.getTotalLength(), pt = path.getPointAtLength(L * f);
+    el.setAttribute('cx', pt.x); el.setAttribute('cy', pt.y); el.style.opacity = f < .08 ? f / .08 : f > .9 ? (1 - f) / .1 : 1;
+  });
+  if (s.beats) {
+    let bi = 0; s.beats.forEach((b, i) => { if (lt >= b.at) bi = i; });
+    const layers = sc.querySelectorAll('.layer'), fade = cl((lt - s.beats[bi].at) / .2);
+    layers.forEach((l, i) => { l.style.opacity = i === bi ? (bi ? fade : 1) : i === bi - 1 ? 1 : 0; l.style.zIndex = i === bi ? 2 : 1; });
+    const b = s.beats[bi], f = sc.querySelector('.finger'), r = sc.querySelector('.ripple');
+    if (b.tap) {
+      const [x, y] = b.tap, ta = b.tapAt, p = ease((lt - (ta - .75)) / .55);
+      f.style.left = (x + (1 - p) * 60) + 'px'; f.style.top = (y + (1 - p) * 120) + 'px';
+      const vis = lt >= ta - .75 && lt <= ta + .4; f.style.opacity = vis ? Math.min(cl((lt - (ta - .75)) / .2), cl((ta + .4 - lt) / .18)) : 0;
+      f.style.transform = `scale(${lt >= ta && lt <= ta + .18 ? .8 : 1})`;
+      const rp = (lt - ta) / .5; r.style.left = x + 'px'; r.style.top = y + 'px'; r.style.opacity = rp >= 0 && rp <= 1 ? 1 - rp : 0; r.style.transform = `scale(${1 + rp * 2.4})`;
+    } else { f.style.opacity = 0; r.style.opacity = 0; }
+  }
+};
+render(0);
+</script></body></html>
