@@ -1204,7 +1204,26 @@ const fetchCSV = u => fetchText(u).catch(() => SITE.CORS_PROXY ? fetchText(SITE.
 const driveImg = u => { const m = String(u).match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=view&)?id=)([\w-]+)/); return m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w400` : u; };
 const priceNum = p => { const m = String(p || '').match(/\d[\d,]*(?:\.\d+)?/); return m ? parseFloat(m[0].replace(/,/g, '')) : null; };
 const safeLink = u => /^https?:\/\//i.test(u) ? u : '';
-const pdfTitle = n => n.replace(/\.pdf$/i, '').replace(/_+/g, ' ').trim();
+/* Keyword search: every typed word must appear somewhere (title or description), in any order.
+   Ignores case, underscores/dashes, and simple word endings (cleaning = clean, brakes = brake); allows one small typo. */
+/* common rider spellings and short forms */
+const SYN = { tire: ['tyre'], tires: ['tyre'], break: ['brake'], breaks: ['brake'], lube: ['lubric', 'lubricat'], lubricate: ['lube', 'lubric'], grease: ['lubric', 'lube'],
+    puncher: ['puncture'], petrol: ['fuel'], fuel: ['petrol'], mileage: ['kmpl', 'efficiency'], tyre: ['tire'], oil: ['lubricant'], bulb: ['light', 'lamp'], light: ['bulb', 'lamp'],
+    cleaning: ['wash'], wash: ['clean'], batt: ['battery'], ecu: ['software'], pads: ['pad'], disc: ['disk'], disk: ['disc'], chian: ['chain'], sprocket: ['chain'] };
+const normText = s => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/\.pdf$/, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const stem = w => w.length > 4 ? w.replace(/(ings|ing|ed|es|s)$/, '') : w;
+const near = (a, b) => { if (Math.abs(a.length - b.length) > 1) return false; let i = 0, j = 0, e = 0; while (i < a.length && j < b.length) { if (a[i] === b[j]) { i++; j++; continue; } if (++e > 1) return false; if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; } } return e + (a.length - i) + (b.length - j) <= 1; };
+function searchMatch(query, text) {
+    const words = normText(query).split(' ').filter(Boolean); if (!words.length) return true;
+    const hay = normText(text), toks = hay.split(' ');
+    const one = w => hay.includes(w) || toks.some(t => { const a = stem(t), b = stem(w); return a.startsWith(b) || b.startsWith(a) && a.length >= 3 || (b.length >= 5 && near(a, b)); });
+    return words.every(w => [w, ...(SYN[w] || [])].some(one));
+}
+function markWords(html, query) {
+    const words = normText(query).split(' ').filter(w => w.length >= 2).map(w => stem(w).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    return words.length ? html.replace(new RegExp(`(${words.join('|')})`, 'gi'), '<mark>$1</mark>') : html;
+}
+const pdfTitle = n => n.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 async function viewGuides() {
     const tab = state.guideTab;
@@ -1224,11 +1243,11 @@ async function drawMaint() {
     }
     box.innerHTML = `<input class="search" type="search" placeholder="Search guides" aria-label="Search guides" id="gq"><div class="list" id="gl"></div>`;
     const draw = () => {
-        const q = $('#gq').value.trim().toLowerCase();
-        const shown = state.guides.filter(p => (pdfTitle(p.name) + ' ' + (p.description || '')).toLowerCase().includes(q));
+        const q = $('#gq').value.trim();
+        const shown = state.guides.filter(p => searchMatch(q, p.name + ' ' + pdfTitle(p.name) + ' ' + (p.description || '')));
         $('#gl').innerHTML = shown.length ? shown.map(p => `<button class="card tap guide" data-act="pdf" data-id="${esc(p.id)}">
             <div class="thumb">PDF<img src="https://drive.google.com/thumbnail?id=${esc(p.id)}&sz=w200" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
-            <div><h3>${esc(pdfTitle(p.name))}</h3>${p.description ? `<p class="small muted">${esc(p.description)}</p>` : ''}<p class="small muted">${p.date ? fmtDate(String(p.date).slice(0, 10)) : ''}</p></div></button>`).join('')
+            <div><h3>${markWords(esc(pdfTitle(p.name)), q)}</h3>${p.description ? `<p class="small muted">${markWords(esc(p.description), q)}</p>` : ''}<p class="small muted">${p.date ? fmtDate(String(p.date).slice(0, 10)) : ''}</p></div></button>`).join('')
             : `<div class="card empty">${state.guides.length ? 'No guides match your search.' : '<b>Coming soon</b>Guides will be posted here.'}</div>`;
     };
     $('#gq').oninput = draw; draw();
