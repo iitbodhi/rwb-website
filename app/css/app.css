@@ -810,3 +810,14 @@ mark{background:rgba(232,102,46,.25);color:inherit;border-radius:3px;padding:0 1
 
 /* join-form questions */
 .req{color:var(--orange);font-weight:700}
+
+/* how-to videos */
+.vid-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.vid-tile{display:grid;gap:4px;align-content:start;text-align:left;padding:0;border:0;background:none;color:inherit;font:inherit;cursor:pointer}
+.vid-cover{position:relative;display:block;aspect-ratio:360/546;border-radius:18px;overflow:hidden;background:#151210;box-shadow:0 10px 24px -14px rgba(0,0,0,.6)}
+.vid-cover img{width:100%;height:100%;object-fit:cover;display:block}
+.vid-play{position:absolute;right:10px;bottom:10px;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:15px;color:#fff;background:var(--orange);box-shadow:0 6px 16px -4px rgba(0,0,0,.5);padding-left:3px}
+.vid-cover em{position:absolute;left:10px;bottom:14px;font:600 12px var(--body);font-style:normal;color:#fff;background:rgba(0,0,0,.55);padding:3px 8px;border-radius:99px}
+.vid-tile b{font-size:.98rem;margin-top:6px}
+.vid-tile:active .vid-cover{transform:scale(.98)}
+.vid-player{display:block;width:100%;max-height:72vh;aspect-ratio:9/16;border-radius:16px;background:#000;object-fit:contain}

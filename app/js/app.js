@@ -147,7 +147,7 @@ function mileageStats(logs) {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, crew: viewCrew, events: viewEvents };
+const ROUTES = { videos: viewVideos, docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, crew: viewCrew, events: viewEvents };
 /* screens render one after another, so the screen the rider tapped last always wins */
 let renderChain = Promise.resolve();
 function render() { renderChain = renderChain.then(doRender, doRender); return renderChain; }
@@ -175,8 +175,10 @@ const initials = m => (m?.full_name || '?').split(/\s+/).slice(0, 2).map(w => w[
 /* profile photo if the member added one, otherwise their initials */
 const face = (m, cls = 'avatar') => `<span class="${cls}">${m?.avatar_url ? `<img src="${esc(m.avatar_url)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<i>${esc(initials(m))}</i></span>`;
 const DOC_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/><path d="M8 13.5h8M8 16.5h5"/></svg>';
+const PLAY_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="4"/><path d="M10 9.2v5.6l4.8-2.8z" fill="currentColor"/></svg>';
 const docsAlert = () => (state.docs || []).some(d => docStatus(d).level !== 'ok' && docStatus(d).level !== 'none');
 const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1>${right}
+    <a class="icon-btn bell vid-btn" href="#videos" aria-label="How-to videos">${PLAY_ICON}</a>
     <a class="icon-btn bell docs-btn" href="#docs" aria-label="My documents${docsAlert() ? ' (something needs renewing)' : ''}">${DOC_ICON}${docsAlert() ? '<i class="dot dot-red"></i>' : ''}</a>
     <a class="icon-btn bell" href="#news" aria-label="Announcements${unread() ? ' (new)' : ''}">${BELL}${unread() ? '<i class="dot"></i>' : ''}</a>
     <a href="#me" aria-label="My profile" class="avatar-link">${face(state.me)}</a></header>`;
@@ -1051,6 +1053,36 @@ function docStatus(d) {
     if (days <= 30) return { level: 'warn', days, text: days === 0 ? 'Expires today' : `${days} day${days === 1 ? '' : 's'} left` };
     return { level: 'ok', days, text: 'Valid' };
 }
+/* =================== How-to videos (short guides, also posted as RWB Instagram stories) =================== */
+const VIDEOS = [
+    ['service', 'Service', 'Log services, bills and reminders', 43],
+    ['mileage', 'Mileage', 'Your real km per litre', 44],
+    ['motomart', 'Motomart', 'Buy and sell used riding gear', 43],
+    ['guides', 'Guides', 'Maintenance help and tested gear', 34],
+    ['events', 'Events', 'Rides, meet-ups and shared costs', 40],
+    ['me', 'Me', 'Your profile and settings', 33],
+    ['rwb-members', 'RWB', 'Members and leaderboards', 34],
+    ['coordinators-and-admins', 'Team tools', 'For coordinators and admins', 45, 'team']
+];
+function viewVideos() {
+    const list = VIDEOS.filter(v => v[4] !== 'team' || isMod());
+    app.innerHTML = `${top('Videos')}
+        <p class="muted" style="margin:-4px 0 16px">Short guides to every part of the app, under a minute each, with sound and subtitles.</p>
+        <div class="vid-grid">${list.map(([id, title, sub, sec, who]) => `
+            <button class="vid-tile" data-act="play" data-id="${id}" aria-label="Play: ${esc(title)}, ${sec} seconds">
+                <span class="vid-cover"><img src="videos/${id}.jpg" alt="" loading="lazy"><i class="vid-play">▶</i><em>0:${String(sec).padStart(2, '0')}</em></span>
+                <b>${esc(title)}${who ? ' <span class="badge coord">Team</span>' : ''}</b><span class="small muted">${esc(sub)}</span>
+            </button>`).join('')}</div>
+        <p class="small muted" style="text-align:center;margin:18px 0 8px">Also on the RWB Instagram highlights.</p>`;
+    actions = {
+        play: el => {
+            const v = VIDEOS.find(x => x[0] === el.dataset.id);
+            openSheet(v[1], `<video class="vid-player" src="videos/${v[0]}.mp4" poster="videos/${v[0]}.jpg" controls autoplay playsinline preload="auto"></video>
+                <p class="small muted" style="margin-top:10px;text-align:center">${esc(v[2])} · turn your sound on</p>`);
+        }
+    };
+}
+
 async function viewDocs() {
     const docs = await load.docs(true);
     const slot = k => docs.find(d => d.kind === k);

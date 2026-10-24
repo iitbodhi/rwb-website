@@ -1,6 +1,6 @@
 /* RWB App service worker: keeps the app shell available offline and loads it fast.
    Bump VERSION whenever app files change so phones pick up the new version. */
-const VERSION = 'rwb-app-v34';
+const VERSION = 'rwb-app-v35';
 const SHELL = ['./', 'index.html', 'config.js', 'css/app.css', 'js/app.js', 'js/api.js', '../js/data.js',
     'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
@@ -15,6 +15,8 @@ self.addEventListener('fetch', e => {
     if (e.request.method !== 'GET') return;
     /* our own files: network first, always asking the server for the newest copy (never the browser's
        10-minute HTTP cache), falling back to the saved copy when offline */
+    /* videos stream straight from the server (they need range requests, and are too big to keep offline) */
+    if (url.origin === location.origin && /\.mp4$/i.test(url.pathname)) return;
     if (url.origin === location.origin) {
         e.respondWith(fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }).then(r => {
             if (r.ok) { const copy = r.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
