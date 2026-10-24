@@ -796,3 +796,14 @@ mark{background:rgba(232,102,46,.25);color:inherit;border-radius:3px;padding:0 1
 /* admin: newly joined members */
 .badge.new-tag{background:#1f9d55;color:#fff;font-weight:700}
 .member-row .joined{color:var(--ink);font-weight:500}
+/* admin: members who left or were removed */
+.member-row.gone-row{opacity:.72;background:repeating-linear-gradient(135deg,transparent 0 10px,color-mix(in srgb,var(--line) 35%,transparent) 10px 11px),var(--surface)}
+.member-row.gone-row .avatar{filter:grayscale(1);opacity:.7}
+.member-row.gone-row .who{text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--muted) 60%,transparent)}
+.badge.gone-tag{text-decoration:none;display:inline-block}
+.badge.gone-tag.left{background:rgba(242,163,58,.18);color:#b46a0c}
+.badge.gone-tag.removed{background:rgba(239,91,76,.16);color:var(--bad)}
+.gone-card{display:grid;gap:3px;padding:12px 14px;border-radius:12px;margin-bottom:12px;font-size:.9rem}
+.gone-card.left{background:rgba(242,163,58,.14);color:#8a520b}
+.gone-card.removed{background:rgba(239,91,76,.12);color:var(--bad)}
+:root[data-theme=dark] .gone-card.left{color:#f2b766}

@@ -17,7 +17,9 @@ const isTeam = m => m.role in TEAM_ORDER;
 const roleBadge = m => isTeam(m) ? `<span class="badge ${m.role === 'coordinator' ? 'coord' : 'orange'}">${ROLE[m.role]}</span>` : '';
 const teamFirst = list => [...list].sort((a, b) => (TEAM_ORDER[a.role] ?? 3) - (TEAM_ORDER[b.role] ?? 3) || a.full_name.localeCompare(b.full_name));
 /* joined (through the form or approved in the app) in the last 7 days: shown to admins so they can add them to the WhatsApp group */
-const isNewMember = m => { const t = Date.parse(m?.joined_at || ''); return t > 0 && Date.now() - t < 7 * 864e5; };
+const isGone = m => m?.status === 'left' || m?.status === 'removed';
+const GONE_TXT = { left: 'Left', removed: 'Removed' };
+const isNewMember = m => { if (isGone(m)) return false; const t = Date.parse(m?.joined_at || ''); return t > 0 && Date.now() - t < 7 * 864e5; };
 const vrnKey = v => (v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /* ---------- formatting ---------- */
@@ -1424,7 +1426,7 @@ async function adminRequests() {
         <h3>${esc(r.full_name)}</h3>
         <dl class="facts"><dt>Google</dt><dd>${esc(r.email || '–')}</dd><dt>WhatsApp</dt><dd><a href="${waTo(r.phone)}" target="_blank" rel="noopener">${esc(r.phone)}</a></dd>
             ${r.bike ? `<dt>Bike</dt><dd>${esc(r.bike)}</dd>` : ''}${r.vrn ? `<dt>Bike no.</dt><dd>${esc(r.vrn)}</dd>` : ''}${r.locality ? `<dt>Locality</dt><dd>${esc(r.locality)}</dd>` : ''}${r.hideout ? `<dt>Hometown</dt><dd>${esc(r.hideout)}</dd>` : ''}${r.blood_group ? `<dt>Blood group</dt><dd>${esc(r.blood_group)}</dd>` : ''}${r.emergency_phone ? `<dt>Emergency</dt><dd>${esc(r.emergency_phone)}</dd>` : ''}${r.dob ? `<dt>Birthday</dt><dd>${fmtDayMonth(r.dob)}</dd>` : ''}<dt>Asked</dt><dd>${fmtDate(String(r.created_at).slice(0, 10))}</dd></dl>
-        <p class="${r.match_member_id ? (r.match_linked ? 'warn' : 'badge ok') : 'badge'}" style="margin-bottom:12px">${r.match_member_id ? (r.match_linked ? `⚠ This number belongs to ${esc(r.match_name)}, who is already on the app with another account.` : `✓ Matches sheet entry: ${esc(r.match_name)}`) : 'Not in the members sheet: approving adds them as a new member'}</p>
+        <p class="${r.match_member_id ? (r.match_linked ? 'warn' : 'badge ok') : 'badge'}" style="margin-bottom:12px">${r.match_member_id ? (r.match_status && r.match_status !== 'active' ? `↩ ${esc(r.match_name)} ${r.match_status === 'left' ? 'left' : 'was removed'}${r.match_removed_at ? ' on ' + fmtDate(String(r.match_removed_at).slice(0, 10)) : ''}. Approving restores them as a new member.` : r.match_linked ? `⚠ This number belongs to ${esc(r.match_name)}, who is already on the app with another account.` : `✓ Matches sheet entry: ${esc(r.match_name)}`) : 'Not in the members sheet: approving adds them as a new member'}</p>
         <div class="btns"><button class="btn ghost" data-act="reject" data-id="${r.id}">Reject</button><button class="btn" data-act="approve" data-id="${r.id}">Approve</button></div></div>`).join('')}</div>`
         : '<div class="card empty"><b>All clear</b>No one is waiting for access.</div>';
     Object.assign(actions, {
@@ -1435,25 +1437,30 @@ async function adminRequests() {
 async function adminMembers() {
     state.adminMembers ??= await api.admin.members();
     const all = state.adminMembers;
-    const nNew = all.filter(isNewMember).length;
-    const F = { all: 'Everyone', new: `New${nNew ? ` (${nNew})` : ''}`, app: 'On the app', admins: 'RWB team' };
+    const nNew = all.filter(isNewMember).length, nGone = all.filter(isGone).length;
+    const F = { all: 'Everyone', new: `New${nNew ? ` (${nNew})` : ''}`, app: 'On the app', admins: 'RWB team', gone: `Left / removed${nGone ? ` (${nGone})` : ''}` };
     state.memberFilter ||= 'all'; state.memberSort ||= 'team';
     const SORTS = { team: 'Team, A–Z', new: 'Newest first', old: 'Oldest first' };
     $('#admin-body').innerHTML = `<div class="chips" style="margin-bottom:10px">${Object.entries(F).map(([k, v]) => `<button class="chip" data-act="mf" data-f="${k}" aria-pressed="${state.memberFilter === k}">${v}</button>`).join('')}</div>
-    ${state.memberFilter === 'admins' ? `<p class="small muted" style="margin-bottom:10px">Tap a person to ${state.me.role === 'superadmin' ? 'make them an admin or a coordinator' : 'make them a coordinator'} or change their role. Coordinators can approve Motomart posts.</p>` : ''}${state.memberFilter === 'new' ? '<p class="small muted" style="margin-bottom:10px">Joined in the last 7 days, through the join form or the app. Add them to the RWB WhatsApp group; the <b>New Member</b> tag goes away after 7 days.</p>' : ''}
+    ${state.memberFilter === 'admins' ? `<p class="small muted" style="margin-bottom:10px">Tap a person to ${state.me.role === 'superadmin' ? 'make them an admin or a coordinator' : 'make them a coordinator'} or change their role. Coordinators can approve Motomart posts.</p>` : ''}${state.memberFilter === 'gone' ? '<p class="small muted" style="margin-bottom:10px">Members who left or were removed, newest first. Their app account and data are deleted; this record stays so you know who left and when. Tap someone to <b>restore</b> them.</p>' : ''}${state.memberFilter === 'new' ? '<p class="small muted" style="margin-bottom:10px">Joined in the last 7 days, through the join form or the app. Add them to the RWB WhatsApp group; the <b>New Member</b> tag goes away after 7 days.</p>' : ''}
     <div class="row" style="gap:8px;margin-bottom:12px"><input class="search" type="search" id="mq" placeholder="Search name, number, bike no. or place" value="${esc(state.adminSearch)}" aria-label="Search members" style="margin:0;flex:1">
         <select id="msort" aria-label="Sort" style="width:auto;flex:none;max-width:44%">${Object.entries(SORTS).map(([k, v]) => `<option value="${k}"${state.memberSort === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>
     <p class="small muted" id="mcount" style="margin:-4px 0 10px"></p><div class="list" id="ml"></div><button class="btn ghost block section" id="more" hidden>Show more</button>`;
     let limit = 50;
     const draw = () => {
         const q = state.adminSearch.trim().toLowerCase(), qd = q.replace(/\D/g, '');
-        const picked = all.filter(m => state.memberFilter === 'app' ? m.user_id : state.memberFilter === 'admins' ? isTeam(m) : state.memberFilter === 'new' ? isNewMember(m) : true);
+        const gone = state.memberFilter === 'gone';
+        const picked = all.filter(m => gone ? isGone(m) : !isGone(m) && (state.memberFilter === 'app' ? m.user_id : state.memberFilter === 'admins' ? isTeam(m) : state.memberFilter === 'new' ? isNewMember(m) : true));
         const jt = m => Date.parse(m.joined_at || m.created_at || 0) || 0;
-        const sort = state.memberFilter === 'new' && state.memberSort === 'team' ? 'new' : state.memberSort;
-        const pool = sort === 'new' ? [...picked].sort((a, b) => jt(b) - jt(a)) : sort === 'old' ? [...picked].sort((a, b) => jt(a) - jt(b)) : teamFirst(picked);
+        const sort = (state.memberFilter === 'new' || gone) && state.memberSort === 'team' ? 'new' : state.memberSort;
+        const gt = m => Date.parse(m.removed_at || 0) || 0;
+        const pool = gone ? [...picked].sort((a, b) => sort === 'old' ? gt(a) - gt(b) : gt(b) - gt(a)) : sort === 'new' ? [...picked].sort((a, b) => jt(b) - jt(a)) : sort === 'old' ? [...picked].sort((a, b) => jt(a) - jt(b)) : teamFirst(picked);
         const hits = pool.filter(m => !q || m.full_name.toLowerCase().includes(q) || (m.nickname || '').toLowerCase().includes(q) || (qd.length >= 3 && (m.phone || '').includes(qd)) || (vrnKey(q).length >= 2 && vrnKey(m.vrn).includes(vrnKey(q))) || (m.locality || '').toLowerCase().includes(q) || (m.hideout || '').toLowerCase().includes(q));
-        $('#mcount').textContent = `${hits.length} ${state.memberFilter === 'app' ? 'on the app' : state.memberFilter === 'admins' ? 'in the RWB team' : state.memberFilter === 'new' ? 'new in the last 7 days' : 'member' + (hits.length === 1 ? '' : 's')}`;
-        $('#ml').innerHTML = hits.slice(0, limit).map(m => `<button class="card tap row member-row" data-act="member" data-id="${m.id}">${face(m, 'avatar sm')}
+        $('#mcount').textContent = `${hits.length} ${state.memberFilter === 'app' ? 'on the app' : state.memberFilter === 'admins' ? 'in the RWB team' : state.memberFilter === 'new' ? 'new in the last 7 days' : gone ? 'left or removed' : 'member' + (hits.length === 1 ? '' : 's')}`;
+        $('#ml').innerHTML = hits.slice(0, limit).map(m => isGone(m) ? `<button class="card tap row member-row gone-row" data-act="member" data-id="${m.id}">${face(m, 'avatar sm')}
+            <div class="grow"><div class="who">${esc(m.full_name)} <span class="badge gone-tag ${m.status}">${GONE_TXT[m.status]}</span></div>
+            <div class="meta">${GONE_TXT[m.status]} ${m.removed_at ? fmtDate(String(m.removed_at).slice(0, 10)) : ''}${m.removed_by ? ` · by ${esc(m.removed_by)}` : ''}${m.removed_note ? ` · “${esc(m.removed_note)}”` : ''} · ${esc(m.phone || '')}</div></div></button>`
+            : `<button class="card tap row member-row" data-act="member" data-id="${m.id}">${face(m, 'avatar sm')}
             <div class="grow"><div class="who">${esc(m.full_name)} ${roleBadge(m)}${isNewMember(m) ? ' <span class="badge new-tag">New Member</span>' : ''}</div>
             <div class="meta">${sort !== 'team' || isNewMember(m) ? `<span class="joined">Joined ${fmtDate(String(m.joined_at || m.created_at).slice(0, 10))}</span> · ` : ''}${m.avg_kmpl ? `<b class="kmpl-tag">${kmplTxt(m.avg_kmpl)}</b> · ` : ''}${esc([m.phone, m.vrn, m.locality].filter(Boolean).join(' · '))}</div></div>
             ${m.user_id ? '<span class="badge ok">On app</span>' : ''}</button>`).join('') || '<div class="card empty">No one matches.</div>';
@@ -1467,6 +1474,7 @@ async function adminMembers() {
     $('#msort').onchange = e => { state.memberSort = e.target.value; limit = 50; draw(); };
 }
 function memberSheet(m) {
+    if (isGone(m)) return goneSheet(m);
     const superA = state.me.role === 'superadmin', self = m.user_id && m.user_id === state.me.user_id;
     const canRemove = !self && m.role !== 'superadmin' && (m.role !== 'admin' || superA);
     openSheet(m.full_name, `
@@ -1491,11 +1499,39 @@ function memberSheet(m) {
             busy(role, async () => { await api.admin.setRole(m.id, to); m.role = to; state.dir = null; toast(to === 'member' ? 'Role removed' : `Now ${to === 'admin' ? 'an admin' : 'a coordinator'}`); memberSheet(m); adminMembers(); });
         });
         const rm = body.querySelector('[data-x=remove]');
-        if (rm) rm.onclick = () => {
-            const typed = window.prompt(`This permanently deletes ${m.full_name}${m.user_id ? ' and all their app data' : ''}.\n\nType REMOVE to confirm.`);
-            if ((typed || '').trim().toUpperCase() !== 'REMOVE') return;
-            busy(rm, async () => { await api.admin.remove(m.id, m.user_id); state.adminMembers = state.adminMembers.filter(x => x.id !== m.id); closeSheet(); toast(`${m.full_name} removed`); state.dir = null; state.board = null; render(); });
+        if (rm) rm.onclick = () => removeSheet(m);
+    });
+}
+function removeSheet(m) {
+    openSheet(`Remove ${firstName(m)}?`, `<form id="rmf">
+        <fieldset><legend>Why?</legend>
+            <label class="wish-opt"><input type="radio" name="why" value="left" checked><span><b>Left the group</b><span class="wish-prev">They left the RWB WhatsApp group or asked to leave</span></span></label>
+            <label class="wish-opt"><input type="radio" name="why" value="removed"><span><b>Removed by admin</b><span class="wish-prev">The RWB team removed them</span></span></label></fieldset>
+        <label>Note <span class="hint">(optional, only admins see it)</span><input name="note" maxlength="200" placeholder="e.g. Moved to Bangalore"></label>
+        <div class="warn">${m.user_id ? 'Their app account, service records, bills, fuel log, documents and Motomart posts are <b>deleted</b>. ' : ''}Their row is removed from the RWB contact sheet (a copy goes to its “Removed members” tab). Their name stays here under <b>Left / removed</b>, and you can restore them any time.</div>
+        <label>Type <b>REMOVE</b> to confirm<input name="ok" autocomplete="off" autocapitalize="characters"></label>
+        <button class="btn danger block">Remove ${esc(firstName(m))}</button></form>`, body => {
+        const f = body.querySelector('#rmf');
+        f.onsubmit = e => {
+            e.preventDefault();
+            if (f.ok.value.trim().toUpperCase() !== 'REMOVE') { toast('Type REMOVE to confirm', true); return; }
+            const why = f.why.value, note = f.note.value.trim();
+            busy(e.submitter, async () => { await api.admin.remove(m.id, m.user_id, why, note); state.adminMembers = null; closeSheet(); toast(`${m.full_name} moved to Left / removed`); state.dir = null; state.board = null; render(); });
         };
+    });
+}
+function goneSheet(m) {
+    openSheet(m.full_name, `
+        <div class="gone-card ${m.status}"><b>${GONE_TXT[m.status]}${m.removed_at ? ' on ' + fmtDate(String(m.removed_at).slice(0, 10)) : ''}</b>
+            <span>${m.removed_by ? `By ${esc(m.removed_by)}` : ''}${m.removed_note ? `${m.removed_by ? ' · ' : ''}“${esc(m.removed_note)}”` : ''}</span></div>
+        <dl class="facts">
+            <dt>WhatsApp</dt><dd>${esc(m.phone || '–')}</dd><dt>Email</dt><dd>${esc(m.email || '–')}</dd>
+            <dt>Bike</dt><dd>${esc([m.bike, m.vrn].filter(Boolean).join(' · ') || '–')}</dd><dt>Locality</dt><dd>${esc(m.locality || '–')}</dd>
+            <dt>Joined</dt><dd>${m.joined_at ? fmtDate(String(m.joined_at).slice(0, 10)) : '–'}</dd>
+        </dl>
+        <button class="btn block" data-x="restore">Restore to RWB</button>
+        <p class="small muted" style="margin-top:8px">Adds them back to the member list and the RWB contact sheet with a <b>New Member</b> tag. If they had the app, they sign in again and an admin approves them. People who register again through the form or the app are restored automatically.</p>`, body => {
+        body.querySelector('[data-x=restore]').onclick = e => busy(e.target, async () => { await api.admin.restore(m.id); state.adminMembers = null; state.dir = null; closeSheet(); toast(`${m.full_name} restored`); render(); });
     });
 }
 function memberEdit(m) {

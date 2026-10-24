@@ -249,7 +249,7 @@ async function supabaseApi(url, key) {
             },
             update: async (id, p) => must(await sb.rpc('admin_update_member', { p_member_id: id, p })),
             setRole: async (id, role) => must(await sb.rpc('admin_set_role', { p_member_id: id, p_role: role })),
-            async remove(id, userId) {
+            async remove(id, userId, reason = 'removed', note = '') {
                 if (userId) await sb.storage.from('avatars').remove([`${userId}/avatar.jpg`]).catch(() => {});
                 const photos = must(await sb.rpc('admin_listing_photos', { p_member_id: id })) || [];
                 if (photos.length) await sb.storage.from(PHOTO_BUCKET).remove(photos);
@@ -257,8 +257,11 @@ async function supabaseApi(url, key) {
                 if (files.length) must(await sb.storage.from(BILL_BUCKET).remove(files));
                 const docs = await sb.rpc('admin_removal_docs', { p_member_id: id }).then(r => r.data || []).catch(() => []);
                 if (docs.length) await sb.storage.from('docs').remove(docs).catch(() => {});
-                return must(await sb.rpc('admin_remove_member', { p_member_id: id }));
-            }
+                const r = await sb.rpc('admin_remove_member', { p_member_id: id, p_reason: reason, p_note: note || null });
+                if (r.error && /function|schema cache/i.test(r.error.message)) return must(await sb.rpc('admin_remove_member', { p_member_id: id }));   /* before the archive update is installed */
+                return must(r);
+            },
+            restore: async id => must(await sb.rpc('admin_restore_member', { p_member_id: id }))
         }
     };
 }
@@ -333,7 +336,7 @@ function demoApi() {
         me: () => wait(me()),
         async updateMe(f) { Object.assign(me(), f); save(); return wait(me()); },
         async setAvatar(file) { me().avatar_url = file ? await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); }) : null; save(); return wait(me()); },
-        directory: () => wait(db.members.map(m => ({ id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url, bike: m.bike, vrn: m.vrn, locality: m.locality, role: m.role, phone: ['superadmin', 'admin', 'coordinator'].includes(m.role) ? m.phone : null, on_app: !!m.user_id, avg_kmpl: m.user_id === 'me' ? m.avg_kmpl : ({ 2: 41.9, 3: 44.6, 4: 36.8, 5: 38.2 })[m.id] ?? null })).sort((a, b) => a.full_name.localeCompare(b.full_name))),
+        directory: () => wait(db.members.filter(m => !m.status || m.status === 'active').map(m => ({ id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url, bike: m.bike, vrn: m.vrn, locality: m.locality, role: m.role, phone: ['superadmin', 'admin', 'coordinator'].includes(m.role) ? m.phone : null, on_app: !!m.user_id, avg_kmpl: m.user_id === 'me' ? m.avg_kmpl : ({ 2: 41.9, 3: 44.6, 4: 36.8, 5: 38.2 })[m.id] ?? null })).sort((a, b) => a.full_name.localeCompare(b.full_name))),
         async boards() {
             const myKm = Math.max(0, me().odo_km || 0, ...db.fuel.map(f => f.odometer_km), ...db.services.map(x => x.odometer_km));
             const rows = [['Rahul Ghosh', 'Rocket', 18420, 36.8, 5, 'TVS Ronin 225'], ['Arjun Sen', 'Sultan', 11250, 41.9, 3, 'TVS Ronin 225'], ['Sourav Paul', '', 5310, 38.2, 1, 'TVS Apache RTR 200 4V'], ['Priya Dutta', '', 2400, 44.6, 2, 'TVS Ronin 225'], ['Kaustabh Roy', 'Pookie', 26100, 34.1, 7, 'TVS Ronin 225']]
@@ -456,11 +459,12 @@ function demoApi() {
             members: () => wait([...db.members].sort((a, b) => a.full_name.localeCompare(b.full_name))),
             async update(id, p) { Object.assign(db.members.find(m => m.id === id), p); save(); return 'saved'; },
             async setRole(id, role) { db.members.find(m => m.id === id).role = role; save(); return role; },
-            async remove(id) {
+            async remove(id, userId, reason = 'removed', note = '') {
                 const m = db.members.find(x => x.id === id);
                 if (m.role === 'superadmin') throw new Error('The super admin cannot be removed');
-                db.members = db.members.filter(x => x.id !== id); save(); return 'removed';
-            }
+                Object.assign(m, { status: reason, removed_at: new Date().toISOString(), removed_by: me().nickname || me().full_name, removed_note: note || null, user_id: null, role: 'member' }); save(); return reason;
+            },
+            async restore(id) { Object.assign(db.members.find(x => x.id === id), { status: 'active', removed_at: null, removed_by: null, removed_note: null, joined_at: new Date().toISOString() }); save(); return 'restored'; }
         }
     };
 }
