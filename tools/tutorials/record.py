@@ -89,7 +89,7 @@ class Rec:
         print(self.name, 'scenes', len(self.scenes), 'beats', beats, 'approx', round(sum(b['hold'] for s in self.scenes for b in s['beats']) + 8.5, 1), 's')
 
 
-async def setup(b):
+async def setup(b, role='member'):
     ctx = await b.new_context(viewport={'width': 390, 'height': 844}, device_scale_factor=2, user_agent=UA, service_workers='block', locale='en-IN', timezone_id='Asia/Kolkata')
     await ctx.add_init_script("try{Object.defineProperty(Notification,'permission',{get:()=>'default'})}catch(e){}; window.open=()=>null;")
     pg = await ctx.new_page()
@@ -104,10 +104,10 @@ async def setup(b):
     await pg.wait_for_timeout(500); await pg.click('[data-act=google]'); await pg.wait_for_timeout(900)
     photos = {1: [b64('helmet1.png'), b64('helmet2.png')], 2: [b64('jacket.png')], 3: [b64('lock.png')], 4: [b64('mount.png')]}
     await pg.evaluate("""(ph) => { const k='rwb-app-demo-v2', d=JSON.parse(localStorage.getItem(k));
-        Object.assign(d.members[0], { role: 'member', nickname: 'Warrior', full_name: 'Warrior Rider' }); const sp = d.members.find(m => m.id === 5); if (sp) sp.user_id = 'u5';
+        Object.assign(d.members[0], { role: ROLE, nickname: ROLE === 'member' ? 'Warrior' : 'Bodhi', full_name: ROLE === 'member' ? 'Warrior Rider' : 'Bodhisatwa Admin' }); const ag = n => new Date(Date.now() - n * 864e5).toISOString(); d.members.find(m => m.id === 3).joined_at = ag(1); d.members.find(m => m.id === 5).joined_at = ag(4); const sp = d.members.find(m => m.id === 5); if (sp) sp.user_id = 'u5';
         for (const l of d.listings) if (ph[l.id]) l.photos = ph[l.id];
         for (const l of d.listings) if (l.user_id === 'me') l.seller_name = 'Warrior Rider';
-        localStorage.setItem(k, JSON.stringify(d)); }""", {str(k): v for k, v in photos.items()})
+        localStorage.setItem(k, JSON.stringify(d)); }""".replace('ROLE', repr(role)), {str(k): v for k, v in photos.items()})
     await pg.reload(); await pg.wait_for_timeout(1300)
     return pg
 
@@ -269,7 +269,57 @@ async def crew(r):
     await r.shot(hold=2.4)
     r.save('RWB members', 'Leaderboards, the RWB team and the member list.', 'Ride together, rank together.')
 
-VIDEOS = {'service': service, 'mileage': mileage, 'motomart': motomart, 'guides': guides, 'events': events, 'me': me, 'crew': crew}
+
+async def staff(r):
+    p = r.p
+    r.scene('Coordinators + admins', 'Approve Motomart posts', 'A <b>waiting for approval</b> alert appears on Home. In Motomart tap <b>To approve</b>, check photos and price, then <b>Approve</b> or <b>Reject</b> with a reason.')
+    await r.tap('a[data-tab=motomart]', wait=900, hold=1.3)
+    await r.tap('[data-act=review]', wait=700, hold=1.3)
+    await r.tap('.mm-card >> nth=0', wait=700, hold=1.3)
+    await r.tap('#sheet [data-x=approve]', wait=1000, hold=1.4); await r.shot(hold=1.0)
+    r.scene('Admins', 'Access requests', 'Someone signed in with a different Google account? Open <b>Admin</b> from <b>Me</b>. Check their details, then <b>Approve</b>. They\'re added to the RWB contact sheet too.')
+    await r.tap('.top a.avatar-link', wait=800, hold=1.2)
+    await r.tap('a[href="#admin"]', wait=1000, hold=1.3)
+    await r.tap('[data-act=approve] >> nth=0', wait=1000, hold=1.5)
+    r.scene('Admins', 'New members', 'In the <b>RWB</b> tab, tap <b>New</b> to see who joined this week (form or app). Add them to the WhatsApp group; the <b>New Member</b> tag goes after 7 days. Sort by <b>Newest first</b> any time.')
+    await r.tap('a[data-tab=crew]', wait=1100, hold=1.2)
+    await r.tap('[data-act=mf][data-f=new]', wait=700, hold=1.4); await r.shot(hold=1.4)
+    r.scene('Admins', 'Make a coordinator', 'Tap any member: <b>WhatsApp</b> them, <b>Edit details</b>, or <b>Make coordinator</b> so they can approve Motomart posts. Only the super admin can make admins.')
+    await r.tap('[data-act=member] >> nth=0', wait=700, hold=1.3)
+    await r.tap('#sheet [data-x=role][data-to=coordinator]', click=False, hold=1.6)
+    await p.keyboard.press('Escape'); await p.wait_for_timeout(300)
+    r.scene('Admins', 'Remove a member', 'Tap <b>Remove from RWB</b>, choose <b>Left the group</b> or <b>Removed by admin</b>, add a note and type REMOVE. Their app data is deleted and their sheet row removed.')
+    await r.tap('[data-act=mf][data-f=all]', wait=600, hold=1.0)
+    await p.fill('#mq', 'arjun'); await p.dispatch_event('#mq', 'input'); await p.wait_for_timeout(300)
+    await r.tap('[data-act=member] >> nth=0', wait=700, hold=1.2)
+    await r.tap('#sheet [data-x=remove]', wait=600, hold=1.3)
+    await p.check('#rmf input[value=left]'); await p.fill('#rmf input[name=note]', 'Moved to Bangalore'); await p.fill('#rmf input[name=ok]', 'REMOVE'); await p.wait_for_timeout(200)
+    await r.tap('#rmf button.danger', wait=1100, hold=1.5)
+    r.scene('Admins', 'Left / removed', 'They stay on record under <b>Left / removed</b>: greyed out with the date, who did it and why. Tap one to <b>Restore</b>. Rejoining through the form or app restores them too.')
+    await p.fill('#mq', ''); await p.dispatch_event('#mq', 'input'); await p.wait_for_timeout(300)
+    await r.tap('[data-act=mf][data-f=gone]', wait=700, hold=1.4)
+    await r.tap('[data-act=member] >> nth=0', wait=700, hold=1.3)
+    await r.tap('#sheet [data-x=restore]', click=False, hold=1.4)
+    await p.keyboard.press('Escape'); await p.wait_for_timeout(300)
+    r.scene('Coordinators + admins', 'Create an event', 'In <b>Events</b> tap <b>＋ Create event</b>: name, date, time, place, reminder and guests. <b>Publish</b> and every member is notified.')
+    await r.tap('a[data-tab=events]', wait=1000, hold=1.1)
+    await r.tap('[data-act=evt-new]', wait=700, hold=1.2)
+    await p.fill('#evf [name=title]', 'Sunday ride to Gadiara'); await p.fill('#evf [name=d1]', '2026-11-08'); await p.fill('#evf [name=t1]', '05:30'); await p.fill('#evf [name=location]', 'Science City, Kolkata'); await p.wait_for_timeout(300)
+    await r.shot(hold=1.6)
+    await r.tap('#evf > button.btn.block', wait=1200, hold=1.4); await r.shot(hold=1.3)
+    r.scene('Admins', 'Announcements', 'Tap the <b>bell</b>, open <b>Post an announcement</b> and send. It goes to everyone\'s phone. Only admins can delete announcements and events from the feed.')
+    await r.tap('.top a.bell[href="#news"]', wait=900, hold=1.1)
+    await r.tap('details.howto summary', wait=500, hold=1.1)
+    await p.fill('#ann [name=title]', 'Helmet check this Sunday'); await p.fill('#ann [name=body]', 'Bring your helmet to the breakfast ride for a free fit check.'); await p.wait_for_timeout(200)
+    await r.confirm('#ann button.btn.block', 'Send “Helmet check this Sunday” to all members?', wait=1000); await r.shot(hold=1.2)
+    r.scene('Admins', 'Birthdays + Pookie', 'In <b>Admin</b>: <b>Birthdays</b> shows today and the next 7 days with a ready message. <b>Pookie</b> lets you add RWB facts the AI should know.')
+    await r.tap('.top a.avatar-link', wait=700, hold=1.0)
+    await r.tap('a[href="#admin"]', wait=900, hold=1.0)
+    await r.tap('[data-act=tab][data-tab=bdays]', wait=900, hold=1.5)
+    await r.tap('[data-act=tab][data-tab=ai]', wait=1100, hold=1.3); await r.shot(hold=2.0)
+    r.save('Coordinators & admins', 'Everything the RWB team can do in the app, in one minute.', 'Thanks for keeping RWB running.')
+
+VIDEOS = {'service': service, 'mileage': mileage, 'motomart': motomart, 'guides': guides, 'events': events, 'me': me, 'crew': crew, 'staff': staff}
 
 async def main(names):
     os.makedirs(f'{S}/data', exist_ok=True)
@@ -277,7 +327,7 @@ async def main(names):
         b = await pw.chromium.launch()
         for n in names:
             import shutil; shutil.rmtree(f'{S}/shots/{n}', ignore_errors=True)
-            pg = await setup(b)
+            pg = await setup(b, 'superadmin' if n == 'staff' else 'member')
             errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
             r = Rec(pg, n)
             try: await VIDEOS[n](r)
