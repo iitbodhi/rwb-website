@@ -2167,9 +2167,13 @@ async function boot() {
 (function pookieDrag() {
     const fab = document.getElementById('pookie-fab'); if (!fab) return;
     const KEY = 'rwb-pookie-pos', M = 12;
+    const SIZE = 54;   /* the bubble's size: measured sizes are 0 while it's hidden (loading, sign-in) */
     const bounds = () => {
-        const tab = document.getElementById('tabbar'), tb = tab && !tab.hidden ? tab.getBoundingClientRect().top : innerHeight;
-        return { minY: 76, maxY: Math.max(140, tb - fab.offsetHeight - 14), maxX: innerWidth - fab.offsetWidth - M };
+        const W = document.documentElement.clientWidth || innerWidth, H = window.visualViewport?.height || innerHeight;
+        const tab = document.getElementById('tabbar'), tr = tab && !tab.hidden ? tab.getBoundingClientRect() : null;
+        const tb = tr && tr.height ? Math.min(tr.top, H) : H - 84;
+        const minY = 76;
+        return { minY, maxY: Math.max(minY + 20, tb - SIZE - 14), maxX: Math.max(M, W - SIZE - M) };
     };
     const place = (x, y) => { const b = bounds(); fab.style.left = Math.min(Math.max(M, x), b.maxX) + 'px'; fab.style.top = Math.min(Math.max(b.minY, y), b.maxY) + 'px'; fab.style.right = 'auto'; fab.style.bottom = 'auto'; };
     const restore = () => {
@@ -2201,8 +2205,13 @@ async function boot() {
     fab.addEventListener('pointerup', end); fab.addEventListener('pointercancel', end);
     /* a drag is not a tap */
     fab.addEventListener('click', e => { if (moved) { e.preventDefault(); moved = false; } });
-    addEventListener('resize', restore);
+    /* re-check the spot whenever the screen or the bottom bar changes, so it can never sit off-screen */
+    const later = () => requestAnimationFrame(() => requestAnimationFrame(restore));
+    addEventListener('resize', later); window.visualViewport?.addEventListener('resize', later);
+    addEventListener('orientationchange', later); addEventListener('pageshow', later);
     addEventListener('hashchange', () => setTimeout(restore, 60));
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') later(); });
+    const tabEl = document.getElementById('tabbar'); if (tabEl) new MutationObserver(later).observe(tabEl, { attributes: true, attributeFilter: ['hidden'] });
     restore();
 })();
 
