@@ -30,16 +30,13 @@
 #boot .trk{fill:none;stroke:rgba(255,255,255,.08);stroke-width:5;stroke-linecap:round;stroke-dasharray:311 415}
 #boot .rev{fill:none;stroke:#e8662e;stroke-width:5;stroke-linecap:round;stroke-dasharray:0 415;filter:drop-shadow(0 0 6px rgba(232,102,46,.8));animation:bootRev 1.6s cubic-bezier(.5,0,.3,1) infinite}
 #boot b{font:800 15px/1 'Barlow Condensed','Arial Narrow',sans-serif;letter-spacing:.22em;color:#f1efec;text-transform:uppercase;padding-left:.22em;white-space:nowrap}
-#boot .road{position:relative;width:150px;height:3px;border-radius:3px;overflow:hidden;background:rgba(255,255,255,.07)}
-#boot .road i{position:absolute;inset:0;background:repeating-linear-gradient(90deg,#e8662e 0 18px,transparent 18px 34px);animation:bootRoad .5s linear infinite;opacity:.85}
 @keyframes bootRev{0%{stroke-dasharray:0 415}55%{stroke-dasharray:300 415}75%{stroke-dasharray:270 415}100%{stroke-dasharray:0 415}}
-@keyframes bootRoad{from{transform:translateX(0)}to{transform:translateX(-34px)}}
 @keyframes bootPop{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
-@media (prefers-reduced-motion:reduce){#boot .rev,#boot .road i,#boot .dial img{animation:none}#boot .rev{stroke-dasharray:200 415}}
+@media (prefers-reduced-motion:reduce){#boot .rev,#boot .dial img{animation:none}#boot .rev{stroke-dasharray:200 415}}
 </style>
 </head>
 <body>
-<div id="boot" aria-hidden="true"><div class="dial"><svg viewBox="0 0 176 176"><circle class="trk" cx="88" cy="88" r="66"/><circle class="rev" cx="88" cy="88" r="66"/></svg><img src="icons/logo-384.png" alt=""></div><b>Explore. Evolve. Inspire.</b><div class="road"><i></i></div></div>
+<div id="boot" aria-hidden="true"><div class="dial"><svg viewBox="0 0 176 176"><circle class="trk" cx="88" cy="88" r="66"/><circle class="rev" cx="88" cy="88" r="66"/></svg><img src="icons/logo-384.png" alt=""></div><b>Explore. Evolve. Inspire.</b></div>
 <script>window.BOOT_T = performance.now();</script>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
 <div id="app" aria-live="polite">
