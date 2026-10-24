@@ -5,6 +5,7 @@
 
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 const BILL_BUCKET = 'bills', PHOTO_BUCKET = 'motomart';
+const extOf = f => ({ 'application/pdf': 'pdf', 'application/msword': 'doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx', 'image/png': 'png' })[f.type] || 'jpg';
 
 export async function createApi() {
     const c = typeof APP_CONFIG !== 'undefined' ? APP_CONFIG : {};
@@ -70,7 +71,7 @@ async function supabaseApi(url, key) {
         async saveService(rec, file) {
             const me = await uid();
             if (file) {
-                const ext = file.type === 'application/pdf' ? 'pdf' : file.type === 'image/png' ? 'png' : 'jpg';
+                const ext = extOf(file);
                 const path = `${me}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
                 must(await sb.storage.from(BILL_BUCKET).upload(path, file, { contentType: file.type, upsert: false }));
                 if (rec.bill_path) await sb.storage.from(BILL_BUCKET).remove([rec.bill_path]);
@@ -115,7 +116,7 @@ async function supabaseApi(url, key) {
         async saveDoc(rec, add = [], drop = []) {
             const me = await uid(), files = (rec.files || []).filter(f => !drop.includes(f));
             for (const file of add) {
-                const ext = file.type === 'application/pdf' ? 'pdf' : 'jpg';
+                const ext = extOf(file);
                 const path = `${me}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
                 must(await sb.storage.from('docs').upload(path, file, { contentType: file.type, upsert: false }));
                 files.push(path);

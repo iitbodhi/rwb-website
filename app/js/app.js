@@ -452,8 +452,8 @@ function serviceDetail(s) {
 }
 async function showBill(s) {
     const url = await api.billUrl(s.bill_path).catch(e => toast(e.message, true)); if (!url) return;
-    const pdf = /\.pdf($|\?)/i.test(s.bill_path) || url.startsWith('data:application/pdf');
-    openSheet('Bill', `<div class="bill-view">${pdf ? `<iframe class="pdf" src="${esc(url)}" title="Bill"></iframe>` : `<img src="${esc(url)}" alt="Bill for service on ${esc(fmtDate(s.service_date))}">`}</div>
+    const k = pathKind(s.bill_path.startsWith('demo:') ? s.bill_path : s.bill_path);
+    openSheet('Bill', `<div class="bill-view">${k === 'pdf' ? `<iframe class="pdf" src="${esc(url)}" title="Bill"></iframe>` : k === 'word' ? wordCard(url, 'Bill') : `<img src="${esc(url)}" alt="Bill for service on ${esc(fmtDate(s.service_date))}">`}</div>
         <div class="btns" style="margin-top:14px"><a class="btn ghost" href="${esc(url)}" target="_blank" rel="noopener" download>Open / download</a><button class="btn ghost" data-x="back">Back</button></div>`,
         body => body.querySelector('[data-x=back]').onclick = () => serviceDetail(s));
 }
@@ -476,10 +476,28 @@ async function loadImage(file) {
     }
 }
 
+/* Two separate pickers: some Android phones open only the gallery when one button accepts photos AND files,
+   so "Photo" opens gallery/camera and "PDF / Word" opens the phone's file manager. */
+const PHOTO_ACCEPT = 'image/*,.heic,.heif';
+const DOC_ACCEPT = '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const MIME = { pdf: 'application/pdf', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+const fileKind = f => { const n = (f.name || '').toLowerCase(), t = f.type || ''; return t === MIME.pdf || n.endsWith('.pdf') ? 'pdf' : t === MIME.docx || n.endsWith('.docx') ? 'docx' : t === MIME.doc || n.endsWith('.doc') ? 'doc' : 'image'; };
+const pathKind = p => /\.pdf($|\?)/i.test(p) || String(p).startsWith('demo:data:application/pdf') ? 'pdf' : /\.docx?($|\?)/i.test(p) || /^demo:data:application\/(msword|vnd\.openxml)/.test(p) ? 'word' : 'image';
+/* PDFs and Word files are kept as they are (phones sometimes leave the type blank, so set it from the name) */
+function asDocFile(f, maxMB) {
+    const k = fileKind(f);
+    if (f.size > maxMB * 1e6) throw new Error(`That ${k === 'pdf' ? 'PDF' : 'Word file'} is over ${maxMB} MB. Add photos of the pages instead.`);
+    return f.type === MIME[k] ? f : new File([f], f.name, { type: MIME[k] });
+}
+const pickers = (id, multiple = false) => `<div class="pick-pair" id="${id}">
+    <label class="file-pick"><input type="file" accept="${PHOTO_ACCEPT}"${multiple ? ' multiple' : ''}><span>📷 Photo</span></label>
+    <label class="file-pick"><input type="file" accept="${DOC_ACCEPT}"${multiple ? ' multiple' : ''}><span>📄 PDF / Word</span></label></div>`;
+const wordCard = (url, name) => `<div class="word-card"><span class="word-ico">W</span><span class="grow"><b>${esc(name)}</b><span class="small muted">Word document. Opens in your phone's document app.</span></span><a class="btn sm" href="${esc(url)}" target="_blank" rel="noopener" download>Open</a></div>`;
+
 /* shrink photos so free storage lasts: about 150–250 KB each */
 async function compressBill(file) {
-    if (file.type === 'application/pdf') { if (file.size > 2e6) throw new Error('That PDF is over 2 MB. Please upload a photo of the bill instead.'); return file; }
-    if (!isImageFile(file)) throw new Error('Please choose a photo or a PDF.');
+    if (fileKind(file) !== 'image') return asDocFile(file, 2);
+    if (!isImageFile(file)) throw new Error('Please choose a photo, a PDF or a Word file.');
     return compressImage(file, 1600, 250e3);
 }
 async function compressImage(file, maxSide = 1400, target = 220e3) {
@@ -519,7 +537,7 @@ function serviceForm(s = null) {
         <label>Total cost (₹)<input type="number" name="cost" min="0" step="1" inputmode="numeric" value="${esc(r.cost ?? '')}"></label>
         <label>Notes<textarea name="notes" maxlength="2000" placeholder="Anything worth remembering">${esc(r.notes || '')}</textarea></label>
         <div>
-            <label class="file-pick" id="pick"><input type="file" accept="image/*,.heic,.heif,application/pdf"><span id="pick-text">${r.bill_path ? '🧾 Bill attached. Tap to replace' : '📷 Add bill / invoice (photo or PDF)'}</span></label>
+            <p class="flabel" id="pick-text" style="margin-bottom:6px">${r.bill_path ? '🧾 Bill attached. Pick a new one to replace it' : 'Bill / invoice (optional)'}</p>${pickers('pick')}
             ${r.bill_path ? '<button type="button" class="btn sm ghost" id="rm-bill" style="margin-top:8px">Remove attached bill</button>' : ''}
         </div>
         <button class="btn block">${s ? 'Save changes' : 'Save service'}</button>
@@ -533,14 +551,15 @@ function serviceForm(s = null) {
         const addOther = () => { const v = body.querySelector('#other-item').value.trim(); if (!v) return; chips.insertAdjacentHTML('beforeend', `<button type="button" class="chip" aria-pressed="true">${esc(v)}</button>`); body.querySelector('#other-item').value = ''; };
         body.querySelector('#add-item').onclick = addOther;
         body.querySelector('#other-item').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addOther(); } };
-        body.querySelector('#pick input').onchange = async e => {
+        body.querySelectorAll('#pick input').forEach(inp => inp.onchange = async e => {
             const fl = e.target.files[0]; if (!fl) return;
             body.querySelector('#pick-text').textContent = 'Preparing…';
             try { file = await compressBill(fl); body.querySelector('#pick-text').textContent = `🧾 ${fl.name} (${Math.round(file.size / 1024)} KB) ready`; }
-            catch (err) { file = null; body.querySelector('#pick-text').textContent = '📷 Add bill / invoice (photo or PDF)'; toast(err.message, true); }
-        };
+            catch (err) { file = null; body.querySelector('#pick-text').textContent = 'Bill / invoice (optional)'; toast(err.message, true); }
+            e.target.value = '';
+        });
         const rm = body.querySelector('#rm-bill');
-        if (rm) rm.onclick = () => { if (confirmBox('Remove the attached bill?')) busy(rm, async () => { const u = await api.removeBill(s); r.bill_path = null; Object.assign(s, u); await load.services(true); rm.remove(); body.querySelector('#pick-text').textContent = '📷 Add bill / invoice (photo or PDF)'; toast('Bill removed'); }); };
+        if (rm) rm.onclick = () => { if (confirmBox('Remove the attached bill?')) busy(rm, async () => { const u = await api.removeBill(s); r.bill_path = null; Object.assign(s, u); await load.services(true); rm.remove(); body.querySelector('#pick-text').textContent = 'Bill / invoice (optional)'; toast('Bill removed'); }); };
         f.onsubmit = e => {
             e.preventDefault();
             const d = Object.fromEntries(new FormData(f));
@@ -990,7 +1009,7 @@ async function viewDocs() {
         <section class="section"><h2>Your bike papers</h2><div class="doc-grid">${['dl', 'rc', 'puc', 'insurance'].map(k => card(slot(k), k)).join('')}</div></section>
         <section class="section"><h2>Other documents</h2>${others.length ? `<div class="doc-grid">${others.map(d => card(d)).join('')}</div>` : ''}
             <button class="btn ghost block" data-act="doc-new" data-kind="other" style="margin-top:${others.length ? 10 : 0}px">＋ Add another document</button>
-            <p class="small muted" style="margin-top:10px">For example: Aadhaar, PAN, service warranty, extended warranty or a ride permit. Photos are kept sharp enough to read; PDFs up to 3 MB.</p></section>`;
+            <p class="small muted" style="margin-top:10px">For example: Aadhaar, PAN, service warranty, extended warranty or a ride permit. Photos are kept sharp enough to read; PDF and Word files up to 3 MB.</p></section>`;
     actions = {
         doc: el => docView(docs.find(d => String(d.id) === el.dataset.id)),
         'doc-new': el => docForm({ kind: el.dataset.kind, files: [] })
@@ -1008,8 +1027,8 @@ async function docView(d) {
         for (const [i, path] of d.files.entries()) {
             const box = body.querySelector(`.doc-page[data-i="${i}"]`);
             try {
-                const url = await api.docUrl(path), pdf = /\.pdf$/i.test(path) || url.startsWith('data:application/pdf');
-                if (box) box.innerHTML = (pdf ? `<iframe class="pdf" src="${esc(url)}" title="Page ${i + 1}"></iframe>` : `<img src="${esc(url)}" alt="${esc(docName(d))}, page ${i + 1}">`)
+                const url = await api.docUrl(path), k = pathKind(path);
+                if (box) box.innerHTML = (k === 'pdf' ? `<iframe class="pdf" src="${esc(url)}" title="Page ${i + 1}"></iframe>` : k === 'word' ? wordCard(url, `${docName(d)}, file ${i + 1}`) : `<img src="${esc(url)}" alt="${esc(docName(d))}, page ${i + 1}">`)
                     + `<a class="small link-btn" href="${esc(url)}" target="_blank" rel="noopener" download>Open full size</a>`;
             } catch { if (box) box.innerHTML = '<p class="small muted">Could not load this page. Check your internet.</p>'; }
         }
@@ -1022,30 +1041,31 @@ function docForm(d) {
         ${d.kind === 'other' ? `<label>Name<input name="title" required maxlength="80" placeholder="e.g. Aadhaar card" value="${esc(d.title || '')}"></label>` : ''}
         <label>${K.number}<input name="doc_number" maxlength="60" autocapitalize="characters" value="${esc(d.doc_number || '')}"></label>
         <label>${K.expiry}<input type="date" name="expiry_date" value="${esc(d.expiry_date || '')}"></label>
-        <fieldset><legend>Photos or PDF <span class="hint muted small">(up to 4 pages, e.g. front and back)</span></legend>
+        <fieldset><legend>Photos, PDF or Word <span class="hint muted small">(up to 4 files, e.g. front and back)</span></legend>
             <div class="thumbs" id="dthumbs"></div>
-            <label class="file-pick"><input type="file" accept="image/*,.heic,.heif,application/pdf" multiple id="dpick"><span>📷 Add page</span></label></fieldset>
+            ${pickers('dpick', true)}</fieldset>
         <label>Notes<input name="notes" maxlength="500" placeholder="Anything to remember (optional)" value="${esc(d.notes || '')}"></label>
         <button class="btn block">${editing ? 'Save changes' : 'Save document'}</button></form>`, body => {
         const f = body.querySelector('#docf'), thumbs = body.querySelector('#dthumbs');
         const draw = () => {
-            thumbs.innerHTML = [...keep.map((p, i) => `<div class="thumb"><div class="doc-thumb">${/\.pdf$/i.test(p) ? 'PDF' : 'Page ' + (i + 1)}</div><button type="button" data-k="${i}" aria-label="Remove page">✕</button></div>`),
-                ...add.map((x, i) => `<div class="thumb">${x.type === 'application/pdf' ? '<div class="doc-thumb">PDF</div>' : `<img src="${x.url}" alt="">`}<button type="button" data-a="${i}" aria-label="Remove page">✕</button></div>`)].join('');
+            const tag = k => k === 'pdf' ? 'PDF' : k === 'word' || k === 'doc' || k === 'docx' ? 'Word' : '';
+            thumbs.innerHTML = [...keep.map((p, i) => `<div class="thumb"><div class="doc-thumb">${tag(pathKind(p)) || 'Page ' + (i + 1)}</div><button type="button" data-k="${i}" aria-label="Remove page">✕</button></div>`),
+                ...add.map((x, i) => `<div class="thumb">${fileKind(x) !== 'image' ? `<div class="doc-thumb">${tag(fileKind(x))}</div>` : `<img src="${x.url}" alt="">`}<button type="button" data-a="${i}" aria-label="Remove page">✕</button></div>`)].join('');
         };
         draw();
         thumbs.onclick = e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.k != null) { drop.push(keep[b.dataset.k]); keep.splice(b.dataset.k, 1); } else { URL.revokeObjectURL(add[b.dataset.a].url); add.splice(b.dataset.a, 1); } draw(); };
-        body.querySelector('#dpick').onchange = async e => {
+        body.querySelectorAll('#dpick input').forEach(inp => inp.onchange = async e => {
             for (const fl of [...e.target.files]) {
                 if (keep.length + add.length >= 4) { toast('Up to 4 pages per document', true); break; }
                 try {
                     let out;
-                    if (fl.type === 'application/pdf') { if (fl.size > 3e6) throw new Error('That PDF is over 3 MB. Add photos of the pages instead.'); out = fl; }
+                    if (fileKind(fl) !== 'image') out = asDocFile(fl, 3);
                     else out = await compressImage(fl, 2200, 480e3);      /* sharper than bills so small print stays readable */
                     add.push(Object.assign(out, { url: URL.createObjectURL(out) }));
                 } catch (err) { toast(err.message, true); }
             }
             e.target.value = ''; draw();
-        };
+        });
         f.onsubmit = e => {
             e.preventDefault();
             const v = Object.fromEntries(new FormData(f));
