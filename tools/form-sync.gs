@@ -213,4 +213,43 @@ function sheetValues_(m) {
   };
 }
 
+/* ======================= One-time catch-up ======================= */
+/**
+ * Adds every app member who is missing from this sheet (matched by WhatsApp number).
+ * For members who were in the app before the sync was set up. Safe to run again: nobody is added twice
+ * and existing rows are never changed. Run it from the editor: choose "addMissingFromApp" → Run,
+ * then open View → Execution log to see who was added.
+ */
+function addMissingFromApp() {
+  const r = UrlFetchApp.fetch(SUPABASE_URL + '/rest/v1/rpc/sheet_export_members', {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY },
+    payload: JSON.stringify({ p_secret: SYNC_SECRET })
+  });
+  if (r.getResponseCode() !== 200) throw new Error('Could not read the app members: ' + r.getContentText());
+  const members = JSON.parse(r.getContentText());
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const sheet = responsesSheet_(), col = columns_(sheet), last = sheet.getLastRow();
+    if (col.phone === undefined) throw new Error('No "WhatsApp No" column found in ' + sheet.getName());
+    const have = new Set(last > 1 ? sheet.getRange(2, col.phone + 1, last - 1, 1).getValues().map(x => String(x[0]).replace(/\D/g, '').slice(-10)) : []);
+    const added = [], noNumber = [], rows = []; let already = 0;
+    members.forEach(m => {
+      const p10 = String(m.phone || '').replace(/\D/g, '').slice(-10);
+      if (p10.length !== 10) { noNumber.push(m.full_name); return; }
+      if (have.has(p10)) { already++; return; }
+      have.add(p10);
+      const vals = sheetValues_(m), row = new Array(sheet.getLastColumn()).fill('');
+      Object.keys(vals).forEach(k => { if (col[k] !== undefined) row[col[k]] = vals[k]; });
+      if (col.joined_at !== undefined) row[col.joined_at] = m.joined_at ? new Date(m.joined_at) : new Date();
+      row[col.added] = 'RWB App';
+      rows.push(row); added.push(m.full_name + ' (' + p10 + ')');
+    });
+    if (rows.length) sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+    console.log('App members: ' + members.length + '. Already in the sheet: ' + already + '. Added now: ' + added.length + '.');
+    if (added.length) console.log('Added:\n' + added.join('\n'));
+    if (noNumber.length) console.log('Not added (no WhatsApp number saved in the app, fix it in the app first):\n' + noNumber.join('\n'));
+  } finally { lock.releaseLock(); }
+}
+
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
