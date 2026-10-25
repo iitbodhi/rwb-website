@@ -582,7 +582,14 @@ async function viewHome() {
             <button data-act="sell"><span>${ICON.tag}</span>Sell gear</button>
             <a href="#docs" aria-label="Documents${docsAlert() ? ' (something needs renewing)' : ''}"><span>${DOC_ICON}${docsAlert() ? '<i class="dot dot-red"></i>' : ''}</span>Documents</a>
         </nav>
-        ${isMod() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
+        ${isAdmin() ? `<section class="admin-dock" aria-label="Admin">
+            <div class="ad-head"><b>${ICON.shield} Admin</b><span class="small muted" id="ad-sum"></span><a href="#admin" data-adtab="requests" class="ad-all">Open ›</a></div>
+            <div class="ad-grid">
+                <a href="#admin" data-adtab="requests"><span class="ad-ico">✅</span>Approvals<i class="ad-n" id="ad-req" hidden></i></a>
+                <a href="#admin" data-adtab="members"><span class="ad-ico">👥</span>Members</a>
+                <a href="#admin" data-adtab="motomart"><span class="ad-ico">🛒</span>Motomart<i class="ad-n" id="ad-mm" hidden></i></a>
+                <a href="#admin" data-adtab="bdays"><span class="ad-ico">🎂</span>Birthdays</a>
+            </div></section>` : isMod() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
         ${profileTodo(state.me)}
         ${docWarn ? `<a class="banner doc-warn ${docWarn.st.level}" href="#docs"><span class="b-ico">📄</span><span class="grow"><b>${esc(docName(docWarn.d))}</b> ${docWarn.st.days < 0 ? `expired on ${fmtDate(docWarn.d.expiry_date)}` : docWarn.st.days === 0 ? 'expires today' : `expires in ${docWarn.st.days} day${docWarn.st.days === 1 ? '' : 's'}`}. Renew it and update My documents.</span>${ICON.chev}</a>` : ''}
         ${nextEvt ? `<a class="banner evt-banner" href="#events/${nextEvt.id}"><span class="evt-mini">${evtTile(nextEvt)}</span><span class="grow"><b>${esc(nextEvt.title)}</b><span class="small muted">${esc(evtWhen(nextEvt, true))}${nextEvt.location ? ' · ' + esc(nextEvt.location) : ''}</span></span>${evd.mine[nextEvt.id] ? `<span class="evt-me ${evd.mine[nextEvt.id].status}">${RSVP_TXT[evd.mine[nextEvt.id].status]}</span>` : '<span class="evt-me ask">RSVP</span>'}</a>` : ''}
@@ -608,12 +615,15 @@ async function viewHome() {
         const mm = listings.filter(l => l.status === 'pending').length, b = $('#admin-banner');
         if (b && mm) { b.innerHTML = `<span class="b-ico">${ICON.tag}</span><span class="grow">${mm} Motomart post${mm > 1 ? 's' : ''} waiting for approval</span>${ICON.chev}`; b.href = '#motomart/review'; b.hidden = false; }
     }
-    if (isAdmin()) api.admin.stats().then(s => {
-        const b = $('#admin-banner'), mm = listings.filter(l => l.status === 'pending').length, parts = [];
-        if (s.pending) parts.push(`${s.pending} waiting for approval`);
-        if (mm) parts.push(`${mm} Motomart post${mm > 1 ? 's' : ''}`);
-        if (b && parts.length) { b.innerHTML = `<span class="b-ico">${ICON.shield}</span><span class="grow">${parts.join(' and ')} waiting for you</span>${ICON.chev}`; b.href = s.pending ? '#admin' : '#admin/motomart'; b.hidden = false; }
-    }).catch(() => {});
+    if (isAdmin()) {
+        app.querySelectorAll('[data-adtab]').forEach(a => a.addEventListener('click', () => { state.adminTab = a.dataset.adtab; }));
+        api.admin.stats().then(s => {
+            const mm = listings.filter(l => l.status === 'pending').length, set = (id, n) => { const el = $('#' + id); if (el) { el.textContent = n; el.hidden = !n; } };
+            set('ad-req', s.pending); set('ad-mm', mm);
+            const sum = $('#ad-sum'); if (sum) sum.textContent = s.pending || mm ? `${s.pending + mm} waiting for you` : `${s.members} members · all clear`;
+            const dock = app.querySelector('.admin-dock'); if (dock) dock.classList.toggle('busy', !!(s.pending || mm));
+        }).catch(() => {});
+    }
 }
 
 /* =================== Service records =================== */
@@ -1622,7 +1632,7 @@ function viewMe() {
         ${'tnc_agreed' in m ? `<h2 class="group-title">RWB rules</h2>
         <div class="group"><div class="bike-row"><span class="g-ico">📜</span><span class="grow"><b>${m.tnc_agreed === true ? 'You agree to the RWB rules' : m.tnc_agreed === false ? 'You don\'t agree to the RWB rules' : 'Please read and agree'}</b><span class="small muted">${m.tnc_agreed === true ? 'From the RWB join form' : 'Needed for every RWB member'}</span></span>
             <button class="btn sm ${m.tnc_agreed === true ? 'ghost' : ''}" data-act="rules">${m.tnc_agreed === true ? 'Read' : 'Read & agree'}</button></div></div>` : ''}
-        ${isAdmin() ? `<div class="group section"><a href="#admin"><span class="g-ico">${ICON.shield}</span><span class="grow"><b>Admin panel</b><span class="small muted">Members, requests, Motomart, birthdays, Pookie</span></span>${ICON.chev}</a></div>` : ''}
+
 
         <h2 class="group-title">Appearance</h2>
         <div class="seg" role="radiogroup" aria-label="Theme">${[['light', 'Light'], ['dark', 'Dark'], ['system', 'Auto']].map(([k, l]) => `<button role="radio" aria-selected="${theme === k}" aria-checked="${theme === k}" data-act="theme" data-t="${k}">${l}</button>`).join('')}</div>
@@ -1721,7 +1731,7 @@ async function squarePhoto(file) {
 async function viewAdmin() {
     const s = await api.admin.stats();
     const tab = state.adminTab;
-    app.innerHTML = top('Admin', '<a class="btn sm ghost" href="#me">Done</a>') + `
+    app.innerHTML = top('Admin', '<a class="btn sm ghost" href="#home">Done</a>') + `
         <div class="stats">
             <button class="stat tap" data-act="mfilter" data-f="all"><b>${s.members}</b><span>Members ›</span></button>
             <button class="stat tap" data-act="mfilter" data-f="app"><b>${s.on_app}</b><span>On the app ›</span></button>
@@ -1818,7 +1828,7 @@ function changeCard(c) {
 }
 async function adminRequests() {
     const [reqs, chg, inc] = await Promise.all([api.admin.requests(), api.admin.changes().catch(() => []), api.admin.incomplete().catch(() => null)]);
-    const digest = () => `🛡️ RWB App: ${reqs.length + chg.length} waiting for approval\n${reqs.length ? `\nNew entries (${reqs.length}):\n${reqs.slice(0, 15).map(r => `• ${r.full_name} (${r.source === 'form' ? 'form' : 'app'})`).join('\n')}` : ''}${chg.length ? `\n\nProfile changes (${chg.length}):\n${chg.slice(0, 15).map(c => `• ${c.full_name}: ${CHANGE_TXT[c.kind]}`).join('\n')}` : ''}\n\nOpen: ${APP_LINK} → Me → Admin panel`;
+    const digest = () => `🛡️ RWB App: ${reqs.length + chg.length} waiting for approval\n${reqs.length ? `\nNew entries (${reqs.length}):\n${reqs.slice(0, 15).map(r => `• ${r.full_name} (${r.source === 'form' ? 'form' : 'app'})`).join('\n')}` : ''}${chg.length ? `\n\nProfile changes (${chg.length}):\n${chg.slice(0, 15).map(c => `• ${c.full_name}: ${CHANGE_TXT[c.kind]}`).join('\n')}` : ''}\n\nOpen: ${APP_LINK} → Home → Admin`;
     $('#admin-body').innerHTML = (reqs.length || chg.length ? `<button class="btn ghost block share-admins" data-act="digest">📣 Share this list to the admin WhatsApp group</button>` : '') + (reqs.length || chg.length ? `${reqs.length ? `<p class="small muted" style="margin-bottom:10px">New entries from the join form and the app. Check the 4 points, then approve. Nobody is a member until approved.</p>
         <div class="list">${reqs.map(reqCard).join('')}</div>` : ''}
         ${chg.length ? `<h2 class="group-title" style="margin-top:${reqs.length ? 22 : 0}px">Changes to approve</h2><p class="small muted" style="margin-bottom:10px">Members changed an important detail in their profile.</p><div class="list">${chg.map(changeCard).join('')}</div>` : ''}`
