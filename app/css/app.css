@@ -949,3 +949,15 @@ details.fu summary .small{width:100%;font-weight:400}
 .ad-grid a:active{transform:scale(.96)}
 .ad-ico{font-size:1.3rem;line-height:1}
 .ad-n{position:absolute;top:4px;right:6px;min-width:18px;height:18px;padding:0 5px;border-radius:99px;background:var(--orange);color:#fff;font:700 .68rem/18px var(--body);font-style:normal;text-align:center}
+/* RWB Terms & Conditions document */
+.tnc-doc{font-size:.9rem;line-height:1.55;color:var(--stone)}
+.tnc-meta{font-size:.76rem;color:var(--muted);margin:0 0 12px;letter-spacing:.02em}
+.tnc-doc section{padding:12px 0;border-top:1px solid var(--hair,var(--line))}
+.tnc-doc section:first-of-type{border-top:0;padding-top:0}
+.tnc-doc h3{font:800 1rem/1.2 var(--display);text-transform:uppercase;letter-spacing:.03em;color:var(--ink);margin:0 0 6px}
+.tnc-doc p{margin:0}
+.tnc-doc ol{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.tnc-doc li{display:grid;grid-template-columns:30px 1fr;gap:4px}
+.tnc-doc li span{font-weight:700;color:var(--orange);font-size:.8rem;padding-top:1px}
+details.rules .tnc-doc{margin-top:10px}
+.tnc-link{display:block;margin:2px 0 6px;font-size:.84rem}

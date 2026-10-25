@@ -3,10 +3,10 @@
 --   • Existing members pass the checks: their VRN was verified when they joined, and they agreed to the rules then
 --   • The app's join form shows the live Google Form (same pages, questions, choices, "read carefully" agreement)
 --   • Signing in with an email RWB already knows fills the join form in
---   • Changing Name, WhatsApp No., VRN / main bike, adding a bike, or withdrawing from the rules needs an admin's OK
---   • Members who never agreed to the rules (read from the sheet) are listed for admins and asked to agree
+--   • Changing Name, WhatsApp No., VRN / main bike, adding a bike, or withdrawing from the Terms & Conditions needs an admin's OK
+--   • Members who never agreed to the Terms & Conditions (read from the sheet) are listed for admins and asked to agree
 --   • Members are told in the app (and on their phone) when they're approved, rejected, or a change is decided,
---     and reminded about missing details (rules, emergency contact…) once a week
+--     and reminded about missing details (Terms & Conditions, emergency contact…) once a week
 -- Run once in Supabase > SQL Editor, after 29. Safe to run again.
 -- =====================================================================
 
@@ -84,7 +84,7 @@ begin
   if length(ph) <> 10 then raise exception 'WhatsApp No. needs a 10-digit number'; end if;
   if p_dob is not null and (p_dob > current_date or p_dob < date '1930-01-01') then raise exception 'Please check your Date of Birth'; end if;
   if em is not null and em = ph then raise exception 'The emergency contact should be someone else''s number'; end if;
-  if not coalesce(p_tnc, false) then raise exception 'Please read and agree to the RWB rules to join'; end if;
+  if not coalesce(p_tnc, false) then raise exception 'Please read and agree to the RWB Terms & Conditions to join'; end if;
   select id into rid from link_requests where phone = ph and status = 'pending' and user_id is null order by created_at desc limit 1;
   if rid is not null and not exists (select 1 from link_requests where user_id = auth.uid()) then
     update link_requests set user_id = auth.uid(), email = coalesce(email, auth.jwt() ->> 'email'), tnc = true,
@@ -240,7 +240,7 @@ begin
   insert into notifications (kind, title, body, url, audience, created_by)
   values ('admin', 'Change to approve',
           m.full_name || case p_kind when 'name' then ' wants to change their name' when 'phone' then ' wants to change their WhatsApp No.'
-            when 'vrn' then ' changed their VRN / main bike' when 'bike' then ' added a bike' else ' no longer agrees to the RWB rules' end,
+            when 'vrn' then ' changed their VRN / main bike' when 'bike' then ' added a bike' else ' no longer agrees to the RWB Terms & Conditions' end,
           '#admin', 'admins', auth.uid());
   return 'pending';
 end $$;
@@ -458,7 +458,7 @@ end $$;
 -- Change decided: the member is told
 create or replace function private.after_change() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare u uuid; what text := case new.kind when 'name' then 'name' when 'phone' then 'WhatsApp No.' when 'vrn' then 'main bike (VRN)' when 'bike' then 'new bike' else 'rules answer' end;
+declare u uuid; what text := case new.kind when 'name' then 'name' when 'phone' then 'WhatsApp No.' when 'vrn' then 'main bike (VRN)' when 'bike' then 'new bike' else 'Terms & Conditions answer' end;
 begin
   if old.status = 'pending' and new.status <> 'pending' and new.kind <> 'tnc' then
     select user_id into u from members where id = new.member_id;
@@ -505,8 +505,8 @@ begin
     miss := private.missing_items(m);
     if cardinality(miss) = 0 then continue; end if;
     perform private.tell_member(m.user_id,
-      case when 'rules' = any(miss) then 'Please agree to the RWB rules' else 'Complete your RWB profile' end,
-      'Missing: ' || array_to_string(miss, ', ') || '. It takes a minute in Me.', '#me');
+      case when 'rules' = any(miss) then 'Please agree to the RWB Terms & Conditions' else 'Complete your RWB profile' end,
+      'Missing: ' || array_to_string(array_replace(miss, 'rules', 'Terms & Conditions'), ', ') || '. It takes a minute in Me.', '#me');
     update members set reminded_at = now() where id = m.id;
     n := n + 1;
   end loop;

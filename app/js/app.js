@@ -236,17 +236,26 @@ function joinFields(v = {}, mode = 'join') {
         L('emergency_phone', 'In case of emergency, contact (number)', tel('emergency_phone', '10-digit number'), 'A family member or friend we can call')
     ].join('');
 }
-/* The RWB rules every new member agrees to (same as the join form) */
-const RWB_RULES = [
-    'RWB is a non-profit, volunteer-run group of TVS Ronin owners in West Bengal.',
-    'Your Ronin\'s registration number (VRN) is needed to join, and admins may check it.',
-    'Share only true details. False details can lead to removal.',
-    'Members\' details are for RWB members only and must never be misused or shared outside.',
-    'Members may be asked to help in emergencies, when they can.',
-    'Ride safe, follow traffic rules, and respect fellow riders and the public.'
+/* RWB Terms & Conditions: what every member agrees to (the join form's "Please read carefully" section, in full) */
+const TNC_UPDATED = '25 October 2026';
+const TNC = [
+    ['About RWB', ['Ronin Warriors of Bengal (“RWB”) is a non-profit, volunteer-run community of TVS Ronin owners in West Bengal. Membership is free.']],
+    ['Membership', ['Membership is open to owners of a TVS Ronin, including riders whose bike is booked and awaiting delivery.', 'Sharing your bike\'s registration number (VRN) is mandatory. RWB admins may verify it before approving you.', 'Every new registration is reviewed by RWB admins, and approval is at their discretion.']],
+    ['Your information', ['You agree to share only true and accurate details, and to keep them up to date in the RWB App.', 'Changes to your name, WhatsApp number or bike are reviewed by an admin before they apply.', 'Sharing false information may lead to removal from RWB.']],
+    ['Privacy of members\' data', ['Your details are used only for running RWB: contacting you, events, and emergencies.', 'Other members\' details are shared with you only as an RWB member. You agree never to share, sell or misuse them outside RWB.', 'How the app handles your data is explained in the RWB Privacy Policy.']],
+    ['Conduct', ['Treat every member with respect. Harassment, hate speech, spam and unapproved promotions are not allowed in RWB groups or the app.', 'Please follow the guidance of RWB admins and coordinators.']],
+    ['Rides, events and safety', ['Ride responsibly, follow traffic laws, and wear proper riding gear.', 'Taking part in rides and events is voluntary and at your own risk. RWB, its admins and organisers are not liable for accidents, injuries, loss or damage.', 'In an emergency, members may be asked to help where they safely can. This is never an obligation.']],
+    ['Motomart and shared expenses', ['Buying and selling on Motomart is directly between members. RWB does not handle payments and is not responsible for any transaction.', 'Shared expense records in Events are a convenience for members to settle costs among themselves.']],
+    ['Social media', ['Share your rides with #roninwb. Please respect fellow members\' privacy when posting photos or videos.']],
+    ['Leaving and removal', ['You can leave RWB at any time. Use the same email you registered with to edit your details or leave.', 'RWB admins may remove members who break these Terms & Conditions.']],
+    ['Changes to these terms', ['RWB may update these Terms & Conditions. Members will be told about important changes, and continuing as a member means you accept them.']]
 ];
-const rulesBlock = () => `<details class="rules"><summary>Read the RWB rules</summary><ol>${RWB_RULES.map(r => `<li>${esc(r)}</li>`).join('')}</ol></details>
-    <label class="check-row"><input type="checkbox" name="tnc" required> <span>I have read and agree to the RWB rules <span class="req">*</span></span></label>`;
+const RWB_RULES = TNC.flatMap(([, pts]) => pts);   /* plain list, used where only text fits */
+const tncDoc = () => `<article class="tnc-doc"><p class="tnc-meta">Ronin Warriors of Bengal · Last updated ${TNC_UPDATED}</p>
+    ${TNC.map(([h, pts], i) => `<section><h3>${i + 1}. ${esc(h)}</h3>${pts.length > 1 ? `<ol>${pts.map((t, j) => `<li><span>${i + 1}.${j + 1}</span>${esc(t)}</li>`).join('')}</ol>` : `<p>${esc(pts[0])}</p>`}</section>`).join('')}</article>`;
+const showTnc = () => openSheet('RWB Terms & Conditions', tncDoc());
+const rulesBlock = () => `<details class="rules"><summary>Read the RWB Terms & Conditions</summary>${tncDoc()}</details>
+    <label class="check-row"><input type="checkbox" name="tnc" required> <span>I have read and agree to the RWB Terms & Conditions <span class="req">*</span></span></label>`;
 
 /* Form → clean values (trimmed; VRN in capitals) */
 function joinData(form) {
@@ -319,7 +328,7 @@ function formItemHtml(item, i, val) {
     const head = `<span class="fq-title">${esc(item.title)}${item.required ? ' <span class="req">*</span>' : ''}</span>${item.help ? `<span class="fq-help">${esc(item.help)}</span>` : ''}`;
     if (item.type === 'MULTIPLE_CHOICE' || item.type === 'CHECKBOX') {
         const multi = item.type === 'CHECKBOX', vals = multi ? String(val || '').split(/,\s*/) : [val];
-        return `<fieldset class="fq${k === 'tnc' ? ' fq-tnc' : ''}" data-i="${i}"${item.required ? ' data-req="1"' : ''}><legend>${head}</legend>${item.choices.map(c => `<label class="fq-choice"><input type="${multi ? 'checkbox' : 'radio'}" name="${name}" value="${esc(c.value)}"${vals.includes(c.value) ? ' checked' : ''}${c.ends ? ' data-ends="1"' : ''}><span>${esc(c.value)}</span></label>`).join('')}</fieldset>`;
+        return `<fieldset class="fq${k === 'tnc' ? ' fq-tnc' : ''}" data-i="${i}"${item.required ? ' data-req="1"' : ''}><legend>${head}</legend>${k === 'tnc' ? '<button type="button" class="link-btn tnc-link" data-act="tnc-read">Read the full RWB Terms & Conditions ›</button>' : ''}${item.choices.map(c => `<label class="fq-choice"><input type="${multi ? 'checkbox' : 'radio'}" name="${name}" value="${esc(c.value)}"${vals.includes(c.value) ? ' checked' : ''}${c.ends ? ' data-ends="1"' : ''}><span>${esc(c.value)}</span></label>`).join('')}</fieldset>`;
     }
     if (item.type === 'LIST') return `<label class="fq" data-i="${i}">${head}<select name="${name}"${req}><option value="">Choose</option>${item.choices.map(c => `<option${c.value === val ? ' selected' : ''}>${esc(c.value)}</option>`).join('')}</select></label>`;
     if (item.type === 'DATE') return `<label class="fq" data-i="${i}">${head}<input type="date" name="${name}" max="${todayISO()}"${req} value="${esc(val)}"></label>`;
@@ -358,8 +367,8 @@ function checkPage(pg, form) {
         const k = formKey(it.title), name = `q${it.i}`;
         const v = it.type === 'CHECKBOX' || it.type === 'MULTIPLE_CHOICE' ? [...form.querySelectorAll(`[name=${name}]:checked`)].map(x => x.value).join(', ') : String(form.elements[name]?.value || '').trim();
         if (it.required && !v) return `Please answer: ${it.title}`;
-        if (k === 'tnc' && v && !isAgree(v)) return 'You need to agree to the RWB rules to join.';
-        if (it.type === 'MULTIPLE_CHOICE' && form.querySelector(`[name=${name}]:checked`)?.dataset.ends) return 'You need to agree to the RWB rules to join.';
+        if (k === 'tnc' && v && !isAgree(v)) return 'You need to agree to the RWB Terms & Conditions to join.';
+        if (it.type === 'MULTIPLE_CHOICE' && form.querySelector(`[name=${name}]:checked`)?.dataset.ends) return 'You need to agree to the RWB Terms & Conditions to join.';
         if (v && PHONE_KEYS.includes(k) && v.replace(/\D/g, '').length < 10) return `${it.title} needs a 10-digit number`;
         if (v && k === 'vrn' && v.replace(/[^A-Za-z0-9]/g, '').length < 6) return 'Please check the VRN (for example WB 02 AB 1234)';
         if (v && k === 'dob' && (v > todayISO() || v < '1930-01-01')) return 'Please check the Date of Birth';
@@ -383,6 +392,7 @@ function liveJoinForm(def, known, sess, filled = false) {
     const show = n => { at = n; form.querySelectorAll('.gpage').forEach(p => p.hidden = Number(p.dataset.p) !== n); window.scrollTo(0, 0); };
     actions = {
         out: () => api.signOut(),
+        'tnc-read': () => showTnc(),
         gnext: () => { const err = checkPage(pages[at], form); if (err) return toast(err, true); show(at + 1); },
         gback: () => show(at - 1)
     };
@@ -392,7 +402,7 @@ function liveJoinForm(def, known, sess, filled = false) {
         const f = readForm(def, form);
         if (!f.full_name || !f.phone) return toast('Full Name and WhatsApp No. are needed', true);
         if (f.emergency_phone && f.phone && f.emergency_phone.replace(/\D/g, '').slice(-10) === f.phone.replace(/\D/g, '').slice(-10)) return toast('The emergency contact should be someone else\'s number', true);
-        if (!f.tnc) return toast('You need to agree to the RWB rules to join.', true);
+        if (!f.tnc) return toast('You need to agree to the RWB Terms & Conditions to join.', true);
         busy(e.submitter, async () => { await api.requestAccess(f); boot(); });
     });
 }
@@ -427,7 +437,7 @@ async function viewAccess(status, sess) {
         e.preventDefault();
         const f = joinData(e.target), err = joinCheck(f, 'join');
         if (err) return toast(err, true);
-        if (!f.tnc) return toast('Please read and agree to the RWB rules', true);
+        if (!f.tnc) return toast('Please read and agree to the RWB Terms & Conditions', true);
         busy(e.submitter, async () => { await api.requestAccess(f); boot(); });
     });
 }
@@ -560,7 +570,7 @@ function missingOf(m) {
 function profileTodo(m) {
     const miss = missingOf(m || {}); if (!miss.length) return '';
     const rules = miss.includes('rules'), rest = miss.filter(x => x !== 'rules');
-    return `<a class="banner todo" href="#me"><span class="b-ico">${rules ? '📜' : '✍️'}</span><span class="grow"><b>${rules ? 'Please agree to the RWB rules' : 'Complete your profile'}</b><span class="small muted">${rules && rest.length ? 'And add your ' + rest.join(', ') : rules ? 'Me → RWB rules → Read & agree' : 'Add your ' + rest.join(', ')}</span></span>${ICON.chev}</a>`;
+    return `<a class="banner todo" href="#me"><span class="b-ico">${rules ? '📜' : '✍️'}</span><span class="grow"><b>${rules ? 'Please agree to the RWB Terms & Conditions' : 'Complete your profile'}</b><span class="small muted">${rules && rest.length ? 'And add your ' + rest.join(', ') : rules ? 'Me → Terms & Conditions → Read & agree' : 'Add your ' + rest.join(', ')}</span></span>${ICON.chev}</a>`;
 }
 async function viewHome() {
     const [services, fuel, bdays, news, listings, docs, evd] = await Promise.all([load.services(), load.fuel(), load.bdays(), load.news(), load.listings().catch(() => []), load.docs(), loadEvents().catch(() => null)]);
@@ -1586,14 +1596,12 @@ function changesBox(list) {
         ${no.map(c => `<p>✕ <b>${esc(CHANGE_TXT[c.kind])}</b> change to ${esc(c.new_value)} wasn't approved${c.reject_reason ? `: ${esc(c.reject_reason)}` : ''}</p>`).join('')}</div>`;
 }
 function rulesSheet(m, done) {
-    const q = (joinFormDef?.items || []).find(i => formKey(i.title) === 'tnc');
-    const text = q ? `<p class="gp-help" style="white-space:pre-line">${esc(q.help || '')}</p>` : `<ol class="rules-ol">${RWB_RULES.map(r => `<li>${esc(r)}</li>`).join('')}</ol>`;
-    openSheet(q ? q.title : 'RWB rules', `${text}
-        ${m.tnc_agreed !== true ? '<button class="btn block" data-x="agree" style="margin-top:14px">I agree to the RWB rules</button>'
-            : '<p class="small muted" style="margin-top:14px">You agreed to these rules when you joined.</p><button class="btn ghost block" data-x="disagree" style="margin-top:8px">I no longer agree</button>'}`, body => {
+    openSheet('RWB Terms & Conditions', `${tncDoc()}
+        ${m.tnc_agreed !== true ? '<button class="btn block" data-x="agree" style="margin-top:16px">I agree to the RWB Terms & Conditions</button>'
+            : '<p class="small muted" style="margin-top:16px">You agreed to these Terms & Conditions as an RWB member.</p><button class="btn ghost block" data-x="disagree" style="margin-top:8px">I no longer agree</button>'}`, body => {
         const a = body.querySelector('[data-x=agree]'), d = body.querySelector('[data-x=disagree]');
-        if (a) a.onclick = () => busy(a, async () => { await api.requestChange('tnc', 'agree'); state.me = await api.me(); closeSheet(); toast('Thanks!'); render(); });
-        if (d) d.onclick = () => { if (confirmBox('Tell the admins you no longer agree to the RWB rules? They may remove you from RWB.')) busy(d, async () => { await api.requestChange('tnc', 'disagree'); closeSheet(); toast('Sent to the admins'); done(); }); };
+        if (a) a.onclick = () => busy(a, async () => { await api.requestChange('tnc', 'agree'); state.me = await api.me(); closeSheet(); toast('Thank you!'); render(); });
+        if (d) d.onclick = () => { if (confirmBox('Tell the admins you no longer agree to the RWB Terms & Conditions? They may remove you from RWB.')) busy(d, async () => { await api.requestChange('tnc', 'disagree'); closeSheet(); toast('Sent to the admins'); done(); }); };
     });
 }
 const BIKE_MODELS = ['TVS Ronin 225', 'TVS Apache RTR 160 4V', 'TVS Apache RTR 200 4V', 'TVS Apache RTR 310', 'Royal Enfield Hunter 350', 'Royal Enfield Classic 350', 'Honda CB350', 'Bajaj Pulsar', 'KTM Duke'];
@@ -1629,8 +1637,8 @@ function viewMe() {
         <div id="my-changes"></div>
         <h2 class="group-title">My bikes <span class="small muted" style="text-transform:none;letter-spacing:0;font-weight:500">up to 3</span></h2>
         <div class="group bikes" id="my-bikes">${bikeRows(m, null)}</div>
-        ${'tnc_agreed' in m ? `<h2 class="group-title">RWB rules</h2>
-        <div class="group"><div class="bike-row"><span class="g-ico">📜</span><span class="grow"><b>${m.tnc_agreed === true ? 'You agree to the RWB rules' : m.tnc_agreed === false ? 'You don\'t agree to the RWB rules' : 'Please read and agree'}</b><span class="small muted">${m.tnc_agreed === true ? 'From the RWB join form' : 'Needed for every RWB member'}</span></span>
+        ${'tnc_agreed' in m ? `<h2 class="group-title">Terms & Conditions</h2>
+        <div class="group"><div class="bike-row"><span class="g-ico">📜</span><span class="grow"><b>${m.tnc_agreed === true ? 'You agree to the RWB T&C' : m.tnc_agreed === false ? 'You don\'t agree to the RWB T&C' : 'Please read and agree'}</b><span class="small muted">${m.tnc_agreed === true ? 'From the RWB join form' : 'Needed for every RWB member'}</span></span>
             <button class="btn sm ${m.tnc_agreed === true ? 'ghost' : ''}" data-act="rules">${m.tnc_agreed === true ? 'Read' : 'Read & agree'}</button></div></div>` : ''}
 
 
@@ -1763,9 +1771,9 @@ function checksOf(r) {
         { k: 'entry', ok: e.ok, warn: e.warn, t: e.t, s: e.s },
         { k: 'ronin', ok: !!r.has_ronin, t: r.has_ronin ? 'Has a Ronin' : 'No Ronin', s: `Answer: ${r.bike || '–'}` },
         { k: 'vrn', ok: !!(r.vrn_verified || r.vrn_known), known: !!r.vrn_known && !r.vrn_verified, t: 'VRN verified', s: '' },
-        r.tnc === true ? { k: 'tnc', ok: true, t: 'Agreed to the RWB rules', s: '' }
-            : r.member_tnc === true ? { k: 'tnc', ok: true, t: 'Agreed to the RWB rules', s: 'When they joined RWB.' }
-            : { k: 'tnc', ok: false, unk: r.tnc == null, t: r.tnc === false ? 'Did not agree to the RWB rules' : 'Rules answer not found', s: r.tnc == null ? 'Sent before the rules question was added. Ask them to agree, or approve if you know they did.' : '' }
+        r.tnc === true ? { k: 'tnc', ok: true, t: 'Agreed to the T&C', s: '' }
+            : r.member_tnc === true ? { k: 'tnc', ok: true, t: 'Agreed to the T&C', s: 'When they joined RWB.' }
+            : { k: 'tnc', ok: false, unk: r.tnc == null, t: r.tnc === false ? 'Did not agree to the T&C' : 'T&C answer not found', s: r.tnc == null ? 'Sent before the T&C question was added. Ask them to agree, or approve if you know they did.' : '' }
     ];
 }
 function reqCard(r) {
@@ -1800,7 +1808,7 @@ function waMsg(kind, x = {}) {
         rejected: `Hi ${first},\n\nThank you for your interest in Ronin Warriors of Bengal. We're sorry, we couldn't approve your registration this time${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'}\n\nIf you think this is a mistake, or things change, just reply here and we'll be happy to help.\n\nRide safe! 🙏\n– ${me}, RWB`,
         change_ok: `Hi ${first}! ✅ Your ${x.what || 'profile'} update in the RWB App is approved. Thanks for keeping your details up to date.\n– ${me}, RWB`,
         change_no: `Hi ${first}, we couldn't approve your ${x.what || 'profile'} update in the RWB App${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'} Just reply here if you'd like help with it. 🙏\n– ${me}, RWB`,
-        remind: `Hi ${first}! 👋\n\nA quick one from the RWB team: please complete your RWB profile.${x.rules ? '\n\n📜 Please read and agree to the RWB rules (Me → RWB rules → Read).' : ''}${x.missing?.length ? `\n\nMissing: ${x.missing.join(', ')}.` : ''}\n\nIt takes a minute in the RWB App: ${APP_LINK} → Me.${x.on_app ? '' : ' Sign in with Google using the email you gave on the join form.'}\n\nThank you! Explore. Evolve. Inspire.\n– ${me}, RWB`
+        remind: `Hi ${first}! 👋\n\nA quick one from the RWB team: please complete your RWB profile.${x.rules ? '\n\n📜 Please read and agree to the RWB Terms & Conditions (Me → Terms & Conditions → Read & agree).' : ''}${x.missing?.length ? `\n\nMissing: ${x.missing.join(', ')}.` : ''}\n\nIt takes a minute in the RWB App: ${APP_LINK} → Me.${x.on_app ? '' : ' Sign in with Google using the email you gave on the join form.'}\n\nThank you! Explore. Evolve. Inspire.\n– ${me}, RWB`
     };
     return T[kind];
 }
@@ -1813,12 +1821,12 @@ function tellOnWhatsApp(title, phone, text, done) {
         body.querySelector('[data-x=skip]').onclick = () => { closeSheet(); done?.(false); };
     });
 }
-const CHANGE_TXT = { name: 'Name', phone: 'WhatsApp No.', vrn: 'Main bike (VRN)', bike: 'New bike', tnc: 'RWB rules' };
+const CHANGE_TXT = { name: 'Name', phone: 'WhatsApp No.', vrn: 'Main bike (VRN)', bike: 'New bike', tnc: 'Terms & Conditions' };
 function changeCard(c) {
     const isVrn = c.kind === 'vrn' || c.kind === 'bike';
     return `<div class="card req-card change-card" data-cid="${c.id}">
         <div class="row" style="gap:8px;align-items:flex-start"><div class="grow"><h3>${esc(c.full_name)}</h3><p class="small muted">Change request · ${timeAgo(c.created_at)}</p></div><span class="badge orange">${esc(CHANGE_TXT[c.kind])}${c.slot ? ' ' + c.slot : ''}</span></div>
-        ${c.kind === 'tnc' ? '<p class="warn" style="margin:12px 0">They no longer agree to the RWB rules. If they\'re leaving, use <b>Remove from RWB</b> on their profile.</p>'
+        ${c.kind === 'tnc' ? '<p class="warn" style="margin:12px 0">They no longer agree to the RWB Terms & Conditions. If they\'re leaving, use <b>Remove from RWB</b> on their profile.</p>'
             : `<div class="chg"><span class="old">${esc(c.old_value || (c.kind === 'bike' ? 'No bike in this slot' : '–'))}</span><span class="arr">→</span><span class="new">${esc(c.new_value)}${c.new_model ? ` · ${esc(c.new_model)}` : ''}</span></div>`}
         ${isVrn ? `<ul class="checks"><li class="${c.vrn_verified ? 'yes' : 'no'}"><label class="vrn-tick"><input type="checkbox" data-act="chg-vrn" data-cid="${c.id}"${c.vrn_verified ? ' checked' : ''}><span class="ci">${c.vrn_verified ? '✓' : '✕'}</span>
             <span class="grow"><b>VRN verified</b><small><span class="vrn">${esc(c.new_value)}</span> · tick once you've checked it</small></span></label>
@@ -1867,23 +1875,23 @@ async function adminRequests() {
         catch (e) { cb.checked = !cb.checked; toast(e.message, true); }
     });
 }
-/* Follow-ups: members who haven't agreed to the rules, or have details missing */
+/* Follow-ups: members who haven't agreed to the Terms & Conditions, or have details missing */
 function followUps(inc) {
     const rules = inc.filter(m => m.missing.includes('rules')), other = inc.filter(m => !m.missing.includes('rules'));
     const row = m => `<div class="fu-row" data-mid="${m.id}"><div class="grow"><b>${esc(m.full_name)}</b>${m.on_app ? ' <span class="badge ok">On the app</span>' : ''}
-            <div class="fu-miss">${m.missing.map(x => `<span>${esc(x)}</span>`).join('')}</div>${m.reminded_at ? `<small class="muted">Reminded ${timeAgo(m.reminded_at)}</small>` : ''}</div>
+            <div class="fu-miss">${m.missing.map(x => `<span>${esc(x === 'rules' ? 'T&C' : x)}</span>`).join('')}</div>${m.reminded_at ? `<small class="muted">Reminded ${timeAgo(m.reminded_at)}</small>` : ''}</div>
         <div class="fu-btns"><button class="btn sm wa" data-act="fu-wa" data-mid="${m.id}">WhatsApp</button>${m.missing.includes('rules') ? `<button class="btn sm ghost" data-act="fu-agree" data-mid="${m.id}">Agreed</button>` : ''}</div></div>`;
     const block = (id, title, sub, list) => `<details class="fu card section" id="${id}"><summary><b>${title}</b> <span class="badge ${list.length ? 'orange' : ''}">${list.length}</span><span class="small muted">${sub}</span></summary>
         ${list.length ? `<input class="search" type="search" placeholder="Search name" data-fu="${id}" style="margin:10px 0">${'<div class="fu-list"></div><button class="btn ghost block" data-more="' + id + '" hidden>Show more</button>'}` : '<p class="small muted" style="margin-top:8px">Everyone is done here.</p>'}</details>`;
     return `<h2 class="group-title" style="margin-top:24px">Follow-ups</h2>
         <p class="small muted" style="margin-bottom:10px">Members on the app get an in-app reminder every Sunday. For everyone else, tap WhatsApp to send a ready-made reminder.</p>
-        ${block('fu-rules', 'Not agreed to the rules', 'No “read carefully” answer on record, or they said no. Tap Agreed if they confirmed to you.', rules)}
+        ${block('fu-rules', 'Not agreed to the T&C', 'No “read carefully” answer on record, or they said no. Tap Agreed if they confirmed to you.', rules)}
         ${block('fu-other', 'Missing details', 'Emergency contact, blood group, birthday, VRN or locality.', other)}
         <button class="btn ghost block section" data-act="fu-remind">🔔 Send in-app reminders now (members on the app)</button>`;
 }
 function bindFollowUps(inc) {
     const rowHtml = m => `<div class="fu-row" data-mid="${m.id}"><div class="grow"><b>${esc(m.full_name)}</b>${m.on_app ? ' <span class="badge ok">On the app</span>' : ''}
-            <div class="fu-miss">${m.missing.map(x => `<span>${esc(x)}</span>`).join('')}</div>${m.reminded_at ? `<small class="muted">Reminded ${timeAgo(m.reminded_at)}</small>` : ''}</div>
+            <div class="fu-miss">${m.missing.map(x => `<span>${esc(x === 'rules' ? 'T&C' : x)}</span>`).join('')}</div>${m.reminded_at ? `<small class="muted">Reminded ${timeAgo(m.reminded_at)}</small>` : ''}</div>
         <div class="fu-btns"><button class="btn sm wa" data-act="fu-wa" data-mid="${m.id}">WhatsApp</button>${m.missing.includes('rules') ? `<button class="btn sm ghost" data-act="fu-agree" data-mid="${m.id}">Agreed</button>` : ''}</div></div>`;
     [['fu-rules', inc.filter(m => m.missing.includes('rules'))], ['fu-other', inc.filter(m => !m.missing.includes('rules'))]].forEach(([id, list]) => {
         const box = $('#' + id); if (!box || !list.length) return;
@@ -1896,7 +1904,7 @@ function bindFollowUps(inc) {
     const byMid = id => inc.find(m => m.id === Number(id));
     Object.assign(actions, {
         'fu-wa': b => { const m = byMid(b.dataset.mid); openWA(waTo(m.phone, waMsg('remind', { ...m, rules: m.missing.includes('rules'), missing: m.missing.filter(x => x !== 'rules') }))); api.admin.markReminded(m.id).catch(() => {}); m.reminded_at = new Date().toISOString(); },
-        'fu-agree': b => { const m = byMid(b.dataset.mid); if (confirmBox(`Record that ${m.full_name} agreed to the RWB rules?`)) busy(b, async () => { await api.admin.setTnc(m.id, true); toast('Recorded'); adminRequests(); }); },
+        'fu-agree': b => { const m = byMid(b.dataset.mid); if (confirmBox(`Record that ${m.full_name} agreed to the RWB Terms & Conditions?`)) busy(b, async () => { await api.admin.setTnc(m.id, true); toast('Recorded'); adminRequests(); }); },
         'fu-remind': b => busy(b, async () => { const n = await api.admin.remindIncomplete(); toast(n ? `Reminder sent to ${n} member${n > 1 ? 's' : ''} on the app` : 'Everyone on the app was reminded in the last week'); adminRequests(); })
     });
 }
@@ -1908,7 +1916,7 @@ function reasonSheet(title, quick, done) {
     });
 }
 function rejectSheet(r) {
-    const quick = ['Not a Ronin owner', 'VRN could not be verified', 'Duplicate entry', 'Did not agree to the rules'];
+    const quick = ['Not a Ronin owner', 'VRN could not be verified', 'Duplicate entry', 'Did not agree to the T&C'];
     openSheet('Reject ' + firstName(r), `<form id="rj"><p class="small muted" style="margin-bottom:10px">${r.source === 'form' ? 'Their sheet row moves to the “Rejected” tab.' : 'They see that the request was not approved.'} The reason is kept for admins.</p>
         <div class="chips" style="margin-bottom:10px">${quick.map(q => `<button type="button" class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
         <label>Reason (optional)<textarea name="reason" rows="2" maxlength="200"></textarea></label>
