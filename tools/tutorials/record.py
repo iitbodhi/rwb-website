@@ -5,7 +5,7 @@ from playwright.async_api import async_playwright
 S = '/tmp/claude-0/-home-claude/298ce0ef-b0f8-5ec3-a03d-16ae7e00049c/scratchpad/tut2'
 U = 'http://localhost:8766/app/'
 UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Mobile Safari/537.36'
-HIDE = '.demo-bar{display:none!important} *{caret-color:transparent!important}'
+HIDE = '.demo-bar{display:none!important} *{caret-color:transparent!important} :focus-visible{outline:none!important;box-shadow:none!important}'
 b64 = lambda f: 'data:image/png;base64,' + base64.b64encode(open(f'{S}/assets/{f}', 'rb').read()).decode()
 
 GUIDES = [{"id": "g1", "name": "Chain_Cleaning_and_Lubrication.pdf", "date": "2026-10-20T00:00:00Z", "description": "Step-by-step chain care every 500–700 km"},
@@ -510,7 +510,146 @@ async def mgmt3(r):
     await r.tap('[data-act=gnext]', wait=800, hold=2.6)
     r.save('Member management', '', '')
 
-VIDEOS = {'service': service, 'mileage': mileage, 'motomart': motomart, 'guides': guides, 'events': events, 'me': me, 'crew': crew, 'staff': staff, 'mgmt': mgmt, 'mgmt2': mgmt2, 'mgmt3': mgmt3}
+async def mgmt5(r):
+    p = r.p
+    FORM = open('/tmp/claude-0/-home-claude/298ce0ef-b0f8-5ec3-a03d-16ae7e00049c/scratchpad/mockform.json').read()
+    await p.context.add_init_script("window.DEMO_JOIN_FORM = " + FORM + ";")
+    await p.evaluate("""() => { const k='rwb-app-demo-v2', d=JSON.parse(localStorage.getItem(k)), now=new Date().toISOString();
+        d.members.forEach((m,i) => { m.tnc_agreed = i % 3 === 0 ? true : null; });
+        const pr = d.members.find(m => m.id === 3), ar = d.members.find(m => m.id === 2);
+        d.changes = [{ id: 901, member_id: pr.id, full_name: pr.full_name, phone: pr.phone, kind: 'vrn', slot: null, old_value: (pr.vrn || 'WB 20 EF 7890') + ' · TVS Ronin 225', new_value: 'WB 20 GH 1122', new_model: 'TVS Ronin 225', vrn_verified: false, status: 'pending', created_at: now, on_app: true },
+                     { id: 902, member_id: ar.id, full_name: ar.full_name, phone: ar.phone, kind: 'bike', slot: 2, old_value: null, new_value: 'WB 06 KL 4455', new_model: 'TVS Apache RTR 160', vrn_verified: false, status: 'pending', created_at: now, on_app: true }];
+        localStorage.setItem(k, JSON.stringify(d)); }""")
+    await p.reload(); await p.wait_for_timeout(1800)
+    # 0 Home admin card
+    r.scene('In the app', 'Admin, right on Home', '')
+    await p.evaluate("document.querySelector('.admin-dock').scrollIntoView({block:'center'})"); await p.wait_for_timeout(400); await r.shot(hold=2.4)
+    await r.tap('.ad-grid [data-adtab=requests]', wait=1300, hold=1.6)
+    # 1 the 4 checks, tappable
+    r.scene('In the app', 'Tap a check to set it', '')
+    await p.evaluate("document.querySelector('.req-card[data-id=\"1\"] .checks').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300); await r.shot(hold=2.2)
+    await r.tap('.req-card[data-id="1"] [data-k=vrn]', wait=700, hold=1.5)
+    await r.shot(hold=2.2)
+    await r.tap('#sheet .chk-opt[data-v=ok]', wait=1300, hold=1.4)
+    await p.evaluate("document.querySelector('.req-card[data-id=\"1\"] .checks').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300); await r.shot(hold=2.0)
+    await p.evaluate("document.querySelector('.req-card[data-id=\"2\"] .checks').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300)
+    await r.tap('.req-card[data-id="2"] [data-k=ronin]', wait=700, hold=1.4)
+    await r.shot(hold=3.0)
+    await p.keyboard.press('Escape'); await p.wait_for_timeout(500)
+    # 2 message before deciding
+    r.scene('In the app', 'Message them first', '')
+    await p.evaluate("document.querySelector('.req-card[data-id=\"2\"] .req-btns').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300)
+    await r.tap('.req-card[data-id="2"] [data-act=ask]', wait=800, hold=1.4)
+    await r.shot(hold=1.8)
+    pressed = await p.get_attribute('#ask-chips [data-a*="Terms"]', 'aria-pressed')
+    if pressed != 'true': await r.tap('#ask-chips [data-a*="Terms"]', wait=400, hold=1.3)
+    await p.evaluate("const t=document.querySelector('#wa-text'); t.scrollIntoView({block:'center'}); t.scrollTop=t.scrollHeight"); await p.wait_for_timeout(300)
+    await r.shot(hold=3.0)
+    await r.tap('#sheet [data-x=send]', wait=700, hold=1.3)
+    # 2b approve + welcome
+    r.scene('In the app', 'Approve + welcome message', '')
+    await p.evaluate("document.querySelector('.req-card[data-id=\"1\"] .req-btns').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300)
+    await r.tap('.req-card[data-id="1"] [data-act=approve]', wait=1500, hold=1.6)
+    await r.shot(hold=2.8)
+    await r.tap('#sheet [data-x=send]', wait=700, hold=1.4)
+    # 3 existing member
+    r.scene('In the app', 'Existing member? A different message', '')
+    await r.tap('.req-card[data-id="3"] [data-act=approve]', wait=1500, hold=1.6)
+    await r.shot(hold=3.0)
+    await r.tap('#sheet [data-x=send]', wait=700, hold=1.2)
+    # 4 reject politely
+    r.scene('In the app', 'Reject, politely', '')
+    await r.tap('.req-card[data-id="2"] [data-act=reject]', wait=800, hold=1.4)
+    await r.tap('#rj [data-q="Not a Ronin owner"]', wait=400, hold=1.3)
+    await r.tap('#rj button.btn.danger', wait=1500, hold=1.5)
+    await r.shot(hold=2.6)
+    await r.tap('#sheet [data-x=send]', wait=700, hold=1.2)
+    # 5 profile changes
+    r.scene('In the app', 'Profile changes', '')
+    await p.evaluate("document.querySelector('.change-card').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300); await r.shot(hold=2.6)
+    await r.tap('.change-card .vrn-tick', wait=900, hold=1.5)
+    await r.tap('.change-card [data-act=chg-ok]', wait=1500, hold=1.5)
+    await r.shot(hold=1.8)
+    await r.tap('#sheet [data-x=skip]', wait=600, hold=1.0)
+    # 6 share to admin group
+    r.scene('In the app', 'Tell the admin group', '')
+    await p.evaluate("window.scrollTo(0,0)"); await p.wait_for_timeout(300)
+    await r.tap('[data-act=digest]', wait=600, hold=2.2)
+    # 7 follow-ups with tabs
+    r.scene('In the app', 'Follow-ups', '')
+    await p.evaluate("document.querySelector('.fu-seg').scrollIntoView({block:'start'}); window.scrollBy(0,-90)"); await p.wait_for_timeout(300)
+    await r.tap('[data-act=fu-view][data-v=app]', wait=700, hold=1.4)
+    await r.tap('#fu-rules summary', wait=700, hold=1.4)
+    await r.tap('#fu-rules [data-act=fu-wa] >> nth=0', wait=600, hold=1.6)
+    await r.tap('[data-act=fu-view][data-v=all]', wait=700, hold=1.4)
+    await r.tap('#fu-notapp summary', wait=700, hold=1.4)
+    await p.evaluate("document.querySelector('#fu-notapp').scrollIntoView({block:'start'}); window.scrollBy(0,-90)"); await p.wait_for_timeout(300); await r.shot(hold=2.2)
+    await r.tap('#fu-notapp [data-act=fu-wa] >> nth=0', wait=600, hold=1.5)
+    # 7b share follow-ups to group
+    r.scene('In the app', 'Share follow-ups to the group', '')
+    await r.tap('[data-act=fu-share]', wait=800, hold=1.5)
+    await r.shot(hold=3.0)
+    await r.tap('#sp [name=app]', wait=400, hold=1.4)
+    await r.tap('#sheet [data-x=send]', wait=900, hold=1.4)
+    await p.evaluate("location.hash='#admin'"); await p.wait_for_timeout(1600)
+    await p.evaluate("document.querySelector('#grp').closest('details').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300)
+    await r.tap('details:has(#grp) summary', wait=600, hold=1.4)
+    await p.evaluate("document.querySelector('#grp').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300); await r.shot(hold=2.4)
+    # 7c welcome a new Ronin
+    r.scene('In the app', 'Welcome new Ronins', '')
+    await p.evaluate("location.hash='#home'"); await p.wait_for_timeout(1500)
+    await r.tap('[data-act=hello]', wait=800, hold=1.6)
+    await r.tap('#hello-t .chip[data-i="1"]', wait=400, hold=1.6)
+    await r.tap('#sheet [data-x=send]', wait=900, hold=1.4)
+    await p.evaluate("location.hash='#admin'"); await p.wait_for_timeout(1500)
+    # 8 new members + bikes
+    r.scene('In the app', 'New members → WhatsApp', '')
+    await r.tap('a[data-tab=crew]', wait=1100, hold=1.3)
+    await r.tap('[data-act=mf][data-f=new]', wait=800, hold=1.5)
+    for k in range(3):
+        await p.locator('[data-act=member]').nth(k).click(); await p.wait_for_timeout(900)
+        if (await p.inner_text('#sheet [data-x=vv][data-slot="1"]')).strip() == 'Verify': break
+        await p.keyboard.press('Escape'); await p.wait_for_timeout(500)
+    await p.keyboard.press('Escape'); await p.wait_for_timeout(500)
+    await r.tap(f'[data-act=member] >> nth={k}', wait=900, hold=1.5)
+    await p.evaluate("document.querySelector('#sheet .group.bikes').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300)
+    await r.tap('#sheet [data-x=vv][data-slot="1"]', wait=1000, hold=1.5)
+    await r.tap('#sheet a.btn.wa', click=False, hold=1.6)
+    await p.keyboard.press('Escape'); await p.wait_for_timeout(300)
+    # 9 remove + restore
+    r.scene('In the app', 'Remove, and restore', '')
+    await r.tap('[data-act=mf][data-f=all]', wait=600, hold=1.1)
+    await p.fill('#mq', 'arjun'); await p.dispatch_event('#mq', 'input'); await p.wait_for_timeout(300)
+    await r.tap('[data-act=member] >> nth=0', wait=700, hold=1.3)
+    await r.tap('#sheet [data-x=remove]', wait=600, hold=1.6)
+    await p.check('#rmf input[value=left]'); await p.fill('#rmf input[name=note]', 'Moved to Bangalore'); await p.fill('#rmf input[name=ok]', 'REMOVE'); await p.wait_for_timeout(200)
+    await r.shot(hold=1.8)
+    await r.tap('#rmf button.danger', wait=1100, hold=1.3)
+    await p.fill('#mq', ''); await p.dispatch_event('#mq', 'input'); await p.wait_for_timeout(300)
+    await r.tap('[data-act=mf][data-f=gone]', wait=700, hold=1.3)
+    await r.tap('[data-act=member] >> nth=0', wait=700, hold=1.4)
+    await r.tap('#sheet [data-x=restore]', wait=1000, hold=1.5)
+    # 10 what members see
+    r.scene('In the app', 'What members see', '')
+    await p.evaluate("""() => { const k='rwb-app-demo-v2', d=JSON.parse(localStorage.getItem(k)); d.members[0].tnc_agreed = null; delete d.members[0].hideout; localStorage.setItem(k, JSON.stringify(d)); location.hash='#home'; }""")
+    await p.reload(); await p.wait_for_timeout(1800)
+    await p.evaluate("document.querySelector('.banner.todo').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300); await r.shot(hold=2.4)
+    await r.tap('.banner.todo', wait=1100, hold=1.3)
+    await p.evaluate("location.hash='#terms'"); await p.wait_for_timeout(1300); await r.shot(hold=2.0)
+    await r.tap('#sheet [data-x=agree]', wait=1200, hold=1.6)
+    await r.tap('.profile [data-act=edit]', wait=700, hold=1.3)
+    await r.type('#mf input[name=full_name]', 'Demo K Rider')
+    await r.tap('#mf > button.btn', wait=1100, hold=2.2)
+    # 11 the join form
+    r.scene('In the app', 'The join form', '')
+    await p.evaluate("document.querySelector('#sheet')?.open && document.querySelector('#sheet').close()"); await p.wait_for_timeout(300)
+    await p.evaluate("window.__va('new', {email:'kunal.das@gmail.com', name:'Kunal Das'})"); await p.wait_for_timeout(1200)
+    await r.shot(hold=2.6)
+    await r.tap("label.fq-choice:has(input[value='Understood & agreed'])", wait=400, hold=1.3)
+    await r.tap('[data-act=gnext]', wait=800, hold=2.6)
+    r.save('Member management', '', '')
+
+VIDEOS = {'service': service, 'mileage': mileage, 'motomart': motomart, 'guides': guides, 'events': events, 'me': me, 'crew': crew, 'staff': staff, 'mgmt': mgmt, 'mgmt2': mgmt2, 'mgmt3': mgmt3, 'mgmt5': mgmt5}
 
 async def main(names):
     os.makedirs(f'{S}/data', exist_ok=True)
@@ -518,7 +657,7 @@ async def main(names):
         b = await pw.chromium.launch()
         for n in names:
             import shutil; shutil.rmtree(f'{S}/shots/{n}', ignore_errors=True)
-            pg = await setup(b, 'superadmin' if n in ('staff', 'mgmt', 'mgmt2', 'mgmt3') else 'member')
+            pg = await setup(b, 'superadmin' if n in ('staff', 'mgmt', 'mgmt2', 'mgmt3', 'mgmt5') else 'member')
             errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
             r = Rec(pg, n)
             try: await VIDEOS[n](r)
