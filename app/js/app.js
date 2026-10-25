@@ -1964,8 +1964,8 @@ function bindFollowUps(inc, all) {
                ...(v === 'all' ? [['fu-notapp', 'Not on the app', 'Send them the app link with the Android and iPhone install videos.', notApp, 'notapp']] : [])];
         $('#fu-body').innerHTML = `<p class="small muted" style="margin:10px 0">${v === 'gone' ? 'Members who left or were removed.' : 'Members on the app get an in-app reminder every Sunday. For everyone else, tap WhatsApp to send a ready-made reminder.'}</p>
             ${lists.map(([id, t, sub, list, kind]) => block(id, t, sub, list, kind)).join('')}
-            ${v !== 'gone' ? `<button class="btn block section" data-act="fu-share">📣 Share all follow-ups to the RWB group</button>
-            <button class="btn ghost block" data-act="fu-remind" style="margin-top:8px">🔔 Send in-app reminders now (members on the app)</button>` : ''}
+            ${(v === 'gone' ? gone.length : tnc.length + other.length + (v === 'all' ? notApp.length : 0)) ? `<button class="btn block section" data-act="fu-share">📣 Share ${FU_VIEWS[v] === 'Members' ? 'all' : `“${FU_VIEWS[v]}”`} follow-ups to the RWB group</button>` : ''}
+            ${v !== 'gone' ? `<button class="btn ghost block" data-act="fu-remind" style="margin-top:8px">🔔 Send in-app reminders now (members on the app)</button>` : ''}
             <details class="fu card section"><summary><b>RWB WhatsApp group link</b><span class="small muted">Optional. Lets members and admins open the group in one tap.</span></summary>
                 <form id="grp" style="margin-top:10px"><input name="link" type="url" placeholder="https://chat.whatsapp.com/…" value="${esc(state.settings?.wa_group_link || '')}">
                 <p class="small muted" style="margin:6px 0 10px">In WhatsApp: open the RWB group → tap its name → Invite via link → Copy link. Only members can see it in the app.</p>
@@ -1982,9 +1982,15 @@ function bindFollowUps(inc, all) {
     };
     draw();
     const byMid = id => inc.find(m => m.id === Number(id)) || (all || []).find(m => m.id === Number(id));
-    const shareAll = (pick = { tnc: true, other: true, app: true }) => {
-        const tnc = pick.tnc ? inc.filter(m => m.missing.includes('rules')) : [], other = pick.other ? inc.filter(m => !m.missing.includes('rules')) : [], notApp = pick.app ? notAppAll : [];
+    /* what the selected tab shows: On the app → only app users; Members → everyone; Left / removed → only them */
+    const inTab = () => {
+        const v = state.fuView, scope = v === 'app' ? inc.filter(m => m.on_app) : v === 'gone' ? [] : inc;
+        return { tnc: scope.filter(m => m.missing.includes('rules')), other: scope.filter(m => !m.missing.includes('rules')), app: v === 'all' ? notAppAll : [], gone: v === 'gone' ? gone : [] };
+    };
+    const shareAll = (pick = { tnc: true, other: true, app: true, gone: true }) => {
+        const t = inTab(), tnc = pick.tnc ? t.tnc : [], other = pick.other ? t.other : [], notApp = pick.app ? t.app : [], left = pick.gone ? t.gone : [];
         const firstNames = l => azSort(l).map(m => `• ${m.full_name}`).join('\n');
+        if (state.fuView === 'gone') return `🏍️ *We miss these warriors!* 🧡\n\n${firstNames(left)}\n\nIf you're in touch with them, let them know they're always welcome back. They can rejoin with the join form at roninwb.in or the RWB App: https://${APP_LINK}\n\nExplore. Evolve. Inspire.`;
         return `🏍️ *RWB App: a quick to-do for some of our warriors* 🙏\n`
             + (tnc.length ? `\n📜 *Please respond to the RWB Terms & Conditions in the app*\nOpen it directly: https://${APP_LINK}/#terms\n(or RWB App → Me → Terms & Conditions → Read & agree)\n${firstNames(tnc)}\n` : '')
             + (other.length ? `\n✍️ *Please add your missing details* (RWB App → Me → Edit)\n${azSort(other).map(m => `• ${m.full_name}: ${m.missing.join(', ')}`).join('\n')}\n` : '')
@@ -2001,14 +2007,14 @@ function bindFollowUps(inc, all) {
         },
         'fu-agree': b => { const m = byMid(b.dataset.mid); if (confirmBox(`Record that ${m.full_name} agreed to the RWB Terms & Conditions?`)) busy(b, async () => { await api.admin.setTnc(m.id, true); toast('Recorded'); adminRequests(); }); },
         'fu-share': () => {
-            const n = { tnc: inc.filter(m => m.missing.includes('rules')).length, other: inc.filter(m => !m.missing.includes('rules')).length, app: notApp.length };
-            const opt = (k, label) => `<label class="share-pick"><input type="checkbox" name="${k}"${n[k] ? ' checked' : ' disabled'}> <span class="grow">${label}</span><span class="badge ${n[k] ? 'orange' : ''}">${n[k]}</span></label>`;
-            openSheet('Share follow-ups to the RWB group', `<p class="small muted" style="margin-bottom:8px">Names are listed one per line, A–Z. Choose what to include:</p>
-                <form id="sp" class="group" style="margin-bottom:10px">${opt('tnc', '📜 Respond to the Terms & Conditions in the app')}${opt('other', '✍️ Missing details')}${opt('app', '📲 Not on the app (with Android & iPhone install videos)')}</form>
+            const t = inTab(), v = state.fuView, n = { tnc: t.tnc.length, other: t.other.length, app: t.app.length, gone: t.gone.length };
+            const opt = (k, label) => v === 'app' && k === 'app' ? '' : `<label class="share-pick"><input type="checkbox" name="${k}"${n[k] ? ' checked' : ' disabled'}> <span class="grow">${label}</span><span class="badge ${n[k] ? 'orange' : ''}">${n[k]}</span></label>`;
+            openSheet('Share follow-ups to the RWB group', `<p class="small muted" style="margin-bottom:8px">Only names from the <b>${FU_VIEWS[v]}</b> tab, one per line, A–Z.${v === 'gone' ? '' : ' Choose what to include:'}</p>
+                <form id="sp" class="group" style="margin-bottom:10px">${v === 'gone' ? opt('gone', '👋 Left / removed members') : opt('tnc', '📜 Respond to the Terms & Conditions in the app') + opt('other', '✍️ Missing details') + opt('app', '📲 Not on the app (with Android & iPhone install videos)')}</form>
                 <textarea id="wa-text" rows="12" style="font-size:.85rem;line-height:1.45"></textarea>
                 <button class="btn wa block" data-x="send" style="margin-top:10px">${state.settings?.wa_group_link ? 'Copy & open the RWB group' : 'Send in the RWB group'}</button>`, body => {
                 const f = body.querySelector('#sp'), ta = body.querySelector('#wa-text');
-                const upd = () => { ta.value = shareAll({ tnc: f.tnc.checked, other: f.other.checked, app: f.app.checked }); };
+                const upd = () => { ta.value = shareAll({ tnc: !!f.tnc?.checked, other: !!f.other?.checked, app: !!f.app?.checked, gone: !!f.gone?.checked }); };
                 f.onchange = upd; upd();
                 body.querySelector('[data-x=send]').onclick = () => { const t = ta.value.trim(); closeSheet(); toGroup(t); };
             });
