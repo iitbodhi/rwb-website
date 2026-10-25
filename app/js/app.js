@@ -1774,7 +1774,7 @@ async function viewAdmin() {
     catch (e) { $('#admin-body').innerHTML = `<div class="card empty"><b>Could not load</b>${esc(e.message)}</div>`; }
 }
 /* Every new entry (join form or app) waits here. Admins see 4 checks before approving. */
-const PARIVAHAN = 'https://parivahan.gov.in/';
+const PARIVAHAN = 'https://www.carinfo.app/rto-vehicle-registration-detail';
 function entryCheck(r) {
     const since = r.member_since ? fmtDate(String(r.member_since).slice(0, 10)) : '';
     if (r.check_entry === 'existing') return { ok: true, t: 'Existing member', s: `Member since ${since}.${r.on_app ? ' Approving links this app account to them' : ' Approving updates their details'}.` };
@@ -1812,7 +1812,7 @@ function reqCard(r) {
             <span class="req-score ${all ? 'ok' : ''}">${cks.filter(c => c.ok).length}/4</span></div>
         <ul class="checks">${cks.map(c => `<li class="${c.ok ? 'yes' : c.pending ? 'no pend' : c.warn || c.unk ? 'warn' : 'no'} tap-chk" data-act="chk" data-id="${r.id}" data-k="${c.k}" role="button" tabindex="0" aria-label="${esc(c.t)}: change">
             <span class="ci">${ico(c)}</span><span class="grow"><b>${esc(c.t)}</b>${c.k === 'vrn' ? `<small><span class="vrn">${esc(r.vrn || r.member_vrn || 'No VRN given')}</span>${c.s ? ' · ' + esc(c.s) : ''}</small>` : c.s ? `<small>${esc(c.s)}</small>` : ''}</span><span class="chk-edit" aria-hidden="true">›</span>
-            ${c.k === 'vrn' && r.vrn ? `<span class="vrn-tools"><button class="link-btn" data-act="copy-vrn" data-v="${esc(r.vrn)}">Copy</button><a class="link-btn" href="${PARIVAHAN}" target="_blank" rel="noopener">Parivahan ↗</a></span>` : ''}
+            ${c.k === 'vrn' && r.vrn ? `<span class="vrn-tools"><button class="link-btn" data-act="copy-vrn" data-v="${esc(r.vrn)}">Copy</button><a class="link-btn" href="${PARIVAHAN}" target="_blank" rel="noopener">Check VRN ↗</a></span>` : ''}
             ${c.k === 'vrn' && r.vrn_other ? `<small class="dup">⚠ Same VRN as ${esc(r.vrn_other)}</small>` : ''}</li>`).join('')}</ul>
         ${r.match_linked && r.on_app && r.check_entry !== 'new' ? '<p class="warn small" style="margin-bottom:10px">⚠ This number is already linked to another app account.</p>' : ''}
         <details class="answers"><summary>All answers</summary>${r.answers && Object.keys(r.answers).length ? `<dl class="facts">${Object.entries(r.answers).map(([q, a]) => `<dt>${esc(q)}</dt><dd>${esc(a)}</dd>`).join('')}<dt>Phone link</dt><dd><a href="${waTo(r.phone)}" target="_blank" rel="noopener">WhatsApp ${esc(r.phone)}</a></dd></dl>` : `<dl class="facts">
@@ -1829,12 +1829,12 @@ function checkSheet(r, k) {
     const OPTS = {
         entry: { title: 'New or existing member', opts: [['auto', `Automatic: ${e.t}`, e.s], ['ok', '✓ Checked, looks fine', 'You checked who they are'], ['dup', '⚠ Possible duplicate', 'Already registered under another number or name']] },
         ronin: { title: 'Has a Ronin', opts: [['auto', 'From their answer', `“${r.bike || 'No answer'}”`], ['ok', '✓ Owns a Ronin', 'Confirmed by you'], ['booked', '✓ Ronin booked', 'Delivery pending (counts as yes)'], ['no', '✕ No Ronin', 'Doesn\'t own one']] },
-        vrn: { title: 'VRN verified', opts: [['ok', '✓ Verified', 'Checked on Parivahan, the RC, or with the rider'], ['no', '✕ Couldn\'t verify', 'The number or the owner didn\'t match'], ['auto', 'Not checked yet', r.vrn_known ? 'Same VRN as on their member record (counts as verified)' : '']] },
+        vrn: { title: 'VRN verified', opts: [['ok', '✓ Verified', 'Checked with Check VRN, the RC, or with the rider'], ['no', '✕ Couldn\'t verify', 'The number or the owner didn\'t match'], ['auto', 'Not checked yet', r.vrn_known ? 'Same VRN as on their member record (counts as verified)' : '']] },
         tnc: { title: 'Agreed to the T&C', opts: [['auto', 'From their answer', r.tnc == null && !(c.tnc_orig ?? null) ? 'No answer on record' : ''], ['ok', '✓ Agreed', 'For example, they replied “I agree” on WhatsApp'], ['no', '✕ Doesn\'t agree', '']] }
     }[k];
     openSheet(OPTS.title, `<p class="small muted" style="margin-bottom:10px">${esc(r.full_name)} · choose how this check counts.</p>
         <div class="chk-opts">${OPTS.opts.map(([v, t, sub]) => `<button type="button" class="chk-opt${v === cur ? ' on' : ''}" data-v="${v}"><b>${esc(t)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</button>`).join('')}</div>
-        ${k === 'vrn' && r.vrn ? `<div class="btns" style="margin-top:12px"><button class="btn ghost" data-x="copy">Copy ${esc(r.vrn)}</button><a class="btn ghost" href="${PARIVAHAN}" target="_blank" rel="noopener">Parivahan ↗</a></div>` : ''}
+        ${k === 'vrn' && r.vrn ? `<div class="btns" style="margin-top:12px"><button class="btn ghost" data-x="copy">Copy ${esc(r.vrn)}</button><a class="btn ghost" href="${PARIVAHAN}" target="_blank" rel="noopener">Check VRN ↗</a></div>` : ''}
         ${k === 'tnc' ? `<button class="btn wa block" data-x="tnc-send" style="margin-top:12px">Send them the T&C on WhatsApp</button>` : ''}`, body => {
         body.querySelectorAll('.chk-opt').forEach(b => b.onclick = () => busy(b, async () => { await api.admin.setCheck(r.id, k, b.dataset.v); closeSheet(); toast('Saved'); adminRequests(); }));
         const cp = body.querySelector('[data-x=copy]'); if (cp) cp.onclick = async () => { try { await navigator.clipboard.writeText(r.vrn); toast('VRN copied'); } catch { toast(r.vrn); } };
@@ -1892,7 +1892,7 @@ function changeCard(c) {
             : `<div class="chg"><span class="old">${esc(c.old_value || (c.kind === 'bike' ? 'No bike in this slot' : '–'))}</span><span class="arr">→</span><span class="new">${esc(c.new_value)}${c.new_model ? ` · ${esc(c.new_model)}` : ''}</span></div>`}
         ${isVrn ? `<ul class="checks"><li class="${c.vrn_verified ? 'yes' : 'no'}"><label class="vrn-tick"><input type="checkbox" data-act="chg-vrn" data-cid="${c.id}"${c.vrn_verified ? ' checked' : ''}><span class="ci">${c.vrn_verified ? '✓' : '✕'}</span>
             <span class="grow"><b>VRN verified</b><small><span class="vrn">${esc(c.new_value)}</span> · tick once you've checked it</small></span></label>
-            <span class="vrn-tools"><button class="link-btn" data-act="copy-vrn" data-v="${esc(c.new_value)}">Copy</button><a class="link-btn" href="${PARIVAHAN}" target="_blank" rel="noopener">Parivahan ↗</a></span>
+            <span class="vrn-tools"><button class="link-btn" data-act="copy-vrn" data-v="${esc(c.new_value)}">Copy</button><a class="link-btn" href="${PARIVAHAN}" target="_blank" rel="noopener">Check VRN ↗</a></span>
             ${c.vrn_other ? `<small class="dup">⚠ Same VRN as ${esc(c.vrn_other)}</small>` : ''}</li></ul>` : ''}
         <div class="btns req-btns" style="margin-top:12px"><button class="btn ghost" data-act="chg-msg" data-cid="${c.id}">💬 Message</button><button class="btn ghost" data-act="chg-no" data-cid="${c.id}">${c.kind === 'tnc' ? 'Dismiss' : 'Reject'}</button><button class="btn" data-act="chg-ok" data-cid="${c.id}">${c.kind === 'tnc' ? 'Record it' : 'Approve'}</button></div></div>`;
 }
