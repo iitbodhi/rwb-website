@@ -1777,7 +1777,7 @@ async function viewAdmin() {
 /* free sites to look up a VRN; the admin picks any one (or all three) */
 const VRN_SITES = [
     ['CarInfo', 'https://www.carinfo.app/rto-vehicle-registration-detail', 'Quick lookup, no sign-in'],
-    ['Spinny RTO details', 'https://www.spinny.com/rto-details/', 'Owner name, RC and insurance'],
+    ['Motorpedia', 'https://themotorpedia.com/vahan-check', 'Vahan check: owner and RC details'],
     ['VAHAN (official, Govt. of India)', 'https://vahan.parivahan.gov.in/nrservices/', 'Know Your Vehicle Details · free, mobile OTP sign-in']];
 const vrnSites = vrn => `<p class="small muted" style="margin:12px 0 8px">Tap a site. <b class="vrn">${esc(vrn)}</b> is copied, so just paste it there. Mark it verified only if the owner name matches.</p>
     <div class="vrn-sites">${VRN_SITES.map(([n, u, d], i) => `<a class="vrn-site" href="${u}" target="_blank" rel="noopener" data-vrn="${esc(vrn)}"><span class="n">${i + 1}</span><span class="grow"><b>${esc(n)}</b><small>${esc(d)}</small></span>${ICON.out}</a>`).join('')}</div>`;
