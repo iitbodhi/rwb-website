@@ -313,6 +313,16 @@ function viewSignIn() {
 const FORM_KEYS = [['full_name', /^full name/i], ['dob', /^date of birth/i], ['phone', /^whatsapp no/i], ['vrn', /^vrn/i], ['blood_group', /^blood group/i],
     ['locality', /^current locality/i], ['hideout', /^permanent hideout/i], ['emergency_phone', /^in case of emergency/i], ['alt_phone', /^mobile no\.? ?\(alternative\)/i],
     ['bike', /^do you own a ronin/i], ['tnc', /read carefully|agree|terms|t\s*&\s*c|tnc|rules|declar|consent/i]];
+/* RWB on social media; join-form questions that mention one get a "Visit" button */
+const SOCIAL = [
+    ['Facebook', 'https://www.facebook.com/profile.php?id=61556220173720', /facebook|\bfb\b/i, '📘'],
+    ['Instagram', 'https://www.instagram.com/ronin_warriors_bengal', /insta|\big\b/i, '📸'],
+    ['WhatsApp channel', 'https://whatsapp.com/channel/0029VaiK6QHEgGfTItym9t2H', /channel/i, '📢']];
+const SKIP_Q = /^(timestamp|email( address)?|score)$/i;
+/* the join-form answers that don't have their own field in the profile (sticker, social media and so on) */
+const extraAnswers = m => Object.entries(m?.form_answers || {}).filter(([q, a]) => !SKIP_Q.test(q.trim()) && !formKey(q) && String(a ?? '').trim());
+const answerRows = (m, mine) => extraAnswers(m).map(([q, a]) => { const so = SOCIAL.find(x => x[2].test(q)); return `<div class="ans-row"><span class="grow"><small>${esc(q)}</small><b>${esc(Array.isArray(a) ? a.join(', ') : a)}</b></span>${so && mine ? `<a class="btn sm ghost" href="${so[1]}" target="_blank" rel="noopener">Visit ↗</a>` : ''}</div>`; }).join('');
+const followRwb = () => `<div class="follow-rwb">${SOCIAL.map(([n, u, , ic]) => `<a href="${u}" target="_blank" rel="noopener"><span>${ic}</span>${esc(n)}</a>`).join('')}</div>`;
 const formKey = title => (FORM_KEYS.find(([, re]) => re.test(String(title || '').trim())) || [])[0] || null;
 const PHONE_KEYS = ['phone', 'emergency_phone', 'alt_phone'];
 const isAgree = v => /(agree|understood|accept|yes|i do)/i.test(v || '') && !/(don'?t|do not|not agree|disagree|^no\b)/i.test(v || '');
@@ -1653,6 +1663,8 @@ function viewMe() {
             ${row('WhatsApp', m.phone)}${row('Bike', m.bike)}${row('Registration', m.vrn)}${row('Birthday', m.dob ? fmtDayMonth(m.dob) : '')}${row('Blood group', m.blood_group)}${row('Locality', m.locality)}${row('Emergency contact', m.emergency_phone)}
         </div>
         <div id="my-changes"></div>
+        ${extraAnswers(m).length ? `<h2 class="group-title">More from your join form</h2><div class="group">${answerRows(m, true)}</div>` : ''}
+        <h2 class="group-title">Follow RWB</h2>${followRwb()}
         <h2 class="group-title">My bikes <span class="small muted" style="text-transform:none;letter-spacing:0;font-weight:500">up to 3</span></h2>
         <div class="group bikes" id="my-bikes">${bikeRows(m, null)}</div>
         ${'tnc_agreed' in m ? `<h2 class="group-title">Terms & Conditions</h2>
@@ -2119,6 +2131,7 @@ function memberSheet(m) {
             <dt>Hometown</dt><dd>${esc(m.hideout || '–')}</dd><dt>Emergency</dt><dd>${esc(m.emergency_phone || '–')}</dd>
             <dt>Joined</dt><dd>${m.joined_at ? fmtDate(String(m.joined_at).slice(0, 10)) : '–'}</dd>
         </dl>
+        ${extraAnswers(m).length ? `<details class="answers" style="margin:-6px 0 12px"><summary>Other join-form answers (${extraAnswers(m).length})</summary><div class="group" style="margin-top:8px">${answerRows(m, false)}</div></details>` : ''}
         <p class="small muted" style="margin:2px 0 6px">Bikes · check each VRN, then mark it verified</p>
         <div class="group bikes" style="margin-bottom:12px">${bikeRows(m, (m.member_bikes || []).slice().sort((a, b) => a.slot - b.slot), true)}</div>
         <div class="btns" style="margin-bottom:10px">${m.phone ? `<a class="btn wa" href="${waTo(m.phone)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}<button class="btn ghost" data-x="edit">Edit details</button></div>

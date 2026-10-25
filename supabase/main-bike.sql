@@ -1,6 +1,7 @@
--- RWB App setup file 32: editing the main bike
+-- RWB App setup file 32: editing the main bike + every member's join-form answers
 -- * Changing only the model of your main bike saves straight away (no approval).
 -- * A new VRN for the main bike still goes to the admins; approving keeps "verified" if the VRN didn't change.
+-- * sheet_set_answers: the sheet script copies each row's other answers (sticker, social media…) into the app.
 -- Safe to run more than once.
 
 create or replace function public.request_change(p_kind text, p_value text, p_slot integer default null, p_model text default null) returns text
@@ -86,3 +87,24 @@ begin
 end $$;
 revoke execute on function public.admin_decide_change(bigint, boolean, text) from public, anon;
 grant execute on function public.admin_decide_change(bigint, boolean, text) to authenticated;
+
+-- ---------- Every member's join-form answers (sticker, social media…) from the sheet ----------
+-- The sheet's script sends each row's answers by question title; they're merged into the member's
+-- form_answers (newer values win). Nothing is sent back to the sheet.
+create or replace function public.sheet_set_answers(p_secret text, p_rows jsonb) returns integer
+language plpgsql security definer set search_path = public, private as $$
+declare n integer := 0; r jsonb; k integer;
+begin
+  if p_secret is null or p_secret <> coalesce((select value from private.config where key = 'sheet_secret'), '') then raise exception 'Not allowed'; end if;
+  perform set_config('rwb.from_sheet', 'on', true);
+  for r in select * from jsonb_array_elements(coalesce(p_rows, '[]'::jsonb)) loop
+    if jsonb_typeof(r -> 'answers') <> 'object' then continue; end if;
+    update members set form_answers = coalesce(form_answers, '{}'::jsonb) || (r -> 'answers')
+    where phone = right(regexp_replace(coalesce(r ->> 'phone', ''), '\D', '', 'g'), 10) and status = 'active'
+      and form_answers is distinct from coalesce(form_answers, '{}'::jsonb) || (r -> 'answers');
+    get diagnostics k = row_count; n := n + k;
+  end loop;
+  return n;
+end $$;
+revoke execute on function public.sheet_set_answers(text, jsonb) from public;
+grant execute on function public.sheet_set_answers(text, jsonb) to anon, authenticated;

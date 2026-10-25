@@ -990,3 +990,11 @@ details.rules .tnc-doc{margin-top:10px}
 .vrn-site b{display:block;font-size:.95rem}.vrn-site small{display:block;color:var(--muted);font-size:.8rem;margin-top:2px}
 .vrn-site svg{width:18px;height:18px;flex:none;opacity:.6}
 .vrn-site .grow{flex:1;min-width:0}
+
+.ans-row{display:flex;align-items:center;gap:12px;padding:12px 14px}
+.ans-row small{color:var(--muted);font-size:.78rem;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ans-row b{display:block;font-weight:600;margin-top:2px;overflow-wrap:anywhere}
+.ans-row .grow{flex:1;min-width:0}
+.follow-rwb{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.follow-rwb a{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 6px;border-radius:16px;background:var(--card2,rgba(127,127,127,.1));border:1px solid var(--line,rgba(127,127,127,.2));color:inherit;text-decoration:none;font-size:.82rem;font-weight:600;text-align:center}
+.follow-rwb a span{font-size:1.4rem}

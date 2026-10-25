@@ -49,13 +49,15 @@ const AGREED = 'Understood & agreed', NOT_AGREED = "I don't agree";   // written
 /** Run once (and again after updating this file). Installs the automatic triggers. */
 function setup() {
   const ss = SpreadsheetApp.getActive();
-  ScriptApp.getProjectTriggers().filter(t => ['onFormSubmitSync', 'onSheetEdit', 'publishForm'].includes(t.getHandlerFunction())).forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.getProjectTriggers().filter(t => ['onFormSubmitSync', 'onSheetEdit', 'publishForm', 'syncAnswers'].includes(t.getHandlerFunction())).forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('onFormSubmitSync').forSpreadsheet(ss).onFormSubmit().create();
   ScriptApp.newTrigger('onSheetEdit').forSpreadsheet(ss).onEdit().create();
   ScriptApp.newTrigger('publishForm').timeBased().everyHours(1).create();
+  ScriptApp.newTrigger('syncAnswers').timeBased().everyDays(1).atHour(3).create();
   columns_(responsesSheet_());
   publishForm();
   syncTnc();
+  syncAnswers();
   console.log('Ready: new form entries go to the approval list, edits here update the app, and the app shows the same join form.');
 }
 
@@ -391,6 +393,22 @@ function syncTnc() {
     n += Number(r.getContentText()) || 0;
   }
   console.log('Rules answers found on ' + rows.length + ' rows; ' + n + ' members updated in the app.' + (rows.length ? '' : ' (No "read carefully" column was found: everyone will be asked to agree in the app.)'));
+}
+
+/**
+ * Copies every row's join-form answers (sticker, social media and the rest) into the app, so members see
+ * them in Me and admins in each profile. Runs from setup and then every night by itself. Safe to run again.
+ */
+function syncAnswers() {
+  const sheet = responsesSheet_(), data = sheet.getDataRange().getValues(), heads = data.shift();
+  const rows = data.map(r => ({ phone: toMember_(heads, r).phone, answers: answers_(heads, r) })).filter(x => x.phone && Object.keys(x.answers).length);
+  let n = 0;
+  for (let i = 0; i < rows.length; i += 100) {
+    const r = UrlFetchApp.fetchAll([rpc_('sheet_set_answers', { p_secret: SYNC_SECRET, p_rows: rows.slice(i, i + 100) })])[0];
+    if (r.getResponseCode() >= 300) { console.log('Answers not sent (run setup file 32 in Supabase first): ' + r.getContentText().slice(0, 200)); return; }
+    n += Number(r.getContentText()) || 0;
+  }
+  console.log('Answers sent for ' + rows.length + ' rows; ' + n + ' members updated in the app.');
 }
 
 /* ======================= Catch-up ======================= */
