@@ -317,9 +317,9 @@ const FORM_KEYS = [['full_name', /^full name/i], ['dob', /^date of birth/i], ['p
 /* RWB on social media; join-form questions that mention one get a "Visit" button (no link yet = no button) */
 const SOCIAL = [
     ['Facebook group', null, /(fb|facebook) group/i, '👥'],
-    ['Facebook', 'https://www.facebook.com/profile.php?id=61556220173720', /facebook|\bfb\b/i, '📘'],
-    ['Instagram', 'https://www.instagram.com/ronin_warriors_bengal', /insta|\big\b/i, '📸'],
-    ['WhatsApp channel', 'https://whatsapp.com/channel/0029VaiK6QHEgGfTItym9t2H', /channel/i, '📢']];
+    ['Facebook', 'https://www.facebook.com/profile.php?id=61556220173720', /facebook|\bfb\b/i, 'img/social-facebook.png'],
+    ['Instagram', 'https://www.instagram.com/ronin_warriors_bengal', /insta|\big\b/i, 'img/social-instagram.png'],
+    ['WhatsApp channel', 'https://whatsapp.com/channel/0029VaiK6QHEgGfTItym9t2H', /channel/i, 'img/social-whatsapp.png']];
 const FOLLOW = SOCIAL.filter(x => x[1]);
 const SKIP_Q = /^(timestamp|email( address)?|score)$/i;
 const isExtraQ = q => !SKIP_Q.test(String(q).trim()) && !formKey(q);
@@ -330,7 +330,7 @@ const extraAnswers = m => Object.entries(m?.form_answers || {}).filter(([q, a]) 
 const moreQs = m => [...new Set([...(joinFormDef?.items || []).filter(i => i.title && !['PAGE_BREAK', 'SECTION_HEADER', 'IMAGE', 'VIDEO'].includes(i.type) && isExtraQ(i.title)).map(i => i.title),
     ...extraAnswers(m).map(([q]) => q)])];
 const answerRows = (m, mine) => (mine ? moreQs(m).map(q => [q, m.form_answers?.[q]]) : extraAnswers(m)).map(([q, a]) => { const so = SOCIAL.find(x => x[2].test(q)); return `<div class="ans-row"><span class="grow"><small>${esc(q)}</small><b class="${ansText(a) ? '' : 'muted'}">${esc(ansText(a) || 'Not answered yet')}</b></span>${so?.[1] && mine ? `<a class="btn sm ghost" href="${so[1]}" target="_blank" rel="noopener">Visit ↗</a>` : ''}</div>`; }).join('');
-const followRwb = () => `<div class="follow-rwb">${FOLLOW.map(([n, u, , ic]) => `<a href="${u}" target="_blank" rel="noopener"><span class="fi">${ic}</span>${esc(n)}</a>`).join('')}</div>`;
+const followRwb = () => `<div class="follow-rwb">${FOLLOW.map(([n, u, , ic]) => `<a href="${u}" target="_blank" rel="noopener"><img class="fi" src="${ic}" alt="" width="40" height="40" loading="lazy">${esc(n)}</a>`).join('')}</div>`;
 function moreSheet(m, done) {
     const qs = moreQs(m), item = q => (joinFormDef?.items || []).find(i => i.title === q);
     openSheet('More from RWB', `<form id="more">${qs.map((q, i) => { const it = item(q), cur = ansText(m.form_answers?.[q]), ch = (it?.choices || []).map(c => c.value).filter(Boolean);
