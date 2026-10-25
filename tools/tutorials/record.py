@@ -411,7 +411,106 @@ async def mgmt2(r):
     await p.evaluate("document.querySelector('#my-bikes').scrollIntoView({block:'center'})"); await p.wait_for_timeout(400); await r.shot(hold=2.0)
     r.save('Member management', '', '')
 
-VIDEOS = {'service': service, 'mileage': mileage, 'motomart': motomart, 'guides': guides, 'events': events, 'me': me, 'crew': crew, 'staff': staff, 'mgmt': mgmt, 'mgmt2': mgmt2}
+async def mgmt3(r):
+    p = r.p
+    FORM = open('/tmp/claude-0/-home-claude/298ce0ef-b0f8-5ec3-a03d-16ae7e00049c/scratchpad/mockform.json').read()
+    await p.context.add_init_script("window.DEMO_JOIN_FORM = " + FORM + ";")
+    await p.evaluate("""() => { const k='rwb-app-demo-v2', d=JSON.parse(localStorage.getItem(k)), now=new Date().toISOString();
+        d.members.forEach((m,i) => { m.tnc_agreed = i % 3 === 0 ? true : null; });
+        const pr = d.members.find(m => m.id === 3), ar = d.members.find(m => m.id === 2);
+        d.changes = [{ id: 901, member_id: pr.id, full_name: pr.full_name, phone: pr.phone, kind: 'vrn', slot: null, old_value: (pr.vrn || 'WB 20 EF 7890') + ' · TVS Ronin 225', new_value: 'WB 20 GH 1122', new_model: 'TVS Ronin 225', vrn_verified: false, status: 'pending', created_at: now, on_app: true },
+                     { id: 902, member_id: ar.id, full_name: ar.full_name, phone: ar.phone, kind: 'bike', slot: 2, old_value: null, new_value: 'WB 06 KL 4455', new_model: 'TVS Apache RTR 160', vrn_verified: false, status: 'pending', created_at: now, on_app: true }];
+        localStorage.setItem(k, JSON.stringify(d)); }""")
+    await p.reload(); await p.wait_for_timeout(1800)
+    # 0 Home admin card
+    r.scene('In the app', 'Admin, right on Home', '')
+    await p.evaluate("document.querySelector('.admin-dock').scrollIntoView({block:'center'})"); await p.wait_for_timeout(400); await r.shot(hold=2.4)
+    await r.tap('.ad-grid [data-adtab=requests]', wait=1300, hold=1.6)
+    # 1 the 4 checks
+    r.scene('In the app', 'The 4 checks', '')
+    await p.evaluate("document.querySelector('.req-card[data-id=\"1\"] .checks').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300); await r.shot(hold=2.6)
+    await p.evaluate("document.querySelector('.req-card[data-id=\"3\"]').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300); await r.shot(hold=2.8)
+    # 2 verify + approve + welcome message
+    r.scene('In the app', 'Approve + welcome message', '')
+    await p.evaluate("document.querySelector('.req-card[data-id=\"1\"] .checks').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300)
+    await r.tap('.req-card[data-id="1"] .vrn-tick', wait=900, hold=1.6)
+    await r.tap('.req-card[data-id="1"] [data-act=approve]', wait=1500, hold=1.6)
+    await r.shot(hold=2.8)
+    await r.tap('#sheet [data-x=send]', wait=700, hold=1.4)
+    # 3 existing member
+    r.scene('In the app', 'Existing member? A different message', '')
+    await r.tap('.req-card[data-id="3"] [data-act=approve]', wait=1500, hold=1.6)
+    await r.shot(hold=3.0)
+    await r.tap('#sheet [data-x=send]', wait=700, hold=1.2)
+    # 4 reject politely
+    r.scene('In the app', 'Reject, politely', '')
+    await r.tap('.req-card[data-id="2"] [data-act=reject]', wait=800, hold=1.4)
+    await r.tap('#rj [data-q="Not a Ronin owner"]', wait=400, hold=1.3)
+    await r.tap('#rj button.btn.danger', wait=1500, hold=1.5)
+    await r.shot(hold=2.6)
+    await r.tap('#sheet [data-x=send]', wait=700, hold=1.2)
+    # 5 profile changes
+    r.scene('In the app', 'Profile changes', '')
+    await p.evaluate("document.querySelector('.change-card').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300); await r.shot(hold=2.6)
+    await r.tap('.change-card .vrn-tick', wait=900, hold=1.5)
+    await r.tap('.change-card [data-act=chg-ok]', wait=1500, hold=1.5)
+    await r.shot(hold=1.8)
+    await r.tap('#sheet [data-x=skip]', wait=600, hold=1.0)
+    # 6 share to admin group
+    r.scene('In the app', 'Tell the admin group', '')
+    await p.evaluate("window.scrollTo(0,0)"); await p.wait_for_timeout(300)
+    await r.tap('[data-act=digest]', wait=600, hold=2.2)
+    # 7 follow-ups
+    r.scene('In the app', 'Follow-ups', '')
+    await r.tap('#fu-rules summary', wait=700, hold=1.5)
+    await p.evaluate("document.querySelector('#fu-rules').scrollIntoView({block:'start'})"); await p.wait_for_timeout(300); await r.shot(hold=2.4)
+    await r.tap('#fu-rules [data-act=fu-wa] >> nth=0', wait=600, hold=1.6)
+    await r.tap('#fu-other summary', wait=700, hold=1.4)
+    await r.tap('[data-act=fu-remind]', wait=1200, hold=1.8)
+    # 8 new members + bikes
+    r.scene('In the app', 'New members → WhatsApp', '')
+    await r.tap('a[data-tab=crew]', wait=1100, hold=1.3)
+    await r.tap('[data-act=mf][data-f=new]', wait=800, hold=1.5)
+    await r.tap('[data-act=member] >> nth=0', wait=900, hold=1.5)
+    await p.evaluate("document.querySelector('#sheet .group.bikes').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300)
+    await r.tap('#sheet [data-x=vv][data-slot="1"]', wait=1000, hold=1.5)
+    await r.tap('#sheet a.btn.wa', click=False, hold=1.6)
+    await p.keyboard.press('Escape'); await p.wait_for_timeout(300)
+    # 9 remove + restore
+    r.scene('In the app', 'Remove, and restore', '')
+    await r.tap('[data-act=mf][data-f=all]', wait=600, hold=1.1)
+    await p.fill('#mq', 'arjun'); await p.dispatch_event('#mq', 'input'); await p.wait_for_timeout(300)
+    await r.tap('[data-act=member] >> nth=0', wait=700, hold=1.3)
+    await r.tap('#sheet [data-x=remove]', wait=600, hold=1.6)
+    await p.check('#rmf input[value=left]'); await p.fill('#rmf input[name=note]', 'Moved to Bangalore'); await p.fill('#rmf input[name=ok]', 'REMOVE'); await p.wait_for_timeout(200)
+    await r.shot(hold=1.8)
+    await r.tap('#rmf button.danger', wait=1100, hold=1.3)
+    await p.fill('#mq', ''); await p.dispatch_event('#mq', 'input'); await p.wait_for_timeout(300)
+    await r.tap('[data-act=mf][data-f=gone]', wait=700, hold=1.3)
+    await r.tap('[data-act=member] >> nth=0', wait=700, hold=1.4)
+    await r.tap('#sheet [data-x=restore]', wait=1000, hold=1.5)
+    # 10 what members see
+    r.scene('In the app', 'What members see', '')
+    await p.evaluate("""() => { const k='rwb-app-demo-v2', d=JSON.parse(localStorage.getItem(k)); d.members[0].tnc_agreed = null; delete d.members[0].hideout; localStorage.setItem(k, JSON.stringify(d)); location.hash='#home'; }""")
+    await p.reload(); await p.wait_for_timeout(1800)
+    await p.evaluate("document.querySelector('.banner.todo').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300); await r.shot(hold=2.4)
+    await r.tap('.banner.todo', wait=1100, hold=1.3)
+    await p.evaluate("document.querySelector('[data-act=rules]').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300)
+    await r.tap('[data-act=rules]', wait=700, hold=1.6)
+    await r.tap('#sheet [data-x=agree]', wait=1200, hold=1.6)
+    await r.tap('.profile [data-act=edit]', wait=700, hold=1.3)
+    await r.type('#mf input[name=full_name]', 'Demo K Rider')
+    await r.tap('#mf > button.btn', wait=1100, hold=2.2)
+    # 11 the join form
+    r.scene('In the app', 'The join form', '')
+    await p.evaluate("document.querySelector('#sheet')?.open && document.querySelector('#sheet').close()"); await p.wait_for_timeout(300)
+    await p.evaluate("window.__va('new', {email:'kunal.das@gmail.com', name:'Kunal Das'})"); await p.wait_for_timeout(1200)
+    await r.shot(hold=2.6)
+    await r.tap("label.fq-choice:has(input[value='Understood & agreed'])", wait=400, hold=1.3)
+    await r.tap('[data-act=gnext]', wait=800, hold=2.6)
+    r.save('Member management', '', '')
+
+VIDEOS = {'service': service, 'mileage': mileage, 'motomart': motomart, 'guides': guides, 'events': events, 'me': me, 'crew': crew, 'staff': staff, 'mgmt': mgmt, 'mgmt2': mgmt2, 'mgmt3': mgmt3}
 
 async def main(names):
     os.makedirs(f'{S}/data', exist_ok=True)
@@ -419,11 +518,13 @@ async def main(names):
         b = await pw.chromium.launch()
         for n in names:
             import shutil; shutil.rmtree(f'{S}/shots/{n}', ignore_errors=True)
-            pg = await setup(b, 'superadmin' if n in ('staff', 'mgmt', 'mgmt2') else 'member')
+            pg = await setup(b, 'superadmin' if n in ('staff', 'mgmt', 'mgmt2', 'mgmt3') else 'member')
             errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
             r = Rec(pg, n)
             try: await VIDEOS[n](r)
-            except Exception as e: print(n, 'FAILED:', str(e).split('\n')[0][:300])
+            except Exception as e:
+                print(n, 'FAILED:', str(e).split('\n')[0][:300], '| scene', len(r.scenes), r.scenes[-1]['cap']['title'] if r.scenes else '', '| beats', len(r.scenes[-1]['beats']) if r.scenes else 0)
+                await pg.screenshot(path=f'{S}/fail.png')
             if errs: print(n, 'page errors', errs[:3])
             await pg.context.close()
         await b.close()
