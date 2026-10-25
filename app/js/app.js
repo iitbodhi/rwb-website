@@ -1872,6 +1872,7 @@ function tellOnWhatsApp(title, phone, text, done) {
         body.querySelector('[data-x=skip]').onclick = () => { closeSheet(); done?.(false); };
     });
 }
+const azSort = l => [...l].sort((a, b) => String(a.full_name || '').trim().localeCompare(String(b.full_name || '').trim(), 'en', { sensitivity: 'base' }));
 const CHANGE_TXT = { name: 'Name', phone: 'WhatsApp No.', vrn: 'Main bike (VRN)', bike: 'New bike', tnc: 'Terms & Conditions' };
 function changeCard(c) {
     const isVrn = c.kind === 'vrn' || c.kind === 'bike';
@@ -1887,7 +1888,7 @@ function changeCard(c) {
 }
 async function adminRequests() {
     const [reqs, chg, inc, all] = await Promise.all([api.admin.requests(), api.admin.changes().catch(() => []), api.admin.incomplete().catch(() => null), state.adminMembers ? Promise.resolve(state.adminMembers) : api.admin.members().then(m => (state.adminMembers = m)).catch(() => [])]);
-    const digest = () => `🛡️ RWB App: ${reqs.length + chg.length} waiting for approval\n${reqs.length ? `\nNew entries (${reqs.length}):\n${reqs.slice(0, 15).map(r => `• ${r.full_name} (${r.source === 'form' ? 'form' : 'app'})`).join('\n')}` : ''}${chg.length ? `\n\nProfile changes (${chg.length}):\n${chg.slice(0, 15).map(c => `• ${c.full_name}: ${CHANGE_TXT[c.kind]}`).join('\n')}` : ''}\n\nOpen: ${APP_LINK} → Home → Admin`;
+    const digest = () => `🛡️ RWB App: ${reqs.length + chg.length} waiting for approval\n${reqs.length ? `\nNew entries (${reqs.length}):\n${azSort(reqs).slice(0, 15).map(r => `• ${r.full_name} (${r.source === 'form' ? 'form' : 'app'})`).join('\n')}` : ''}${chg.length ? `\n\nProfile changes (${chg.length}):\n${azSort(chg).slice(0, 15).map(c => `• ${c.full_name}: ${CHANGE_TXT[c.kind]}`).join('\n')}` : ''}\n\nOpen: ${APP_LINK} → Home → Admin`;
     $('#admin-body').innerHTML = (reqs.length || chg.length ? `<button class="btn ghost block share-admins" data-act="digest">📣 Share this list to the admin WhatsApp group</button>` : '') + (reqs.length || chg.length ? `${reqs.length ? `<p class="small muted" style="margin-bottom:10px">New entries from the join form and the app. Check the 4 points, then approve. Nobody is a member until approved.</p>
         <div class="list">${reqs.map(reqCard).join('')}</div>` : ''}
         ${chg.length ? `<h2 class="group-title" style="margin-top:${reqs.length ? 22 : 0}px">Changes to approve</h2><p class="small muted" style="margin-bottom:10px">Members changed an important detail in their profile.</p><div class="list">${chg.map(changeCard).join('')}</div>` : ''}`
@@ -1973,10 +1974,10 @@ function bindFollowUps(inc, all) {
     const byMid = id => inc.find(m => m.id === Number(id)) || (all || []).find(m => m.id === Number(id));
     const shareAll = () => {
         const tnc = inc.filter(m => m.missing.includes('rules')), other = inc.filter(m => !m.missing.includes('rules'));
-        const firstNames = l => l.map(m => m.full_name).join(', ');
+        const firstNames = l => azSort(l).map(m => `• ${m.full_name}`).join('\n');
         return `🏍️ *RWB App: a quick to-do for some of our warriors* 🙏\n`
             + (tnc.length ? `\n📜 *Please agree to the RWB Terms & Conditions*\nRead them: ${TNC_URL}\n(RWB App → Me → Terms & Conditions → Read & agree)\n${firstNames(tnc)}\n` : '')
-            + (other.length ? `\n✍️ *Please add your missing details* (RWB App → Me → Edit)\n${other.map(m => `• ${m.full_name}: ${m.missing.join(', ')}`).join('\n')}\n` : '')
+            + (other.length ? `\n✍️ *Please add your missing details* (RWB App → Me → Edit)\n${azSort(other).map(m => `• ${m.full_name}: ${m.missing.join(', ')}`).join('\n')}\n` : '')
             + (notApp.length ? `\n📲 *Not on the RWB App yet?* Get it: https://${APP_LINK}\nSign in with the email you gave on the join form.\nAndroid guide: ${INSTALL_ANDROID}\niPhone guide: ${INSTALL_IPHONE}\n${firstNames(notApp)}\n` : '')
             + `\nThank you! Explore. Evolve. Inspire.`;
     };
