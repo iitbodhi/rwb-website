@@ -180,6 +180,9 @@ const I = [
   { dur: 4.6, card: `<div class="check">✓</div><h2>You're <em>in!</em></h2><p>RWB now lives on your Home Screen, just like any other app.</p><span class="tag">Questions? Ask any RWB admin</span>` }
 ];
 const SC = ANDROID ? A : I;
+/* ?d=3.6,5.2,...: new scene lengths (to fit the voice-over); beats and taps stretch to match */
+const DUR = new URLSearchParams(location.search).get('d');
+if (DUR) DUR.split(',').map(Number).forEach((d, i) => { const s = SC[i]; if (!s || !d) return; const k = d / s.dur; s.dur = d; (s.beats || []).forEach(b => { b.at *= k; if (b.tapAt) b.tapAt *= k; }); });
 const TOTAL = SC.reduce((a, s) => a + s.dur, 0);
 document.getElementById('pill').textContent = ANDROID ? 'Android' : 'iPhone';
 /* build layers */

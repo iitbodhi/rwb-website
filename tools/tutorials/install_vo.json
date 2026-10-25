@@ -1,0 +1,26 @@
+{
+ "android": [
+  "Here's how to install the RWB App on Android. It takes about a minute.",
+  "Open Chrome, and go to ronin W.B. dot in. Scroll to Get the RWB App, and tap Download Now.",
+  "Android warns about every app from outside the Play Store. Tap Download anyway. It's the official RWB file.",
+  "When the download finishes, tap Open.",
+  "If Android blocks it, tap Settings, switch on Allow from this source, and go back.",
+  "Tap Install, then Open. If Play Protect asks, choose install anyway.",
+  "Sign in with Google, using the same account you used on the RWB join form.",
+  "Tap Turn on, then Allow, to get birthdays, events, and ride news.",
+  "You're in! See you on the next ride."
+ ],
+ "ios": [
+  "Here's how to add the RWB App to your iPhone. It takes under a minute.",
+  "Don't tap the link inside WhatsApp. It opens inside WhatsApp, which can't add apps. Open Safari yourself instead.",
+  "Find Safari on your Home Screen, and open it.",
+  "Tap the address bar, type ronin W.B. dot in, slash app, and tap go.",
+  "At the bottom, tap the Share button. It's the square with an arrow pointing up.",
+  "Scroll down the list, and tap Add to Home Screen.",
+  "Keep the name RWB, and tap Add.",
+  "The RWB icon is now on your Home Screen. Always open the app from this icon.",
+  "Sign in with Google, using the same account you used on the RWB join form.",
+  "Tap Turn on, then Allow. Notifications need i O S 16.4 or newer.",
+  "You're in! See you on the next ride."
+ ]
+}
