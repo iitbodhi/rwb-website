@@ -1937,7 +1937,7 @@ function followUps(inc, all) {
         <div id="fu-body"></div>`;
 }
 function bindFollowUps(inc, all) {
-    const gone = (all || []).filter(isGone), notApp = (all || []).filter(m => !isGone(m) && !m.user_id);
+    const gone = (all || []).filter(isGone), notApp = (all || []).filter(m => !isGone(m) && !m.user_id), notAppAll = notApp;
     const rowHtml = (m, kind) => `<div class="fu-row" data-mid="${m.id}"><div class="grow"><b>${esc(m.full_name)}</b>${m.on_app || m.user_id ? ' <span class="badge ok">On the app</span>' : ''}
             ${kind === 'gone' ? `<div class="small muted">${esc(GONE_TXT?.[m.status] || 'Left')}${m.removed_at ? ' · ' + fmtDate(String(m.removed_at).slice(0, 10)) : ''}</div>` : kind === 'notapp' ? `<div class="small muted">${esc([m.vrn, m.locality].filter(Boolean).join(' · ') || 'Not on the app yet')}</div>`
                 : `<div class="fu-miss">${m.missing.map(x => `<span>${esc(x === 'rules' ? 'T&C' : x)}</span>`).join('')}</div>`}${m.reminded_at ? `<small class="muted">Reminded ${timeAgo(m.reminded_at)}</small>` : ''}</div>
@@ -1972,8 +1972,8 @@ function bindFollowUps(inc, all) {
     };
     draw();
     const byMid = id => inc.find(m => m.id === Number(id)) || (all || []).find(m => m.id === Number(id));
-    const shareAll = () => {
-        const tnc = inc.filter(m => m.missing.includes('rules')), other = inc.filter(m => !m.missing.includes('rules'));
+    const shareAll = (pick = { tnc: true, other: true, app: true }) => {
+        const tnc = pick.tnc ? inc.filter(m => m.missing.includes('rules')) : [], other = pick.other ? inc.filter(m => !m.missing.includes('rules')) : [], notApp = pick.app ? notAppAll : [];
         const firstNames = l => azSort(l).map(m => `• ${m.full_name}`).join('\n');
         return `🏍️ *RWB App: a quick to-do for some of our warriors* 🙏\n`
             + (tnc.length ? `\n📜 *Please agree to the RWB Terms & Conditions*\nRead them: ${TNC_URL}\n(RWB App → Me → Terms & Conditions → Read & agree)\n${firstNames(tnc)}\n` : '')
@@ -1990,7 +1990,19 @@ function bindFollowUps(inc, all) {
             if (kind !== 'gone') { api.admin.markReminded(m.id).catch(() => {}); m.reminded_at = new Date().toISOString(); }
         },
         'fu-agree': b => { const m = byMid(b.dataset.mid); if (confirmBox(`Record that ${m.full_name} agreed to the RWB Terms & Conditions?`)) busy(b, async () => { await api.admin.setTnc(m.id, true); toast('Recorded'); adminRequests(); }); },
-        'fu-share': () => toGroup(shareAll()),
+        'fu-share': () => {
+            const n = { tnc: inc.filter(m => m.missing.includes('rules')).length, other: inc.filter(m => !m.missing.includes('rules')).length, app: notApp.length };
+            const opt = (k, label) => `<label class="share-pick"><input type="checkbox" name="${k}"${n[k] ? ' checked' : ' disabled'}> <span class="grow">${label}</span><span class="badge ${n[k] ? 'orange' : ''}">${n[k]}</span></label>`;
+            openSheet('Share follow-ups to the RWB group', `<p class="small muted" style="margin-bottom:8px">Names are listed one per line, A–Z. Choose what to include:</p>
+                <form id="sp" class="group" style="margin-bottom:10px">${opt('tnc', '📜 Agree to the Terms & Conditions (with link)')}${opt('other', '✍️ Missing details')}${opt('app', '📲 Not on the app (with Android & iPhone install videos)')}</form>
+                <textarea id="wa-text" rows="12" style="font-size:.85rem;line-height:1.45"></textarea>
+                <button class="btn wa block" data-x="send" style="margin-top:10px">${state.settings?.wa_group_link ? 'Copy & open the RWB group' : 'Send in the RWB group'}</button>`, body => {
+                const f = body.querySelector('#sp'), ta = body.querySelector('#wa-text');
+                const upd = () => { ta.value = shareAll({ tnc: f.tnc.checked, other: f.other.checked, app: f.app.checked }); };
+                f.onchange = upd; upd();
+                body.querySelector('[data-x=send]').onclick = () => { const t = ta.value.trim(); closeSheet(); toGroup(t); };
+            });
+        },
         'fu-remind': b => busy(b, async () => { const n = await api.admin.remindIncomplete(); toast(n ? `Reminder sent to ${n} member${n > 1 ? 's' : ''} on the app` : 'Everyone on the app was reminded in the last week'); adminRequests(); })
     });
 }
