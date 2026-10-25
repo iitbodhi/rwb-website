@@ -28,6 +28,8 @@ async function supabaseApi(url, key) {
     const { createClient } = await import(SUPABASE_JS);
     const sb = createClient(url, key, { auth: { flowType: 'pkce', persistSession: true, detectSessionInUrl: true } });
     const uid = async () => (await sb.auth.getSession()).data.session?.user?.id;
+    let midCache = null;   /* [user id, member id] */
+    const myMemberId = async () => { const u = await uid(); if (midCache?.[0] !== u) midCache = [u, must(await sb.from('members').select('id').eq('user_id', u).single()).id]; return midCache[1]; };
 
     return {
         demo: false,
@@ -51,7 +53,8 @@ async function supabaseApi(url, key) {
         joinForm: async () => must(await sb.rpc('join_form')),
         settings: async () => { const r = await sb.rpc('app_settings'); return r.error ? {} : r.data; },
         myPrefill: async () => must(await sb.rpc('my_prefill')),
-        myChanges: async () => must(await sb.from('change_requests').select('kind, slot, new_value, new_model, status, reject_reason, created_at, decided_at').order('created_at', { ascending: false }).limit(20)),
+        /* filtered to my own member id: admins can read everyone's rows */
+        myChanges: async () => must(await sb.from('change_requests').select('kind, slot, new_value, new_model, status, reject_reason, created_at, decided_at').eq('member_id', await myMemberId()).order('created_at', { ascending: false }).limit(20)),
         async requestChange(kind, value, slot = null, model = null) {
             const r = await sb.rpc('request_change', { p_kind: kind, p_value: value ?? '', p_slot: slot, p_model: model });
             if (r.error && /could not find|function/i.test(r.error.message || '')) {   /* before setup file 30: the old way */
@@ -68,7 +71,7 @@ async function supabaseApi(url, key) {
             if (r.error && /could not find|function/i.test(r.error.message || '')) return must(await sb.rpc('request_access', args));
             return must(r);
         },
-        myRequest: async () => must(await sb.from('link_requests').select('*').maybeSingle()),
+        myRequest: async () => must(await sb.from('link_requests').select('*').eq('user_id', await uid()).order('created_at', { ascending: false }).limit(1).maybeSingle()),
         me: async () => must(await sb.from('members').select('*').eq('user_id', await uid()).single()),
         updateMe: async f => must(await sb.from('members').update(f).eq('user_id', await uid()).select().single()),
         async setAvatar(file) {   /* file = small square JPEG, or null to remove */
@@ -80,7 +83,7 @@ async function supabaseApi(url, key) {
         },
         birthdays: async (days = 0) => must(await sb.rpc('birthdays', { p_days: days })),
         directory: async () => must(await sb.rpc('member_directory')),
-        myBikes: async () => must(await sb.from('member_bikes').select('slot, vrn, model, verified').order('slot')),
+        myBikes: async () => must(await sb.from('member_bikes').select('slot, vrn, model, verified').eq('member_id', await myMemberId()).order('slot')),
         saveBike: async (slot, vrn, model, memberId = null) => must(await sb.rpc('save_bike', { p_slot: slot, p_vrn: vrn || '', p_model: model || null, p_member_id: memberId })),
         leaderboard: async () => must(await sb.rpc('odometer_leaderboard')),
         boards: async () => must(await sb.rpc('warrior_boards')),
