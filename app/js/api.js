@@ -83,6 +83,7 @@ async function supabaseApi(url, key) {
         },
         birthdays: async (days = 0) => must(await sb.rpc('birthdays', { p_days: days })),
         directory: async () => must(await sb.rpc('member_directory')),
+        updateMyAnswers: async answers => { const r = await sb.rpc('update_my_answers', { p_answers: answers }); if (r.error && /could not find|function/i.test(r.error.message || '')) throw new Error('Please ask an RWB admin to run setup file 32 first.'); return must(r); },
         myBikes: async () => must(await sb.from('member_bikes').select('slot, vrn, model, verified').eq('member_id', await myMemberId()).order('slot')),
         saveBike: async (slot, vrn, model, memberId = null) => must(await sb.rpc('save_bike', { p_slot: slot, p_vrn: vrn || '', p_model: model || null, p_member_id: memberId })),
         leaderboard: async () => must(await sb.rpc('odometer_leaderboard')),
@@ -400,6 +401,7 @@ function demoApi() {
             db.changes.push({ id: nid(), member_id: m.id, full_name: m.full_name, phone: m.phone, kind, slot, new_value: kind === 'phone' ? value.replace(/\D/g, '').slice(-10) : kind === 'vrn' || kind === 'bike' ? value.toUpperCase() : value, new_model: model, old_value: kind === 'name' ? m.full_name : kind === 'phone' ? m.phone : kind === 'vrn' ? [m.vrn, m.bike].filter(Boolean).join(' · ') : kind === 'tnc' ? 'agree' : null, vrn_verified: false, status: 'pending', created_at: new Date().toISOString(), on_app: true });
             save(); return 'pending';
         },
+        updateMyAnswers: answers => { me().form_answers = { ...(me().form_answers || {}), ...answers }; save(); return wait(answers); },
         myBikes: () => wait((me().member_bikes || []).slice().sort((a, b) => a.slot - b.slot)),
         async saveBike(slot, vrn, model, mid = null) { if (!mid) return this.requestChange('bike', vrn, slot, model); const m = db.members.find(x => x.id === mid); m.member_bikes = (m.member_bikes || []).filter(b => b.slot !== slot); if (vrn) m.member_bikes.push({ slot, vrn: vrn.toUpperCase(), model: model || null, verified: false }); save(); return vrn ? 'saved' : 'removed'; },
         directory: () => wait(db.members.filter(m => !m.status || m.status === 'active').map(m => ({ id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url, bike: m.bike, vrn: m.vrn, vrn_verified: !!m.vrn_verified, bikes: m.member_bikes || null, locality: m.locality, role: m.role, phone: ['superadmin', 'admin', 'coordinator'].includes(m.role) ? m.phone : null, on_app: !!m.user_id, avg_kmpl: m.user_id === 'me' ? m.avg_kmpl : ({ 2: 41.9, 3: 44.6, 4: 36.8, 5: 38.2 })[m.id] ?? null })).sort((a, b) => a.full_name.localeCompare(b.full_name))),

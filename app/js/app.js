@@ -314,15 +314,35 @@ const FORM_KEYS = [['full_name', /^full name/i], ['dob', /^date of birth/i], ['p
     ['locality', /^current locality/i], ['hideout', /^permanent hideout/i], ['emergency_phone', /^in case of emergency/i], ['alt_phone', /^mobile no\.? ?\(alternative\)/i],
     ['bike', /^do you own a ronin/i], ['tnc', /read carefully|agree|terms|t\s*&\s*c|tnc|rules|declar|consent/i]];
 /* RWB on social media; join-form questions that mention one get a "Visit" button */
+/* RWB on social media; join-form questions that mention one get a "Visit" button (no link yet = no button) */
 const SOCIAL = [
+    ['Facebook group', null, /(fb|facebook) group/i, '👥'],
     ['Facebook', 'https://www.facebook.com/profile.php?id=61556220173720', /facebook|\bfb\b/i, '📘'],
     ['Instagram', 'https://www.instagram.com/ronin_warriors_bengal', /insta|\big\b/i, '📸'],
     ['WhatsApp channel', 'https://whatsapp.com/channel/0029VaiK6QHEgGfTItym9t2H', /channel/i, '📢']];
+const FOLLOW = SOCIAL.filter(x => x[1]);
 const SKIP_Q = /^(timestamp|email( address)?|score)$/i;
+const isExtraQ = q => !SKIP_Q.test(String(q).trim()) && !formKey(q);
+const ansText = a => Array.isArray(a) ? a.join(', ') : String(a ?? '').trim();
 /* the join-form answers that don't have their own field in the profile (sticker, social media and so on) */
-const extraAnswers = m => Object.entries(m?.form_answers || {}).filter(([q, a]) => !SKIP_Q.test(q.trim()) && !formKey(q) && String(a ?? '').trim());
-const answerRows = (m, mine) => extraAnswers(m).map(([q, a]) => { const so = SOCIAL.find(x => x[2].test(q)); return `<div class="ans-row"><span class="grow"><small>${esc(q)}</small><b>${esc(Array.isArray(a) ? a.join(', ') : a)}</b></span>${so && mine ? `<a class="btn sm ghost" href="${so[1]}" target="_blank" rel="noopener">Visit ↗</a>` : ''}</div>`; }).join('');
-const followRwb = () => `<div class="follow-rwb">${SOCIAL.map(([n, u, , ic]) => `<a href="${u}" target="_blank" rel="noopener"><span>${ic}</span>${esc(n)}</a>`).join('')}</div>`;
+const extraAnswers = m => Object.entries(m?.form_answers || {}).filter(([q, a]) => isExtraQ(q) && ansText(a));
+/* every such question: from the live join form (even if unanswered) plus anything already on the record */
+const moreQs = m => [...new Set([...(joinFormDef?.items || []).filter(i => i.title && !['PAGE_BREAK', 'SECTION_HEADER', 'IMAGE', 'VIDEO'].includes(i.type) && isExtraQ(i.title)).map(i => i.title),
+    ...extraAnswers(m).map(([q]) => q)])];
+const answerRows = (m, mine) => (mine ? moreQs(m).map(q => [q, m.form_answers?.[q]]) : extraAnswers(m)).map(([q, a]) => { const so = SOCIAL.find(x => x[2].test(q)); return `<div class="ans-row"><span class="grow"><small>${esc(q)}</small><b class="${ansText(a) ? '' : 'muted'}">${esc(ansText(a) || 'Not answered yet')}</b></span>${so?.[1] && mine ? `<a class="btn sm ghost" href="${so[1]}" target="_blank" rel="noopener">Visit ↗</a>` : ''}</div>`; }).join('');
+const followRwb = () => `<div class="follow-rwb">${FOLLOW.map(([n, u, , ic]) => `<a href="${u}" target="_blank" rel="noopener"><span class="fi">${ic}</span>${esc(n)}</a>`).join('')}</div>`;
+function moreSheet(m, done) {
+    const qs = moreQs(m), item = q => (joinFormDef?.items || []).find(i => i.title === q);
+    openSheet('More from RWB', `<form id="more">${qs.map((q, i) => { const it = item(q), cur = ansText(m.form_answers?.[q]), ch = (it?.choices || []).map(c => c.value).filter(Boolean);
+        return `<label><span>${esc(q)}</span>${ch.length ? `<select name="q${i}"><option value="">Choose…</option>${[...new Set([...ch, ...(cur && !ch.includes(cur) ? [cur] : [])])].map(c => `<option${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select>`
+            : `<input name="q${i}" maxlength="300" value="${esc(cur)}">`}</label>`; }).join('')}
+        <p class="small muted" style="margin:-4px 0 12px">Saved straight away, no approval needed.</p><button class="btn block">Save</button></form>`, body => {
+        body.querySelector('#more').onsubmit = e => { e.preventDefault(); const f = e.target, out = {};
+            qs.forEach((q, i) => { const v = f[`q${i}`].value.trim(); if (v !== ansText(m.form_answers?.[q])) out[q] = v; });
+            if (!Object.keys(out).length) { closeSheet(); return; }
+            busy(e.submitter, async () => { const saved = await api.updateMyAnswers(out); m.form_answers = { ...(m.form_answers || {}), ...saved }; closeSheet(); toast('Saved'); done(); }); };
+    });
+}
 const formKey = title => (FORM_KEYS.find(([, re]) => re.test(String(title || '').trim())) || [])[0] || null;
 const PHONE_KEYS = ['phone', 'emergency_phone', 'alt_phone'];
 const isAgree = v => /(agree|understood|accept|yes|i do)/i.test(v || '') && !/(don'?t|do not|not agree|disagree|^no\b)/i.test(v || '');
@@ -1663,7 +1683,7 @@ function viewMe() {
             ${row('WhatsApp', m.phone)}${row('Bike', m.bike)}${row('Registration', m.vrn)}${row('Birthday', m.dob ? fmtDayMonth(m.dob) : '')}${row('Blood group', m.blood_group)}${row('Locality', m.locality)}${row('Emergency contact', m.emergency_phone)}
         </div>
         <div id="my-changes"></div>
-        ${extraAnswers(m).length ? `<h2 class="group-title">More from your join form</h2><div class="group">${answerRows(m, true)}</div>` : ''}
+        <div id="more-rwb"></div>
         <h2 class="group-title">Follow RWB</h2>${followRwb()}
         <h2 class="group-title">My bikes <span class="small muted" style="text-transform:none;letter-spacing:0;font-weight:500">up to 3</span></h2>
         <div class="group bikes" id="my-bikes">${bikeRows(m, null)}</div>
@@ -1702,8 +1722,10 @@ function viewMe() {
         const g = $('#my-bikes'); if (g) g.innerHTML = bikeRows(state.me, myBikes, false, myChanges.filter(c => c.kind === 'bike' && c.status === 'pending'));
         const ch = $('#my-changes'); if (ch) ch.innerHTML = changesBox(myChanges);
     };
-    drawBikes(); loadJoinForm();
+    const drawMore = () => { const el = $('#more-rwb'); if (el) el.innerHTML = moreQs(m).length ? `<h2 class="group-title">More from RWB</h2><div class="group">${answerRows(m, true)}<button class="bike-add" data-act="more-edit">✎ Edit my answers</button></div>` : ''; };
+    drawBikes(); drawMore(); loadJoinForm().then(drawMore);
     actions = {
+        'more-edit': () => moreSheet(m, drawMore),
         bike: el => { const sl = Number(el.dataset.slot); bikeSheet(sl, sl === 1 ? { vrn: state.me.vrn || '', model: state.me.bike || 'TVS Ronin 225' } : myBikes.find(b => b.slot === sl), drawBikes); },
         rules: () => rulesSheet(m, drawBikes),
         out: async () => { await disablePush(true).catch(() => {}); api.signOut(); },
@@ -1878,6 +1900,7 @@ function waMsg(kind, x = {}) {
         change_no: `Hi ${first}, we couldn't approve your ${x.what || 'profile'} update in the RWB App${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'} Just reply here if you'd like help with it. 🙏\n– ${me}, RWB`,
         ask: `Hi ${first}! 👋\n\nThanks for registering with Ronin Warriors of Bengal. Before we approve you, could you please help us with:\n${(x.asks || []).map(a => '• ' + a).join('\n') || '• '}\n${(x.asks || []).some(a => /terms/i.test(a)) ? `\n📜 RWB Terms & Conditions: ${TNC_URL}\nIf you agree, just reply “I agree” here.\n` : ''}\n${x.on_app ? 'You can update your details in the RWB App (open it and tap Edit my details), or just reply here.' : 'You can edit your join form response (use the same email), or just reply here.'}\n\nThank you!\n– ${me}, RWB`,
         invite: `Hi ${first}! 👋\n\nRWB now has its own free app for members: service records and reminders, mileage tracker, Motomart for used gear, events, guides and more.\n\n📲 Get it here: https://${APP_LINK}\nSign in with Google using the email you gave on the RWB join form.\n\n🎥 How to install:\nAndroid: ${INSTALL_ANDROID}\niPhone: ${INSTALL_IPHONE}\n\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
+        sticker: `Hi ${first}! 👋\n\nIf you haven't got your RWB sticker yet, you can collect it at our next meet-up or ride. 🏍️\n\nIf you already have one, kindly update it in the RWB App → Me → More from RWB: https://${APP_LINK}/#me\n\nThank you!\n– ${me}, RWB`,
         comeback: `Hi ${first}! 👋\n\nIt's ${me} from Ronin Warriors of Bengal. We miss you on the road! If you'd like to come back to RWB, just reply here or fill the join form again at roninwb.in.\n\nRide safe! 🏍️`,
         remind: `Hi ${first}! 👋\n\nA quick one from the RWB team: please complete your RWB profile.${x.rules ? `\n\n📜 Please read and agree to the RWB Terms & Conditions: ${TNC_URL}\nAgree in the app (Me → Terms & Conditions → Read & agree), or just reply “I agree” here.` : ''}${x.missing?.length ? `\n\nMissing: ${x.missing.join(', ')}.` : ''}\n\nIt takes a minute in the RWB App: ${APP_LINK} → Me.${x.on_app ? '' : ' Sign in with Google using the email you gave on the join form.'}\n\nThank you! Explore. Evolve. Inspire.\n– ${me}, RWB`
     };
@@ -1973,8 +1996,11 @@ function followUps(inc, all) {
 }
 function bindFollowUps(inc, all) {
     const gone = (all || []).filter(isGone), notApp = (all || []).filter(m => !isGone(m) && !m.user_id), notAppAll = notApp;
+    /* "Have you received RWB sticker?" answered with anything but a yes */
+    const stickerQ = m => Object.keys(m.form_answers || {}).find(q => /sticker/i.test(q) && /receiv|got/i.test(q) && !/willing/i.test(q));
+    const noSticker = (all || []).filter(m => { if (isGone(m)) return false; const q = stickerQ(m); return q && !/^\s*(yes|yeah|yep|done|got|received|already|ha+n?)\b/i.test(ansText(m.form_answers[q])); });
     const rowHtml = (m, kind) => `<div class="fu-row" data-mid="${m.id}"><div class="grow"><b>${esc(m.full_name)}</b>${m.on_app || m.user_id ? ' <span class="badge ok">On the app</span>' : ''}
-            ${kind === 'gone' ? `<div class="small muted">${esc(GONE_TXT?.[m.status] || 'Left')}${m.removed_at ? ' · ' + fmtDate(String(m.removed_at).slice(0, 10)) : ''}</div>` : kind === 'notapp' ? `<div class="small muted">${esc([m.vrn, m.locality].filter(Boolean).join(' · ') || 'Not on the app yet')}</div>`
+            ${kind === 'gone' ? `<div class="small muted">${esc(GONE_TXT?.[m.status] || 'Left')}${m.removed_at ? ' · ' + fmtDate(String(m.removed_at).slice(0, 10)) : ''}</div>` : kind === 'notapp' ? `<div class="small muted">${esc([m.vrn, m.locality].filter(Boolean).join(' · ') || 'Not on the app yet')}</div>` : kind === 'sticker' ? `<div class="small muted">Answered: “${esc(ansText(m.form_answers[stickerQ(m)]))}”${m.locality ? ' · ' + esc(m.locality) : ''}</div>`
                 : `<div class="fu-miss">${m.missing.map(x => `<span>${esc(x === 'rules' ? 'T&C' : x)}</span>`).join('')}</div>`}${m.reminded_at ? `<small class="muted">Reminded ${timeAgo(m.reminded_at)}</small>` : ''}</div>
         <div class="fu-btns"><button class="btn sm wa" data-act="fu-wa" data-kind="${kind}" data-mid="${m.id}">WhatsApp</button>${kind === 'todo' && m.missing.includes('rules') ? `<button class="btn sm ghost" data-act="fu-agree" data-mid="${m.id}">Agreed</button>` : ''}</div></div>`;
     const block = (id, title, sub, list, kind) => `<details class="fu card section" id="${id}"${list.length && list.length < 6 ? ' open' : ''}><summary><b>${title}</b> <span class="badge ${list.length ? 'orange' : ''}">${list.length}</span><span class="small muted">${sub}</span></summary>
@@ -1986,6 +2012,7 @@ function bindFollowUps(inc, all) {
         const lists = v === 'gone' ? [['fu-gone', 'Left / removed', 'Say hello, or invite them back.', gone, 'gone']]
             : [['fu-rules', 'Not agreed to the T&C', 'No “read carefully” answer on record, or they said no. Tap Agreed if they confirmed to you.', tnc, 'todo'],
                ['fu-other', 'Missing details', 'Emergency contact, blood group, birthday, VRN or locality.', other, 'todo'],
+               ['fu-sticker', 'RWB sticker not received', 'Tell them where to collect it, or to update the app if they already have one.', v === 'app' ? noSticker.filter(m => m.user_id) : noSticker, 'sticker'],
                ...(v === 'all' ? [['fu-notapp', 'Not on the app', 'Send them the app link with the Android and iPhone install videos.', notApp, 'notapp']] : [])];
         $('#fu-body').innerHTML = `<p class="small muted" style="margin:10px 0">${v === 'gone' ? 'Members who left or were removed.' : 'Members on the app get an in-app reminder every Sunday. For everyone else, tap WhatsApp to send a ready-made reminder.'}</p>
             ${lists.map(([id, t, sub, list, kind]) => block(id, t, sub, list, kind)).join('')}
@@ -2026,9 +2053,9 @@ function bindFollowUps(inc, all) {
         'fu-view': el => { state.fuView = el.dataset.v; document.querySelectorAll('.fu-seg [role=tab]').forEach(t => t.setAttribute('aria-selected', t === el)); draw(); },
         'fu-wa': b => {
             const m = byMid(b.dataset.mid), kind = b.dataset.kind;
-            const text = kind === 'notapp' ? waMsg('invite', m) : kind === 'gone' ? waMsg('comeback', m) : waMsg('remind', { ...m, rules: m.missing.includes('rules'), missing: m.missing.filter(x => x !== 'rules') });
+            const text = kind === 'sticker' ? waMsg('sticker', m) : kind === 'notapp' ? waMsg('invite', m) : kind === 'gone' ? waMsg('comeback', m) : waMsg('remind', { ...m, rules: m.missing.includes('rules'), missing: m.missing.filter(x => x !== 'rules') });
             openWA(waTo(m.phone, text));
-            if (kind !== 'gone') { api.admin.markReminded(m.id).catch(() => {}); m.reminded_at = new Date().toISOString(); }
+            if (kind === 'todo' || kind === 'notapp') { api.admin.markReminded(m.id).catch(() => {}); m.reminded_at = new Date().toISOString(); }
         },
         'fu-agree': b => { const m = byMid(b.dataset.mid); if (confirmBox(`Record that ${m.full_name} agreed to the RWB Terms & Conditions?`)) busy(b, async () => { await api.admin.setTnc(m.id, true); toast('Recorded'); adminRequests(); }); },
         'fu-share': () => {

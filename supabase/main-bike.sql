@@ -2,6 +2,7 @@
 -- * Changing only the model of your main bike saves straight away (no approval).
 -- * A new VRN for the main bike still goes to the admins; approving keeps "verified" if the VRN didn't change.
 -- * sheet_set_answers: the sheet script copies each row's other answers (sticker, social media…) into the app.
+-- * update_my_answers: members edit their "More from RWB" answers (sticker, social media…) without approval.
 -- Safe to run more than once.
 
 create or replace function public.request_change(p_kind text, p_value text, p_slot integer default null, p_model text default null) returns text
@@ -108,3 +109,27 @@ begin
 end $$;
 revoke execute on function public.sheet_set_answers(text, jsonb) from public;
 grant execute on function public.sheet_set_answers(text, jsonb) to anon, authenticated;
+
+-- ---------- "More from RWB": members edit their other join-form answers themselves (no approval) ----------
+-- Only questions from the join form (or answers already on their record) are accepted, never the
+-- profile fields that need an admin (name, number, VRN, T&C). Changes go to the sheet as usual.
+create or replace function public.update_my_answers(p_answers jsonb) returns jsonb
+language plpgsql security definer set search_path = public, private as $$
+declare m members; k text; v jsonb; titles text[]; out jsonb := '{}'::jsonb;
+begin
+  select * into m from members where user_id = auth.uid() and status = 'active';
+  if not found then raise exception 'Members only'; end if;
+  if jsonb_typeof(p_answers) <> 'object' then raise exception 'Nothing to save'; end if;
+  select coalesce(array_agg(i ->> 'title'), '{}') into titles
+    from jsonb_array_elements(coalesce((select value from private.config where key = 'join_form')::jsonb -> 'items', '[]'::jsonb)) i;
+  for k, v in select * from jsonb_each(p_answers) loop
+    if k ~* '^(full name|date of birth|whatsapp no|vrn|blood group|current locality|permanent hideout|in case of emergency|mobile no|do you own a ronin|email|timestamp)'
+       or k ~* '(read carefully|terms|t\s*&\s*c|consent|declar)' then continue; end if;
+    if not (k = any(titles) or coalesce(m.form_answers, '{}'::jsonb) ? k) then continue; end if;
+    out := out || jsonb_build_object(k, left(trim(coalesce(v #>> '{}', '')), 300));
+  end loop;
+  update members set form_answers = coalesce(form_answers, '{}'::jsonb) || out where id = m.id;
+  return out;
+end $$;
+revoke execute on function public.update_my_answers(jsonb) from public, anon;
+grant execute on function public.update_my_answers(jsonb) to authenticated;
