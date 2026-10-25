@@ -1599,7 +1599,7 @@ function installSheet() {
 /* Bikes: the main bike is on the member record (Edit details); bikes 2 and 3 can be added here */
 const vBadge = ok => ok ? '<span class="badge ok">✓ Verified</span>' : '';
 function bikeRows(m, extra, admin = false, waiting = []) {
-    const main = `<div class="bike-row"><span class="g-ico">🏍️</span><span class="grow"><b>${esc(m.vrn || 'No VRN yet')}</b><span class="small muted">${esc(m.bike || 'Main bike')} · main bike</span></span>${vBadge(m.vrn_verified)}${admin ? `<button class="btn sm ghost" data-x="vv" data-slot="1">${m.vrn_verified ? 'Unverify' : 'Verify'}</button>` : ''}</div>`;
+    const main = `<div class="bike-row"><span class="g-ico">🏍️</span><span class="grow"><b>${esc(m.vrn || 'No VRN yet')}</b><span class="small muted">${esc(m.bike || 'Main bike')} · main bike</span></span>${vBadge(m.vrn_verified)}${admin ? `<button class="btn sm ghost" data-x="vv" data-slot="1">${m.vrn_verified ? 'Unverify' : 'Verify'}</button>` : `<button class="btn sm ghost" data-act="bike" data-slot="1">Edit</button>`}</div>`;
     if (extra === null) return main + '<p class="small muted" style="padding:10px 14px">Loading…</p>';
     const rows = extra.map(b => `<div class="bike-row"><span class="g-ico">🏍️</span><span class="grow"><b>${esc(b.vrn)}</b><span class="small muted">${esc(b.model || 'Model not set')}</span></span>${vBadge(b.verified)}${admin ? `<button class="btn sm ghost" data-x="vv" data-slot="${b.slot}">${b.verified ? 'Unverify' : 'Verify'}</button>` : `<button class="btn sm ghost" data-act="bike" data-slot="${b.slot}">Edit</button>`}</div>`).join('');
     const wait = waiting.map(c => `<div class="bike-row"><span class="g-ico">⏳</span><span class="grow"><b>${esc(c.new_value)}</b><span class="small muted">${esc(c.new_model || '')} · waiting for an admin</span></span></div>`).join('');
@@ -1623,15 +1623,16 @@ function rulesSheet(m, done) {
 }
 const BIKE_MODELS = ['TVS Ronin 225', 'TVS Apache RTR 160 4V', 'TVS Apache RTR 200 4V', 'TVS Apache RTR 310', 'Royal Enfield Hunter 350', 'Royal Enfield Classic 350', 'Honda CB350', 'Bajaj Pulsar', 'KTM Duke'];
 function bikeSheet(slot, b, done) {
-    openSheet(b ? 'Edit bike' : 'Add a bike', `<form id="bk">
+    const main = slot === 1;
+    openSheet(main ? 'Edit main bike' : b ? 'Edit bike' : 'Add a bike', `<form id="bk">
         <label><span>VRN <span class="req">*</span></span><input name="vrn" required autocapitalize="characters" placeholder="WB 02 AB 1234" value="${esc(b?.vrn || '')}"></label>
-        <label><span>Model</span><input name="model" list="bike-models" value="${esc(b?.model || 'TVS Ronin 225')}"><small class="hint">Change it if it's a different bike. An admin checks the VRN and approves it.</small></label>
+        <label><span>Model</span><input name="model" list="bike-models" value="${esc(b?.model || 'TVS Ronin 225')}"><small class="hint">${main ? 'Changing only the model saves straight away. A new VRN is checked and approved by an admin.' : 'Change it if it\'s a different bike. An admin checks the VRN and approves it.'}</small></label>
         <datalist id="bike-models">${BIKE_MODELS.map(x => `<option value="${esc(x)}">`).join('')}</datalist>
-        <button class="btn block">Save bike</button>${b ? '<button type="button" class="btn danger block" data-x="del" style="margin-top:8px">Remove this bike</button>' : ''}</form>`, body => {
+        <button class="btn block">Save bike</button>${b && !main ? '<button type="button" class="btn danger block" data-x="del" style="margin-top:8px">Remove this bike</button>' : ''}</form>`, body => {
         body.querySelector('#bk').onsubmit = e => {
             e.preventDefault(); const v = e.target.vrn.value.replace(/\s+/g, ' ').trim().toUpperCase();
             if (v.replace(/[^A-Z0-9]/g, '').length < 6) return toast('Please check the VRN (for example WB 02 AB 1234)', true);
-            busy(e.submitter, async () => { const r = await api.saveBike(slot, v, e.target.model.value.trim()); closeSheet(); state.dir = null; toast(r === 'pending' ? 'Sent to the admins for approval' : 'Bike saved'); done(); });
+            busy(e.submitter, async () => { const r = main ? await api.requestChange('vrn', v, null, e.target.model.value.trim()) : await api.saveBike(slot, v, e.target.model.value.trim()); if (main) state.me = await api.me(); closeSheet(); state.dir = null; toast(r === 'pending' ? 'Sent to the admins for approval' : r === 'unchanged' ? 'Nothing changed' : 'Bike saved'); main ? render() : done(); });
         };
         const del = body.querySelector('[data-x=del]');
         if (del) del.onclick = () => { if (confirmBox('Remove this bike from your profile?')) busy(del, async () => { await api.saveBike(slot, ''); closeSheet(); state.dir = null; toast('Bike removed'); done(); }); };
@@ -1691,7 +1692,7 @@ function viewMe() {
     };
     drawBikes(); loadJoinForm();
     actions = {
-        bike: el => bikeSheet(Number(el.dataset.slot), myBikes.find(b => b.slot === Number(el.dataset.slot)), drawBikes),
+        bike: el => { const sl = Number(el.dataset.slot); bikeSheet(sl, sl === 1 ? { vrn: state.me.vrn || '', model: state.me.bike || 'TVS Ronin 225' } : myBikes.find(b => b.slot === sl), drawBikes); },
         rules: () => rulesSheet(m, drawBikes),
         out: async () => { await disablePush(true).catch(() => {}); api.signOut(); },
         theme: el => { setTheme(el.dataset.t); app.querySelectorAll('[data-act=theme]').forEach(b => { const on = b === el; b.setAttribute('aria-selected', on); b.setAttribute('aria-checked', on); }); },

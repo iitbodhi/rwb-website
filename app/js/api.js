@@ -395,6 +395,8 @@ function demoApi() {
             const m = me(); db.changes = (db.changes || []).filter(c => !(c.member_id === m.id && c.kind === kind && (c.slot || 0) === (slot || 0) && c.status === 'pending'));
             if (kind === 'bike' && !value) { m.member_bikes = (m.member_bikes || []).filter(b => b.slot !== slot); save(); return 'removed'; }
             if (kind === 'tnc' && value === 'agree') { m.tnc_agreed = true; save(); return 'saved'; }
+            const nv = x => String(x || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+            if (kind === 'vrn' && nv(value) === nv(m.vrn)) { if ((model || m.bike) === m.bike) return 'unchanged'; m.bike = model || null; save(); return 'saved'; }
             db.changes.push({ id: nid(), member_id: m.id, full_name: m.full_name, phone: m.phone, kind, slot, new_value: kind === 'phone' ? value.replace(/\D/g, '').slice(-10) : kind === 'vrn' || kind === 'bike' ? value.toUpperCase() : value, new_model: model, old_value: kind === 'name' ? m.full_name : kind === 'phone' ? m.phone : kind === 'vrn' ? [m.vrn, m.bike].filter(Boolean).join(' · ') : kind === 'tnc' ? 'agree' : null, vrn_verified: false, status: 'pending', created_at: new Date().toISOString(), on_app: true });
             save(); return 'pending';
         },
