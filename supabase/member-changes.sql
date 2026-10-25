@@ -4,11 +4,17 @@
 --   • The app's join form shows the live Google Form (same pages, questions, choices, "read carefully" agreement)
 --   • Signing in with an email RWB already knows fills the join form in
 --   • Changing Name, WhatsApp No., VRN / main bike, adding a bike, or withdrawing from the rules needs an admin's OK
+--   • Members who never agreed to the rules (read from the sheet) are listed for admins and asked to agree
+--   • Members are told in the app (and on their phone) when they're approved, rejected, or a change is decided,
+--     and reminded about missing details (rules, emergency contact…) once a week
 -- Run once in Supabase > SQL Editor, after 29. Safe to run again.
 -- =====================================================================
 
 -- ---------- 1. What existing members already did ----------
-alter table public.members add column if not exists tnc_agreed boolean not null default true;
+alter table public.members add column if not exists tnc_agreed boolean;          -- null = never recorded (asked to agree)
+alter table public.members alter column tnc_agreed drop not null;
+alter table public.members alter column tnc_agreed drop default;
+alter table public.members add column if not exists reminded_at timestamptz;
 alter table public.members add column if not exists form_answers jsonb;
 alter table public.link_requests add column if not exists answers jsonb;
 -- members who joined before the approval list: their VRN was checked by the team when they joined
@@ -350,5 +356,267 @@ begin
 end $$;
 drop trigger if exists members_answers_to_sheet on public.members;
 create trigger members_answers_to_sheet after update of form_answers on public.members for each row execute function private.answers_push();
+
+
+-- ---------- 8. Rules agreement for existing members, read from the sheet ----------
+-- The sheet's script sends each row's "read carefully" answer. Only empty records are filled, so an answer
+-- given later in the app is never overwritten.
+create or replace function public.sheet_set_tnc(p_secret text, p_rows jsonb) returns integer
+language plpgsql security definer set search_path = public, private as $$
+declare n integer := 0; r jsonb;
+begin
+  if p_secret is null or p_secret <> coalesce((select value from private.config where key = 'sheet_secret'), '') then raise exception 'Not allowed'; end if;
+  perform set_config('rwb.from_sheet', 'on', true);
+  for r in select * from jsonb_array_elements(coalesce(p_rows, '[]'::jsonb)) loop
+    update members set tnc_agreed = (r ->> 'tnc') = 'yes'
+    where phone = right(regexp_replace(coalesce(r ->> 'phone', ''), '\D', '', 'g'), 10) and status = 'active' and tnc_agreed is null
+      and (r ->> 'tnc') in ('yes', 'no');
+    if found then n := n + 1; end if;
+  end loop;
+  return n;
+end $$;
+revoke execute on function public.sheet_set_tnc(text, jsonb) from public;
+grant execute on function public.sheet_set_tnc(text, jsonb) to anon, authenticated;
+
+-- An admin can record that someone agreed (for example, they confirmed on WhatsApp)
+create or replace function public.admin_set_tnc(p_member_id bigint, p_agreed boolean) returns boolean
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'Admins only'; end if;
+  update members set tnc_agreed = p_agreed where id = p_member_id;
+  return p_agreed;
+end $$;
+revoke execute on function public.admin_set_tnc(bigint, boolean) from public, anon;
+grant execute on function public.admin_set_tnc(bigint, boolean) to authenticated;
+
+
+-- ---------- 9. Personal notifications (only that member sees them, also on their phone) ----------
+alter table public.notifications add column if not exists target_user uuid references auth.users(id) on delete cascade;
+alter table public.notifications drop constraint if exists notifications_kind_check;
+alter table public.notifications add constraint notifications_kind_check check (kind in ('announcement','birthday','motomart','member','admin','event','personal'));
+alter table public.notifications drop constraint if exists notifications_audience_check;
+alter table public.notifications add constraint notifications_audience_check check (audience in ('all','admins','moderators','going','user'));
+drop policy if exists notifications_read on public.notifications;
+create policy notifications_read on public.notifications for select to authenticated
+  using ((audience = 'all' and public.is_member())
+      or (audience = 'moderators' and public.is_moderator())
+      or (audience = 'going' and exists (select 1 from event_rsvps r where r.event_id = notifications.event_id and r.user_id = auth.uid() and r.status in ('going','maybe')))
+      or (audience = 'user' and target_user = auth.uid())
+      or (audience <> 'user' and public.is_admin()));
+
+create or replace function private.tell_member(p_user uuid, p_title text, p_body text, p_url text default '#me') returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if p_user is null then return; end if;
+  insert into notifications (kind, title, body, url, audience, target_user) values ('personal', p_title, p_body, p_url, 'user', p_user);
+end $$;
+
+create or replace function public.push_job(p_id bigint, p_secret text) returns jsonb
+language plpgsql security definer set search_path = public, private as $$
+declare n notifications;
+begin
+  if p_secret is null or p_secret <> coalesce((select value from private.config where key = 'push_secret'), '') then
+    raise exception 'Not allowed';
+  end if;
+  select * into n from notifications where id = p_id;
+  if not found then return null; end if;
+  return jsonb_build_object(
+    'subject',      (select value from private.config where key = 'vapid_subject'),
+    'vapid_public', (select value from private.config where key = 'vapid_public'),
+    'vapid_private',(select value from private.config where key = 'vapid_private'),
+    'payload', jsonb_build_object('title', n.title, 'body', n.body, 'url', coalesce(n.url, '#home'), 'tag', n.kind || '-' || n.id),
+    'subs', coalesce((
+      select jsonb_agg(jsonb_build_object('endpoint', s.endpoint, 'keys', jsonb_build_object('p256dh', s.p256dh, 'auth', s.auth)))
+      from push_subscriptions s join members m on m.user_id = s.user_id
+      where (n.audience = 'all'
+             or (n.audience = 'admins' and m.role in ('admin','superadmin'))
+             or (n.audience = 'moderators' and m.role in ('coordinator','admin','superadmin'))
+             or (n.audience = 'going' and exists (select 1 from event_rsvps r where r.event_id = n.event_id and r.user_id = s.user_id and r.status in ('going','maybe')))
+             or (n.audience = 'user' and s.user_id = n.target_user))
+        and (n.created_by is null or s.user_id <> n.created_by)
+        and (n.kind in ('announcement','admin','event','personal') or coalesce((m.notify ->> n.kind)::boolean, true))
+    ), '[]'::jsonb));
+end $$;
+revoke execute on function public.push_job(bigint, text) from public, anon, authenticated;
+grant execute on function public.push_job(bigint, text) to service_role;
+
+-- Approved / rejected entries: the person is told in the app
+create or replace function private.after_approve() returns trigger
+language plpgsql security definer set search_path = public, private as $$
+begin
+  if new.status = 'approved' and old.status = 'pending' then
+    update members set tnc_agreed = coalesce(new.tnc, tnc_agreed),
+      form_answers = case when new.answers is not null then coalesce(form_answers, '{}'::jsonb) || new.answers else form_answers end
+    where phone = new.phone;
+    perform private.tell_member(new.user_id, 'Welcome to RWB! 🎉', 'You''re approved. Explore the app, and check your details in Me (you can add your bike model and up to 3 bikes).', '#me');
+  elsif new.status = 'rejected' and old.status = 'pending' then
+    perform private.tell_member(new.user_id, 'About your RWB request', 'Your request wasn''t approved' || coalesce(': ' || new.reject_reason, '') || '. Message an RWB admin if you think this is a mistake.', '#home');
+  end if;
+  return new;
+end $$;
+
+-- Change decided: the member is told
+create or replace function private.after_change() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare u uuid; what text := case new.kind when 'name' then 'name' when 'phone' then 'WhatsApp No.' when 'vrn' then 'main bike (VRN)' when 'bike' then 'new bike' else 'rules answer' end;
+begin
+  if old.status = 'pending' and new.status <> 'pending' and new.kind <> 'tnc' then
+    select user_id into u from members where id = new.member_id;
+    perform private.tell_member(u, case when new.status = 'approved' then 'Change approved ✅' else 'Change not approved' end,
+      'Your ' || what || ' change ' || case when new.status = 'approved' then 'is approved.' else 'wasn''t approved' || coalesce(': ' || new.reject_reason, '.') end, '#me');
+  end if;
+  return new;
+end $$;
+drop trigger if exists change_requests_after on public.change_requests;
+create trigger change_requests_after after update of status on public.change_requests for each row execute function private.after_change();
+
+-- ---------- 10. Missing details: listed for admins, and members reminded every week ----------
+create or replace function private.missing_items(m public.members) returns text[] language sql stable as $$
+  select array_remove(array[
+    case when m.tnc_agreed is not true then 'rules' end,
+    case when nullif(trim(coalesce(m.emergency_phone, '')), '') is null then 'emergency contact' end,
+    case when nullif(trim(coalesce(m.blood_group, '')), '') is null then 'blood group' end,
+    case when m.dob is null then 'date of birth' end,
+    case when nullif(trim(coalesce(m.vrn, '')), '') is null then 'VRN' end,
+    case when nullif(trim(coalesce(m.locality, '')), '') is null then 'locality' end], null)
+$$;
+
+create or replace function public.admin_incomplete()
+returns table (id bigint, full_name text, phone text, on_app boolean, missing text[], tnc_agreed boolean, reminded_at timestamptz, joined_at timestamptz)
+language plpgsql stable security definer set search_path = public, private as $$
+begin
+  if not is_admin() then raise exception 'Admins only'; end if;
+  return query
+    select m.id, m.full_name, m.phone, m.user_id is not null, private.missing_items(m), m.tnc_agreed, m.reminded_at, m.joined_at
+    from members m where m.status = 'active' and cardinality(private.missing_items(m)) > 0
+    order by (m.tnc_agreed is not true) desc, m.full_name;
+end $$;
+revoke execute on function public.admin_incomplete() from public, anon;
+grant execute on function public.admin_incomplete() to authenticated;
+
+-- In-app reminder (with a phone notification) to members on the app with something missing; at most once a week each
+create or replace function public.remind_incomplete(p_force boolean default false) returns integer
+language plpgsql security definer set search_path = public, private as $$
+declare m members; miss text[]; n integer := 0;
+begin
+  if auth.uid() is not null and not is_admin() then raise exception 'Admins only'; end if;
+  for m in select * from members where status = 'active' and user_id is not null
+            and (p_force or reminded_at is null or reminded_at < now() - interval '6 days') loop
+    miss := private.missing_items(m);
+    if cardinality(miss) = 0 then continue; end if;
+    perform private.tell_member(m.user_id,
+      case when 'rules' = any(miss) then 'Please agree to the RWB rules' else 'Complete your RWB profile' end,
+      'Missing: ' || array_to_string(miss, ', ') || '. It takes a minute in Me.', '#me');
+    update members set reminded_at = now() where id = m.id;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+revoke execute on function public.remind_incomplete(boolean) from public, anon;
+grant execute on function public.remind_incomplete(boolean) to authenticated;
+do $$ begin
+  if exists (select 1 from cron.job where jobname = 'rwb-profile-reminders') then perform cron.unschedule('rwb-profile-reminders'); end if;
+  perform cron.schedule('rwb-profile-reminders', '30 4 * * 0', 'select public.remind_incomplete()');   -- Sundays 10:00 IST
+exception when others then null;
+end $$;
+
+-- Admins mark when they sent a WhatsApp reminder, so the list shows it
+create or replace function public.admin_mark_reminded(p_member_id bigint) returns timestamptz
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'Admins only'; end if;
+  update members set reminded_at = now() where id = p_member_id;
+  return now();
+end $$;
+revoke execute on function public.admin_mark_reminded(bigint) from public, anon;
+grant execute on function public.admin_mark_reminded(bigint) to authenticated;
+
+-- The sheet's "read carefully" column follows the app, and admins' edits there reach the app
+create or replace function private.member_json(m public.members) returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('full_name', m.full_name, 'dob', m.dob, 'phone', m.phone, 'email', m.email, 'vrn', m.vrn,
+    'bike', m.bike, 'blood_group', m.blood_group, 'locality', m.locality, 'hideout', m.hideout,
+    'emergency_phone', m.emergency_phone, 'alt_phone', m.alt_phone, 'joined_at', m.joined_at,
+    'vrn_verified', m.vrn_verified, 'answers', m.form_answers, 'tnc_agreed', m.tnc_agreed,
+    'bike2_vrn', (select vrn from member_bikes where member_id = m.id and slot = 2),
+    'bike2_model', (select model from member_bikes where member_id = m.id and slot = 2),
+    'bike3_vrn', (select vrn from member_bikes where member_id = m.id and slot = 3),
+    'bike3_model', (select model from member_bikes where member_id = m.id and slot = 3))
+$$;
+create or replace function private.tnc_push() returns trigger
+language plpgsql security definer set search_path = public, private as $$
+begin
+  if coalesce(current_setting('rwb.from_sheet', true), '') = 'on' then return new; end if;
+  if new.status = 'active' and new.tnc_agreed is distinct from old.tnc_agreed and new.tnc_agreed is not null then
+    perform private.sheet_post(jsonb_build_object('action', 'update', 'old_phone', new.phone, 'member', private.member_json(new)));
+  end if;
+  return new;
+end $$;
+drop trigger if exists members_tnc_to_sheet on public.members;
+create trigger members_tnc_to_sheet after update of tnc_agreed on public.members for each row execute function private.tnc_push();
+
+-- Sheet edits (now including the "read carefully" answer) reach the app
+create or replace function public.sheet_edit_member(p_secret text, p jsonb, p_old_phone text default null) returns text
+language plpgsql security definer set search_path = public, private as $$
+declare
+  ph  text := right(regexp_replace(coalesce(p ->> 'phone', ''), '\D', '', 'g'), 10);
+  op  text := right(regexp_replace(coalesce(p_old_phone, ''), '\D', '', 'g'), 10);
+  m   members; rid bigint; d date; v text;
+  t   text := '';
+begin
+  if p_secret is null or p_secret <> coalesce((select value from private.config where key = 'sheet_secret'), '') then
+    raise exception 'Not allowed';
+  end if;
+  perform set_config('rwb.from_sheet', 'on', true);
+  if p ? 'dob' then begin d := nullif(p ->> 'dob', '')::date; exception when others then d := null; end; end if;
+  select * into m from members where phone = coalesce(nullif(op, ''), ph) and status = 'active';
+  if not found and op <> '' then select * into m from members where phone = ph and status = 'active'; end if;
+  if found then
+    if p ? 'phone' and length(ph) = 10 and ph <> m.phone and exists (select 1 from members where phone = ph and id <> m.id) then
+      return 'skipped: another member has ' || ph;
+    end if;
+    update members set
+      full_name       = coalesce(nullif(regexp_replace(trim(coalesce(p ->> 'full_name', '')), '\s+', ' ', 'g'), ''), full_name),
+      dob             = coalesce(d, dob),
+      phone           = case when length(ph) = 10 then ph else phone end,
+      email           = coalesce(nullif(lower(trim(coalesce(p ->> 'email', ''))), ''), email),
+      vrn             = coalesce(nullif(upper(trim(coalesce(p ->> 'vrn', ''))), ''), vrn),
+      bike            = coalesce(nullif(trim(coalesce(p ->> 'bike', '')), ''), bike),
+      blood_group     = coalesce(nullif(trim(coalesce(p ->> 'blood_group', '')), ''), blood_group),
+      locality        = coalesce(nullif(trim(coalesce(p ->> 'locality', '')), ''), locality),
+      hideout         = coalesce(nullif(trim(coalesce(p ->> 'hideout', '')), ''), hideout),
+      emergency_phone = coalesce(nullif(right(regexp_replace(coalesce(p ->> 'emergency_phone', ''), '\D', '', 'g'), 10), ''), emergency_phone),
+      alt_phone       = coalesce(nullif(right(regexp_replace(coalesce(p ->> 'alt_phone', ''), '\D', '', 'g'), 10), ''), alt_phone),
+      vrn_verified    = case lower(coalesce(p ->> 'vrn_verified', '')) when 'yes' then true when 'no' then false else vrn_verified end,
+      tnc_agreed      = case lower(coalesce(p ->> 'tnc', '')) when 'yes' then true when 'no' then false else tnc_agreed end
+    where id = m.id;
+    foreach v in array array['2', '3'] loop
+      if nullif(trim(coalesce(p ->> ('bike' || v || '_vrn'), '')), '') is not null then
+        insert into member_bikes (member_id, slot, vrn, model) values (m.id, v::smallint, upper(trim(p ->> ('bike' || v || '_vrn'))), nullif(trim(coalesce(p ->> ('bike' || v || '_model'), '')), ''))
+        on conflict (member_id, slot) do update set vrn = excluded.vrn, model = coalesce(excluded.model, member_bikes.model),
+          verified = case when private.norm_vrn(member_bikes.vrn) = private.norm_vrn(excluded.vrn) then member_bikes.verified else false end;
+      elsif nullif(trim(coalesce(p ->> ('bike' || v || '_model'), '')), '') is not null then
+        update member_bikes set model = trim(p ->> ('bike' || v || '_model')) where member_id = m.id and slot = v::smallint;
+      end if;
+    end loop;
+    return 'updated';
+  end if;
+  -- a waiting entry: keep its details in step with the sheet
+  select id into rid from link_requests where phone = coalesce(nullif(op, ''), ph) and status = 'pending' order by created_at desc limit 1;
+  if rid is not null then
+    update link_requests set
+      full_name = coalesce(nullif(trim(coalesce(p ->> 'full_name', '')), ''), full_name), dob = coalesce(d, dob),
+      phone = case when length(ph) = 10 then ph else phone end, vrn = coalesce(nullif(upper(trim(coalesce(p ->> 'vrn', ''))), ''), vrn),
+      bike = coalesce(nullif(trim(coalesce(p ->> 'bike', '')), ''), bike), blood_group = coalesce(nullif(trim(coalesce(p ->> 'blood_group', '')), ''), blood_group),
+      locality = coalesce(nullif(trim(coalesce(p ->> 'locality', '')), ''), locality), hideout = coalesce(nullif(trim(coalesce(p ->> 'hideout', '')), ''), hideout),
+      emergency_phone = coalesce(nullif(right(regexp_replace(coalesce(p ->> 'emergency_phone', ''), '\D', '', 'g'), 10), ''), emergency_phone),
+      alt_phone = coalesce(nullif(right(regexp_replace(coalesce(p ->> 'alt_phone', ''), '\D', '', 'g'), 10), ''), alt_phone),
+      email = coalesce(nullif(lower(trim(coalesce(p ->> 'email', ''))), ''), email)
+    where id = rid;
+    return 'updated entry';
+  end if;
+  return 'not found';
+end $$;
+revoke execute on function public.sheet_edit_member(text, jsonb, text) from public;
+grant execute on function public.sheet_edit_member(text, jsonb, text) to anon, authenticated;
 
 notify pgrst, 'reload schema';

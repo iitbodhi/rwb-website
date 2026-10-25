@@ -265,6 +265,10 @@ async function supabaseApi(url, key) {
                 return must(r);
             },
             changes: async () => must(await sb.rpc('admin_list_changes')),
+            incomplete: async () => must(await sb.rpc('admin_incomplete')),
+            remindIncomplete: async () => must(await sb.rpc('remind_incomplete', { p_force: false })),
+            markReminded: async id => must(await sb.rpc('admin_mark_reminded', { p_member_id: id })),
+            setTnc: async (id, v) => must(await sb.rpc('admin_set_tnc', { p_member_id: id, p_agreed: v })),
             setChangeVrn: async (id, v) => must(await sb.rpc('admin_set_change_vrn', { p_id: id, p_verified: v })),
             decideChange: async (id, ok, reason = '') => must(await sb.rpc('admin_decide_change', { p_id: id, p_approve: ok, p_reason: reason || null })),
             setReqVrn: async (id, v) => must(await sb.rpc('admin_set_request_vrn', { p_request_id: id, p_verified: v })),
@@ -505,6 +509,11 @@ function demoApi() {
             },
             async reject(id) { db.requests = db.requests.filter(x => x.id !== id); save(); return 'rejected'; },
             changes: () => wait((db.changes || []).filter(c => c.status === 'pending')),
+            incomplete: () => wait(db.members.filter(m => !m.status || m.status === 'active').map(m => ({ id: m.id, full_name: m.full_name, phone: m.phone, on_app: !!m.user_id, tnc_agreed: m.tnc_agreed ?? null, reminded_at: m.reminded_at || null,
+                missing: [m.tnc_agreed !== true && 'rules', !m.emergency_phone && 'emergency contact', !m.blood_group && 'blood group', !m.dob && 'date of birth', !m.vrn && 'VRN', !m.locality && 'locality'].filter(Boolean) })).filter(m => m.missing.length)),
+            async remindIncomplete() { return db.members.filter(m => m.user_id && m.user_id !== 'me').length; },
+            async markReminded(id) { const m = db.members.find(x => x.id === id); m.reminded_at = new Date().toISOString(); save(); },
+            async setTnc(id, v) { db.members.find(x => x.id === id).tnc_agreed = v; save(); return v; },
             async setChangeVrn(id, v) { const c = db.changes.find(x => x.id === id); c.vrn_verified = v; save(); return v; },
             async decideChange(id, ok, reason) {
                 const c = db.changes.find(x => x.id === id), m = db.members.find(x => x.id === c.member_id);

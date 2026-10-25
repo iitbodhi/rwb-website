@@ -43,7 +43,8 @@ const ADDED_VIA = 'Added via', UPDATED_IN_APP = 'Updated in app';
 const APP_COLS = { status: 'App · Status', vrn_verified: 'App · VRN verified', bike2_vrn: 'App · Bike 2 VRN', bike2_model: 'App · Bike 2 model', bike3_vrn: 'App · Bike 3 VRN', bike3_model: 'App · Bike 3 model' };
 const ST = { waiting: 'Waiting for approval', member: 'Member' };
 /* Columns that update the app when an admin edits them here */
-const EDITABLE = ['full_name', 'dob', 'phone', 'email', 'vrn', 'bike', 'blood_group', 'locality', 'hideout', 'emergency_phone', 'alt_phone', 'vrn_verified', 'bike2_vrn', 'bike2_model', 'bike3_vrn', 'bike3_model'];
+const EDITABLE = ['full_name', 'dob', 'phone', 'email', 'vrn', 'bike', 'blood_group', 'locality', 'hideout', 'emergency_phone', 'alt_phone', 'vrn_verified', 'bike2_vrn', 'bike2_model', 'bike3_vrn', 'bike3_model', 'tnc'];
+const AGREED = 'Understood & agreed', NOT_AGREED = "I don't agree";   // written in the "read carefully" column for answers given in the app
 
 /** Run once (and again after updating this file). Installs the automatic triggers. */
 function setup() {
@@ -54,6 +55,7 @@ function setup() {
   ScriptApp.newTrigger('publishForm').timeBased().everyHours(1).create();
   columns_(responsesSheet_());
   publishForm();
+  syncTnc();
   console.log('Ready: new form entries go to the approval list, edits here update the app, and the app shows the same join form.');
 }
 
@@ -350,6 +352,7 @@ function columns_(sheet) {
     Object.keys(COLUMNS).forEach(k => { if (col[k] === undefined && t.indexOf(COLUMNS[k]) === 0) col[k] = i; });
     if (t === ADDED_VIA.toLowerCase()) col.added = i;
     if (t === UPDATED_IN_APP.toLowerCase()) col.updated = i;
+    if (col.tnc === undefined && TNC_HEAD.test(t) && !t.startsWith('app ·')) col.tnc = i;
     Object.keys(APP_COLS).forEach(k => { if (t === APP_COLS[k].toLowerCase()) col[k] = i; });
   });
   return col;
@@ -368,10 +371,26 @@ function sheetValues_(m) {
     bike: /ronin/i.test(bike) ? 'Yes' : bike
   };
 }
-/* The app's own columns */
+/* The app's own columns (and the rules answer, when the app knows it) */
 function appValues_(m) {
   const t = v => v == null ? '' : String(v);
-  return { status: ST.member, vrn_verified: m.vrn_verified ? 'Yes' : '', bike2_vrn: t(m.bike2_vrn), bike2_model: t(m.bike2_model), bike3_vrn: t(m.bike3_vrn), bike3_model: t(m.bike3_model) };
+  return { ...(m.tnc_agreed == null ? {} : { tnc: m.tnc_agreed ? AGREED : NOT_AGREED }), status: ST.member, vrn_verified: m.vrn_verified ? 'Yes' : '', bike2_vrn: t(m.bike2_vrn), bike2_model: t(m.bike2_model), bike3_vrn: t(m.bike3_vrn), bike3_model: t(m.bike3_model) };
+}
+
+/**
+ * Tells the app who agreed to the RWB rules on the join form (the "read carefully" answer on each row).
+ * Members whose row has no answer stay "not agreed yet": admins see them, and the app asks them to agree.
+ * Runs from setup; safe to run again (answers given later in the app are never overwritten).
+ */
+function syncTnc() {
+  const sheet = responsesSheet_(), data = sheet.getDataRange().getValues(), heads = data.shift();
+  const rows = data.map(r => toMember_(heads, r)).filter(m => m.phone && (m.tnc === 'yes' || m.tnc === 'no')).map(m => ({ phone: m.phone, tnc: m.tnc }));
+  let n = 0;
+  for (let i = 0; i < rows.length; i += 400) {
+    const r = UrlFetchApp.fetchAll([rpc_('sheet_set_tnc', { p_secret: SYNC_SECRET, p_rows: rows.slice(i, i + 400) })])[0];
+    n += Number(r.getContentText()) || 0;
+  }
+  console.log('Rules answers found on ' + rows.length + ' rows; ' + n + ' members updated in the app.' + (rows.length ? '' : ' (No "read carefully" column was found: everyone will be asked to agree in the app.)'));
 }
 
 /* ======================= Catch-up ======================= */

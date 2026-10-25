@@ -546,6 +546,22 @@ function newsRow(n, del = false, compact = false) {
         ${del ? `<button class="icon-btn del" data-act="del-news" data-id="${n.id}" aria-label="Delete">✕</button>` : ICON.chev}</a>`;
 }
 
+/* What a member still needs to fill in (shown on Home until done) */
+function missingOf(m) {
+    const out = [];
+    if ('tnc_agreed' in m && m.tnc_agreed !== true) out.push('rules');   /* known once setup file 30 is run */
+    if (!m.emergency_phone) out.push('emergency contact');
+    if (!m.blood_group) out.push('blood group');
+    if (!m.dob) out.push('date of birth');
+    if (!m.vrn) out.push('VRN');
+    if (!m.locality) out.push('locality');
+    return out;
+}
+function profileTodo(m) {
+    const miss = missingOf(m || {}); if (!miss.length) return '';
+    const rules = miss.includes('rules'), rest = miss.filter(x => x !== 'rules');
+    return `<a class="banner todo" href="#me"><span class="b-ico">${rules ? '📜' : '✍️'}</span><span class="grow"><b>${rules ? 'Please agree to the RWB rules' : 'Complete your profile'}</b><span class="small muted">${rules && rest.length ? 'And add your ' + rest.join(', ') : rules ? 'Me → RWB rules → Read & agree' : 'Add your ' + rest.join(', ')}</span></span>${ICON.chev}</a>`;
+}
 async function viewHome() {
     const [services, fuel, bdays, news, listings, docs, evd] = await Promise.all([load.services(), load.fuel(), load.bdays(), load.news(), load.listings().catch(() => []), load.docs(), loadEvents().catch(() => null)]);
     const nextEvt = evd ? evd.events.filter(e => e.status === 'live' && !evtPast(e) && new Date(e.starts_at) - Date.now() < 14 * 864e5)[0] : null;
@@ -567,6 +583,7 @@ async function viewHome() {
             <a href="#docs" aria-label="Documents${docsAlert() ? ' (something needs renewing)' : ''}"><span>${DOC_ICON}${docsAlert() ? '<i class="dot dot-red"></i>' : ''}</span>Documents</a>
         </nav>
         ${isMod() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
+        ${profileTodo(state.me)}
         ${docWarn ? `<a class="banner doc-warn ${docWarn.st.level}" href="#docs"><span class="b-ico">📄</span><span class="grow"><b>${esc(docName(docWarn.d))}</b> ${docWarn.st.days < 0 ? `expired on ${fmtDate(docWarn.d.expiry_date)}` : docWarn.st.days === 0 ? 'expires today' : `expires in ${docWarn.st.days} day${docWarn.st.days === 1 ? '' : 's'}`}. Renew it and update My documents.</span>${ICON.chev}</a>` : ''}
         ${nextEvt ? `<a class="banner evt-banner" href="#events/${nextEvt.id}"><span class="evt-mini">${evtTile(nextEvt)}</span><span class="grow"><b>${esc(nextEvt.title)}</b><span class="small muted">${esc(evtWhen(nextEvt, true))}${nextEvt.location ? ' · ' + esc(nextEvt.location) : ''}</span></span>${evd.mine[nextEvt.id] ? `<span class="evt-me ${evd.mine[nextEvt.id].status}">${RSVP_TXT[evd.mine[nextEvt.id].status]}</span>` : '<span class="evt-me ask">RSVP</span>'}</a>` : ''}
         ${today.length ? `<div class="banner bday"><span class="b-ico">🎂</span><span class="grow"><b>${esc(names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : names[0])}</b> ${names.length > 1 ? 'have' : 'has'} a birthday today</span><button class="btn sm wa" data-act="wish">Wish</button></div>` : ''}
@@ -1562,7 +1579,7 @@ function rulesSheet(m, done) {
     const q = (joinFormDef?.items || []).find(i => formKey(i.title) === 'tnc');
     const text = q ? `<p class="gp-help" style="white-space:pre-line">${esc(q.help || '')}</p>` : `<ol class="rules-ol">${RWB_RULES.map(r => `<li>${esc(r)}</li>`).join('')}</ol>`;
     openSheet(q ? q.title : 'RWB rules', `${text}
-        ${m.tnc_agreed === false ? '<button class="btn block" data-x="agree" style="margin-top:14px">I agree to the RWB rules</button>'
+        ${m.tnc_agreed !== true ? '<button class="btn block" data-x="agree" style="margin-top:14px">I agree to the RWB rules</button>'
             : '<p class="small muted" style="margin-top:14px">You agreed to these rules when you joined.</p><button class="btn ghost block" data-x="disagree" style="margin-top:8px">I no longer agree</button>'}`, body => {
         const a = body.querySelector('[data-x=agree]'), d = body.querySelector('[data-x=disagree]');
         if (a) a.onclick = () => busy(a, async () => { await api.requestChange('tnc', 'agree'); state.me = await api.me(); closeSheet(); toast('Thanks!'); render(); });
@@ -1602,9 +1619,9 @@ function viewMe() {
         <div id="my-changes"></div>
         <h2 class="group-title">My bikes <span class="small muted" style="text-transform:none;letter-spacing:0;font-weight:500">up to 3</span></h2>
         <div class="group bikes" id="my-bikes">${bikeRows(m, null)}</div>
-        <h2 class="group-title">RWB rules</h2>
-        <div class="group"><div class="bike-row"><span class="g-ico">📜</span><span class="grow"><b>${m.tnc_agreed === false ? 'You don\'t agree to the RWB rules' : 'You agree to the RWB rules'}</b><span class="small muted">From the RWB join form</span></span>
-            <button class="btn sm ghost" data-act="rules">Read</button></div></div>
+        ${'tnc_agreed' in m ? `<h2 class="group-title">RWB rules</h2>
+        <div class="group"><div class="bike-row"><span class="g-ico">📜</span><span class="grow"><b>${m.tnc_agreed === true ? 'You agree to the RWB rules' : m.tnc_agreed === false ? 'You don\'t agree to the RWB rules' : 'Please read and agree'}</b><span class="small muted">${m.tnc_agreed === true ? 'From the RWB join form' : 'Needed for every RWB member'}</span></span>
+            <button class="btn sm ${m.tnc_agreed === true ? 'ghost' : ''}" data-act="rules">${m.tnc_agreed === true ? 'Read' : 'Read & agree'}</button></div></div>` : ''}
         ${isAdmin() ? `<div class="group section"><a href="#admin"><span class="g-ico">${ICON.shield}</span><span class="grow"><b>Admin panel</b><span class="small muted">Members, requests, Motomart, birthdays, Pookie</span></span>${ICON.chev}</a></div>` : ''}
 
         <h2 class="group-title">Appearance</h2>
@@ -1762,6 +1779,30 @@ function reqCard(r) {
             ${r.emergency_phone ? `<dt>Emergency</dt><dd>${esc(r.emergency_phone)}</dd>` : ''}${r.alt_phone ? `<dt>Alt. mobile</dt><dd>${esc(r.alt_phone)}</dd>` : ''}</dl>`}</details>
         <div class="btns" style="margin-top:12px"><button class="btn ghost" data-act="reject" data-id="${r.id}">Reject</button><button class="btn" data-act="approve" data-id="${r.id}">Approve</button></div></div>`;
 }
+/* Ready-made WhatsApp messages; the admin can edit them before sending (free: sent from the admin's own WhatsApp) */
+const APP_LINK = 'roninwb.in/app';
+function waMsg(kind, x = {}) {
+    const first = firstName(x) || 'Warrior', me = firstName(state.me) || 'RWB';
+    const T = {
+        welcome: `Hi ${first}! 🎉\n\nWelcome to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nMeanwhile, get the RWB App: ${APP_LINK}\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
+        existing: `Hi Warrior ${first}! 👋\n\nYou're already in our RWB WhatsApp group, so nothing to worry about. Your RWB App account is ready: just open the app and explore.\n\n🔧 Service: records, bills and next-service reminders\n⛽ Mileage: your real km/l and fuel spends\n🛒 Motomart: buy and sell used riding gear\n📘 Guides: maintenance help and tested gear\n📅 Events: rides, RSVPs and shared expenses\n🏍️ RWB: members and leaderboards\n🤖 Pookie: our AI for any bike question\n\nPlease also update your details in the Me tab (you can set your bike model and add up to 3 bikes).\n\n${APP_LINK}\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
+        returning: `Hi ${first}! 🎉\n\nWelcome back to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nThe RWB App: ${APP_LINK}\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
+        rejected: `Hi ${first},\n\nThank you for your interest in Ronin Warriors of Bengal. We're sorry, we couldn't approve your registration this time${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'}\n\nIf you think this is a mistake, or things change, just reply here and we'll be happy to help.\n\nRide safe! 🙏\n– ${me}, RWB`,
+        change_ok: `Hi ${first}! ✅ Your ${x.what || 'profile'} update in the RWB App is approved. Thanks for keeping your details up to date.\n– ${me}, RWB`,
+        change_no: `Hi ${first}, we couldn't approve your ${x.what || 'profile'} update in the RWB App${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'} Just reply here if you'd like help with it. 🙏\n– ${me}, RWB`,
+        remind: `Hi ${first}! 👋\n\nA quick one from the RWB team: please complete your RWB profile.${x.rules ? '\n\n📜 Please read and agree to the RWB rules (Me → RWB rules → Read).' : ''}${x.missing?.length ? `\n\nMissing: ${x.missing.join(', ')}.` : ''}\n\nIt takes a minute in the RWB App: ${APP_LINK} → Me.${x.on_app ? '' : ' Sign in with Google using the email you gave on the join form.'}\n\nThank you! Explore. Evolve. Inspire.\n– ${me}, RWB`
+    };
+    return T[kind];
+}
+function tellOnWhatsApp(title, phone, text, done) {
+    openSheet(title, `<p class="small muted" style="margin-bottom:8px">Sent from your own WhatsApp. Change anything you like first.</p>
+        <textarea id="wa-text" rows="12" style="font-size:.9rem;line-height:1.45">${esc(text)}</textarea>
+        <button class="btn wa block" data-x="send" style="margin-top:10px">Send on WhatsApp</button>
+        <button class="btn ghost block" data-x="skip" style="margin-top:8px">Not now</button>`, body => {
+        body.querySelector('[data-x=send]').onclick = () => { openWA(waTo(phone, body.querySelector('#wa-text').value)); closeSheet(); done?.(true); };
+        body.querySelector('[data-x=skip]').onclick = () => { closeSheet(); done?.(false); };
+    });
+}
 const CHANGE_TXT = { name: 'Name', phone: 'WhatsApp No.', vrn: 'Main bike (VRN)', bike: 'New bike', tnc: 'RWB rules' };
 function changeCard(c) {
     const isVrn = c.kind === 'vrn' || c.kind === 'bike';
@@ -1776,16 +1817,21 @@ function changeCard(c) {
         <div class="btns" style="margin-top:12px"><button class="btn ghost" data-act="chg-no" data-cid="${c.id}">${c.kind === 'tnc' ? 'Dismiss' : 'Reject'}</button><button class="btn" data-act="chg-ok" data-cid="${c.id}">${c.kind === 'tnc' ? 'Record it' : 'Approve'}</button></div></div>`;
 }
 async function adminRequests() {
-    const [reqs, chg] = await Promise.all([api.admin.requests(), api.admin.changes().catch(() => [])]);
-    $('#admin-body').innerHTML = reqs.length || chg.length ? `${reqs.length ? `<p class="small muted" style="margin-bottom:10px">New entries from the join form and the app. Check the 4 points, then approve. Nobody is a member until approved.</p>
+    const [reqs, chg, inc] = await Promise.all([api.admin.requests(), api.admin.changes().catch(() => []), api.admin.incomplete().catch(() => null)]);
+    const digest = () => `🛡️ RWB App: ${reqs.length + chg.length} waiting for approval\n${reqs.length ? `\nNew entries (${reqs.length}):\n${reqs.slice(0, 15).map(r => `• ${r.full_name} (${r.source === 'form' ? 'form' : 'app'})`).join('\n')}` : ''}${chg.length ? `\n\nProfile changes (${chg.length}):\n${chg.slice(0, 15).map(c => `• ${c.full_name}: ${CHANGE_TXT[c.kind]}`).join('\n')}` : ''}\n\nOpen: ${APP_LINK} → Me → Admin panel`;
+    $('#admin-body').innerHTML = (reqs.length || chg.length ? `<button class="btn ghost block share-admins" data-act="digest">📣 Share this list to the admin WhatsApp group</button>` : '') + (reqs.length || chg.length ? `${reqs.length ? `<p class="small muted" style="margin-bottom:10px">New entries from the join form and the app. Check the 4 points, then approve. Nobody is a member until approved.</p>
         <div class="list">${reqs.map(reqCard).join('')}</div>` : ''}
         ${chg.length ? `<h2 class="group-title" style="margin-top:${reqs.length ? 22 : 0}px">Changes to approve</h2><p class="small muted" style="margin-bottom:10px">Members changed an important detail in their profile.</p><div class="list">${chg.map(changeCard).join('')}</div>` : ''}`
-        : '<div class="card empty"><b>All clear</b>Nothing waiting for approval.</div>';
+        : '<div class="card empty"><b>All clear</b>Nothing waiting for approval.</div>') + (inc ? followUps(inc) : '');
     const byCid = id => chg.find(c => c.id === Number(id));
+    if (inc) bindFollowUps(inc);
     Object.assign(actions, {
+        digest: () => openWA(waShare(digest())),
         'chg-ok': b => { const c = byCid(b.dataset.cid); if ((c.kind === 'vrn' || c.kind === 'bike') && !c.vrn_verified && !confirmBox('The VRN isn\'t ticked as verified. Approve anyway?')) return;
-            busy(b, async () => { await api.admin.decideChange(c.id, true); state.adminMembers = null; state.dir = null; toast(c.kind === 'tnc' ? 'Recorded' : 'Change approved'); viewAdmin(); }); },
-        'chg-no': b => { const c = byCid(b.dataset.cid); reasonSheet(`Reject ${firstName(c)}'s change`, ['Could not verify the VRN', 'Please message an admin', 'Not allowed'], async reason => { await api.admin.decideChange(c.id, false, reason); toast(c.kind === 'tnc' ? 'Dismissed' : 'Change rejected'); viewAdmin(); }); }
+            busy(b, async () => { await api.admin.decideChange(c.id, true); state.adminMembers = null; state.dir = null; toast(c.kind === 'tnc' ? 'Recorded' : 'Change approved'); await viewAdmin();
+                if (c.kind !== 'tnc') tellOnWhatsApp(`Let ${firstName(c)} know`, c.phone, waMsg('change_ok', { ...c, what: CHANGE_TXT[c.kind].toLowerCase() })); }); },
+        'chg-no': b => { const c = byCid(b.dataset.cid); reasonSheet(`Reject ${firstName(c)}'s change`, ['Could not verify the VRN', 'Please message an admin', 'Not allowed'], async reason => { await api.admin.decideChange(c.id, false, reason); toast(c.kind === 'tnc' ? 'Dismissed' : 'Change rejected'); await viewAdmin();
+            if (c.kind !== 'tnc') tellOnWhatsApp(`Let ${firstName(c)} know`, c.phone, waMsg('change_no', { ...c, reason, what: CHANGE_TXT[c.kind].toLowerCase() })); }); }
     });
     $('#admin-body').querySelectorAll('[data-act=chg-vrn]').forEach(cb => cb.onchange = async () => {
         try { await api.admin.setChangeVrn(Number(cb.dataset.cid), cb.checked); await adminRequests(); toast(cb.checked ? 'VRN marked as verified' : 'VRN unmarked'); }
@@ -1797,7 +1843,11 @@ async function adminRequests() {
         approve: b => {
             const r = byId(b.dataset.id), miss = checksOf(r).filter(c => !c.ok).map(c => c.t);
             if (miss.length && !confirmBox(`Not all 4 checks are ticked:\n• ${miss.join('\n• ')}\n\nApprove ${r.full_name} anyway?`)) return;
-            busy(b, async () => { await api.admin.approve(r.id); state.adminMembers = null; state.dir = null; toast(`${r.full_name} approved${r.check_entry === 'existing' ? ': details updated' : ''}`); viewAdmin(); });
+            busy(b, async () => {
+                await api.admin.approve(r.id); state.adminMembers = null; state.dir = null; toast(`${r.full_name} approved`); await viewAdmin();
+                const kind = r.check_entry === 'existing' || r.check_entry === 'recent' ? 'existing' : r.check_entry === 'returning' ? 'returning' : 'welcome';
+                tellOnWhatsApp(`Let ${firstName(r)} know`, r.phone, waMsg(kind, r));
+            });
         },
         reject: b => rejectSheet(byId(b.dataset.id))
     });
@@ -1805,6 +1855,39 @@ async function adminRequests() {
         const r = byId(cb.dataset.id);
         try { await api.admin.setReqVrn(r.id, cb.checked); await adminRequests(); toast(cb.checked ? 'VRN marked as verified' : 'VRN unmarked'); }
         catch (e) { cb.checked = !cb.checked; toast(e.message, true); }
+    });
+}
+/* Follow-ups: members who haven't agreed to the rules, or have details missing */
+function followUps(inc) {
+    const rules = inc.filter(m => m.missing.includes('rules')), other = inc.filter(m => !m.missing.includes('rules'));
+    const row = m => `<div class="fu-row" data-mid="${m.id}"><div class="grow"><b>${esc(m.full_name)}</b>${m.on_app ? ' <span class="badge ok">On the app</span>' : ''}
+            <div class="fu-miss">${m.missing.map(x => `<span>${esc(x)}</span>`).join('')}</div>${m.reminded_at ? `<small class="muted">Reminded ${timeAgo(m.reminded_at)}</small>` : ''}</div>
+        <div class="fu-btns"><button class="btn sm wa" data-act="fu-wa" data-mid="${m.id}">WhatsApp</button>${m.missing.includes('rules') ? `<button class="btn sm ghost" data-act="fu-agree" data-mid="${m.id}">Agreed</button>` : ''}</div></div>`;
+    const block = (id, title, sub, list) => `<details class="fu card section" id="${id}"><summary><b>${title}</b> <span class="badge ${list.length ? 'orange' : ''}">${list.length}</span><span class="small muted">${sub}</span></summary>
+        ${list.length ? `<input class="search" type="search" placeholder="Search name" data-fu="${id}" style="margin:10px 0">${'<div class="fu-list"></div><button class="btn ghost block" data-more="' + id + '" hidden>Show more</button>'}` : '<p class="small muted" style="margin-top:8px">Everyone is done here.</p>'}</details>`;
+    return `<h2 class="group-title" style="margin-top:24px">Follow-ups</h2>
+        <p class="small muted" style="margin-bottom:10px">Members on the app get an in-app reminder every Sunday. For everyone else, tap WhatsApp to send a ready-made reminder.</p>
+        ${block('fu-rules', 'Not agreed to the rules', 'No “read carefully” answer on record, or they said no. Tap Agreed if they confirmed to you.', rules)}
+        ${block('fu-other', 'Missing details', 'Emergency contact, blood group, birthday, VRN or locality.', other)}
+        <button class="btn ghost block section" data-act="fu-remind">🔔 Send in-app reminders now (members on the app)</button>`;
+}
+function bindFollowUps(inc) {
+    const rowHtml = m => `<div class="fu-row" data-mid="${m.id}"><div class="grow"><b>${esc(m.full_name)}</b>${m.on_app ? ' <span class="badge ok">On the app</span>' : ''}
+            <div class="fu-miss">${m.missing.map(x => `<span>${esc(x)}</span>`).join('')}</div>${m.reminded_at ? `<small class="muted">Reminded ${timeAgo(m.reminded_at)}</small>` : ''}</div>
+        <div class="fu-btns"><button class="btn sm wa" data-act="fu-wa" data-mid="${m.id}">WhatsApp</button>${m.missing.includes('rules') ? `<button class="btn sm ghost" data-act="fu-agree" data-mid="${m.id}">Agreed</button>` : ''}</div></div>`;
+    [['fu-rules', inc.filter(m => m.missing.includes('rules'))], ['fu-other', inc.filter(m => !m.missing.includes('rules'))]].forEach(([id, list]) => {
+        const box = $('#' + id); if (!box || !list.length) return;
+        let lim = 25, q = '';
+        const draw = () => { const hits = list.filter(m => !q || m.full_name.toLowerCase().includes(q)); box.querySelector('.fu-list').innerHTML = hits.slice(0, lim).map(rowHtml).join('') || '<p class="small muted">No one matches.</p>'; box.querySelector('[data-more]').hidden = hits.length <= lim; };
+        box.querySelector('[data-fu]').oninput = e => { q = e.target.value.trim().toLowerCase(); lim = 25; draw(); };
+        box.querySelector('[data-more]').onclick = () => { lim += 50; draw(); };
+        draw();
+    });
+    const byMid = id => inc.find(m => m.id === Number(id));
+    Object.assign(actions, {
+        'fu-wa': b => { const m = byMid(b.dataset.mid); openWA(waTo(m.phone, waMsg('remind', { ...m, rules: m.missing.includes('rules'), missing: m.missing.filter(x => x !== 'rules') }))); api.admin.markReminded(m.id).catch(() => {}); m.reminded_at = new Date().toISOString(); },
+        'fu-agree': b => { const m = byMid(b.dataset.mid); if (confirmBox(`Record that ${m.full_name} agreed to the RWB rules?`)) busy(b, async () => { await api.admin.setTnc(m.id, true); toast('Recorded'); adminRequests(); }); },
+        'fu-remind': b => busy(b, async () => { const n = await api.admin.remindIncomplete(); toast(n ? `Reminder sent to ${n} member${n > 1 ? 's' : ''} on the app` : 'Everyone on the app was reminded in the last week'); adminRequests(); })
     });
 }
 function reasonSheet(title, quick, done) {
@@ -1821,7 +1904,7 @@ function rejectSheet(r) {
         <label>Reason (optional)<textarea name="reason" rows="2" maxlength="200"></textarea></label>
         <button class="btn danger block">Reject</button></form>`, body => {
         body.querySelectorAll('[data-q]').forEach(c => c.onclick = () => { body.querySelector('[name=reason]').value = c.dataset.q; });
-        body.querySelector('#rj').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { await api.admin.reject(r.id, e.target.reason.value.trim()); closeSheet(); toast('Rejected'); viewAdmin(); }); };
+        body.querySelector('#rj').onsubmit = e => { e.preventDefault(); const reason = e.target.reason.value.trim(); busy(e.submitter, async () => { await api.admin.reject(r.id, reason); closeSheet(); toast('Rejected'); await viewAdmin(); tellOnWhatsApp(`Let ${firstName(r)} know`, r.phone, waMsg('rejected', { ...r, reason })); }); };
     });
 }
 async function adminMembers() {
@@ -2031,7 +2114,7 @@ async function drawPushState() {
 
 /* =================== Announcements =================== */
 const STICKY = n => n.kind === 'announcement' || n.kind === 'event';   /* only admins can remove these */
-const KIND_ICON = { event: '📅', announcement: '📣', birthday: '🎂', motomart: '🛒', member: '🏍️', admin: '🛡️' };
+const KIND_ICON = { event: '📅', announcement: '📣', birthday: '🎂', motomart: '🛒', member: '🏍️', admin: '🛡️', personal: '🙋' };
 function shortAgo(iso) {
     const s = (Date.now() - new Date(iso)) / 1000;
     if (s < 60) return 'now'; if (s < 3600) return Math.floor(s / 60) + 'm'; if (s < 86400) return Math.floor(s / 3600) + 'h';
