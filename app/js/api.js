@@ -473,7 +473,9 @@ function demoApi() {
             requests: () => wait(db.requests),
             async approve(id) {
                 const r = db.requests.find(x => x.id === id);
-                db.members.push({ id: nid(), full_name: r.full_name, phone: r.phone, email: r.email, dob: r.dob, vrn: r.vrn, locality: r.locality, role: 'member', user_id: 'u' + id, joined_at: iso(today) });
+                const ex = db.members.find(m => m.phone === r.phone);
+                if (ex) Object.assign(ex, { full_name: r.full_name, vrn: r.vrn || ex.vrn, locality: r.locality || ex.locality, bike: r.bike || ex.bike, vrn_verified: r.vrn_verified || ex.vrn_verified });
+                else db.members.push({ id: nid(), full_name: r.full_name, phone: r.phone, email: r.email, dob: r.dob, vrn: r.vrn, bike: r.bike, locality: r.locality, role: 'member', user_id: r.on_app ? 'u' + id : null, vrn_verified: !!r.vrn_verified, joined_at: iso(today) });
                 db.requests = db.requests.filter(x => x.id !== id); save(); return 'approved';
             },
             async reject(id) { db.requests = db.requests.filter(x => x.id !== id); save(); return 'rejected'; },
