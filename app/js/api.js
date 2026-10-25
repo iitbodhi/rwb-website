@@ -48,7 +48,7 @@ async function supabaseApi(url, key) {
         async signOut() { await sb.auth.signOut(); },
 
         linkAccount: async () => must(await sb.rpc('link_account')),
-        requestAccess: async f => must(await sb.rpc('request_access', { p_full_name: f.full_name, p_phone: f.phone, p_dob: f.dob || null, p_vrn: f.vrn || null, p_locality: f.locality || null, p_bike: f.bike || null, p_blood_group: f.blood_group || null, p_hideout: f.hideout || null, p_emergency_phone: f.emergency_phone || null, p_alt_phone: f.alt_phone || null })),
+        requestAccess: async f => must(await sb.rpc('request_access', { p_full_name: f.full_name, p_phone: f.phone, p_dob: f.dob || null, p_vrn: f.vrn || null, p_locality: f.locality || null, p_bike: f.bike || null, p_blood_group: f.blood_group || null, p_hideout: f.hideout || null, p_emergency_phone: f.emergency_phone || null, p_alt_phone: f.alt_phone || null, p_tnc: !!f.tnc })),
         myRequest: async () => must(await sb.from('link_requests').select('*').maybeSingle()),
         me: async () => must(await sb.from('members').select('*').eq('user_id', await uid()).single()),
         updateMe: async f => must(await sb.from('members').update(f).eq('user_id', await uid()).select().single()),
@@ -61,6 +61,8 @@ async function supabaseApi(url, key) {
         },
         birthdays: async (days = 0) => must(await sb.rpc('birthdays', { p_days: days })),
         directory: async () => must(await sb.rpc('member_directory')),
+        myBikes: async () => must(await sb.from('member_bikes').select('slot, vrn, model, verified').order('slot')),
+        saveBike: async (slot, vrn, model, memberId = null) => must(await sb.rpc('save_bike', { p_slot: slot, p_vrn: vrn || '', p_model: model || null, p_member_id: memberId })),
         leaderboard: async () => must(await sb.rpc('odometer_leaderboard')),
         boards: async () => must(await sb.rpc('warrior_boards')),
         centres: async () => must(await sb.from('service_centres').select('id,name,area,pincode').order('name')),
@@ -239,11 +241,13 @@ async function supabaseApi(url, key) {
             stats: async () => must(await sb.rpc('admin_stats')),
             requests: async () => must(await sb.rpc('admin_list_requests')),
             approve: async id => must(await sb.rpc('admin_approve_request', { p_request_id: id })),
-            reject: async id => must(await sb.rpc('admin_reject_request', { p_request_id: id })),
+            reject: async (id, reason = '') => must(await sb.rpc('admin_reject_request', { p_request_id: id, p_reason: reason || null })),
+            setReqVrn: async (id, v) => must(await sb.rpc('admin_set_request_vrn', { p_request_id: id, p_verified: v })),
+            setVrnVerified: async (memberId, slot, v) => must(await sb.rpc('admin_set_vrn_verified', { p_member_id: memberId, p_slot: slot, p_verified: v })),
             async members() {
                 const all = []; let from = 0;
                 for (;;) {   /* fetch in pages of 1000 (Supabase's default limit) */
-                    const page = must(await sb.from('members').select('*').order('full_name').range(from, from + 999));
+                    const page = must(await sb.from('members').select('*, member_bikes(slot, vrn, model, verified)').order('full_name').range(from, from + 999));
                     all.push(...page); if (page.length < 1000) return all; from += 1000;
                 }
             },
@@ -295,7 +299,10 @@ function demoApi() {
             odo += dist;
             fuel.push({ id: id++, fill_date: daysAgo(70 - i * 10), odometer_km: odo, litres: l, amount: Math.round(l * 104.9), full_tank: full, trip_a_km: i === 0 ? null : full ? (i === 2 ? 392 : dist) : null, notes: '' });
         });
-        const requests = [{ id: 1, email: 'newrider@example.com', full_name: 'Kunal Das', phone: '9000000010', dob: '1998-08-21', vrn: 'WB 26 KL 3333', locality: 'Kalyani', created_at: daysAgo(1), match_member_id: null, match_name: null, match_linked: false }];
+        const requests = [
+            { id: 1, source: 'app', email: 'newrider@example.com', full_name: 'Kunal Das', phone: '9000000010', dob: '1998-08-21', vrn: 'WB 26 KL 3333', bike: 'TVS Ronin 225', blood_group: 'O+', locality: 'Kalyani', emergency_phone: '9000000077', created_at: daysAgo(1), match_member_id: null, match_name: null, match_linked: false, tnc: true, vrn_verified: false, on_app: true, check_entry: 'new', has_ronin: true, vrn_other: null },
+            { id: 2, source: 'form', email: 'riya@example.com', full_name: 'Riya Basu', phone: '9000000011', dob: '1996-04-02', vrn: 'WB 02 AB 1234', bike: 'Royal Enfield Hunter', blood_group: 'A+', locality: 'Behala', emergency_phone: '9000000078', created_at: daysAgo(0), match_member_id: null, match_name: null, match_linked: false, tnc: true, vrn_verified: false, on_app: false, check_entry: 'new', has_ronin: false, vrn_other: 'Demo Rider' },
+            { id: 3, source: 'form', email: '', full_name: 'Sourav Paul', phone: '9000000005', dob: '1993-02-10', vrn: 'WB 12 IJ 2222', bike: 'TVS Ronin 225', blood_group: 'B+', locality: 'Barasat', emergency_phone: '9000000079', created_at: daysAgo(0), match_member_id: 5, match_name: 'Sourav Paul', match_linked: false, match_status: 'active', member_since: '2025-03-14', tnc: null, vrn_verified: true, on_app: false, check_entry: 'existing', has_ronin: true, vrn_other: null }];
         const pic = (bg, label) => 'demo:data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600"><rect width="100%" height="100%" fill="${bg}"/><text x="50%" y="52%" text-anchor="middle" font-family="sans-serif" font-size="54" font-weight="700" fill="#fff">${label}</text></svg>`);
         const L = (id, o) => ({ id, user_id: 'u2', size: '', age: '', condition: 'Good', reason: '', details: '', seller_name: 'Arjun Sen', seller_phone: '9000000002', status: 'live', reject_reason: null, created_at: daysAgo(id), published_at: daysAgo(id), ...o });
         const listings = [
@@ -336,7 +343,9 @@ function demoApi() {
         me: () => wait(me()),
         async updateMe(f) { Object.assign(me(), f); save(); return wait(me()); },
         async setAvatar(file) { me().avatar_url = file ? await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); }) : null; save(); return wait(me()); },
-        directory: () => wait(db.members.filter(m => !m.status || m.status === 'active').map(m => ({ id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url, bike: m.bike, vrn: m.vrn, locality: m.locality, role: m.role, phone: ['superadmin', 'admin', 'coordinator'].includes(m.role) ? m.phone : null, on_app: !!m.user_id, avg_kmpl: m.user_id === 'me' ? m.avg_kmpl : ({ 2: 41.9, 3: 44.6, 4: 36.8, 5: 38.2 })[m.id] ?? null })).sort((a, b) => a.full_name.localeCompare(b.full_name))),
+        myBikes: () => wait((me().member_bikes || []).slice().sort((a, b) => a.slot - b.slot)),
+        async saveBike(slot, vrn, model, mid = null) { const m = mid ? db.members.find(x => x.id === mid) : me(); m.member_bikes = (m.member_bikes || []).filter(b => b.slot !== slot); if (vrn) m.member_bikes.push({ slot, vrn: vrn.toUpperCase(), model: model || null, verified: false }); save(); return vrn ? 'saved' : 'removed'; },
+        directory: () => wait(db.members.filter(m => !m.status || m.status === 'active').map(m => ({ id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url, bike: m.bike, vrn: m.vrn, vrn_verified: !!m.vrn_verified, bikes: m.member_bikes || null, locality: m.locality, role: m.role, phone: ['superadmin', 'admin', 'coordinator'].includes(m.role) ? m.phone : null, on_app: !!m.user_id, avg_kmpl: m.user_id === 'me' ? m.avg_kmpl : ({ 2: 41.9, 3: 44.6, 4: 36.8, 5: 38.2 })[m.id] ?? null })).sort((a, b) => a.full_name.localeCompare(b.full_name))),
         async boards() {
             const myKm = Math.max(0, me().odo_km || 0, ...db.fuel.map(f => f.odometer_km), ...db.services.map(x => x.odometer_km));
             const rows = [['Rahul Ghosh', 'Rocket', 18420, 36.8, 5, 'TVS Ronin 225'], ['Arjun Sen', 'Sultan', 11250, 41.9, 3, 'TVS Ronin 225'], ['Sourav Paul', '', 5310, 38.2, 1, 'TVS Apache RTR 200 4V'], ['Priya Dutta', '', 2400, 44.6, 2, 'TVS Ronin 225'], ['Kaustabh Roy', 'Pookie', 26100, 34.1, 7, 'TVS Ronin 225']]
@@ -456,6 +465,8 @@ function demoApi() {
                 db.requests = db.requests.filter(x => x.id !== id); save(); return 'approved';
             },
             async reject(id) { db.requests = db.requests.filter(x => x.id !== id); save(); return 'rejected'; },
+            async setReqVrn(id, v) { const r = db.requests.find(x => x.id === id); if (r) r.vrn_verified = v; save(); return v; },
+            async setVrnVerified(mid, slot, v) { const m = db.members.find(x => x.id === mid); if (slot === 1) m.vrn_verified = v; else { const b = (m.member_bikes || []).find(x => x.slot === slot); if (b) b.verified = v; } save(); return v; },
             members: () => wait([...db.members].sort((a, b) => a.full_name.localeCompare(b.full_name))),
             async update(id, p) { Object.assign(db.members.find(m => m.id === id), p); save(); return 'saved'; },
             async setRole(id, role) { db.members.find(m => m.id === id).role = role; save(); return role; },

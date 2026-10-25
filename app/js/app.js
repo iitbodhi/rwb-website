@@ -235,10 +235,23 @@ function joinFields(v = {}, mode = 'join') {
         L('emergency_phone', 'In case of emergency, contact (number)', tel('emergency_phone', '10-digit number'), 'A family member or friend we can call')
     ].join('');
 }
+/* The RWB rules every new member agrees to (same as the join form) */
+const RWB_RULES = [
+    'RWB is a non-profit, volunteer-run group of TVS Ronin owners in West Bengal.',
+    'Your Ronin\'s registration number (VRN) is needed to join, and admins may check it.',
+    'Share only true details. False details can lead to removal.',
+    'Members\' details are for RWB members only and must never be misused or shared outside.',
+    'Members may be asked to help in emergencies, when they can.',
+    'Ride safe, follow traffic rules, and respect fellow riders and the public.'
+];
+const rulesBlock = () => `<details class="rules"><summary>Read the RWB rules</summary><ol>${RWB_RULES.map(r => `<li>${esc(r)}</li>`).join('')}</ol></details>
+    <label class="check-row"><input type="checkbox" name="tnc" required> <span>I have read and agree to the RWB rules <span class="req">*</span></span></label>`;
+
 /* Form → clean values (trimmed; VRN in capitals) */
 function joinData(form) {
     const d = Object.fromEntries(new FormData(form));
     Object.keys(d).forEach(k => d[k] = String(d[k]).replace(/\s+/g, ' ').trim());
+    if ('tnc' in d) d.tnc = d.tnc === 'on';
     if (d.vrn) d.vrn = d.vrn.toUpperCase();
     return d;
 }
@@ -288,6 +301,7 @@ async function viewAccess(status, sess) {
         <p class="muted" style="margin:8px 0 18px">Fill this in and an admin will link you to your membership. Use the WhatsApp number you're in the RWB group with.</p>
         <form id="req">
             ${joinFields({ ...req, full_name: req?.full_name || sess.name || '' }, 'join')}
+            ${rulesBlock()}
             <button class="btn block">Send to admins</button>
             <button type="button" class="btn ghost block" data-act="out">Use a different Google account</button>
         </form>`;
@@ -296,6 +310,7 @@ async function viewAccess(status, sess) {
         e.preventDefault();
         const f = joinData(e.target), err = joinCheck(f, 'join');
         if (err) return toast(err, true);
+        if (!f.tnc) return toast('Please read and agree to the RWB rules', true);
         busy(e.submitter, async () => { await api.requestAccess(f); boot(); });
     });
 }
@@ -461,7 +476,7 @@ async function viewHome() {
     }
     if (isAdmin()) api.admin.stats().then(s => {
         const b = $('#admin-banner'), mm = listings.filter(l => l.status === 'pending').length, parts = [];
-        if (s.pending) parts.push(`${s.pending} access request${s.pending > 1 ? 's' : ''}`);
+        if (s.pending) parts.push(`${s.pending} new entr${s.pending > 1 ? 'ies' : 'y'} to approve`);
         if (mm) parts.push(`${mm} Motomart post${mm > 1 ? 's' : ''}`);
         if (b && parts.length) { b.innerHTML = `<span class="b-ico">${ICON.shield}</span><span class="grow">${parts.join(' and ')} waiting for you</span>${ICON.chev}`; b.href = s.pending ? '#admin' : '#admin/motomart'; b.hidden = false; }
     }).catch(() => {});
@@ -1410,6 +1425,32 @@ function installSheet() {
     });
 }
 
+/* Bikes: the main bike is on the member record (Edit details); bikes 2 and 3 can be added here */
+const vBadge = ok => ok ? '<span class="badge ok">✓ Verified</span>' : '';
+function bikeRows(m, extra, admin = false) {
+    const main = `<div class="bike-row"><span class="g-ico">🏍️</span><span class="grow"><b>${esc(m.vrn || 'No VRN yet')}</b><span class="small muted">${esc(m.bike || 'Main bike')} · main bike</span></span>${vBadge(m.vrn_verified)}${admin ? `<button class="btn sm ghost" data-x="vv" data-slot="1">${m.vrn_verified ? 'Unverify' : 'Verify'}</button>` : ''}</div>`;
+    if (extra === null) return main + '<p class="small muted" style="padding:10px 14px">Loading…</p>';
+    const rows = extra.map(b => `<div class="bike-row"><span class="g-ico">🏍️</span><span class="grow"><b>${esc(b.vrn)}</b><span class="small muted">${esc(b.model || 'Model not set')}</span></span>${vBadge(b.verified)}${admin ? `<button class="btn sm ghost" data-x="vv" data-slot="${b.slot}">${b.verified ? 'Unverify' : 'Verify'}</button>` : `<button class="btn sm ghost" data-act="bike" data-slot="${b.slot}">Edit</button>`}</div>`).join('');
+    const free = [2, 3].find(sl => !extra.some(b => b.slot === sl));
+    return main + rows + (!admin && free ? `<button class="bike-add" data-act="bike" data-slot="${free}">＋ Add a bike</button>` : '');
+}
+const BIKE_MODELS = ['TVS Ronin 225', 'TVS Apache RTR 160 4V', 'TVS Apache RTR 200 4V', 'TVS Apache RTR 310', 'Royal Enfield Hunter 350', 'Royal Enfield Classic 350', 'Honda CB350', 'Bajaj Pulsar', 'KTM Duke'];
+function bikeSheet(slot, b, done) {
+    openSheet(b ? 'Edit bike' : 'Add a bike', `<form id="bk">
+        <label><span>VRN <span class="req">*</span></span><input name="vrn" required autocapitalize="characters" placeholder="WB 02 AB 1234" value="${esc(b?.vrn || '')}"></label>
+        <label><span>Model</span><input name="model" list="bike-models" value="${esc(b?.model || 'TVS Ronin 225')}"><small class="hint">Change it if it's a different bike. An admin verifies the VRN.</small></label>
+        <datalist id="bike-models">${BIKE_MODELS.map(x => `<option value="${esc(x)}">`).join('')}</datalist>
+        <button class="btn block">Save bike</button>${b ? '<button type="button" class="btn danger block" data-x="del" style="margin-top:8px">Remove this bike</button>' : ''}</form>`, body => {
+        body.querySelector('#bk').onsubmit = e => {
+            e.preventDefault(); const v = e.target.vrn.value.replace(/\s+/g, ' ').trim().toUpperCase();
+            if (v.replace(/[^A-Z0-9]/g, '').length < 6) return toast('Please check the VRN (for example WB 02 AB 1234)', true);
+            busy(e.submitter, async () => { await api.saveBike(slot, v, e.target.model.value.trim()); closeSheet(); state.dir = null; toast('Bike saved'); done(); });
+        };
+        const del = body.querySelector('[data-x=del]');
+        if (del) del.onclick = () => { if (confirmBox('Remove this bike from your profile?')) busy(del, async () => { await api.saveBike(slot, ''); closeSheet(); state.dir = null; toast('Bike removed'); done(); }); };
+    });
+}
+
 function viewMe() {
     const m = state.me, role = (ROLE[m.role] || 'Member') + (m.role === 'coordinator' ? ' (Motomart)' : '');
     const row = (k, v) => `<div><span class="muted">${k}</span><span class="rt">${esc(v || '–')}</span></div>`;
@@ -1423,6 +1464,8 @@ function viewMe() {
         <div class="group kv">
             ${row('WhatsApp', m.phone)}${row('Bike', m.bike)}${row('Registration', m.vrn)}${row('Birthday', m.dob ? fmtDayMonth(m.dob) : '')}${row('Blood group', m.blood_group)}${row('Locality', m.locality)}${row('Emergency contact', m.emergency_phone)}
         </div>
+        <h2 class="group-title">My bikes <span class="small muted" style="text-transform:none;letter-spacing:0;font-weight:500">up to 3</span></h2>
+        <div class="group bikes" id="my-bikes">${bikeRows(m, null)}</div>
         ${isAdmin() ? `<div class="group section"><a href="#admin"><span class="g-ico">${ICON.shield}</span><span class="grow"><b>Admin panel</b><span class="small muted">Members, requests, Motomart, birthdays, Pookie</span></span>${ICON.chev}</a></div>` : ''}
 
         <h2 class="group-title">Appearance</h2>
@@ -1449,7 +1492,11 @@ function viewMe() {
             <button data-act="out" class="danger-row"><span class="grow"><b>Sign out</b></span></button>
         </div>
         <p class="small muted" style="text-align:center;margin-top:24px">RWB App, free for every warrior</p>`;
+    let myBikes = [];
+    const drawBikes = async () => { myBikes = await api.myBikes().catch(() => []); const g = $('#my-bikes'); if (g) g.innerHTML = bikeRows(state.me, myBikes); };
+    drawBikes();
     actions = {
+        bike: el => bikeSheet(Number(el.dataset.slot), myBikes.find(b => b.slot === Number(el.dataset.slot)), drawBikes),
         out: async () => { await disablePush(true).catch(() => {}); api.signOut(); },
         theme: el => { setTheme(el.dataset.t); app.querySelectorAll('[data-act=theme]').forEach(b => { const on = b === el; b.setAttribute('aria-selected', on); b.setAttribute('aria-checked', on); }); },
         'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); drawPushState(); }),
@@ -1508,7 +1555,7 @@ async function viewAdmin() {
             <button class="stat tap" data-act="mfilter" data-f="app"><b>${s.on_app}</b><span>On the app ›</span></button>
             <button class="stat tap ${s.pending ? 'accent' : ''}" data-act="tab" data-tab="requests"><b>${s.pending}</b><span>Waiting ›</span></button></div>
         <div class="seg section scroll" role="tablist">
-            <button role="tab" aria-selected="${tab === 'requests'}" data-act="tab" data-tab="requests">Requests${s.pending ? ` (${s.pending})` : ''}</button>
+            <button role="tab" aria-selected="${tab === 'requests'}" data-act="tab" data-tab="requests">Approvals${s.pending ? ` (${s.pending})` : ''}</button>
             <button role="tab" aria-selected="${tab === 'motomart'}" data-act="tab" data-tab="motomart">Motomart<span id="mm-count"></span></button>
             <button role="tab" aria-selected="${tab === 'members'}" data-act="tab" data-tab="members">Members</button>
             <button role="tab" aria-selected="${tab === 'bdays'}" data-act="tab" data-tab="bdays">Birthdays</button>
@@ -1519,18 +1566,73 @@ async function viewAdmin() {
     try { await ({ requests: adminRequests, motomart: adminMotomart, members: adminMembers, bdays: adminBdays, ai: adminAI })[tab](); }
     catch (e) { $('#admin-body').innerHTML = `<div class="card empty"><b>Could not load</b>${esc(e.message)}</div>`; }
 }
+/* Every new entry (join form or app) waits here. Admins see 4 checks before approving. */
+const PARIVAHAN = 'https://parivahan.gov.in/';
+function entryCheck(r) {
+    const since = r.member_since ? fmtDate(String(r.member_since).slice(0, 10)) : '';
+    if (r.check_entry === 'existing') return { ok: false, warn: true, t: 'Existing member, filling the form again', s: `Member since ${since}. Approving updates their details.` };
+    if (r.check_entry === 'returning') return { ok: false, warn: true, t: 'Returning member', s: `${r.match_status === 'left' ? 'Left' : 'Removed'}${r.match_removed_at ? ' on ' + fmtDate(String(r.match_removed_at).slice(0, 10)) : ''}. Approving restores them.` };
+    if (r.check_entry === 'recent') return { ok: true, t: 'New member', s: `Joined on ${since} and filled the form again.` };
+    return { ok: true, t: 'New member', s: 'Not in the member list yet.' };
+}
+function checksOf(r) {
+    const e = entryCheck(r);
+    return [
+        { k: 'entry', ok: e.ok, warn: e.warn, t: e.t, s: e.s },
+        { k: 'ronin', ok: !!r.has_ronin, t: r.has_ronin ? 'Has a Ronin' : 'No Ronin', s: `Answer: ${r.bike || '–'}` },
+        { k: 'vrn', ok: !!r.vrn_verified, t: 'VRN verified', s: '' },
+        { k: 'tnc', ok: r.tnc === true, unk: r.tnc == null, t: r.tnc === true ? 'Agreed to the RWB rules' : r.tnc === false ? 'Did not agree to the RWB rules' : 'Rules answer not found', s: r.tnc == null ? 'The form has no rules question, or it was left empty.' : '' }
+    ];
+}
+function reqCard(r) {
+    const cks = checksOf(r), all = cks.every(c => c.ok);
+    const ico = c => c.ok ? '✓' : c.warn || c.unk ? '!' : '✕';
+    return `<div class="card req-card" data-id="${r.id}">
+        <div class="row" style="gap:8px;align-items:flex-start"><div class="grow"><h3>${esc(r.full_name)}</h3>
+            <p class="small muted">${r.source === 'form' ? 'Join form' : 'App request'} · ${timeAgo(r.form_ts || r.created_at)}${r.on_app ? ' · signed in on the app' : ''}</p></div>
+            <span class="req-score ${all ? 'ok' : ''}">${cks.filter(c => c.ok).length}/4</span></div>
+        <ul class="checks">${cks.map(c => c.k === 'vrn' ? `<li class="${c.ok ? 'yes' : 'no'}"><label class="vrn-tick"><input type="checkbox" data-act="vrn-tick" data-id="${r.id}"${c.ok ? ' checked' : ''}><span class="ci">${ico(c)}</span>
+                <span class="grow"><b>VRN verified</b><small><span class="vrn">${esc(r.vrn || 'No VRN given')}</span> · tick once you've checked it</small></span></label>
+                <span class="vrn-tools">${r.vrn ? `<button class="link-btn" data-act="copy-vrn" data-v="${esc(r.vrn)}">Copy</button><a class="link-btn" href="${PARIVAHAN}" target="_blank" rel="noopener">Parivahan ↗</a>` : ''}</span>
+                ${r.vrn_other ? `<small class="dup">⚠ Same VRN as ${esc(r.vrn_other)}</small>` : ''}</li>`
+            : `<li class="${c.ok ? 'yes' : c.warn || c.unk ? 'warn' : 'no'}"><span class="ci">${ico(c)}</span><span class="grow"><b>${esc(c.t)}</b>${c.s ? `<small>${esc(c.s)}</small>` : ''}</span></li>`).join('')}</ul>
+        ${r.match_linked && r.on_app && r.check_entry !== 'new' ? '<p class="warn small" style="margin-bottom:10px">⚠ This number is already linked to another app account.</p>' : ''}
+        <details class="answers"><summary>All answers</summary><dl class="facts">
+            <dt>WhatsApp</dt><dd><a href="${waTo(r.phone)}" target="_blank" rel="noopener">${esc(r.phone)}</a></dd><dt>Email</dt><dd>${esc(r.email || '–')}</dd>
+            ${r.dob ? `<dt>Birthday</dt><dd>${fmtDayMonth(r.dob)}</dd>` : ''}<dt>Bike</dt><dd>${esc(r.bike || '–')}</dd>${r.blood_group ? `<dt>Blood group</dt><dd>${esc(r.blood_group)}</dd>` : ''}
+            ${r.locality ? `<dt>Locality</dt><dd>${esc(r.locality)}</dd>` : ''}${r.hideout ? `<dt>Hometown</dt><dd>${esc(r.hideout)}</dd>` : ''}
+            ${r.emergency_phone ? `<dt>Emergency</dt><dd>${esc(r.emergency_phone)}</dd>` : ''}${r.alt_phone ? `<dt>Alt. mobile</dt><dd>${esc(r.alt_phone)}</dd>` : ''}</dl></details>
+        <div class="btns" style="margin-top:12px"><button class="btn ghost" data-act="reject" data-id="${r.id}">Reject</button><button class="btn" data-act="approve" data-id="${r.id}">Approve</button></div></div>`;
+}
 async function adminRequests() {
     const reqs = await api.admin.requests();
-    $('#admin-body').innerHTML = reqs.length ? `<div class="list">${reqs.map(r => `<div class="card">
-        <h3>${esc(r.full_name)}</h3>
-        <dl class="facts"><dt>Google</dt><dd>${esc(r.email || '–')}</dd><dt>WhatsApp</dt><dd><a href="${waTo(r.phone)}" target="_blank" rel="noopener">${esc(r.phone)}</a></dd>
-            ${r.bike ? `<dt>Bike</dt><dd>${esc(r.bike)}</dd>` : ''}${r.vrn ? `<dt>Bike no.</dt><dd>${esc(r.vrn)}</dd>` : ''}${r.locality ? `<dt>Locality</dt><dd>${esc(r.locality)}</dd>` : ''}${r.hideout ? `<dt>Hometown</dt><dd>${esc(r.hideout)}</dd>` : ''}${r.blood_group ? `<dt>Blood group</dt><dd>${esc(r.blood_group)}</dd>` : ''}${r.emergency_phone ? `<dt>Emergency</dt><dd>${esc(r.emergency_phone)}</dd>` : ''}${r.alt_phone ? `<dt>Alt. mobile</dt><dd>${esc(r.alt_phone)}</dd>` : ''}${r.dob ? `<dt>Birthday</dt><dd>${fmtDayMonth(r.dob)}</dd>` : ''}<dt>Asked</dt><dd>${fmtDate(String(r.created_at).slice(0, 10))}</dd></dl>
-        <p class="${r.match_member_id ? (r.match_linked ? 'warn' : 'badge ok') : 'badge'}" style="margin-bottom:12px">${r.match_member_id ? (r.match_status && r.match_status !== 'active' ? `↩ ${esc(r.match_name)} ${r.match_status === 'left' ? 'left' : 'was removed'}${r.match_removed_at ? ' on ' + fmtDate(String(r.match_removed_at).slice(0, 10)) : ''}. Approving restores them as a new member.` : r.match_linked ? `⚠ This number belongs to ${esc(r.match_name)}, who is already on the app with another account.` : `✓ Matches sheet entry: ${esc(r.match_name)}`) : 'Not in the members sheet: approving adds them as a new member'}</p>
-        <div class="btns"><button class="btn ghost" data-act="reject" data-id="${r.id}">Reject</button><button class="btn" data-act="approve" data-id="${r.id}">Approve</button></div></div>`).join('')}</div>`
-        : '<div class="card empty"><b>All clear</b>No one is waiting for access.</div>';
+    $('#admin-body').innerHTML = reqs.length ? `<p class="small muted" style="margin-bottom:10px">New entries from the join form and the app. Check the 4 points, then approve. Nobody is a member until approved.</p>
+        <div class="list">${reqs.map(reqCard).join('')}</div>`
+        : '<div class="card empty"><b>All clear</b>No new entries waiting.</div>';
+    const byId = id => reqs.find(r => r.id === Number(id));
     Object.assign(actions, {
-        approve: b => busy(b, async () => { await api.admin.approve(Number(b.dataset.id)); state.adminMembers = null; toast('Approved. Added to the RWB contact sheet.'); viewAdmin(); }),
-        reject: b => { if (confirmBox('Reject this request?')) busy(b, async () => { await api.admin.reject(Number(b.dataset.id)); toast('Rejected'); viewAdmin(); }); }
+        'copy-vrn': async b => { try { await navigator.clipboard.writeText(b.dataset.v); toast('VRN copied'); } catch { toast(b.dataset.v); } },
+        approve: b => {
+            const r = byId(b.dataset.id), miss = checksOf(r).filter(c => !c.ok).map(c => c.t);
+            if (miss.length && !confirmBox(`Not all 4 checks are ticked:\n• ${miss.join('\n• ')}\n\nApprove ${r.full_name} anyway?`)) return;
+            busy(b, async () => { await api.admin.approve(r.id); state.adminMembers = null; state.dir = null; toast(`${r.full_name} approved${r.check_entry === 'existing' ? ': details updated' : ''}`); viewAdmin(); });
+        },
+        reject: b => rejectSheet(byId(b.dataset.id))
+    });
+    $('#admin-body').querySelectorAll('[data-act=vrn-tick]').forEach(cb => cb.onchange = async () => {
+        const r = byId(cb.dataset.id);
+        try { await api.admin.setReqVrn(r.id, cb.checked); await adminRequests(); toast(cb.checked ? 'VRN marked as verified' : 'VRN unmarked'); }
+        catch (e) { cb.checked = !cb.checked; toast(e.message, true); }
+    });
+}
+function rejectSheet(r) {
+    const quick = ['Not a Ronin owner', 'VRN could not be verified', 'Duplicate entry', 'Did not agree to the rules'];
+    openSheet('Reject ' + firstName(r), `<form id="rj"><p class="small muted" style="margin-bottom:10px">${r.source === 'form' ? 'Their sheet row moves to the “Rejected” tab.' : 'They see that the request was not approved.'} The reason is kept for admins.</p>
+        <div class="chips" style="margin-bottom:10px">${quick.map(q => `<button type="button" class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+        <label>Reason (optional)<textarea name="reason" rows="2" maxlength="200"></textarea></label>
+        <button class="btn danger block">Reject</button></form>`, body => {
+        body.querySelectorAll('[data-q]').forEach(c => c.onclick = () => { body.querySelector('[name=reason]').value = c.dataset.q; });
+        body.querySelector('#rj').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { await api.admin.reject(r.id, e.target.reason.value.trim()); closeSheet(); toast('Rejected'); viewAdmin(); }); };
     });
 }
 async function adminMembers() {
@@ -1554,7 +1656,7 @@ async function adminMembers() {
         const sort = (state.memberFilter === 'new' || gone) && state.memberSort === 'team' ? 'new' : state.memberSort;
         const gt = m => Date.parse(m.removed_at || 0) || 0;
         const pool = gone ? [...picked].sort((a, b) => sort === 'old' ? gt(a) - gt(b) : gt(b) - gt(a)) : sort === 'new' ? [...picked].sort((a, b) => jt(b) - jt(a)) : sort === 'old' ? [...picked].sort((a, b) => jt(a) - jt(b)) : teamFirst(picked);
-        const hits = pool.filter(m => !q || m.full_name.toLowerCase().includes(q) || (m.nickname || '').toLowerCase().includes(q) || (qd.length >= 3 && (m.phone || '').includes(qd)) || (vrnKey(q).length >= 2 && vrnKey(m.vrn).includes(vrnKey(q))) || (m.locality || '').toLowerCase().includes(q) || (m.hideout || '').toLowerCase().includes(q));
+        const hits = pool.filter(m => !q || m.full_name.toLowerCase().includes(q) || (m.nickname || '').toLowerCase().includes(q) || (qd.length >= 3 && (m.phone || '').includes(qd)) || (vrnKey(q).length >= 2 && [m.vrn, ...(m.member_bikes || []).map(b => b.vrn)].some(v => vrnKey(v).includes(vrnKey(q)))) || (m.locality || '').toLowerCase().includes(q) || (m.hideout || '').toLowerCase().includes(q));
         $('#mcount').textContent = `${hits.length} ${state.memberFilter === 'app' ? 'on the app' : state.memberFilter === 'admins' ? 'in the RWB team' : state.memberFilter === 'new' ? 'new in the last 7 days' : gone ? 'left or removed' : 'member' + (hits.length === 1 ? '' : 's')}`;
         $('#ml').innerHTML = hits.slice(0, limit).map(m => isGone(m) ? `<button class="card tap row member-row gone-row" data-act="member" data-id="${m.id}">${face(m, 'avatar sm')}
             <div class="grow"><div class="who">${esc(m.full_name)} <span class="badge gone-tag ${m.status}">${GONE_TXT[m.status]}</span></div>
@@ -1580,11 +1682,13 @@ function memberSheet(m) {
         ${m.avatar_url ? `<img class="member-photo" src="${esc(m.avatar_url)}" alt="">` : ''}<div class="tags" style="margin:0 0 10px">${m.user_id ? '<span class="badge ok">On the app</span>' : '<span class="badge">Not on the app yet</span>'}${roleBadge(m)}${isNewMember(m) ? '<span class="badge new-tag">New Member</span>' : ''}</div>
         <dl class="facts">
             <dt>WhatsApp</dt><dd>${esc(m.phone || '–')}</dd><dt>Email</dt><dd>${esc(m.email || '–')}</dd>
-            <dt>Birthday</dt><dd>${m.dob ? fmtDayMonth(m.dob) : '–'}</dd><dt>Bike</dt><dd>${esc([m.bike, m.vrn].filter(Boolean).join(' · ') || '–')}</dd>
+            <dt>Birthday</dt><dd>${m.dob ? fmtDayMonth(m.dob) : '–'}</dd>
             <dt>Blood group</dt><dd>${esc(m.blood_group || '–')}</dd><dt>Locality</dt><dd>${esc(m.locality || '–')}</dd>
             <dt>Hometown</dt><dd>${esc(m.hideout || '–')}</dd><dt>Emergency</dt><dd>${esc(m.emergency_phone || '–')}</dd>
             <dt>Joined</dt><dd>${m.joined_at ? fmtDate(String(m.joined_at).slice(0, 10)) : '–'}</dd>
         </dl>
+        <p class="small muted" style="margin:2px 0 6px">Bikes · check each VRN, then mark it verified</p>
+        <div class="group bikes" style="margin-bottom:12px">${bikeRows(m, (m.member_bikes || []).slice().sort((a, b) => a.slot - b.slot), true)}</div>
         <div class="btns" style="margin-bottom:10px">${m.phone ? `<a class="btn wa" href="${waTo(m.phone)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}<button class="btn ghost" data-x="edit">Edit details</button></div>
         ${!self && m.role !== 'superadmin' && (m.role !== 'admin' || superA) ? `<div class="btns" style="margin-bottom:10px">
             ${m.role === 'admin' ? '' : `<button class="btn ghost" data-x="role" data-to="${m.role === 'coordinator' ? 'member' : 'coordinator'}">${m.role === 'coordinator' ? 'Remove coordinator' : 'Make coordinator'}</button>`}
@@ -1592,6 +1696,10 @@ function memberSheet(m) {
             <p class="small muted" style="margin:-4px 0 12px">Coordinators can approve, reject and delete Motomart posts. They can't manage members.</p>` : ''}
         ${canRemove ? `<button class="btn danger block" data-x="remove">Remove from RWB</button><p class="small muted" style="margin-top:6px">Use when someone leaves the RWB WhatsApp community. Deletes their profile${m.user_id ? ', app account, service records, fuel log and bills' : ''}, and their row in the RWB contact sheet (a copy goes to its “Removed members” tab). This can't be undone in the app.</p>` : ''}`, body => {
         body.querySelector('[data-x=edit]').onclick = () => memberEdit(m);
+        body.querySelectorAll('[data-x=vv]').forEach(btn => btn.onclick = () => {
+            const slot = Number(btn.dataset.slot), b = (m.member_bikes || []).find(x => x.slot === slot), now = slot === 1 ? !m.vrn_verified : !b?.verified;
+            busy(btn, async () => { await api.admin.setVrnVerified(m.id, slot, now); if (slot === 1) m.vrn_verified = now; else b.verified = now; state.dir = null; toast(now ? 'VRN verified' : 'Marked as not verified'); memberSheet(m); });
+        });
         body.querySelectorAll('[data-x=role]').forEach(role => role.onclick = () => {
             const to = role.dataset.to;
             if (to !== 'member' && !m.user_id && !confirmBox(`${m.full_name} hasn't signed in to the app yet. They'll get ${ROLE[to].toLowerCase()} rights when they do. Continue?`)) return;
@@ -2127,12 +2235,12 @@ async function viewCrew() {
     const draw = () => {
         const q = (state.crewSearch || '').trim().toLowerCase(), qv = vrnKey(q);
         const pool = q ? all : others;   /* while searching, the team is included too */
-        const hits = pool.filter(m => !q || [m.full_name, m.nickname, m.bike, m.locality].some(v => (v || '').toLowerCase().includes(q)) || (qv.length >= 2 && vrnKey(m.vrn).includes(qv)));
+        const hits = pool.filter(m => !q || [m.full_name, m.nickname, m.bike, m.locality].some(v => (v || '').toLowerCase().includes(q)) || (qv.length >= 2 && [m.vrn, ...(m.bikes || []).map(b => b.vrn)].some(v => vrnKey(v).includes(qv))));
         $('#ccount').textContent = q ? `${hits.length} found${qv.length >= 4 && !hits.length ? '. That bike isn\'t registered with RWB.' : ''}` : `${all.length} members in RWB`;
         $('#cl').innerHTML = hits.slice(0, limit).map(m => `<div class="card row member-row">${face(m, 'avatar sm')}
             <div class="grow"><div class="who">${name(m)} ${roleBadge(m)}</div>
             <div class="meta">${m.avg_kmpl ? `<b class="kmpl-tag">${kmplTxt(m.avg_kmpl)}</b> · ` : ''}${esc([m.bike, m.locality].filter(Boolean).join(', ') || 'RWB member')}</div></div>
-            ${m.vrn ? `<span class="vrn">${esc(m.vrn)}</span>` : ''}</div>`).join('') || (q ? '<div class="card empty">No one matches.</div>' : '');
+            ${m.vrn ? `<span class="vrn${m.vrn_verified ? ' ok' : ''}" title="${m.vrn_verified ? 'VRN verified by RWB' : ''}">${esc(qv.length >= 2 && !vrnKey(m.vrn).includes(qv) ? ((m.bikes || []).find(b => vrnKey(b.vrn).includes(qv))?.vrn || m.vrn) : m.vrn)}${m.vrn_verified ? ' ✓' : ''}</span>` : ''}</div>`).join('') || (q ? '<div class="card empty">No one matches.</div>' : '');
         $('#cmore').hidden = hits.length <= limit;
     };
     $('#cq').oninput = e => { state.crewSearch = e.target.value; limit = 50; draw(); };

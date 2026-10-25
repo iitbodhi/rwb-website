@@ -861,3 +861,36 @@ body[data-route=motomart] .btn.fab{font-size:.88rem;padding:11px 18px}
 .acc .acc-thumb:has(img) .acc-ph{display:none}
 .acc .acc-thumb:not(:has(img)){background:var(--paper-2)}
 .card.guide.acc{grid-template-columns:84px 1fr;gap:14px;align-items:center}
+
+/* approvals: 4 checks */
+.req-card h3{margin:0}
+.req-score{font:800 1rem/1 var(--display);padding:6px 10px;border-radius:99px;background:var(--paper-2);color:var(--stone)}
+.req-score.ok{background:var(--ok-soft);color:var(--ok)}
+.checks{list-style:none;margin:12px 0 10px;padding:0;display:grid;gap:6px}
+.checks li{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:9px 10px;border-radius:12px;background:var(--paper-2)}
+.checks li b{display:block;font-size:.9rem}
+.checks li small{display:block;font-size:.76rem;color:var(--muted);margin-top:1px}
+.checks .ci{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:700 .85rem/1 var(--body);background:var(--line);color:var(--stone)}
+.checks li.yes .ci{background:var(--ok);color:#fff}
+.checks li.no .ci{background:var(--bad);color:#fff}
+.checks li.warn .ci{background:#e9a23b;color:#fff}
+.checks .vrn-tick{display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer;font-weight:400}
+.checks .vrn-tick input{position:absolute;opacity:0;width:1px;height:1px}
+.checks .vrn-tick:has(input:focus-visible) .ci{outline:2px solid var(--orange);outline-offset:2px}
+.checks li.no .vrn-tick .ci{background:transparent;border:2px dashed var(--muted);color:transparent}
+.checks .vrn-tools{display:flex;gap:16px;width:100%;margin:-2px 0 0 36px}
+.checks .dup{width:100%;margin-left:36px;color:#c47a12!important;font-weight:600}
+.checks .vrn{font-weight:700;color:var(--ink);letter-spacing:.02em}
+details.answers summary,details.rules summary{cursor:pointer;font-size:.84rem;font-weight:600;color:var(--orange);padding:4px 0}
+details.answers .facts{margin-top:8px}
+details.rules{margin:6px 0 10px;padding:10px 12px;border-radius:12px;background:var(--paper-2)}
+details.rules ol{margin:8px 0 2px;padding-left:18px;display:grid;gap:6px;font-size:.86rem;color:var(--stone)}
+.check-row{display:flex!important;grid-template-columns:none;align-items:flex-start;gap:10px;margin:4px 0 16px;font-weight:500;color:var(--ink)}
+.check-row input{width:20px;height:20px;margin-top:1px;flex:none;accent-color:var(--orange)}
+/* bikes */
+.group.bikes .bike-row{display:flex;align-items:center;gap:12px;padding:11px 14px;border-top:1px solid var(--hair)}
+.group.bikes .bike-row:first-child{border-top:0}
+.group.bikes .bike-row b{display:block;letter-spacing:.02em}
+.group.bikes .g-ico{font-size:1.1rem}
+.bike-add{display:block;width:100%;border:0;border-top:1px dashed var(--hair);background:none;padding:12px 14px;text-align:left;font:600 .9rem var(--body);color:var(--orange);cursor:pointer}
+.vrn.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
