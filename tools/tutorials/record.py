@@ -319,7 +319,99 @@ async def staff(r):
     await r.tap('[data-act=tab][data-tab=ai]', wait=1100, hold=1.3); await r.shot(hold=2.0)
     r.save('Coordinators & admins', 'Everything the RWB team can do in the app, in one minute.', 'Thanks for keeping RWB running.')
 
-VIDEOS = {'service': service, 'mileage': mileage, 'motomart': motomart, 'guides': guides, 'events': events, 'me': me, 'crew': crew, 'staff': staff}
+async def mgmt(r):
+    p = r.p
+    # A: approving an app join request
+    r.scene('In the app', 'Approve a join request', 'A banner on <b>Home</b> (and a notification) says someone is waiting. Open it, check their details and tap <b>Approve</b>.')
+    await r.shot(hold=1.6)
+    await r.tap('#admin-banner', wait=1000, hold=1.6)
+    await r.p.evaluate("document.querySelector('[data-act=approve]').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300); await r.shot(hold=2.6)
+    await r.tap('[data-act=approve] >> nth=0', wait=1000, hold=1.8)
+    # B: tracking new members
+    r.scene('In the app', 'Find new members', 'In the <b>RWB</b> tab tap <b>New</b>: everyone who joined in the last 7 days, from the form or the app, with a green <b>New Member</b> tag.')
+    await r.tap('a[data-tab=crew]', wait=1100, hold=1.4)
+    await r.tap('[data-act=mf][data-f=new]', wait=800, hold=1.6); await r.shot(hold=2.4)
+    r.scene('In the app', 'Add them on WhatsApp', 'Tap a new member to see their details and <b>WhatsApp</b> them, or use their number to add them to the RWB group. <b>Newest first</b> sorting works any time.')
+    await r.tap('[data-act=member] >> nth=0', wait=800, hold=1.6)
+    await r.tap('#sheet a.btn.wa', click=False, hold=2.4)
+    await p.keyboard.press('Escape'); await p.wait_for_timeout(300)
+    await r.select('#msort', 'new')
+    # C: removing
+    r.scene('In the app', 'Remove from RWB', 'Tap the member → <b>Remove from RWB</b>. Pick <b>Left the group</b> or <b>Removed by admin</b>, add a note, type <b>REMOVE</b>.')
+    await r.tap('[data-act=mf][data-f=all]', wait=600, hold=1.2)
+    await p.fill('#mq', 'arjun'); await p.dispatch_event('#mq', 'input'); await p.wait_for_timeout(300)
+    await r.tap('[data-act=member] >> nth=0', wait=700, hold=1.6)
+    await r.tap('#sheet [data-x=remove]', wait=600, hold=2.2)
+    await p.check('#rmf input[value=left]'); await p.fill('#rmf input[name=note]', 'Moved to Bangalore'); await p.fill('#rmf input[name=ok]', 'REMOVE'); await p.wait_for_timeout(200)
+    await r.shot(hold=2.4)
+    await r.tap('#rmf button.danger', wait=1100, hold=1.8)
+    # D: left / removed + restore
+    r.scene('In the app', 'Left / removed, and Restore', 'They\'re kept under <b>Left / removed</b>: greyed out, with the date, who did it and why. Tap one and <b>Restore to RWB</b> to undo.')
+    await p.fill('#mq', ''); await p.dispatch_event('#mq', 'input'); await p.wait_for_timeout(300)
+    await r.tap('[data-act=mf][data-f=gone]', wait=700, hold=1.6); await r.shot(hold=2.0)
+    await r.tap('[data-act=member] >> nth=0', wait=700, hold=2.4)
+    await r.tap('#sheet [data-x=restore]', wait=1000, hold=1.8); await r.shot(hold=1.6)
+    r.save('Member management', '', '')
+
+async def mgmt2(r):
+    p = r.p
+    # 0: the approval list and its 4 checks
+    r.scene('In the app', 'The approval list', '')
+    await r.shot(hold=1.4)
+    await r.tap('#admin-banner', wait=1100, hold=1.5)
+    await p.evaluate("document.querySelector('.req-card[data-id=\"1\"] .checks').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300); await r.shot(hold=2.6)
+    # 1: tick VRN verified, then approve
+    r.scene('In the app', 'Verify the VRN, then approve', '')
+    await r.tap('.req-card[data-id="1"] [data-act=copy-vrn]', wait=500, hold=1.4)
+    await r.tap('.req-card[data-id="1"] .vrn-tick', wait=900, hold=1.6)
+    await p.evaluate("document.querySelector('.req-card[data-id=\"1\"] .checks').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300); await r.shot(hold=1.8)
+    await r.tap('.req-card[data-id="1"] [data-act=approve]', wait=1100, hold=1.6); await r.shot(hold=1.4)
+    # 2: reject with a reason
+    r.scene('In the app', 'Reject, with a reason', '')
+    await p.evaluate("document.querySelector('.req-card[data-id=\"2\"] .checks').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300); await r.shot(hold=2.4)
+    await r.tap('.req-card[data-id="2"] [data-act=reject]', wait=800, hold=1.4)
+    await r.tap('#rj [data-q="Not a Ronin owner"]', wait=400, hold=1.4)
+    await r.tap('#rj button.btn.danger', wait=1100, hold=1.6)
+    # 3: an existing member filling the form again
+    r.scene('In the app', 'Existing member, again', '')
+    await p.evaluate("document.querySelector('.req-card[data-id=\"3\"] .checks').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300); await r.shot(hold=2.4)
+    await r.tap('.req-card[data-id="3"] [data-act=approve]', wait=1200, hold=1.6); await r.shot(hold=1.4)
+    # 4: new members → WhatsApp, and verify bikes
+    r.scene('In the app', 'New members and bikes', '')
+    await r.tap('a[data-tab=crew]', wait=1100, hold=1.3)
+    await r.tap('[data-act=mf][data-f=new]', wait=800, hold=1.5); await r.shot(hold=1.6)
+    await r.tap('[data-act=member] >> nth=0', wait=900, hold=1.6)
+    await p.evaluate("document.querySelector('#sheet .group.bikes').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300)
+    await r.tap('#sheet [data-x=vv][data-slot="1"]', wait=1000, hold=1.6)
+    await p.evaluate("document.querySelector('#sheet .group.bikes').scrollIntoView({block:'center'})"); await p.wait_for_timeout(300); await r.shot(hold=1.6)
+    await r.tap('#sheet a.btn.wa', click=False, hold=1.8)
+    await p.keyboard.press('Escape'); await p.wait_for_timeout(300)
+    # 5: remove
+    r.scene('In the app', 'Remove from RWB', '')
+    await r.tap('[data-act=mf][data-f=all]', wait=600, hold=1.2)
+    await p.fill('#mq', 'arjun'); await p.dispatch_event('#mq', 'input'); await p.wait_for_timeout(300)
+    await r.tap('[data-act=member] >> nth=0', wait=700, hold=1.5)
+    await r.tap('#sheet [data-x=remove]', wait=600, hold=2.0)
+    await p.check('#rmf input[value=left]'); await p.fill('#rmf input[name=note]', 'Moved to Bangalore'); await p.fill('#rmf input[name=ok]', 'REMOVE'); await p.wait_for_timeout(200)
+    await r.shot(hold=2.2)
+    await r.tap('#rmf button.danger', wait=1100, hold=1.6)
+    # 6: restore
+    r.scene('In the app', 'Restore', '')
+    await p.fill('#mq', ''); await p.dispatch_event('#mq', 'input'); await p.wait_for_timeout(300)
+    await r.tap('[data-act=mf][data-f=gone]', wait=700, hold=1.5); await r.shot(hold=1.6)
+    await r.tap('[data-act=member] >> nth=0', wait=700, hold=2.0)
+    await r.tap('#sheet [data-x=restore]', wait=1000, hold=1.6); await r.shot(hold=1.4)
+    # 7: members add their bikes
+    r.scene('In the app', 'My bikes', '')
+    await r.tap('.top a.avatar-link', wait=1000, hold=1.4)
+    await p.evaluate("document.querySelector('#my-bikes').scrollIntoView({block:'center'})"); await p.wait_for_timeout(500); await r.shot(hold=1.6)
+    await r.tap('#my-bikes .bike-add', wait=700, hold=1.4)
+    await r.type('#bk input[name=vrn]', 'WB 20 AA 1234')
+    await r.tap('#bk button.btn.block', wait=1100, hold=1.4)
+    await p.evaluate("document.querySelector('#my-bikes').scrollIntoView({block:'center'})"); await p.wait_for_timeout(400); await r.shot(hold=2.0)
+    r.save('Member management', '', '')
+
+VIDEOS = {'service': service, 'mileage': mileage, 'motomart': motomart, 'guides': guides, 'events': events, 'me': me, 'crew': crew, 'staff': staff, 'mgmt': mgmt, 'mgmt2': mgmt2}
 
 async def main(names):
     os.makedirs(f'{S}/data', exist_ok=True)
@@ -327,7 +419,7 @@ async def main(names):
         b = await pw.chromium.launch()
         for n in names:
             import shutil; shutil.rmtree(f'{S}/shots/{n}', ignore_errors=True)
-            pg = await setup(b, 'superadmin' if n == 'staff' else 'member')
+            pg = await setup(b, 'superadmin' if n in ('staff', 'mgmt', 'mgmt2') else 'member')
             errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
             r = Rec(pg, n)
             try: await VIDEOS[n](r)
