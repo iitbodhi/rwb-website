@@ -70,7 +70,11 @@ const waPref = () => { try { const v = localStorage.getItem('rwb-wa-app'); retur
 function waIntent(url) {
     const pkg = WA_APPS[waPref()][1];
     if (!isAndroid || !pkg) return url;
-    const u = new URL(url), phone = u.pathname.replace(/\D/g, ''), text = u.searchParams.get('text') || '';
+    const u = new URL(url);
+    /* group invite link: open it in the chosen app as-is (never as a chat with a "phone number") */
+    if (u.hostname === 'chat.whatsapp.com') return `intent://chat.whatsapp.com${u.pathname}#Intent;scheme=https;package=${pkg};S.browser_fallback_url=${encodeURIComponent(url)};end`;
+    if (u.hostname !== 'wa.me' && u.hostname !== 'api.whatsapp.com') return url;
+    const phone = u.pathname.replace(/\D/g, ''), text = u.searchParams.get('text') || '';
     const q = [phone && 'phone=' + phone, text && 'text=' + encodeURIComponent(text)].filter(Boolean).join('&');
     return `intent://send/?${q}#Intent;scheme=whatsapp;package=${pkg};S.browser_fallback_url=${encodeURIComponent(url)};end`;
 }
@@ -147,7 +151,13 @@ function mileageStats(logs) {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { videos: viewVideos, docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, crew: viewCrew, events: viewEvents };
+const ROUTES = { videos: viewVideos, docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, crew: viewCrew, events: viewEvents, terms: viewTerms };
+/* roninwb.in/app/#terms: Me screen with the Terms & Conditions open, ready to agree */
+function viewTerms() {
+    history.replaceState(null, '', '#me'); document.body.dataset.route = 'me';
+    tabbar.querySelectorAll('a').forEach(a => a.dataset.tab === 'me' ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
+    viewMe(); actions.rules?.();
+}
 /* screens render one after another, so the screen the rider tapped last always wins */
 let renderChain = Promise.resolve();
 function render() { renderChain = renderChain.then(doRender, doRender); return renderChain; }
@@ -1976,7 +1986,7 @@ function bindFollowUps(inc, all) {
         const tnc = pick.tnc ? inc.filter(m => m.missing.includes('rules')) : [], other = pick.other ? inc.filter(m => !m.missing.includes('rules')) : [], notApp = pick.app ? notAppAll : [];
         const firstNames = l => azSort(l).map(m => `• ${m.full_name}`).join('\n');
         return `🏍️ *RWB App: a quick to-do for some of our warriors* 🙏\n`
-            + (tnc.length ? `\n📜 *Please agree to the RWB Terms & Conditions*\nRead them: ${TNC_URL}\n(RWB App → Me → Terms & Conditions → Read & agree)\n${firstNames(tnc)}\n` : '')
+            + (tnc.length ? `\n📜 *Please respond to the RWB Terms & Conditions in the app*\nOpen it directly: https://${APP_LINK}/#terms\n(or RWB App → Me → Terms & Conditions → Read & agree)\n${firstNames(tnc)}\n` : '')
             + (other.length ? `\n✍️ *Please add your missing details* (RWB App → Me → Edit)\n${azSort(other).map(m => `• ${m.full_name}: ${m.missing.join(', ')}`).join('\n')}\n` : '')
             + (notApp.length ? `\n📲 *Not on the RWB App yet?* Get it: https://${APP_LINK}\nSign in with the email you gave on the join form.\nAndroid guide: ${INSTALL_ANDROID}\niPhone guide: ${INSTALL_IPHONE}\n${firstNames(notApp)}\n` : '')
             + `\nThank you! Explore. Evolve. Inspire.`;
@@ -1994,7 +2004,7 @@ function bindFollowUps(inc, all) {
             const n = { tnc: inc.filter(m => m.missing.includes('rules')).length, other: inc.filter(m => !m.missing.includes('rules')).length, app: notApp.length };
             const opt = (k, label) => `<label class="share-pick"><input type="checkbox" name="${k}"${n[k] ? ' checked' : ' disabled'}> <span class="grow">${label}</span><span class="badge ${n[k] ? 'orange' : ''}">${n[k]}</span></label>`;
             openSheet('Share follow-ups to the RWB group', `<p class="small muted" style="margin-bottom:8px">Names are listed one per line, A–Z. Choose what to include:</p>
-                <form id="sp" class="group" style="margin-bottom:10px">${opt('tnc', '📜 Agree to the Terms & Conditions (with link)')}${opt('other', '✍️ Missing details')}${opt('app', '📲 Not on the app (with Android & iPhone install videos)')}</form>
+                <form id="sp" class="group" style="margin-bottom:10px">${opt('tnc', '📜 Respond to the Terms & Conditions in the app')}${opt('other', '✍️ Missing details')}${opt('app', '📲 Not on the app (with Android & iPhone install videos)')}</form>
                 <textarea id="wa-text" rows="12" style="font-size:.85rem;line-height:1.45"></textarea>
                 <button class="btn wa block" data-x="send" style="margin-top:10px">${state.settings?.wa_group_link ? 'Copy & open the RWB group' : 'Send in the RWB group'}</button>`, body => {
                 const f = body.querySelector('#sp'), ta = body.querySelector('#wa-text');
