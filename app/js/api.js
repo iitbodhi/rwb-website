@@ -49,6 +49,7 @@ async function supabaseApi(url, key) {
 
         linkAccount: async () => must(await sb.rpc('link_account')),
         joinForm: async () => must(await sb.rpc('join_form')),
+        settings: async () => { const r = await sb.rpc('app_settings'); return r.error ? {} : r.data; },
         myPrefill: async () => must(await sb.rpc('my_prefill')),
         myChanges: async () => must(await sb.from('change_requests').select('kind, slot, new_value, new_model, status, reject_reason, created_at, decided_at').order('created_at', { ascending: false }).limit(20)),
         async requestChange(kind, value, slot = null, model = null) {
@@ -257,7 +258,13 @@ async function supabaseApi(url, key) {
 
         admin: {
             stats: async () => must(await sb.rpc('admin_stats')),
-            requests: async () => must(await sb.rpc('admin_list_requests')),
+            async requests() {
+                const list = must(await sb.rpc('admin_list_requests'));
+                /* when each entry was last changed by the person (setup file 31) */
+                const u = await sb.from('link_requests').select('id, updated_at').eq('status', 'pending');
+                if (!u.error) { const m = new Map(u.data.map(x => [x.id, x.updated_at])); list.forEach(r => { r.updated_at = m.get(r.id) || null; }); }
+                return list;
+            },
             approve: async id => must(await sb.rpc('admin_approve_request', { p_request_id: id })),
             async reject(id, reason = '') {
                 const r = await sb.rpc('admin_reject_request', { p_request_id: id, p_reason: reason || null });
@@ -266,6 +273,7 @@ async function supabaseApi(url, key) {
             },
             changes: async () => must(await sb.rpc('admin_list_changes')),
             incomplete: async () => must(await sb.rpc('admin_incomplete')),
+            setSetting: async (key, value) => must(await sb.rpc('admin_set_setting', { p_key: key, p_value: value || '' })),
             remindIncomplete: async () => must(await sb.rpc('remind_incomplete', { p_force: false })),
             markReminded: async id => must(await sb.rpc('admin_mark_reminded', { p_member_id: id })),
             setTnc: async (id, v) => must(await sb.rpc('admin_set_tnc', { p_member_id: id, p_agreed: v })),
@@ -375,6 +383,7 @@ function demoApi() {
         async updateMe(f) { Object.assign(me(), f); save(); return wait(me()); },
         async setAvatar(file) { me().avatar_url = file ? await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); }) : null; save(); return wait(me()); },
         joinForm: () => wait(window.DEMO_JOIN_FORM || null),
+        settings: () => wait({ wa_group_link: db.groupLink || null }),
         myPrefill: () => wait(null),
         myChanges: () => wait((db.changes || []).filter(c => c.member_id === me().id).slice().reverse()),
         async requestChange(kind, value, slot = null, model = null) {
@@ -509,6 +518,7 @@ function demoApi() {
             },
             async reject(id) { db.requests = db.requests.filter(x => x.id !== id); save(); return 'rejected'; },
             changes: () => wait((db.changes || []).filter(c => c.status === 'pending')),
+            async setSetting(k, v) { db.groupLink = v || null; save(); return v || ''; },
             incomplete: () => wait(db.members.filter(m => !m.status || m.status === 'active').map(m => ({ id: m.id, full_name: m.full_name, phone: m.phone, on_app: !!m.user_id, tnc_agreed: m.tnc_agreed ?? null, reminded_at: m.reminded_at || null,
                 missing: [m.tnc_agreed !== true && 'rules', !m.emergency_phone && 'emergency contact', !m.blood_group && 'blood group', !m.dob && 'date of birth', !m.vrn && 'VRN', !m.locality && 'locality'].filter(Boolean) })).filter(m => m.missing.length)),
             async remindIncomplete() { return db.members.filter(m => m.user_id && m.user_id !== 'me').length; },

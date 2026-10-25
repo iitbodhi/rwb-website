@@ -194,8 +194,21 @@ const globalActions = {
     'add-fuel': () => fuelForm(),
     'chat-close': () => { if (history.length > 1 && state.cameFrom) history.back(); else location.hash = '#home'; },
     'odo': () => odoSheet(),
-    'wish': () => wishSheet(state.bdays.filter(b => b.day === todayISO()))
+    'wish': () => wishSheet(state.bdays.filter(b => b.day === todayISO())),
+    'hello': el => helloSheet(el.dataset.name)
 };
+/* Welcome a new Ronin in the RWB WhatsApp group */
+function helloSheet(name) {
+    const first = String(name || '').trim().split(/\s+/)[0] || 'Warrior';
+    const T = [`Welcome to RWB, ${name}! 🏍️🎉`, `Welcome to the RWB family, ${first}! 🧡 Glad to have you with us. Explore. Evolve. Inspire. 🏍️`, `Hey ${first}, welcome aboard! 🙌 See you on the next ride! 🏍️`];
+    openSheet(`Welcome ${first}`, `<p class="small muted" style="margin-bottom:8px">Say hello in the RWB WhatsApp group. Pick a message or write your own.</p>
+        <div class="list" id="hello-t" style="margin-bottom:10px">${T.map((t, i) => `<button type="button" class="chip" style="text-align:left;white-space:normal" aria-pressed="${i === 0}" data-i="${i}">${esc(t)}</button>`).join('')}</div>
+        <textarea id="wa-text" rows="4">${esc(T[0])}</textarea>
+        <button class="btn wa block" data-x="send" style="margin-top:10px">${state.settings?.wa_group_link ? 'Copy & open the RWB group' : 'Send in the RWB group'}</button>`, body => {
+        body.querySelectorAll('#hello-t .chip').forEach(c => c.onclick = () => { body.querySelectorAll('#hello-t .chip').forEach(x => x.setAttribute('aria-pressed', x === c)); body.querySelector('#wa-text').value = T[Number(c.dataset.i)]; });
+        body.querySelector('[data-x=send]').onclick = () => { const t = body.querySelector('#wa-text').value.trim(); closeSheet(); toGroup(t); };
+    });
+}
 
 /* =================== Sign in / access =================== */
 /* =================== Member details: the same questions as the RWB join form =================== */
@@ -414,8 +427,10 @@ async function viewAccess(status, sess) {
         app.innerHTML = `${demoBar()}<section class="signin"><img src="icons/logo-128.png" alt="">
             <div><h1>Request sent</h1><p class="lead">Thanks${req ? ', ' + esc(firstName(req)) : ''}! An RWB admin will check your details and let you in, usually within a day.</p></div>
             <button class="btn block" data-act="recheck">Check again</button>
+            <button class="btn ghost block" data-act="edit-req">Edit my details</button>
             <button class="btn ghost block" data-act="out">Sign out</button></section>`;
-        actions = { recheck: b => busy(b, boot), out: () => api.signOut() };
+        actions = { recheck: b => busy(b, boot), out: () => api.signOut(),
+            'edit-req': async b => { const def = await loadJoinForm(); if (def?.items?.length) liveJoinForm(def, { ...(req || {}), answers: req?.answers || {} }, sess, true); else viewAccess('not_found', sess); } };
         return;
     }
     const [def, pre] = await Promise.all([loadJoinForm(), api.myPrefill().catch(() => null)]);
@@ -549,6 +564,8 @@ function cluster(services, fuel) {
 
 function newsRow(n, del = false, compact = false) {
     const href = n.url && n.url.startsWith('#') ? n.url : '#news';
+    const hello = n.kind === 'member' && /say hello to (.+?)!?$/i.exec(n.body || '');
+    if (hello && !del) return newsRow({ ...n, kind: 'member' }, true, compact).replace('<a class="news-row', `<a data-act="hello" data-name="${esc(hello[1])}" class="news-row`).replace(/<button class="icon-btn del"[^]*?<\/button>/, ICON.chev);
     if (compact) return `<a class="news-row mini ${n.kind}" href="${esc(href)}"><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || '📣'}</span>
         <span class="grow"><b>${esc(n.title)}</b><span class="news-line">${n.body ? esc(n.body) + ' · ' : ''}${shortAgo(n.created_at)}${n.audience === 'admins' ? ' · admins' : n.audience === 'moderators' ? ' · team' : ''}</span></span>${ICON.chev}</a>`;
     return `<a class="news-row ${n.kind}" href="${esc(href)}"><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || '📣'}</span>
@@ -1781,7 +1798,8 @@ function reqCard(r) {
     const ico = c => c.ok ? '✓' : c.warn || c.unk ? '!' : '✕';
     return `<div class="card req-card" data-id="${r.id}">
         <div class="row" style="gap:8px;align-items:flex-start"><div class="grow"><h3>${esc(r.full_name)}</h3>
-            <p class="small muted">${r.source === 'form' ? 'Join form' : 'App request'} · ${timeAgo(r.form_ts || r.created_at)}${r.on_app ? ' · signed in on the app' : ''}</p></div>
+            <p class="small muted">${r.source === 'form' ? 'Join form' : 'App request'} · ${timeAgo(r.form_ts || r.created_at)}${r.on_app ? ' · signed in on the app' : ''}</p>
+            ${r.updated_at && Date.now() - Date.parse(r.updated_at) < 3 * 864e5 ? `<span class="upd-tag">✏️ Updated ${timeAgo(r.updated_at)}</span>` : ''}</div>
             <span class="req-score ${all ? 'ok' : ''}">${cks.filter(c => c.ok).length}/4</span></div>
         <ul class="checks">${cks.map(c => c.k === 'vrn' && c.known ? `<li class="yes"><span class="ci">✓</span><span class="grow"><b>VRN verified</b><small><span class="vrn">${esc(r.vrn || r.member_vrn || '')}</span> · verified earlier, same VRN on their record</small></span></li>`
             : c.k === 'vrn' ? `<li class="${c.ok ? 'yes' : 'no'}"><label class="vrn-tick"><input type="checkbox" data-act="vrn-tick" data-id="${r.id}"${c.ok ? ' checked' : ''}><span class="ci">${ico(c)}</span>
@@ -1795,7 +1813,7 @@ function reqCard(r) {
             ${r.dob ? `<dt>Birthday</dt><dd>${fmtDayMonth(r.dob)}</dd>` : ''}<dt>Bike</dt><dd>${esc(r.bike || '–')}</dd>${r.blood_group ? `<dt>Blood group</dt><dd>${esc(r.blood_group)}</dd>` : ''}
             ${r.locality ? `<dt>Locality</dt><dd>${esc(r.locality)}</dd>` : ''}${r.hideout ? `<dt>Hometown</dt><dd>${esc(r.hideout)}</dd>` : ''}
             ${r.emergency_phone ? `<dt>Emergency</dt><dd>${esc(r.emergency_phone)}</dd>` : ''}${r.alt_phone ? `<dt>Alt. mobile</dt><dd>${esc(r.alt_phone)}</dd>` : ''}</dl>`}</details>
-        <div class="btns" style="margin-top:12px"><button class="btn ghost" data-act="reject" data-id="${r.id}">Reject</button><button class="btn" data-act="approve" data-id="${r.id}">Approve</button></div></div>`;
+        <div class="btns req-btns" style="margin-top:12px"><button class="btn ghost" data-act="ask" data-id="${r.id}" aria-label="Message ${esc(r.full_name)} on WhatsApp">💬 Message</button><button class="btn ghost" data-act="reject" data-id="${r.id}">Reject</button><button class="btn" data-act="approve" data-id="${r.id}">Approve</button></div></div>`;
 }
 /* Ready-made WhatsApp messages; the admin can edit them before sending (free: sent from the admin's own WhatsApp) */
 const APP_LINK = 'roninwb.in/app';
@@ -1808,9 +1826,26 @@ function waMsg(kind, x = {}) {
         rejected: `Hi ${first},\n\nThank you for your interest in Ronin Warriors of Bengal. We're sorry, we couldn't approve your registration this time${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'}\n\nIf you think this is a mistake, or things change, just reply here and we'll be happy to help.\n\nRide safe! 🙏\n– ${me}, RWB`,
         change_ok: `Hi ${first}! ✅ Your ${x.what || 'profile'} update in the RWB App is approved. Thanks for keeping your details up to date.\n– ${me}, RWB`,
         change_no: `Hi ${first}, we couldn't approve your ${x.what || 'profile'} update in the RWB App${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'} Just reply here if you'd like help with it. 🙏\n– ${me}, RWB`,
+        ask: `Hi ${first}! 👋\n\nThanks for registering with Ronin Warriors of Bengal. Before we approve you, could you please help us with:\n${(x.asks || []).map(a => '• ' + a).join('\n') || '• '}\n\n${x.on_app ? 'You can update your details in the RWB App (open it and tap Edit my details), or just reply here.' : 'You can edit your join form response (use the same email), or just reply here.'}\n\nThank you!\n– ${me}, RWB`,
+        invite: `Hi ${first}! 👋\n\nRWB now has its own free app for members: service records and reminders, mileage tracker, Motomart for used gear, events, guides and more.\n\n📲 Get it here: https://${APP_LINK}\nSign in with Google using the email you gave on the RWB join form.\n\n🎥 How to install:\nAndroid: ${INSTALL_ANDROID}\niPhone: ${INSTALL_IPHONE}\n\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
+        comeback: `Hi ${first}! 👋\n\nIt's ${me} from Ronin Warriors of Bengal. We miss you on the road! If you'd like to come back to RWB, just reply here or fill the join form again at roninwb.in.\n\nRide safe! 🏍️`,
         remind: `Hi ${first}! 👋\n\nA quick one from the RWB team: please complete your RWB profile.${x.rules ? '\n\n📜 Please read and agree to the RWB Terms & Conditions (Me → Terms & Conditions → Read & agree).' : ''}${x.missing?.length ? `\n\nMissing: ${x.missing.join(', ')}.` : ''}\n\nIt takes a minute in the RWB App: ${APP_LINK} → Me.${x.on_app ? '' : ' Sign in with Google using the email you gave on the join form.'}\n\nThank you! Explore. Evolve. Inspire.\n– ${me}, RWB`
     };
     return T[kind];
+}
+const INSTALL_ANDROID = 'https://roninwb.in/app/videos/install-android.mp4', INSTALL_IPHONE = 'https://roninwb.in/app/videos/install-iphone.mp4';
+/* Send a message to the RWB WhatsApp group: with the saved group link it's copied and the group opens (paste it);
+   otherwise WhatsApp's share screen opens with the message ready (long lists use the phone's share sheet). */
+async function toGroup(text) {
+    const link = state.settings?.wa_group_link;
+    if (link) {
+        try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
+        toast('Message copied. Paste it in the RWB group.');
+        setTimeout(() => openWA(link), 600);
+        return;
+    }
+    if (text.length > 1800 && navigator.share) { try { await navigator.share({ text }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+    openWA(waShare(text));
 }
 function tellOnWhatsApp(title, phone, text, done) {
     openSheet(title, `<p class="small muted" style="margin-bottom:8px">Sent from your own WhatsApp. Change anything you like first.</p>
@@ -1832,19 +1867,20 @@ function changeCard(c) {
             <span class="grow"><b>VRN verified</b><small><span class="vrn">${esc(c.new_value)}</span> · tick once you've checked it</small></span></label>
             <span class="vrn-tools"><button class="link-btn" data-act="copy-vrn" data-v="${esc(c.new_value)}">Copy</button><a class="link-btn" href="${PARIVAHAN}" target="_blank" rel="noopener">Parivahan ↗</a></span>
             ${c.vrn_other ? `<small class="dup">⚠ Same VRN as ${esc(c.vrn_other)}</small>` : ''}</li></ul>` : ''}
-        <div class="btns" style="margin-top:12px"><button class="btn ghost" data-act="chg-no" data-cid="${c.id}">${c.kind === 'tnc' ? 'Dismiss' : 'Reject'}</button><button class="btn" data-act="chg-ok" data-cid="${c.id}">${c.kind === 'tnc' ? 'Record it' : 'Approve'}</button></div></div>`;
+        <div class="btns req-btns" style="margin-top:12px"><button class="btn ghost" data-act="chg-msg" data-cid="${c.id}">💬 Message</button><button class="btn ghost" data-act="chg-no" data-cid="${c.id}">${c.kind === 'tnc' ? 'Dismiss' : 'Reject'}</button><button class="btn" data-act="chg-ok" data-cid="${c.id}">${c.kind === 'tnc' ? 'Record it' : 'Approve'}</button></div></div>`;
 }
 async function adminRequests() {
-    const [reqs, chg, inc] = await Promise.all([api.admin.requests(), api.admin.changes().catch(() => []), api.admin.incomplete().catch(() => null)]);
+    const [reqs, chg, inc, all] = await Promise.all([api.admin.requests(), api.admin.changes().catch(() => []), api.admin.incomplete().catch(() => null), state.adminMembers ? Promise.resolve(state.adminMembers) : api.admin.members().then(m => (state.adminMembers = m)).catch(() => [])]);
     const digest = () => `🛡️ RWB App: ${reqs.length + chg.length} waiting for approval\n${reqs.length ? `\nNew entries (${reqs.length}):\n${reqs.slice(0, 15).map(r => `• ${r.full_name} (${r.source === 'form' ? 'form' : 'app'})`).join('\n')}` : ''}${chg.length ? `\n\nProfile changes (${chg.length}):\n${chg.slice(0, 15).map(c => `• ${c.full_name}: ${CHANGE_TXT[c.kind]}`).join('\n')}` : ''}\n\nOpen: ${APP_LINK} → Home → Admin`;
     $('#admin-body').innerHTML = (reqs.length || chg.length ? `<button class="btn ghost block share-admins" data-act="digest">📣 Share this list to the admin WhatsApp group</button>` : '') + (reqs.length || chg.length ? `${reqs.length ? `<p class="small muted" style="margin-bottom:10px">New entries from the join form and the app. Check the 4 points, then approve. Nobody is a member until approved.</p>
         <div class="list">${reqs.map(reqCard).join('')}</div>` : ''}
         ${chg.length ? `<h2 class="group-title" style="margin-top:${reqs.length ? 22 : 0}px">Changes to approve</h2><p class="small muted" style="margin-bottom:10px">Members changed an important detail in their profile.</p><div class="list">${chg.map(changeCard).join('')}</div>` : ''}`
-        : '<div class="card empty"><b>All clear</b>Nothing waiting for approval.</div>') + (inc ? followUps(inc) : '');
+        : '<div class="card empty"><b>All clear</b>Nothing waiting for approval.</div>') + (inc ? followUps(inc, all) : '');
     const byCid = id => chg.find(c => c.id === Number(id));
-    if (inc) bindFollowUps(inc);
+    if (inc) bindFollowUps(inc, all);
     Object.assign(actions, {
         digest: () => openWA(waShare(digest())),
+        'chg-msg': b => { const c = byCid(b.dataset.cid); tellOnWhatsApp(`Message ${firstName(c)}`, c.phone, `Hi ${firstName(c)}! 👋 About your ${CHANGE_TXT[c.kind].toLowerCase()} update in the RWB App: \n\n– ${firstName(state.me)}, RWB`); },
         'chg-ok': b => { const c = byCid(b.dataset.cid); if ((c.kind === 'vrn' || c.kind === 'bike') && !c.vrn_verified && !confirmBox('The VRN isn\'t ticked as verified. Approve anyway?')) return;
             busy(b, async () => { await api.admin.decideChange(c.id, true); state.adminMembers = null; state.dir = null; toast(c.kind === 'tnc' ? 'Recorded' : 'Change approved'); await viewAdmin();
                 if (c.kind !== 'tnc') tellOnWhatsApp(`Let ${firstName(c)} know`, c.phone, waMsg('change_ok', { ...c, what: CHANGE_TXT[c.kind].toLowerCase() })); }); },
@@ -1867,45 +1903,97 @@ async function adminRequests() {
                 tellOnWhatsApp(`Let ${firstName(r)} know`, r.phone, waMsg(kind, r));
             });
         },
-        reject: b => rejectSheet(byId(b.dataset.id))
+        reject: b => rejectSheet(byId(b.dataset.id)),
+        ask: b => askSheet(byId(b.dataset.id))
     });
+    /* keep the list fresh while it's open: people may update their details after a message */
+    clearInterval(state.apprTimer);
+    state.apprTimer = setInterval(() => { if (location.hash.startsWith('#admin') && state.adminTab === 'requests' && document.visibilityState === 'visible' && !$('dialog#sheet[open]')) adminRequests(); else if (!location.hash.startsWith('#admin')) clearInterval(state.apprTimer); }, 30000);
     $('#admin-body').querySelectorAll('[data-act=vrn-tick]').forEach(cb => cb.onchange = async () => {
         const r = byId(cb.dataset.id);
         try { await api.admin.setReqVrn(r.id, cb.checked); await adminRequests(); toast(cb.checked ? 'VRN marked as verified' : 'VRN unmarked'); }
         catch (e) { cb.checked = !cb.checked; toast(e.message, true); }
     });
 }
-/* Follow-ups: members who haven't agreed to the Terms & Conditions, or have details missing */
-function followUps(inc) {
-    const rules = inc.filter(m => m.missing.includes('rules')), other = inc.filter(m => !m.missing.includes('rules'));
-    const row = m => `<div class="fu-row" data-mid="${m.id}"><div class="grow"><b>${esc(m.full_name)}</b>${m.on_app ? ' <span class="badge ok">On the app</span>' : ''}
-            <div class="fu-miss">${m.missing.map(x => `<span>${esc(x === 'rules' ? 'T&C' : x)}</span>`).join('')}</div>${m.reminded_at ? `<small class="muted">Reminded ${timeAgo(m.reminded_at)}</small>` : ''}</div>
-        <div class="fu-btns"><button class="btn sm wa" data-act="fu-wa" data-mid="${m.id}">WhatsApp</button>${m.missing.includes('rules') ? `<button class="btn sm ghost" data-act="fu-agree" data-mid="${m.id}">Agreed</button>` : ''}</div></div>`;
-    const block = (id, title, sub, list) => `<details class="fu card section" id="${id}"><summary><b>${title}</b> <span class="badge ${list.length ? 'orange' : ''}">${list.length}</span><span class="small muted">${sub}</span></summary>
-        ${list.length ? `<input class="search" type="search" placeholder="Search name" data-fu="${id}" style="margin:10px 0">${'<div class="fu-list"></div><button class="btn ghost block" data-more="' + id + '" hidden>Show more</button>'}` : '<p class="small muted" style="margin-top:8px">Everyone is done here.</p>'}</details>`;
+/* Follow-ups: Terms & Conditions, missing details, not on the app, and people who left — with a view filter */
+const FU_VIEWS = { app: 'On the app', all: 'Members', gone: 'Left / removed' };
+function followUps(inc, all) {
+    state.fuView ||= 'all';
     return `<h2 class="group-title" style="margin-top:24px">Follow-ups</h2>
-        <p class="small muted" style="margin-bottom:10px">Members on the app get an in-app reminder every Sunday. For everyone else, tap WhatsApp to send a ready-made reminder.</p>
-        ${block('fu-rules', 'Not agreed to the T&C', 'No “read carefully” answer on record, or they said no. Tap Agreed if they confirmed to you.', rules)}
-        ${block('fu-other', 'Missing details', 'Emergency contact, blood group, birthday, VRN or locality.', other)}
-        <button class="btn ghost block section" data-act="fu-remind">🔔 Send in-app reminders now (members on the app)</button>`;
+        <div class="seg fu-seg" role="tablist" aria-label="Follow-up view">${Object.entries(FU_VIEWS).map(([k, v]) => `<button role="tab" aria-selected="${state.fuView === k}" data-act="fu-view" data-v="${k}">${v}</button>`).join('')}</div>
+        <div id="fu-body"></div>`;
 }
-function bindFollowUps(inc) {
-    const rowHtml = m => `<div class="fu-row" data-mid="${m.id}"><div class="grow"><b>${esc(m.full_name)}</b>${m.on_app ? ' <span class="badge ok">On the app</span>' : ''}
-            <div class="fu-miss">${m.missing.map(x => `<span>${esc(x === 'rules' ? 'T&C' : x)}</span>`).join('')}</div>${m.reminded_at ? `<small class="muted">Reminded ${timeAgo(m.reminded_at)}</small>` : ''}</div>
-        <div class="fu-btns"><button class="btn sm wa" data-act="fu-wa" data-mid="${m.id}">WhatsApp</button>${m.missing.includes('rules') ? `<button class="btn sm ghost" data-act="fu-agree" data-mid="${m.id}">Agreed</button>` : ''}</div></div>`;
-    [['fu-rules', inc.filter(m => m.missing.includes('rules'))], ['fu-other', inc.filter(m => !m.missing.includes('rules'))]].forEach(([id, list]) => {
-        const box = $('#' + id); if (!box || !list.length) return;
-        let lim = 25, q = '';
-        const draw = () => { const hits = list.filter(m => !q || m.full_name.toLowerCase().includes(q)); box.querySelector('.fu-list').innerHTML = hits.slice(0, lim).map(rowHtml).join('') || '<p class="small muted">No one matches.</p>'; box.querySelector('[data-more]').hidden = hits.length <= lim; };
-        box.querySelector('[data-fu]').oninput = e => { q = e.target.value.trim().toLowerCase(); lim = 25; draw(); };
-        box.querySelector('[data-more]').onclick = () => { lim += 50; draw(); };
-        draw();
-    });
-    const byMid = id => inc.find(m => m.id === Number(id));
+function bindFollowUps(inc, all) {
+    const gone = (all || []).filter(isGone), notApp = (all || []).filter(m => !isGone(m) && !m.user_id);
+    const rowHtml = (m, kind) => `<div class="fu-row" data-mid="${m.id}"><div class="grow"><b>${esc(m.full_name)}</b>${m.on_app || m.user_id ? ' <span class="badge ok">On the app</span>' : ''}
+            ${kind === 'gone' ? `<div class="small muted">${esc(GONE_TXT?.[m.status] || 'Left')}${m.removed_at ? ' · ' + fmtDate(String(m.removed_at).slice(0, 10)) : ''}</div>` : kind === 'notapp' ? `<div class="small muted">${esc([m.vrn, m.locality].filter(Boolean).join(' · ') || 'Not on the app yet')}</div>`
+                : `<div class="fu-miss">${m.missing.map(x => `<span>${esc(x === 'rules' ? 'T&C' : x)}</span>`).join('')}</div>`}${m.reminded_at ? `<small class="muted">Reminded ${timeAgo(m.reminded_at)}</small>` : ''}</div>
+        <div class="fu-btns"><button class="btn sm wa" data-act="fu-wa" data-kind="${kind}" data-mid="${m.id}">WhatsApp</button>${kind === 'todo' && m.missing.includes('rules') ? `<button class="btn sm ghost" data-act="fu-agree" data-mid="${m.id}">Agreed</button>` : ''}</div></div>`;
+    const block = (id, title, sub, list, kind) => `<details class="fu card section" id="${id}"${list.length && list.length < 6 ? ' open' : ''}><summary><b>${title}</b> <span class="badge ${list.length ? 'orange' : ''}">${list.length}</span><span class="small muted">${sub}</span></summary>
+        ${list.length ? `<input class="search" type="search" placeholder="Search name" data-fu="${id}" style="margin:10px 0"><div class="fu-list"></div><button class="btn ghost block" data-more="${id}" hidden>Show more</button>` : '<p class="small muted" style="margin-top:8px">Nobody here.</p>'}</details>`;
+    const draw = () => {
+        const v = state.fuView, onApp = m => m.on_app;
+        const scope = v === 'app' ? inc.filter(onApp) : inc;
+        const tnc = scope.filter(m => m.missing.includes('rules')), other = scope.filter(m => !m.missing.includes('rules'));
+        const lists = v === 'gone' ? [['fu-gone', 'Left / removed', 'Say hello, or invite them back.', gone, 'gone']]
+            : [['fu-rules', 'Not agreed to the T&C', 'No “read carefully” answer on record, or they said no. Tap Agreed if they confirmed to you.', tnc, 'todo'],
+               ['fu-other', 'Missing details', 'Emergency contact, blood group, birthday, VRN or locality.', other, 'todo'],
+               ...(v === 'all' ? [['fu-notapp', 'Not on the app', 'Send them the app link with the Android and iPhone install videos.', notApp, 'notapp']] : [])];
+        $('#fu-body').innerHTML = `<p class="small muted" style="margin:10px 0">${v === 'gone' ? 'Members who left or were removed.' : 'Members on the app get an in-app reminder every Sunday. For everyone else, tap WhatsApp to send a ready-made reminder.'}</p>
+            ${lists.map(([id, t, sub, list, kind]) => block(id, t, sub, list, kind)).join('')}
+            ${v !== 'gone' ? `<button class="btn block section" data-act="fu-share">📣 Share all follow-ups to the RWB group</button>
+            <button class="btn ghost block" data-act="fu-remind" style="margin-top:8px">🔔 Send in-app reminders now (members on the app)</button>` : ''}
+            <details class="fu card section"><summary><b>RWB WhatsApp group link</b><span class="small muted">Optional. Lets members and admins open the group in one tap.</span></summary>
+                <form id="grp" style="margin-top:10px"><input name="link" type="url" placeholder="https://chat.whatsapp.com/…" value="${esc(state.settings?.wa_group_link || '')}">
+                <p class="small muted" style="margin:6px 0 10px">In WhatsApp: open the RWB group → tap its name → Invite via link → Copy link. Only members can see it in the app.</p>
+                <button class="btn block">Save link</button></form></details>`;
+        lists.forEach(([id, , , list, kind]) => {
+            const box = $('#' + id); if (!box || !list.length) return;
+            let lim = 25, q = '';
+            const paint = () => { const hits = list.filter(m => !q || m.full_name.toLowerCase().includes(q)); box.querySelector('.fu-list').innerHTML = hits.slice(0, lim).map(m => rowHtml(m, kind)).join('') || '<p class="small muted">No one matches.</p>'; box.querySelector('[data-more]').hidden = hits.length <= lim; };
+            box.querySelector('[data-fu]').oninput = e => { q = e.target.value.trim().toLowerCase(); lim = 25; paint(); };
+            box.querySelector('[data-more]').onclick = () => { lim += 50; paint(); };
+            paint();
+        });
+        $('#grp').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { const v = await api.admin.setSetting('wa_group_link', e.target.link.value); state.settings = { ...(state.settings || {}), wa_group_link: v || null }; toast(v ? 'Group link saved' : 'Group link removed'); }); };
+    };
+    draw();
+    const byMid = id => inc.find(m => m.id === Number(id)) || (all || []).find(m => m.id === Number(id));
+    const shareAll = () => {
+        const tnc = inc.filter(m => m.missing.includes('rules')), other = inc.filter(m => !m.missing.includes('rules'));
+        const firstNames = l => l.map(m => m.full_name).join(', ');
+        return `🏍️ *RWB App: a quick to-do for some of our warriors* 🙏\n`
+            + (tnc.length ? `\n📜 *Please agree to the RWB Terms & Conditions*\n(RWB App → Me → Terms & Conditions → Read & agree)\n${firstNames(tnc)}\n` : '')
+            + (other.length ? `\n✍️ *Please add your missing details* (RWB App → Me → Edit)\n${other.map(m => `• ${m.full_name}: ${m.missing.join(', ')}`).join('\n')}\n` : '')
+            + (notApp.length ? `\n📲 *Not on the RWB App yet?* Get it: https://${APP_LINK}\nSign in with the email you gave on the join form.\nAndroid guide: ${INSTALL_ANDROID}\niPhone guide: ${INSTALL_IPHONE}\n${firstNames(notApp)}\n` : '')
+            + `\nThank you! Explore. Evolve. Inspire.`;
+    };
     Object.assign(actions, {
-        'fu-wa': b => { const m = byMid(b.dataset.mid); openWA(waTo(m.phone, waMsg('remind', { ...m, rules: m.missing.includes('rules'), missing: m.missing.filter(x => x !== 'rules') }))); api.admin.markReminded(m.id).catch(() => {}); m.reminded_at = new Date().toISOString(); },
+        'fu-view': el => { state.fuView = el.dataset.v; document.querySelectorAll('.fu-seg [role=tab]').forEach(t => t.setAttribute('aria-selected', t === el)); draw(); },
+        'fu-wa': b => {
+            const m = byMid(b.dataset.mid), kind = b.dataset.kind;
+            const text = kind === 'notapp' ? waMsg('invite', m) : kind === 'gone' ? waMsg('comeback', m) : waMsg('remind', { ...m, rules: m.missing.includes('rules'), missing: m.missing.filter(x => x !== 'rules') });
+            openWA(waTo(m.phone, text));
+            if (kind !== 'gone') { api.admin.markReminded(m.id).catch(() => {}); m.reminded_at = new Date().toISOString(); }
+        },
         'fu-agree': b => { const m = byMid(b.dataset.mid); if (confirmBox(`Record that ${m.full_name} agreed to the RWB Terms & Conditions?`)) busy(b, async () => { await api.admin.setTnc(m.id, true); toast('Recorded'); adminRequests(); }); },
+        'fu-share': () => toGroup(shareAll()),
         'fu-remind': b => busy(b, async () => { const n = await api.admin.remindIncomplete(); toast(n ? `Reminder sent to ${n} member${n > 1 ? 's' : ''} on the app` : 'Everyone on the app was reminded in the last week'); adminRequests(); })
+    });
+}
+/* Ask the applicant for something before deciding (they can update their details; the card refreshes by itself) */
+function askSheet(r) {
+    const ASKS = ['Confirm your bike\'s VRN (registration number)', 'Share a photo of your RC', 'Confirm that you own a TVS Ronin', 'Agree to the RWB Terms & Conditions', 'Add an emergency contact number', 'Check your WhatsApp number'];
+    const pre = [!(r.vrn_verified || r.vrn_known) && ASKS[0], !r.has_ronin && ASKS[2], !(r.tnc === true || r.member_tnc === true) && ASKS[3], !r.emergency_phone && ASKS[4]].filter(Boolean);
+    openSheet(`Message ${firstName(r)}`, `<p class="small muted" style="margin-bottom:8px">Pick what you need from them. When they update their details, this card refreshes by itself.</p>
+        <div class="chips" id="ask-chips" style="margin-bottom:10px">${ASKS.map(a => `<button type="button" class="chip" aria-pressed="${pre.includes(a)}" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div>
+        <textarea id="wa-text" rows="11" style="font-size:.9rem;line-height:1.45"></textarea>
+        <button class="btn wa block" data-x="send" style="margin-top:10px">Send on WhatsApp</button>`, body => {
+        const ta = body.querySelector('#wa-text');
+        const draw = () => { ta.value = waMsg('ask', { ...r, asks: [...body.querySelectorAll('#ask-chips [aria-pressed=true]')].map(c => c.dataset.a) }); };
+        body.querySelectorAll('#ask-chips .chip').forEach(c => c.onclick = () => { c.setAttribute('aria-pressed', c.getAttribute('aria-pressed') !== 'true'); draw(); });
+        draw();
+        body.querySelector('[data-x=send]').onclick = () => { openWA(waTo(r.phone, ta.value)); closeSheet(); };
     });
 }
 function reasonSheet(title, quick, done) {
@@ -2553,6 +2641,7 @@ async function boot() {
         const status = await api.linkAccount();
         if (status !== 'member') return viewAccess(status, sess);
         state.me = await api.me();
+        api.settings().then(v => { state.settings = v || {}; }).catch(() => { state.settings = {}; });
         await load.news(true);
         await render();
     } catch (e) {

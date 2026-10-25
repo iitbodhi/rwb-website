@@ -961,3 +961,9 @@ details.fu summary .small{width:100%;font-weight:400}
 .tnc-doc li span{font-weight:700;color:var(--orange);font-size:.8rem;padding-top:1px}
 details.rules .tnc-doc{margin-top:10px}
 .tnc-link{display:block;margin:2px 0 6px;font-size:.84rem}
+/* approvals: message + updated tag; follow-up views */
+.req-btns{display:grid;grid-template-columns:auto 1fr 1fr;gap:8px}
+.req-btns .btn{padding-left:12px;padding-right:12px}
+.upd-tag{display:inline-block;margin-top:6px;font-size:.72rem;font-weight:700;padding:3px 9px;border-radius:99px;background:color-mix(in srgb,#3d86f0 18%,transparent);color:#3d86f0}
+.fu-seg{margin:8px 0 4px}
+#hello-t{display:grid;gap:6px}
