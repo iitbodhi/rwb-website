@@ -967,3 +967,14 @@ details.rules .tnc-doc{margin-top:10px}
 .upd-tag{display:inline-block;margin-top:6px;font-size:.72rem;font-weight:700;padding:3px 9px;border-radius:99px;background:color-mix(in srgb,#3d86f0 18%,transparent);color:#3d86f0}
 .fu-seg{margin:8px 0 4px}
 #hello-t{display:grid;gap:6px}
+/* tappable checks */
+.checks li.tap-chk{cursor:pointer;flex-wrap:wrap;transition:background .15s}
+.checks li.tap-chk:active{filter:brightness(.95)}
+.checks li .chk-edit{flex:none;color:var(--muted);font-size:1.2rem;line-height:1;margin-left:auto}
+.checks li.pend .ci{background:transparent;border:2px dashed var(--muted);color:transparent}
+.checks li.tap-chk .vrn-tools{margin:2px 0 0 36px}
+.chk-opts{display:grid;gap:8px}
+.chk-opt{display:grid;gap:2px;text-align:left;padding:12px 14px;border-radius:14px;border:1.5px solid var(--hair,var(--line));background:var(--surface,var(--card));color:var(--ink);font:inherit;cursor:pointer}
+.chk-opt b{font-size:.95rem}
+.chk-opt small{font-size:.78rem;color:var(--muted)}
+.chk-opt.on{border-color:var(--orange);background:color-mix(in srgb,var(--orange) 10%,var(--surface,var(--card)))}

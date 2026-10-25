@@ -261,8 +261,9 @@ async function supabaseApi(url, key) {
             async requests() {
                 const list = must(await sb.rpc('admin_list_requests'));
                 /* when each entry was last changed by the person (setup file 31) */
-                const u = await sb.from('link_requests').select('id, updated_at').eq('status', 'pending');
-                if (!u.error) { const m = new Map(u.data.map(x => [x.id, x.updated_at])); list.forEach(r => { r.updated_at = m.get(r.id) || null; }); }
+                let u = await sb.from('link_requests').select('id, updated_at, checks').eq('status', 'pending');
+                if (u.error) u = await sb.from('link_requests').select('id, updated_at').eq('status', 'pending');
+                if (!u.error) { const m = new Map(u.data.map(x => [x.id, x])); list.forEach(r => { const x = m.get(r.id) || {}; r.updated_at = x.updated_at || null; r.checks = x.checks || {}; }); }
                 return list;
             },
             approve: async id => must(await sb.rpc('admin_approve_request', { p_request_id: id })),
@@ -273,6 +274,7 @@ async function supabaseApi(url, key) {
             },
             changes: async () => must(await sb.rpc('admin_list_changes')),
             incomplete: async () => must(await sb.rpc('admin_incomplete')),
+            setCheck: async (id, check, value) => must(await sb.rpc('admin_set_request_check', { p_id: id, p_check: check, p_value: value })),
             setSetting: async (key, value) => must(await sb.rpc('admin_set_setting', { p_key: key, p_value: value || '' })),
             remindIncomplete: async () => must(await sb.rpc('remind_incomplete', { p_force: false })),
             markReminded: async id => must(await sb.rpc('admin_mark_reminded', { p_member_id: id })),
@@ -519,6 +521,14 @@ function demoApi() {
             async reject(id) { db.requests = db.requests.filter(x => x.id !== id); save(); return 'rejected'; },
             changes: () => wait((db.changes || []).filter(c => c.status === 'pending')),
             async setSetting(k, v) { db.groupLink = v || null; save(); return v || ''; },
+            async setCheck(id, k, v) {
+                const r = db.requests.find(x => x.id === id), c = r.checks ||= {};
+                if (k === 'tnc' && !('tnc_orig' in c)) c.tnc_orig = r.tnc ?? null;
+                if (v === 'auto') { delete c[k]; delete c['by_' + k]; } else { c[k] = v; c['by_' + k] = me().nickname || me().full_name.split(' ')[0]; }
+                if (k === 'vrn') r.vrn_verified = v === 'ok';
+                if (k === 'tnc') r.tnc = v === 'ok' ? true : v === 'no' ? false : c.tnc_orig;
+                save(); return c;
+            },
             incomplete: () => wait(db.members.filter(m => !m.status || m.status === 'active').map(m => ({ id: m.id, full_name: m.full_name, phone: m.phone, on_app: !!m.user_id, tnc_agreed: m.tnc_agreed ?? null, reminded_at: m.reminded_at || null,
                 missing: [m.tnc_agreed !== true && 'rules', !m.emergency_phone && 'emergency contact', !m.blood_group && 'blood group', !m.dob && 'date of birth', !m.vrn && 'VRN', !m.locality && 'locality'].filter(Boolean) })).filter(m => m.missing.length)),
             async remindIncomplete() { return db.members.filter(m => m.user_id && m.user_id !== 'me').length; },

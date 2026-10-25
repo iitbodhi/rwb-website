@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terms & Conditions · Ronin Warriors of Bengal</title>
+<meta name="description" content="The RWB Terms & Conditions every member of Ronin Warriors of Bengal agrees to.">
+<meta name="theme-color" content="#f7f7f5">
+<link rel="icon" href="assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,800;1,800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .policy{max-width:70ch;padding-bottom:4rem}
+  .policy h2{font-size:1.45rem;margin:2rem 0 .6rem;max-width:none}
+  .policy ol{list-style:none;padding:0;margin:0;display:grid;gap:.55rem}
+  .policy li{display:grid;grid-template-columns:2.6rem 1fr;gap:.25rem}
+  .policy li b{color:#d4501a}
+  .policy p{margin-bottom:.6rem}
+  .agree-box{margin-top:2.4rem;padding:1.1rem 1.2rem;border-radius:16px;background:#fbe9e0;border:1px solid #f1c3ad}
+  .agree-box p{margin:0}
+</style>
+</head>
+<body data-page="terms">
+<main>
+<section class="wrap page-head">
+  <h1>Terms &amp; Conditions</h1>
+  <p id="tnc-updated">Ronin Warriors of Bengal (RWB).</p>
+</section>
+<section class="wrap page-body policy" id="tnc">
+  <noscript><p>Please turn on JavaScript to read the RWB Terms &amp; Conditions, or ask an RWB admin for a copy.</p></noscript>
+</section>
+<section class="wrap page-body policy">
+  <div class="agree-box"><p><b>How to agree:</b> in the RWB App, open <b>Me → Terms &amp; Conditions → Read &amp; agree</b>. Or reply <b>“I agree”</b> to the RWB admin who sent you this link.</p></div>
+  <p style="margin-top:1.2rem">See also the <a href="privacy.html">Privacy Policy</a>.</p>
+</section>
+</main>
+<script src="js/terms.js"></script>
+<script>
+(function () {
+  var t = window.RWB_TNC; if (!t) return;
+  var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  document.getElementById('tnc-updated').textContent = 'Ronin Warriors of Bengal (RWB). Last updated ' + t.updated + '.';
+  document.getElementById('tnc').innerHTML = t.sections.map(function (s, i) {
+    var pts = s[1];
+    return '<h2>' + (i + 1) + '. ' + esc(s[0]) + '</h2>' + (pts.length > 1
+      ? '<ol>' + pts.map(function (p, j) { return '<li><b>' + (i + 1) + '.' + (j + 1) + '</b><span>' + esc(p) + '</span></li>'; }).join('') + '</ol>'
+      : '<p>' + esc(pts[0]) + '</p>');
+  }).join('');
+})();
+</script>
+<script src="js/data.js"></script>
+<script src="js/shared.js"></script>
+</body>
+</html>
