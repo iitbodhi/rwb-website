@@ -48,7 +48,13 @@ async function supabaseApi(url, key) {
         async signOut() { await sb.auth.signOut(); },
 
         linkAccount: async () => must(await sb.rpc('link_account')),
-        requestAccess: async f => must(await sb.rpc('request_access', { p_full_name: f.full_name, p_phone: f.phone, p_dob: f.dob || null, p_vrn: f.vrn || null, p_locality: f.locality || null, p_bike: f.bike || null, p_blood_group: f.blood_group || null, p_hideout: f.hideout || null, p_emergency_phone: f.emergency_phone || null, p_alt_phone: f.alt_phone || null, p_tnc: !!f.tnc })),
+        async requestAccess(f) {
+            const args = { p_full_name: f.full_name, p_phone: f.phone, p_dob: f.dob || null, p_vrn: f.vrn || null, p_locality: f.locality || null, p_bike: f.bike || null, p_blood_group: f.blood_group || null, p_hideout: f.hideout || null, p_emergency_phone: f.emergency_phone || null, p_alt_phone: f.alt_phone || null };
+            const r = await sb.rpc('request_access', { ...args, p_tnc: !!f.tnc });
+            /* database not updated yet (before setup file 29): send it the old way */
+            if (r.error && /could not find|function/i.test(r.error.message || '')) return must(await sb.rpc('request_access', args));
+            return must(r);
+        },
         myRequest: async () => must(await sb.from('link_requests').select('*').maybeSingle()),
         me: async () => must(await sb.from('members').select('*').eq('user_id', await uid()).single()),
         updateMe: async f => must(await sb.from('members').update(f).eq('user_id', await uid()).select().single()),
@@ -241,13 +247,19 @@ async function supabaseApi(url, key) {
             stats: async () => must(await sb.rpc('admin_stats')),
             requests: async () => must(await sb.rpc('admin_list_requests')),
             approve: async id => must(await sb.rpc('admin_approve_request', { p_request_id: id })),
-            reject: async (id, reason = '') => must(await sb.rpc('admin_reject_request', { p_request_id: id, p_reason: reason || null })),
+            async reject(id, reason = '') {
+                const r = await sb.rpc('admin_reject_request', { p_request_id: id, p_reason: reason || null });
+                if (r.error && /could not find|function/i.test(r.error.message || '')) return must(await sb.rpc('admin_reject_request', { p_request_id: id }));
+                return must(r);
+            },
             setReqVrn: async (id, v) => must(await sb.rpc('admin_set_request_vrn', { p_request_id: id, p_verified: v })),
             setVrnVerified: async (memberId, slot, v) => must(await sb.rpc('admin_set_vrn_verified', { p_member_id: memberId, p_slot: slot, p_verified: v })),
             async members() {
                 const all = []; let from = 0;
                 for (;;) {   /* fetch in pages of 1000 (Supabase's default limit) */
-                    const page = must(await sb.from('members').select('*, member_bikes(slot, vrn, model, verified)').order('full_name').range(from, from + 999));
+                    let res = await sb.from('members').select('*, member_bikes(slot, vrn, model, verified)').order('full_name').range(from, from + 999);
+                    if (res.error) res = await sb.from('members').select('*').order('full_name').range(from, from + 999);   /* before setup file 29 */
+                    const page = must(res);
                     all.push(...page); if (page.length < 1000) return all; from += 1000;
                 }
             },
