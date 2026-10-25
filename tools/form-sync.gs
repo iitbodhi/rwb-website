@@ -14,6 +14,8 @@
  *   b) Choose "setup" in the function list → Run → allow access. (Installs the form and edit triggers.)
  *   c) Deploy → Manage deployments → ✏️ → Version: New version → Deploy.
  *   d) Optional: run "addMissingFromApp" once to label every row's status and add anyone missing.
+ * The app's join form copies the Google Form (questions, choices, required answers, the "read carefully" part).
+ * It updates by itself every hour; after editing the form, run "publishForm" to update the app straight away.
  */
 const SUPABASE_URL = 'https://hcowcybshljgkeixudry.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhjb3djeWJzaGxqZ2tlaXh1ZHJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3NDI2MjMsImV4cCI6MjEwODMxODYyM30.LLYjaairRQZ3-Ddwo9kschTeVXjEv84n45RrqEUhi0g';
@@ -46,11 +48,13 @@ const EDITABLE = ['full_name', 'dob', 'phone', 'email', 'vrn', 'bike', 'blood_gr
 /** Run once (and again after updating this file). Installs the automatic triggers. */
 function setup() {
   const ss = SpreadsheetApp.getActive();
-  ScriptApp.getProjectTriggers().filter(t => ['onFormSubmitSync', 'onSheetEdit'].includes(t.getHandlerFunction())).forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.getProjectTriggers().filter(t => ['onFormSubmitSync', 'onSheetEdit', 'publishForm'].includes(t.getHandlerFunction())).forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('onFormSubmitSync').forSpreadsheet(ss).onFormSubmit().create();
   ScriptApp.newTrigger('onSheetEdit').forSpreadsheet(ss).onEdit().create();
+  ScriptApp.newTrigger('publishForm').timeBased().everyHours(1).create();
   columns_(responsesSheet_());
-  console.log('Ready: new form entries go to the approval list, and edits here update the app.');
+  publishForm();
+  console.log('Ready: new form entries go to the approval list, edits here update the app, and the app shows the same join form.');
 }
 
 /** Runs by itself for every new form submission: the entry waits for an admin in the app. */
@@ -59,8 +63,12 @@ function onFormSubmitSync(e) {
   const col = columns_(sheet);
   const heads = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const row = sheet.getRange(rowNo, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const res = send_([toMember_(heads, row)]);
-  if (String(res[0]) === 'pending') sheet.getRange(rowNo, col.status + 1).setValue(ST.waiting);
+  const m = toMember_(heads, row);
+  const res = send_([m]);
+  if (String(res[0]) === 'pending') {
+    sheet.getRange(rowNo, col.status + 1).setValue(ST.waiting);
+    UrlFetchApp.fetchAll([rpc_('sheet_upsert_member_answers', { p_secret: SYNC_SECRET, p_phone: m.phone, p_answers: answers_(heads, row) })]);
+  }
   console.log('New form entry: ' + res.join(', '));
 }
 
@@ -154,6 +162,49 @@ function toMember_(heads, row) {
     joined_at: v('joined_at') instanceof Date ? Utilities.formatDate(v('joined_at'), 'Asia/Kolkata', "yyyy-MM-dd'T'HH:mm:ssXXX") : ''
   };
 }
+/* Every answer on a row, by question title (what admins see under "All answers") */
+function answers_(heads, row) {
+  const skip = /^(timestamp|added via|updated in app|app ·)/i, out = {};
+  heads.forEach((h, i) => {
+    const t = String(h).trim(); let v = row[i];
+    if (!t || skip.test(t) || v === '' || v == null) return;
+    if (v instanceof Date) v = Utilities.formatDate(v, 'Asia/Kolkata', /date of birth/i.test(t) ? 'dd/MM/yyyy' : 'dd/MM/yyyy HH:mm');
+    out[t] = String(v);
+  });
+  return out;
+}
+
+/**
+ * Sends the join form's questions to the app, so the app's join form is the same: pages, titles, help text,
+ * choices, required answers and the "read carefully" agreement. Runs every hour by itself (and from setup).
+ * Edited the form? Run "publishForm" once to update the app straight away.
+ */
+function publishForm() {
+  const form = FormApp.openById(FORM_ID), T = FormApp.ItemType, items = [];
+  const typed = it => ({ [T.TEXT]: () => it.asTextItem(), [T.PARAGRAPH_TEXT]: () => it.asParagraphTextItem(), [T.MULTIPLE_CHOICE]: () => it.asMultipleChoiceItem(),
+    [T.LIST]: () => it.asListItem(), [T.CHECKBOX]: () => it.asCheckboxItem(), [T.DATE]: () => it.asDateItem(), [T.SCALE]: () => it.asScaleItem() })[it.getType()];
+  form.getItems().forEach(it => {
+    const type = String(it.getType()), base = { type: type, title: it.getTitle(), help: it.getHelpText() || '' };
+    if (it.getType() === T.PAGE_BREAK || it.getType() === T.SECTION_HEADER) { items.push(base); return; }
+    const make = typed(it); if (!make) return;             // images, videos and grids are left out
+    const q = make();
+    base.required = !!q.isRequired();
+    if (q.getChoices) base.choices = q.getChoices().map(c => {
+      let nav = '';
+      try { const n = c.getPageNavigationType(); nav = n === FormApp.PageNavigationType.SUBMIT ? 'submit' : ''; } catch (e) { /* no navigation */ }
+      return { value: c.getValue(), ends: nav === 'submit' };
+    });
+    if (it.getType() === T.MULTIPLE_CHOICE || it.getType() === T.CHECKBOX) { try { base.other = q.hasOtherOption(); } catch (e) { /* ignore */ } }
+    if (it.getType() === T.DATE) { try { base.year = q.includesYear(); } catch (e) { base.year = true; } }
+    if (it.getType() === T.SCALE) { base.low = q.getLowerBound(); base.high = q.getUpperBound(); }
+    items.push(base);
+  });
+  let collects = true; try { collects = form.collectsEmail(); } catch (e) { /* ignore */ }
+  const payload = { title: form.getTitle(), description: form.getDescription() || '', collectsEmail: collects, items: items, updated: new Date().toISOString() };
+  const r = UrlFetchApp.fetchAll([rpc_('sheet_set_join_form', { p_secret: SYNC_SECRET, p_form: payload })])[0];
+  console.log('Join form sent to the app (' + items.length + ' items): ' + r.getContentText());
+}
+
 /* The app's own columns on a row: VRN verified and bikes 2 and 3 */
 function extras_(col, row) {
   const t = k => col[k] === undefined ? '' : String(row[col[k]] || '').replace(/\s+/g, ' ').trim();
@@ -203,7 +254,11 @@ function doPost(e) {
     const find = p => { const i = p ? phones.lastIndexOf(String(p).replace(/\D/g, '').slice(-10)) : -1; return i < 0 ? 0 : i + 2; };
     const rowNo = find(body.old_phone) || find(m.phone);
     const vals = sheetValues_(m), app = appValues_(m);
+    const heads = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+    const extra = {};   // answers to other form questions, written into the column with the same title
+    Object.keys(m.answers || {}).forEach(t => { const i = heads.indexOf(String(t).trim()); if (i >= 0 && !Object.values(col).includes(i)) extra[i] = m.answers[t]; });
     if (rowNo) {
+      Object.keys(extra).forEach(i => { if (extra[i] !== '' && extra[i] != null) sheet.getRange(rowNo, +i + 1).setValue(extra[i]); });
       /* form answers: only filled-in values are written, so answers already in the sheet are never blanked */
       Object.keys(vals).forEach(k => { if (col[k] !== undefined && vals[k] !== '') sheet.getRange(rowNo, col[k] + 1).setValue(vals[k]); });
       /* the app's own columns always follow the app */
@@ -214,6 +269,7 @@ function doPost(e) {
     const row = new Array(sheet.getLastColumn()).fill('');
     Object.keys(vals).forEach(k => { if (col[k] !== undefined) row[col[k]] = vals[k]; });
     Object.keys(app).forEach(k => { if (col[k] !== undefined) row[col[k]] = app[k]; });
+    Object.keys(extra).forEach(i => { row[+i] = extra[i]; });
     if (col.joined_at !== undefined) row[col.joined_at] = m.joined_at ? new Date(m.joined_at) : new Date();
     row[col.added] = 'RWB App';
     sheet.appendRow(row);

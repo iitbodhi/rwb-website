@@ -48,9 +48,21 @@ async function supabaseApi(url, key) {
         async signOut() { await sb.auth.signOut(); },
 
         linkAccount: async () => must(await sb.rpc('link_account')),
+        joinForm: async () => must(await sb.rpc('join_form')),
+        myPrefill: async () => must(await sb.rpc('my_prefill')),
+        myChanges: async () => must(await sb.from('change_requests').select('kind, slot, new_value, new_model, status, reject_reason, created_at, decided_at').order('created_at', { ascending: false }).limit(20)),
+        async requestChange(kind, value, slot = null, model = null) {
+            const r = await sb.rpc('request_change', { p_kind: kind, p_value: value ?? '', p_slot: slot, p_model: model });
+            if (r.error && /could not find|function/i.test(r.error.message || '')) {   /* before setup file 30: the old way */
+                if (kind === 'vrn') return must(await sb.from('members').update({ vrn: value, bike: model }).eq('user_id', await uid()).select().single()) && 'saved';
+                throw new Error('Please ask an RWB admin to change this for now.');
+            }
+            return must(r);
+        },
         async requestAccess(f) {
             const args = { p_full_name: f.full_name, p_phone: f.phone, p_dob: f.dob || null, p_vrn: f.vrn || null, p_locality: f.locality || null, p_bike: f.bike || null, p_blood_group: f.blood_group || null, p_hideout: f.hideout || null, p_emergency_phone: f.emergency_phone || null, p_alt_phone: f.alt_phone || null };
-            const r = await sb.rpc('request_access', { ...args, p_tnc: !!f.tnc });
+            let r = await sb.rpc('request_access', { ...args, p_tnc: !!f.tnc, p_answers: f.answers || null });
+            if (r.error && /could not find|function/i.test(r.error.message || '')) r = await sb.rpc('request_access', { ...args, p_tnc: !!f.tnc });
             /* database not updated yet (before setup file 29): send it the old way */
             if (r.error && /could not find|function/i.test(r.error.message || '')) return must(await sb.rpc('request_access', args));
             return must(r);
@@ -252,6 +264,9 @@ async function supabaseApi(url, key) {
                 if (r.error && /could not find|function/i.test(r.error.message || '')) return must(await sb.rpc('admin_reject_request', { p_request_id: id }));
                 return must(r);
             },
+            changes: async () => must(await sb.rpc('admin_list_changes')),
+            setChangeVrn: async (id, v) => must(await sb.rpc('admin_set_change_vrn', { p_id: id, p_verified: v })),
+            decideChange: async (id, ok, reason = '') => must(await sb.rpc('admin_decide_change', { p_id: id, p_approve: ok, p_reason: reason || null })),
             setReqVrn: async (id, v) => must(await sb.rpc('admin_set_request_vrn', { p_request_id: id, p_verified: v })),
             setVrnVerified: async (memberId, slot, v) => must(await sb.rpc('admin_set_vrn_verified', { p_member_id: memberId, p_slot: slot, p_verified: v })),
             async members() {
@@ -314,7 +329,7 @@ function demoApi() {
         const requests = [
             { id: 1, source: 'app', email: 'newrider@example.com', full_name: 'Kunal Das', phone: '9000000010', dob: '1998-08-21', vrn: 'WB 26 KL 3333', bike: 'TVS Ronin 225', blood_group: 'O+', locality: 'Kalyani', emergency_phone: '9000000077', created_at: daysAgo(1), match_member_id: null, match_name: null, match_linked: false, tnc: true, vrn_verified: false, on_app: true, check_entry: 'new', has_ronin: true, vrn_other: null },
             { id: 2, source: 'form', email: 'riya@example.com', full_name: 'Riya Basu', phone: '9000000011', dob: '1996-04-02', vrn: 'WB 02 AB 1234', bike: 'Royal Enfield Hunter', blood_group: 'A+', locality: 'Behala', emergency_phone: '9000000078', created_at: daysAgo(0), match_member_id: null, match_name: null, match_linked: false, tnc: true, vrn_verified: false, on_app: false, check_entry: 'new', has_ronin: false, vrn_other: 'Demo Rider' },
-            { id: 3, source: 'form', email: '', full_name: 'Sourav Paul', phone: '9000000005', dob: '1993-02-10', vrn: 'WB 12 IJ 2222', bike: 'TVS Ronin 225', blood_group: 'B+', locality: 'Barasat', emergency_phone: '9000000079', created_at: daysAgo(0), match_member_id: 5, match_name: 'Sourav Paul', match_linked: false, match_status: 'active', member_since: '2025-03-14', tnc: null, vrn_verified: true, on_app: false, check_entry: 'existing', has_ronin: true, vrn_other: null }];
+            { id: 3, source: 'app', email: 'sourav.p@gmail.com', full_name: 'Sourav Paul', phone: '9000000005', dob: '1993-02-10', vrn: 'WB 12 IJ 2222', bike: 'TVS Ronin 225', blood_group: 'B+', locality: 'Barasat', emergency_phone: '9000000079', created_at: daysAgo(0), match_member_id: 5, match_name: 'Sourav Paul', match_linked: false, match_status: 'active', member_since: '2025-03-14', tnc: null, member_tnc: true, vrn_verified: false, vrn_known: true, member_vrn: 'WB 12 IJ 2222', on_app: true, check_entry: 'existing', has_ronin: true, vrn_other: null }];
         const pic = (bg, label) => 'demo:data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600"><rect width="100%" height="100%" fill="${bg}"/><text x="50%" y="52%" text-anchor="middle" font-family="sans-serif" font-size="54" font-weight="700" fill="#fff">${label}</text></svg>`);
         const L = (id, o) => ({ id, user_id: 'u2', size: '', age: '', condition: 'Good', reason: '', details: '', seller_name: 'Arjun Sen', seller_phone: '9000000002', status: 'live', reject_reason: null, created_at: daysAgo(id), published_at: daysAgo(id), ...o });
         const listings = [
@@ -355,8 +370,18 @@ function demoApi() {
         me: () => wait(me()),
         async updateMe(f) { Object.assign(me(), f); save(); return wait(me()); },
         async setAvatar(file) { me().avatar_url = file ? await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); }) : null; save(); return wait(me()); },
+        joinForm: () => wait(window.DEMO_JOIN_FORM || null),
+        myPrefill: () => wait(null),
+        myChanges: () => wait((db.changes || []).filter(c => c.member_id === me().id).slice().reverse()),
+        async requestChange(kind, value, slot = null, model = null) {
+            const m = me(); db.changes = (db.changes || []).filter(c => !(c.member_id === m.id && c.kind === kind && (c.slot || 0) === (slot || 0) && c.status === 'pending'));
+            if (kind === 'bike' && !value) { m.member_bikes = (m.member_bikes || []).filter(b => b.slot !== slot); save(); return 'removed'; }
+            if (kind === 'tnc' && value === 'agree') { m.tnc_agreed = true; save(); return 'saved'; }
+            db.changes.push({ id: nid(), member_id: m.id, full_name: m.full_name, phone: m.phone, kind, slot, new_value: kind === 'phone' ? value.replace(/\D/g, '').slice(-10) : kind === 'vrn' || kind === 'bike' ? value.toUpperCase() : value, new_model: model, old_value: kind === 'name' ? m.full_name : kind === 'phone' ? m.phone : kind === 'vrn' ? [m.vrn, m.bike].filter(Boolean).join(' · ') : kind === 'tnc' ? 'agree' : null, vrn_verified: false, status: 'pending', created_at: new Date().toISOString(), on_app: true });
+            save(); return 'pending';
+        },
         myBikes: () => wait((me().member_bikes || []).slice().sort((a, b) => a.slot - b.slot)),
-        async saveBike(slot, vrn, model, mid = null) { const m = mid ? db.members.find(x => x.id === mid) : me(); m.member_bikes = (m.member_bikes || []).filter(b => b.slot !== slot); if (vrn) m.member_bikes.push({ slot, vrn: vrn.toUpperCase(), model: model || null, verified: false }); save(); return vrn ? 'saved' : 'removed'; },
+        async saveBike(slot, vrn, model, mid = null) { if (!mid) return this.requestChange('bike', vrn, slot, model); const m = db.members.find(x => x.id === mid); m.member_bikes = (m.member_bikes || []).filter(b => b.slot !== slot); if (vrn) m.member_bikes.push({ slot, vrn: vrn.toUpperCase(), model: model || null, verified: false }); save(); return vrn ? 'saved' : 'removed'; },
         directory: () => wait(db.members.filter(m => !m.status || m.status === 'active').map(m => ({ id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url, bike: m.bike, vrn: m.vrn, vrn_verified: !!m.vrn_verified, bikes: m.member_bikes || null, locality: m.locality, role: m.role, phone: ['superadmin', 'admin', 'coordinator'].includes(m.role) ? m.phone : null, on_app: !!m.user_id, avg_kmpl: m.user_id === 'me' ? m.avg_kmpl : ({ 2: 41.9, 3: 44.6, 4: 36.8, 5: 38.2 })[m.id] ?? null })).sort((a, b) => a.full_name.localeCompare(b.full_name))),
         async boards() {
             const myKm = Math.max(0, me().odo_km || 0, ...db.fuel.map(f => f.odometer_km), ...db.services.map(x => x.odometer_km));
@@ -479,6 +504,14 @@ function demoApi() {
                 db.requests = db.requests.filter(x => x.id !== id); save(); return 'approved';
             },
             async reject(id) { db.requests = db.requests.filter(x => x.id !== id); save(); return 'rejected'; },
+            changes: () => wait((db.changes || []).filter(c => c.status === 'pending')),
+            async setChangeVrn(id, v) { const c = db.changes.find(x => x.id === id); c.vrn_verified = v; save(); return v; },
+            async decideChange(id, ok, reason) {
+                const c = db.changes.find(x => x.id === id), m = db.members.find(x => x.id === c.member_id);
+                if (ok) { if (c.kind === 'name') m.full_name = c.new_value; else if (c.kind === 'phone') m.phone = c.new_value; else if (c.kind === 'vrn') Object.assign(m, { vrn: c.new_value, bike: c.new_model || m.bike, vrn_verified: c.vrn_verified });
+                    else if (c.kind === 'bike') { m.member_bikes = (m.member_bikes || []).filter(b => b.slot !== c.slot); m.member_bikes.push({ slot: c.slot, vrn: c.new_value, model: c.new_model, verified: c.vrn_verified }); } else if (c.kind === 'tnc') m.tnc_agreed = false; }
+                Object.assign(c, { status: ok ? 'approved' : 'rejected', reject_reason: ok ? null : reason, decided_at: new Date().toISOString() }); save(); return c.status;
+            },
             async setReqVrn(id, v) { const r = db.requests.find(x => x.id === id); if (r) r.vrn_verified = v; save(); return v; },
             async setVrnVerified(mid, slot, v) { const m = db.members.find(x => x.id === mid); if (slot === 1) m.vrn_verified = v; else { const b = (m.member_bikes || []).find(x => x.slot === slot); if (b) b.verified = v; } save(); return v; },
             members: () => wait([...db.members].sort((a, b) => a.full_name.localeCompare(b.full_name))),

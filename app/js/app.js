@@ -213,7 +213,8 @@ function joinFields(v = {}, mode = 'join') {
     v = v || {};
     const need = k => mode === 'admin' ? k === 'full_name' || k === 'phone' : JOIN_REQUIRED.includes(k);
     const rq = k => need(k) ? ' required' : '';
-    const L = (k, title, input, hint = '') => `<label><span>${title}${need(k) ? ' <span class="req">*</span>' : ''}</span>${input}${hint ? `<small class="hint">${hint}</small>` : ''}</label>`;
+    const L = (k, title, input, hint = '') => `<label><span>${esc(formTitle(k, title))}${need(k) ? ' <span class="req">*</span>' : ''}</span>${input}${hint ? `<small class="hint">${hint}</small>` : ''}</label>`;
+    const APPROVE = mode === 'me' ? '<span class="needs-ok">Changes need an admin\'s approval</span>' : '';
     const val = k => esc(v[k] || '');
     const tel = (k, ph) => `<input name="${k}" inputmode="tel" autocomplete="off" placeholder="${ph}"${rq(k)} value="${val(k)}">`;
     const sel = (k, opts, cur) => {
@@ -222,13 +223,13 @@ function joinFields(v = {}, mode = 'join') {
     };
     const dob = v.dob && !String(v.dob).startsWith('1904') ? String(v.dob).slice(0, 10) : '';
     return [
-        mode !== 'me' ? L('full_name', 'Full Name', `<input name="full_name" autocomplete="name"${rq('full_name')} value="${val('full_name')}">`) : '',
+        L('full_name', 'Full Name', `<input name="full_name" autocomplete="name"${rq('full_name')} value="${val('full_name')}">`, APPROVE),
         mode !== 'join' ? L('nickname', 'Nickname', `<input name="nickname" maxlength="40" value="${val('nickname')}">`, 'Optional, only used in the app') : '',
         L('dob', 'Date of Birth', `<input type="date" name="dob" max="${todayISO()}"${rq('dob')} value="${esc(dob)}">`, v.dob && !dob && mode === 'me' ? 'Only your birthday was saved so far. Please add the year too.' : ''),
-        mode !== 'me' ? L('phone', 'WhatsApp No.', tel('phone', '10-digit number'), mode === 'join' ? 'The number you\'re in the RWB WhatsApp group with' : '') : '',
+        L('phone', 'WhatsApp No.', tel('phone', '10-digit number'), mode === 'join' ? 'The number you\'re in the RWB WhatsApp group with' : APPROVE),
         L('alt_phone', 'Mobile No. (alternative)', tel('alt_phone', 'Optional')),
         L('bike', 'Do you own a Ronin bike?', sel('bike', RONIN, v.bike || (mode === 'join' ? 'TVS Ronin 225' : ''))),
-        L('vrn', 'VRN please', `<input name="vrn" autocapitalize="characters" placeholder="WB 02 AB 1234"${rq('vrn')} value="${val('vrn')}">`, 'Your Ronin\'s registration number'),
+        L('vrn', 'VRN please', `<input name="vrn" autocapitalize="characters" placeholder="WB 02 AB 1234"${rq('vrn')} value="${val('vrn')}">`, mode === 'me' ? 'Your main bike. ' + APPROVE : 'Your Ronin\'s registration number'),
         L('blood_group', 'Blood group', sel('blood_group', BLOOD.map(b => [b, b]), normBlood(v.blood_group))),
         L('locality', 'Current Locality', `<input name="locality" placeholder="Area, city"${rq('locality')} value="${val('locality')}">`),
         L('hideout', 'Permanent Hideout', `<input name="hideout" placeholder="Home town"${rq('hideout')} value="${val('hideout')}">`),
@@ -284,6 +285,118 @@ function viewSignIn() {
     actions = { google: b => busy(b, () => api.signIn()) };
 }
 
+/* =================== The join form, exactly as the RWB Google Form =================== */
+/* The sheet's script publishes the form's questions; the app shows the same pages, titles, help text, choices and
+   required answers. Answers to the questions the app knows also fill the member record; every answer is kept. */
+const FORM_KEYS = [['full_name', /^full name/i], ['dob', /^date of birth/i], ['phone', /^whatsapp no/i], ['vrn', /^vrn/i], ['blood_group', /^blood group/i],
+    ['locality', /^current locality/i], ['hideout', /^permanent hideout/i], ['emergency_phone', /^in case of emergency/i], ['alt_phone', /^mobile no\.? ?\(alternative\)/i],
+    ['bike', /^do you own a ronin/i], ['tnc', /read carefully|agree|terms|t\s*&\s*c|tnc|rules|declar|consent/i]];
+const formKey = title => (FORM_KEYS.find(([, re]) => re.test(String(title || '').trim())) || [])[0] || null;
+const PHONE_KEYS = ['phone', 'emergency_phone', 'alt_phone'];
+const isAgree = v => /(agree|understood|accept|yes|i do)/i.test(v || '') && !/(don'?t|do not|not agree|disagree|^no\b)/i.test(v || '');
+const roninAnswer = v => /^(yes|yeah|yep)/i.test(String(v || '').trim()) ? 'TVS Ronin 225' : String(v || '').trim();
+let joinFormDef;   // loaded once
+async function loadJoinForm() { if (joinFormDef === undefined) joinFormDef = await api.joinForm().catch(() => null); return joinFormDef; }
+const formTitle = (key, fallback) => (joinFormDef?.items || []).find(i => i.type !== 'PAGE_BREAK' && i.type !== 'SECTION_HEADER' && formKey(i.title) === key)?.title || fallback;
+
+/* the value to show for a question, from what RWB already knows about this person */
+function prefillFor(item, known) {
+    const k = formKey(item.title), ans = known?.answers || {};
+    if (ans[item.title] != null) return String(ans[item.title]);
+    if (!k || k === 'tnc' || !known) return '';
+    let v = known[k]; if (v == null) return '';
+    v = String(v);
+    if (k === 'dob') return v.startsWith('1904') ? '' : v.slice(0, 10);
+    if (item.choices) {
+        const norm = x => String(x).toLowerCase().replace(/[^a-z0-9+-]/g, '');
+        if (k === 'bike' && /ronin/i.test(v)) return (item.choices.find(c => /^(yes|yeah|yep)/i.test(c.value)) || {}).value || v;
+        return (item.choices.find(c => norm(c.value) === norm(v)) || {}).value || '';
+    }
+    return v;
+}
+function formItemHtml(item, i, val) {
+    const k = formKey(item.title), name = `q${i}`, req = item.required ? ' required' : '';
+    const head = `<span class="fq-title">${esc(item.title)}${item.required ? ' <span class="req">*</span>' : ''}</span>${item.help ? `<span class="fq-help">${esc(item.help)}</span>` : ''}`;
+    if (item.type === 'MULTIPLE_CHOICE' || item.type === 'CHECKBOX') {
+        const multi = item.type === 'CHECKBOX', vals = multi ? String(val || '').split(/,\s*/) : [val];
+        return `<fieldset class="fq${k === 'tnc' ? ' fq-tnc' : ''}" data-i="${i}"${item.required ? ' data-req="1"' : ''}><legend>${head}</legend>${item.choices.map(c => `<label class="fq-choice"><input type="${multi ? 'checkbox' : 'radio'}" name="${name}" value="${esc(c.value)}"${vals.includes(c.value) ? ' checked' : ''}${c.ends ? ' data-ends="1"' : ''}><span>${esc(c.value)}</span></label>`).join('')}</fieldset>`;
+    }
+    if (item.type === 'LIST') return `<label class="fq" data-i="${i}">${head}<select name="${name}"${req}><option value="">Choose</option>${item.choices.map(c => `<option${c.value === val ? ' selected' : ''}>${esc(c.value)}</option>`).join('')}</select></label>`;
+    if (item.type === 'DATE') return `<label class="fq" data-i="${i}">${head}<input type="date" name="${name}" max="${todayISO()}"${req} value="${esc(val)}"></label>`;
+    if (item.type === 'PARAGRAPH_TEXT') return `<label class="fq" data-i="${i}">${head}<textarea name="${name}" rows="3"${req}>${esc(val)}</textarea></label>`;
+    if (item.type === 'SCALE') return `<label class="fq" data-i="${i}">${head}<select name="${name}"${req}><option value="">Choose</option>${Array.from({ length: (item.high || 5) - (item.low || 1) + 1 }, (_, j) => (item.low || 1) + j).map(n => `<option${String(n) === val ? ' selected' : ''}>${n}</option>`).join('')}</select></label>`;
+    const extra = PHONE_KEYS.includes(k) ? ' inputmode="tel" autocomplete="off"' : k === 'vrn' ? ' autocapitalize="characters"' : k === 'full_name' ? ' autocomplete="name"' : '';
+    return `<label class="fq" data-i="${i}">${head}<input name="${name}"${extra}${req} value="${esc(val)}"></label>`;
+}
+/* the form split into pages at each page break (like Google Forms) */
+function formPages(def) {
+    const pages = [{ title: def.title, help: def.description, items: [] }];
+    def.items.forEach((it, i) => {
+        if (it.type === 'PAGE_BREAK') pages.push({ title: it.title, help: it.help, items: [] });
+        else pages.at(-1).items.push({ ...it, i });
+    });
+    return pages.filter((p, n) => n === 0 || p.items.length);
+}
+function readForm(def, form) {
+    const fd = new FormData(form), out = { answers: {} };
+    def.items.forEach((it, i) => {
+        if (it.type === 'PAGE_BREAK' || it.type === 'SECTION_HEADER') return;
+        const v = (it.type === 'CHECKBOX' ? fd.getAll(`q${i}`).join(', ') : String(fd.get(`q${i}`) ?? '')).replace(/\s+/g, ' ').trim();
+        if (v) out.answers[it.title] = v;
+        const k = formKey(it.title); if (!k) return;
+        if (k === 'tnc') out.tnc = isAgree(v);
+        else if (k === 'bike') out.bike = roninAnswer(v);
+        else if (k === 'vrn') out.vrn = v.toUpperCase();
+        else out[k] = v;
+    });
+    if (!def.items.some(it => formKey(it.title) === 'tnc')) out.tnc = !!form.querySelector('[name=tnc]')?.checked;
+    return out;
+}
+function checkPage(pg, form) {
+    for (const it of pg.items) {
+        if (it.type === 'SECTION_HEADER') continue;
+        const k = formKey(it.title), name = `q${it.i}`;
+        const v = it.type === 'CHECKBOX' || it.type === 'MULTIPLE_CHOICE' ? [...form.querySelectorAll(`[name=${name}]:checked`)].map(x => x.value).join(', ') : String(form.elements[name]?.value || '').trim();
+        if (it.required && !v) return `Please answer: ${it.title}`;
+        if (k === 'tnc' && v && !isAgree(v)) return 'You need to agree to the RWB rules to join.';
+        if (it.type === 'MULTIPLE_CHOICE' && form.querySelector(`[name=${name}]:checked`)?.dataset.ends) return 'You need to agree to the RWB rules to join.';
+        if (v && PHONE_KEYS.includes(k) && v.replace(/\D/g, '').length < 10) return `${it.title} needs a 10-digit number`;
+        if (v && k === 'vrn' && v.replace(/[^A-Za-z0-9]/g, '').length < 6) return 'Please check the VRN (for example WB 02 AB 1234)';
+        if (v && k === 'dob' && (v > todayISO() || v < '1930-01-01')) return 'Please check the Date of Birth';
+    }
+    return '';
+}
+function liveJoinForm(def, known, sess, filled = false) {
+    const pages = formPages(def);
+    let at = 0;
+    app.innerHTML = `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>Join RWB</h1></header>
+        <p class="small muted" style="margin:4px 0 14px">Signed in as <b>${esc(sess.email)}</b>${filled ? '. We filled in what RWB already knows; check it and change anything that\'s wrong.' : '. Same questions as the RWB join form.'}</p>
+        <form id="req" class="gform" novalidate>${pages.map((pg, n) => `<section class="gpage" data-p="${n}"${n ? ' hidden' : ''}>
+            ${pg.title ? `<h2 class="gp-title">${esc(pg.title)}</h2>` : ''}${pg.help ? `<p class="gp-help">${esc(pg.help)}</p>` : ''}
+            ${pg.items.map(it => it.type === 'SECTION_HEADER' ? `<div class="fq-section"><b>${esc(it.title)}</b>${it.help ? `<span class="fq-help">${esc(it.help)}</span>` : ''}</div>` : formItemHtml(it, it.i, prefillFor(it, known))).join('')}
+            ${n === pages.length - 1 && !def.items.some(it => formKey(it.title) === 'tnc') ? rulesBlock() : ''}
+            <div class="gnav">${n ? '<button type="button" class="btn ghost" data-act="gback">Back</button>' : ''}${n < pages.length - 1 ? '<button type="button" class="btn" data-act="gnext">Next</button>' : '<button class="btn">Send to admins</button>'}</div>
+            <p class="small muted gp-count">Page ${n + 1} of ${pages.length}</p></section>`).join('')}
+        </form>
+        <button type="button" class="btn ghost block" data-act="out" style="margin-top:10px">Use a different Google account</button>`;
+    const form = $('#req');
+    const show = n => { at = n; form.querySelectorAll('.gpage').forEach(p => p.hidden = Number(p.dataset.p) !== n); window.scrollTo(0, 0); };
+    actions = {
+        out: () => api.signOut(),
+        gnext: () => { const err = checkPage(pages[at], form); if (err) return toast(err, true); show(at + 1); },
+        gback: () => show(at - 1)
+    };
+    form.addEventListener('submit', e => {
+        e.preventDefault();
+        for (let n = 0; n < pages.length; n++) { const err = checkPage(pages[n], form); if (err) { show(n); return toast(err, true); } }
+        const f = readForm(def, form);
+        if (!f.full_name || !f.phone) return toast('Full Name and WhatsApp No. are needed', true);
+        if (f.emergency_phone && f.phone && f.emergency_phone.replace(/\D/g, '').slice(-10) === f.phone.replace(/\D/g, '').slice(-10)) return toast('The emergency contact should be someone else\'s number', true);
+        if (!f.tnc) return toast('You need to agree to the RWB rules to join.', true);
+        busy(e.submitter, async () => { await api.requestAccess(f); boot(); });
+    });
+}
+
 async function viewAccess(status, sess) {
     tabbar.hidden = true;
     const req = status === 'pending' || status === 'rejected' ? await api.myRequest().catch(() => null) : null;
@@ -295,12 +408,16 @@ async function viewAccess(status, sess) {
         actions = { recheck: b => busy(b, boot), out: () => api.signOut() };
         return;
     }
+    const [def, pre] = await Promise.all([loadJoinForm(), api.myPrefill().catch(() => null)]);
+    const known = req || pre ? { ...(pre || {}), ...(req || {}), answers: { ...(pre?.answers || {}), ...(req?.answers || {}) } } : null;
+    if (status === 'rejected' && def) toast('Your earlier request was not approved. You can check your details and send them again.', true);
+    if (def?.items?.length) return liveJoinForm(def, known || (sess.name ? { full_name: sess.name } : null), sess, !!known);
     app.innerHTML = `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>Almost there</h1></header>
         ${status === 'rejected' ? '<p class="warn">Your earlier request was not approved. If you think this is a mistake, message an RWB admin on WhatsApp, or send the details again.</p><br>' : ''}
         <p>We couldn't find <b>${esc(sess.email)}</b> in the RWB members list. Maybe you used a different email on the join form.</p>
         <p class="muted" style="margin:8px 0 18px">Fill this in and an admin will link you to your membership. Use the WhatsApp number you're in the RWB group with.</p>
         <form id="req">
-            ${joinFields({ ...req, full_name: req?.full_name || sess.name || '' }, 'join')}
+            ${joinFields({ ...(known || {}), full_name: known?.full_name || sess.name || '' }, 'join')}
             ${rulesBlock()}
             <button class="btn block">Send to admins</button>
             <button type="button" class="btn ghost block" data-act="out">Use a different Google account</button>
@@ -476,7 +593,7 @@ async function viewHome() {
     }
     if (isAdmin()) api.admin.stats().then(s => {
         const b = $('#admin-banner'), mm = listings.filter(l => l.status === 'pending').length, parts = [];
-        if (s.pending) parts.push(`${s.pending} new entr${s.pending > 1 ? 'ies' : 'y'} to approve`);
+        if (s.pending) parts.push(`${s.pending} waiting for approval`);
         if (mm) parts.push(`${mm} Motomart post${mm > 1 ? 's' : ''}`);
         if (b && parts.length) { b.innerHTML = `<span class="b-ico">${ICON.shield}</span><span class="grow">${parts.join(' and ')} waiting for you</span>${ICON.chev}`; b.href = s.pending ? '#admin' : '#admin/motomart'; b.hidden = false; }
     }).catch(() => {});
@@ -1427,24 +1544,42 @@ function installSheet() {
 
 /* Bikes: the main bike is on the member record (Edit details); bikes 2 and 3 can be added here */
 const vBadge = ok => ok ? '<span class="badge ok">✓ Verified</span>' : '';
-function bikeRows(m, extra, admin = false) {
+function bikeRows(m, extra, admin = false, waiting = []) {
     const main = `<div class="bike-row"><span class="g-ico">🏍️</span><span class="grow"><b>${esc(m.vrn || 'No VRN yet')}</b><span class="small muted">${esc(m.bike || 'Main bike')} · main bike</span></span>${vBadge(m.vrn_verified)}${admin ? `<button class="btn sm ghost" data-x="vv" data-slot="1">${m.vrn_verified ? 'Unverify' : 'Verify'}</button>` : ''}</div>`;
     if (extra === null) return main + '<p class="small muted" style="padding:10px 14px">Loading…</p>';
     const rows = extra.map(b => `<div class="bike-row"><span class="g-ico">🏍️</span><span class="grow"><b>${esc(b.vrn)}</b><span class="small muted">${esc(b.model || 'Model not set')}</span></span>${vBadge(b.verified)}${admin ? `<button class="btn sm ghost" data-x="vv" data-slot="${b.slot}">${b.verified ? 'Unverify' : 'Verify'}</button>` : `<button class="btn sm ghost" data-act="bike" data-slot="${b.slot}">Edit</button>`}</div>`).join('');
-    const free = [2, 3].find(sl => !extra.some(b => b.slot === sl));
-    return main + rows + (!admin && free ? `<button class="bike-add" data-act="bike" data-slot="${free}">＋ Add a bike</button>` : '');
+    const wait = waiting.map(c => `<div class="bike-row"><span class="g-ico">⏳</span><span class="grow"><b>${esc(c.new_value)}</b><span class="small muted">${esc(c.new_model || '')} · waiting for an admin</span></span></div>`).join('');
+    const free = [2, 3].find(sl => !extra.some(b => b.slot === sl) && !waiting.some(c => c.slot === sl));
+    return main + rows + wait + (!admin && free ? `<button class="bike-add" data-act="bike" data-slot="${free}">＋ Add a bike</button>` : '');
+}
+function changesBox(list) {
+    const wait = list.filter(c => c.status === 'pending' && c.kind !== 'bike'), no = list.filter(c => c.status === 'rejected' && Date.now() - Date.parse(c.decided_at || c.created_at) < 14 * 864e5);
+    if (!wait.length && !no.length) return '';
+    return `<div class="card section chg-box">${wait.map(c => `<p>⏳ <b>${esc(CHANGE_TXT[c.kind])}</b> → ${esc(c.kind === 'tnc' ? 'no longer agree' : c.new_value + (c.new_model ? ' · ' + c.new_model : ''))} <span class="muted">· waiting for an admin</span></p>`).join('')}
+        ${no.map(c => `<p>✕ <b>${esc(CHANGE_TXT[c.kind])}</b> change to ${esc(c.new_value)} wasn't approved${c.reject_reason ? `: ${esc(c.reject_reason)}` : ''}</p>`).join('')}</div>`;
+}
+function rulesSheet(m, done) {
+    const q = (joinFormDef?.items || []).find(i => formKey(i.title) === 'tnc');
+    const text = q ? `<p class="gp-help" style="white-space:pre-line">${esc(q.help || '')}</p>` : `<ol class="rules-ol">${RWB_RULES.map(r => `<li>${esc(r)}</li>`).join('')}</ol>`;
+    openSheet(q ? q.title : 'RWB rules', `${text}
+        ${m.tnc_agreed === false ? '<button class="btn block" data-x="agree" style="margin-top:14px">I agree to the RWB rules</button>'
+            : '<p class="small muted" style="margin-top:14px">You agreed to these rules when you joined.</p><button class="btn ghost block" data-x="disagree" style="margin-top:8px">I no longer agree</button>'}`, body => {
+        const a = body.querySelector('[data-x=agree]'), d = body.querySelector('[data-x=disagree]');
+        if (a) a.onclick = () => busy(a, async () => { await api.requestChange('tnc', 'agree'); state.me = await api.me(); closeSheet(); toast('Thanks!'); render(); });
+        if (d) d.onclick = () => { if (confirmBox('Tell the admins you no longer agree to the RWB rules? They may remove you from RWB.')) busy(d, async () => { await api.requestChange('tnc', 'disagree'); closeSheet(); toast('Sent to the admins'); done(); }); };
+    });
 }
 const BIKE_MODELS = ['TVS Ronin 225', 'TVS Apache RTR 160 4V', 'TVS Apache RTR 200 4V', 'TVS Apache RTR 310', 'Royal Enfield Hunter 350', 'Royal Enfield Classic 350', 'Honda CB350', 'Bajaj Pulsar', 'KTM Duke'];
 function bikeSheet(slot, b, done) {
     openSheet(b ? 'Edit bike' : 'Add a bike', `<form id="bk">
         <label><span>VRN <span class="req">*</span></span><input name="vrn" required autocapitalize="characters" placeholder="WB 02 AB 1234" value="${esc(b?.vrn || '')}"></label>
-        <label><span>Model</span><input name="model" list="bike-models" value="${esc(b?.model || 'TVS Ronin 225')}"><small class="hint">Change it if it's a different bike. An admin verifies the VRN.</small></label>
+        <label><span>Model</span><input name="model" list="bike-models" value="${esc(b?.model || 'TVS Ronin 225')}"><small class="hint">Change it if it's a different bike. An admin checks the VRN and approves it.</small></label>
         <datalist id="bike-models">${BIKE_MODELS.map(x => `<option value="${esc(x)}">`).join('')}</datalist>
         <button class="btn block">Save bike</button>${b ? '<button type="button" class="btn danger block" data-x="del" style="margin-top:8px">Remove this bike</button>' : ''}</form>`, body => {
         body.querySelector('#bk').onsubmit = e => {
             e.preventDefault(); const v = e.target.vrn.value.replace(/\s+/g, ' ').trim().toUpperCase();
             if (v.replace(/[^A-Z0-9]/g, '').length < 6) return toast('Please check the VRN (for example WB 02 AB 1234)', true);
-            busy(e.submitter, async () => { await api.saveBike(slot, v, e.target.model.value.trim()); closeSheet(); state.dir = null; toast('Bike saved'); done(); });
+            busy(e.submitter, async () => { const r = await api.saveBike(slot, v, e.target.model.value.trim()); closeSheet(); state.dir = null; toast(r === 'pending' ? 'Sent to the admins for approval' : 'Bike saved'); done(); });
         };
         const del = body.querySelector('[data-x=del]');
         if (del) del.onclick = () => { if (confirmBox('Remove this bike from your profile?')) busy(del, async () => { await api.saveBike(slot, ''); closeSheet(); state.dir = null; toast('Bike removed'); done(); }); };
@@ -1464,8 +1599,12 @@ function viewMe() {
         <div class="group kv">
             ${row('WhatsApp', m.phone)}${row('Bike', m.bike)}${row('Registration', m.vrn)}${row('Birthday', m.dob ? fmtDayMonth(m.dob) : '')}${row('Blood group', m.blood_group)}${row('Locality', m.locality)}${row('Emergency contact', m.emergency_phone)}
         </div>
+        <div id="my-changes"></div>
         <h2 class="group-title">My bikes <span class="small muted" style="text-transform:none;letter-spacing:0;font-weight:500">up to 3</span></h2>
         <div class="group bikes" id="my-bikes">${bikeRows(m, null)}</div>
+        <h2 class="group-title">RWB rules</h2>
+        <div class="group"><div class="bike-row"><span class="g-ico">📜</span><span class="grow"><b>${m.tnc_agreed === false ? 'You don\'t agree to the RWB rules' : 'You agree to the RWB rules'}</b><span class="small muted">From the RWB join form</span></span>
+            <button class="btn sm ghost" data-act="rules">Read</button></div></div>
         ${isAdmin() ? `<div class="group section"><a href="#admin"><span class="g-ico">${ICON.shield}</span><span class="grow"><b>Admin panel</b><span class="small muted">Members, requests, Motomart, birthdays, Pookie</span></span>${ICON.chev}</a></div>` : ''}
 
         <h2 class="group-title">Appearance</h2>
@@ -1492,11 +1631,16 @@ function viewMe() {
             <button data-act="out" class="danger-row"><span class="grow"><b>Sign out</b></span></button>
         </div>
         <p class="small muted" style="text-align:center;margin-top:24px">RWB App, free for every warrior</p>`;
-    let myBikes = [];
-    const drawBikes = async () => { myBikes = await api.myBikes().catch(() => []); const g = $('#my-bikes'); if (g) g.innerHTML = bikeRows(state.me, myBikes); };
-    drawBikes();
+    let myBikes = [], myChanges = [];
+    const drawBikes = async () => {
+        [myBikes, myChanges] = await Promise.all([api.myBikes().catch(() => []), api.myChanges().catch(() => [])]);
+        const g = $('#my-bikes'); if (g) g.innerHTML = bikeRows(state.me, myBikes, false, myChanges.filter(c => c.kind === 'bike' && c.status === 'pending'));
+        const ch = $('#my-changes'); if (ch) ch.innerHTML = changesBox(myChanges);
+    };
+    drawBikes(); loadJoinForm();
     actions = {
         bike: el => bikeSheet(Number(el.dataset.slot), myBikes.find(b => b.slot === Number(el.dataset.slot)), drawBikes),
+        rules: () => rulesSheet(m, drawBikes),
         out: async () => { await disablePush(true).catch(() => {}); api.signOut(); },
         theme: el => { setTheme(el.dataset.t); app.querySelectorAll('[data-act=theme]').forEach(b => { const on = b === el; b.setAttribute('aria-selected', on); b.setAttribute('aria-checked', on); }); },
         'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); drawPushState(); }),
@@ -1504,7 +1648,7 @@ function viewMe() {
         'push-test': b => busy(b, async () => { await api.testPush(); toast('Test sent. It should arrive in a few seconds.'); }),
         install: () => installEvt ? (async () => { installEvt.prompt(); await installEvt.userChoice; installEvt = null; render(); })() : installSheet(),
         edit: () => openSheet('My details', `<form id="mf">
-            <p class="small muted" style="margin-bottom:10px">Your Full Name and WhatsApp No. can only be changed by an admin. <span class="req">*</span> marks answers every member needs.</p>
+            <p class="small muted" style="margin-bottom:10px">Changes to your Full Name, WhatsApp No. and main bike (VRN) are checked by an admin first. Everything else saves straight away. <span class="req">*</span> marks answers every member needs.</p>
             ${joinFields(m, 'me')}
             <button class="btn block">Save details</button></form>`, body => {
             body.querySelector('#mf').onsubmit = e => {
@@ -1512,7 +1656,18 @@ function viewMe() {
                 const d = joinData(e.target), err = joinCheck(d, 'me', m.phone);
                 if (err) return toast(err, true);
                 Object.keys(d).forEach(k => d[k] = d[k] || null);
-                busy(e.submitter, async () => { state.me = await api.updateMe(d); closeSheet(); render(); toast('Details saved'); });
+                /* important details go to the admins; the rest saves now */
+                const ask = [];
+                if (d.full_name && d.full_name !== m.full_name) ask.push(['name', d.full_name]);
+                if (d.phone && d.phone.replace(/\D/g, '').slice(-10) !== m.phone) ask.push(['phone', d.phone]);
+                if ((d.vrn && vrnKey(d.vrn) !== vrnKey(m.vrn)) || (d.bike && d.bike !== m.bike)) ask.push(['vrn', d.vrn || m.vrn, d.bike || m.bike]);
+                ['full_name', 'phone', 'vrn', 'bike'].forEach(k => delete d[k]);
+                busy(e.submitter, async () => {
+                    state.me = await api.updateMe(d);
+                    for (const [kind, v, model] of ask) await api.requestChange(kind, v, null, model);
+                    closeSheet(); render();
+                    toast(ask.length ? `Saved. ${ask.map(a => CHANGE_TXT[a[0]]).join(', ')} sent to the admins for approval` : 'Details saved');
+                });
             };
         })
     };
@@ -1570,7 +1725,7 @@ async function viewAdmin() {
 const PARIVAHAN = 'https://parivahan.gov.in/';
 function entryCheck(r) {
     const since = r.member_since ? fmtDate(String(r.member_since).slice(0, 10)) : '';
-    if (r.check_entry === 'existing') return { ok: false, warn: true, t: 'Existing member, filling the form again', s: `Member since ${since}. Approving updates their details.` };
+    if (r.check_entry === 'existing') return { ok: true, t: 'Existing member', s: `Member since ${since}.${r.on_app ? ' Approving links this app account to them' : ' Approving updates their details'}.` };
     if (r.check_entry === 'returning') return { ok: false, warn: true, t: 'Returning member', s: `${r.match_status === 'left' ? 'Left' : 'Removed'}${r.match_removed_at ? ' on ' + fmtDate(String(r.match_removed_at).slice(0, 10)) : ''}. Approving restores them.` };
     if (r.check_entry === 'recent') return { ok: true, t: 'New member', s: `Joined on ${since} and filled the form again.` };
     return { ok: true, t: 'New member', s: 'Not in the member list yet.' };
@@ -1580,8 +1735,10 @@ function checksOf(r) {
     return [
         { k: 'entry', ok: e.ok, warn: e.warn, t: e.t, s: e.s },
         { k: 'ronin', ok: !!r.has_ronin, t: r.has_ronin ? 'Has a Ronin' : 'No Ronin', s: `Answer: ${r.bike || '–'}` },
-        { k: 'vrn', ok: !!r.vrn_verified, t: 'VRN verified', s: '' },
-        { k: 'tnc', ok: r.tnc === true, unk: r.tnc == null, t: r.tnc === true ? 'Agreed to the RWB rules' : r.tnc === false ? 'Did not agree to the RWB rules' : 'Rules answer not found', s: r.tnc == null ? 'The form has no rules question, or it was left empty.' : '' }
+        { k: 'vrn', ok: !!(r.vrn_verified || r.vrn_known), known: !!r.vrn_known && !r.vrn_verified, t: 'VRN verified', s: '' },
+        r.tnc === true ? { k: 'tnc', ok: true, t: 'Agreed to the RWB rules', s: '' }
+            : r.member_tnc === true ? { k: 'tnc', ok: true, t: 'Agreed to the RWB rules', s: 'When they joined RWB.' }
+            : { k: 'tnc', ok: false, unk: r.tnc == null, t: r.tnc === false ? 'Did not agree to the RWB rules' : 'Rules answer not found', s: r.tnc == null ? 'Sent before the rules question was added. Ask them to agree, or approve if you know they did.' : '' }
     ];
 }
 function reqCard(r) {
@@ -1591,24 +1748,49 @@ function reqCard(r) {
         <div class="row" style="gap:8px;align-items:flex-start"><div class="grow"><h3>${esc(r.full_name)}</h3>
             <p class="small muted">${r.source === 'form' ? 'Join form' : 'App request'} · ${timeAgo(r.form_ts || r.created_at)}${r.on_app ? ' · signed in on the app' : ''}</p></div>
             <span class="req-score ${all ? 'ok' : ''}">${cks.filter(c => c.ok).length}/4</span></div>
-        <ul class="checks">${cks.map(c => c.k === 'vrn' ? `<li class="${c.ok ? 'yes' : 'no'}"><label class="vrn-tick"><input type="checkbox" data-act="vrn-tick" data-id="${r.id}"${c.ok ? ' checked' : ''}><span class="ci">${ico(c)}</span>
+        <ul class="checks">${cks.map(c => c.k === 'vrn' && c.known ? `<li class="yes"><span class="ci">✓</span><span class="grow"><b>VRN verified</b><small><span class="vrn">${esc(r.vrn || r.member_vrn || '')}</span> · verified earlier, same VRN on their record</small></span></li>`
+            : c.k === 'vrn' ? `<li class="${c.ok ? 'yes' : 'no'}"><label class="vrn-tick"><input type="checkbox" data-act="vrn-tick" data-id="${r.id}"${c.ok ? ' checked' : ''}><span class="ci">${ico(c)}</span>
                 <span class="grow"><b>VRN verified</b><small><span class="vrn">${esc(r.vrn || 'No VRN given')}</span> · tick once you've checked it</small></span></label>
                 <span class="vrn-tools">${r.vrn ? `<button class="link-btn" data-act="copy-vrn" data-v="${esc(r.vrn)}">Copy</button><a class="link-btn" href="${PARIVAHAN}" target="_blank" rel="noopener">Parivahan ↗</a>` : ''}</span>
                 ${r.vrn_other ? `<small class="dup">⚠ Same VRN as ${esc(r.vrn_other)}</small>` : ''}</li>`
             : `<li class="${c.ok ? 'yes' : c.warn || c.unk ? 'warn' : 'no'}"><span class="ci">${ico(c)}</span><span class="grow"><b>${esc(c.t)}</b>${c.s ? `<small>${esc(c.s)}</small>` : ''}</span></li>`).join('')}</ul>
         ${r.match_linked && r.on_app && r.check_entry !== 'new' ? '<p class="warn small" style="margin-bottom:10px">⚠ This number is already linked to another app account.</p>' : ''}
-        <details class="answers"><summary>All answers</summary><dl class="facts">
+        <details class="answers"><summary>All answers</summary>${r.answers && Object.keys(r.answers).length ? `<dl class="facts">${Object.entries(r.answers).map(([q, a]) => `<dt>${esc(q)}</dt><dd>${esc(a)}</dd>`).join('')}<dt>Phone link</dt><dd><a href="${waTo(r.phone)}" target="_blank" rel="noopener">WhatsApp ${esc(r.phone)}</a></dd></dl>` : `<dl class="facts">
             <dt>WhatsApp</dt><dd><a href="${waTo(r.phone)}" target="_blank" rel="noopener">${esc(r.phone)}</a></dd><dt>Email</dt><dd>${esc(r.email || '–')}</dd>
             ${r.dob ? `<dt>Birthday</dt><dd>${fmtDayMonth(r.dob)}</dd>` : ''}<dt>Bike</dt><dd>${esc(r.bike || '–')}</dd>${r.blood_group ? `<dt>Blood group</dt><dd>${esc(r.blood_group)}</dd>` : ''}
             ${r.locality ? `<dt>Locality</dt><dd>${esc(r.locality)}</dd>` : ''}${r.hideout ? `<dt>Hometown</dt><dd>${esc(r.hideout)}</dd>` : ''}
-            ${r.emergency_phone ? `<dt>Emergency</dt><dd>${esc(r.emergency_phone)}</dd>` : ''}${r.alt_phone ? `<dt>Alt. mobile</dt><dd>${esc(r.alt_phone)}</dd>` : ''}</dl></details>
+            ${r.emergency_phone ? `<dt>Emergency</dt><dd>${esc(r.emergency_phone)}</dd>` : ''}${r.alt_phone ? `<dt>Alt. mobile</dt><dd>${esc(r.alt_phone)}</dd>` : ''}</dl>`}</details>
         <div class="btns" style="margin-top:12px"><button class="btn ghost" data-act="reject" data-id="${r.id}">Reject</button><button class="btn" data-act="approve" data-id="${r.id}">Approve</button></div></div>`;
 }
+const CHANGE_TXT = { name: 'Name', phone: 'WhatsApp No.', vrn: 'Main bike (VRN)', bike: 'New bike', tnc: 'RWB rules' };
+function changeCard(c) {
+    const isVrn = c.kind === 'vrn' || c.kind === 'bike';
+    return `<div class="card req-card change-card" data-cid="${c.id}">
+        <div class="row" style="gap:8px;align-items:flex-start"><div class="grow"><h3>${esc(c.full_name)}</h3><p class="small muted">Change request · ${timeAgo(c.created_at)}</p></div><span class="badge orange">${esc(CHANGE_TXT[c.kind])}${c.slot ? ' ' + c.slot : ''}</span></div>
+        ${c.kind === 'tnc' ? '<p class="warn" style="margin:12px 0">They no longer agree to the RWB rules. If they\'re leaving, use <b>Remove from RWB</b> on their profile.</p>'
+            : `<div class="chg"><span class="old">${esc(c.old_value || (c.kind === 'bike' ? 'No bike in this slot' : '–'))}</span><span class="arr">→</span><span class="new">${esc(c.new_value)}${c.new_model ? ` · ${esc(c.new_model)}` : ''}</span></div>`}
+        ${isVrn ? `<ul class="checks"><li class="${c.vrn_verified ? 'yes' : 'no'}"><label class="vrn-tick"><input type="checkbox" data-act="chg-vrn" data-cid="${c.id}"${c.vrn_verified ? ' checked' : ''}><span class="ci">${c.vrn_verified ? '✓' : '✕'}</span>
+            <span class="grow"><b>VRN verified</b><small><span class="vrn">${esc(c.new_value)}</span> · tick once you've checked it</small></span></label>
+            <span class="vrn-tools"><button class="link-btn" data-act="copy-vrn" data-v="${esc(c.new_value)}">Copy</button><a class="link-btn" href="${PARIVAHAN}" target="_blank" rel="noopener">Parivahan ↗</a></span>
+            ${c.vrn_other ? `<small class="dup">⚠ Same VRN as ${esc(c.vrn_other)}</small>` : ''}</li></ul>` : ''}
+        <div class="btns" style="margin-top:12px"><button class="btn ghost" data-act="chg-no" data-cid="${c.id}">${c.kind === 'tnc' ? 'Dismiss' : 'Reject'}</button><button class="btn" data-act="chg-ok" data-cid="${c.id}">${c.kind === 'tnc' ? 'Record it' : 'Approve'}</button></div></div>`;
+}
 async function adminRequests() {
-    const reqs = await api.admin.requests();
-    $('#admin-body').innerHTML = reqs.length ? `<p class="small muted" style="margin-bottom:10px">New entries from the join form and the app. Check the 4 points, then approve. Nobody is a member until approved.</p>
-        <div class="list">${reqs.map(reqCard).join('')}</div>`
-        : '<div class="card empty"><b>All clear</b>No new entries waiting.</div>';
+    const [reqs, chg] = await Promise.all([api.admin.requests(), api.admin.changes().catch(() => [])]);
+    $('#admin-body').innerHTML = reqs.length || chg.length ? `${reqs.length ? `<p class="small muted" style="margin-bottom:10px">New entries from the join form and the app. Check the 4 points, then approve. Nobody is a member until approved.</p>
+        <div class="list">${reqs.map(reqCard).join('')}</div>` : ''}
+        ${chg.length ? `<h2 class="group-title" style="margin-top:${reqs.length ? 22 : 0}px">Changes to approve</h2><p class="small muted" style="margin-bottom:10px">Members changed an important detail in their profile.</p><div class="list">${chg.map(changeCard).join('')}</div>` : ''}`
+        : '<div class="card empty"><b>All clear</b>Nothing waiting for approval.</div>';
+    const byCid = id => chg.find(c => c.id === Number(id));
+    Object.assign(actions, {
+        'chg-ok': b => { const c = byCid(b.dataset.cid); if ((c.kind === 'vrn' || c.kind === 'bike') && !c.vrn_verified && !confirmBox('The VRN isn\'t ticked as verified. Approve anyway?')) return;
+            busy(b, async () => { await api.admin.decideChange(c.id, true); state.adminMembers = null; state.dir = null; toast(c.kind === 'tnc' ? 'Recorded' : 'Change approved'); viewAdmin(); }); },
+        'chg-no': b => { const c = byCid(b.dataset.cid); reasonSheet(`Reject ${firstName(c)}'s change`, ['Could not verify the VRN', 'Please message an admin', 'Not allowed'], async reason => { await api.admin.decideChange(c.id, false, reason); toast(c.kind === 'tnc' ? 'Dismissed' : 'Change rejected'); viewAdmin(); }); }
+    });
+    $('#admin-body').querySelectorAll('[data-act=chg-vrn]').forEach(cb => cb.onchange = async () => {
+        try { await api.admin.setChangeVrn(Number(cb.dataset.cid), cb.checked); await adminRequests(); toast(cb.checked ? 'VRN marked as verified' : 'VRN unmarked'); }
+        catch (e) { cb.checked = !cb.checked; toast(e.message, true); }
+    });
     const byId = id => reqs.find(r => r.id === Number(id));
     Object.assign(actions, {
         'copy-vrn': async b => { try { await navigator.clipboard.writeText(b.dataset.v); toast('VRN copied'); } catch { toast(b.dataset.v); } },
@@ -1623,6 +1805,13 @@ async function adminRequests() {
         const r = byId(cb.dataset.id);
         try { await api.admin.setReqVrn(r.id, cb.checked); await adminRequests(); toast(cb.checked ? 'VRN marked as verified' : 'VRN unmarked'); }
         catch (e) { cb.checked = !cb.checked; toast(e.message, true); }
+    });
+}
+function reasonSheet(title, quick, done) {
+    openSheet(title, `<form id="rs"><div class="chips" style="margin-bottom:10px">${quick.map(q => `<button type="button" class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+        <label>Reason (optional, the member sees it in their profile)<textarea name="reason" rows="2" maxlength="200"></textarea></label><button class="btn danger block">Reject</button></form>`, body => {
+        body.querySelectorAll('[data-q]').forEach(c => c.onclick = () => { body.querySelector('[name=reason]').value = c.dataset.q; });
+        body.querySelector('#rs').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { await done(e.target.reason.value.trim()); closeSheet(); }); };
     });
 }
 function rejectSheet(r) {
