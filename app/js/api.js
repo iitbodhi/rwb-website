@@ -130,10 +130,13 @@ async function supabaseApi(url, key) {
         eventPeople: async id => must(await sb.rpc('event_people', { p_event: id })) || [],
         async rsvp(eventId, status, guests = 0) { return must(await sb.from('event_rsvps').upsert({ event_id: eventId, user_id: await uid(), status, guests }, { onConflict: 'event_id,user_id' }).select().single()); },
         async saveEvent(rec) {
-            const { id, created_by, created_at, updated_at, reminded_at, ...row } = rec;
-            return id ? must(await sb.from('events').update(row).eq('id', id).select().single())
-                      : must(await sb.from('events').insert(row).select().single());
+            const { id, created_by, created_at, updated_at, reminded_at, source_key, ...row } = rec;
+            const go = r => id ? sb.from('events').update(r).eq('id', id).select().single() : sb.from('events').insert(r).select().single();
+            let res = await go(row);
+            if (res.error && /tag|capacity|on_website/.test(res.error.message || '')) { const { tag, capacity, on_website, ...old } = row; res = await go(old); }   /* before setup file 38 */
+            return must(res);
         },
+        importEvents: async rows => must(await sb.rpc('admin_import_events', { p_rows: rows })),
         deleteEvent: async id => must(await sb.from('events').delete().eq('id', id)),
         expenses: async id => must(await sb.from('event_expenses').select('*').eq('event_id', id).order('created_at')),
         async saveExpense(rec) {
@@ -487,6 +490,7 @@ function demoApi() {
         async rsvp(eventId, status, guests = 0) { db.rsvps ||= []; const e = db.events.find(x => x.id === eventId); if (!e.allow_guests || status !== 'going') guests = 0; const r = db.rsvps.find(x => x.event_id === eventId && x.user_id === 'me'); if (r) Object.assign(r, { status, guests }); else db.rsvps.push({ event_id: eventId, user_id: 'me', status, guests }); save(); return wait({ status, guests }); },
         async saveEvent(rec) { let row; if (rec.id) { row = db.events.find(e => e.id === rec.id); Object.assign(row, rec); } else { row = { status: 'live', ...rec, id: nid(), created_by: 'me' }; db.events.push(row); } save(); return wait(row); },
         async deleteEvent(id) { db.events = db.events.filter(e => e.id !== id); save(); },
+        importEvents: rows => { let n = 0; rows.forEach(r => { const key = (r.title + r.starts_at.slice(0, 10)).toLowerCase(); if (db.events.some(e => (e.title + String(e.starts_at).slice(0, 10)).toLowerCase() === key)) return; db.events.push({ ...r, id: nid(), status: 'live', capacity: r.capacity ? +r.capacity : null, on_website: true, created_by: 'me' }); n++; }); save(); return wait(n); },
         expenses: id => wait((db.expenses || []).filter(x => x.event_id === id)),
         async saveExpense(rec) { db.expenses ||= []; if (rec.id) Object.assign(db.expenses.find(x => x.id === rec.id), rec); else db.expenses.push({ ...rec, id: nid(), created_by: 'me', created_at: new Date().toISOString() }); save(); return wait(rec); },
         async deleteExpense(id) { db.expenses = db.expenses.filter(x => x.id !== id); save(); },

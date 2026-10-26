@@ -125,8 +125,8 @@ function slotsHTML(row) {
     return `<div class="slots ${cls}">${filled} / ${total} · ${label}<div class="slots-bar"><i style="width:${Math.round(p * 100)}%"></i></div></div>
         ${p < 1 ? `<a class="btn btn-sm" href="${CONFIG.INSTAGRAM_DM_URL}" target="_blank" rel="noopener">Enquire Now</a>` : ''}`;
 }
-function renderEvents(csvText) {
-    const events = parseCSV(csvText).filter(r => r.title).map(r => ({ ...r, state: eventState(r) }));
+function renderEvents(rows) {
+    const events = rows.filter(r => r.title).map(r => ({ ...r, state: eventState(r) }));
     const list = $('#events-list');
     const draw = f => {
         const shown = events.filter(e => f === 'all' || e.state === f);
@@ -143,7 +143,27 @@ function renderEvents(csvText) {
     $$('#event-tabs button').forEach(b => b.classList.toggle('active', b.dataset.filter === first));
     draw(first); tabs('#event-tabs', draw);
 }
-fetchCSV(CONFIG.EVENTS_SHEET_URL).then(renderEvents)
+/* Events from the RWB App (public details only), shaped like the old sheet rows */
+function appEventRows(list) {
+    const ist = (d, o) => d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', ...o });
+    const ymd = d => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const hm = d => ist(d, { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase();
+    const rows = list.map(e => {
+        const s = new Date(e.starts_at), en = e.ends_at ? new Date(e.ends_at) : null, multi = en && ymd(en) !== ymd(s) && en - s >= 12 * 36e5;   /* a night ride past midnight is still one day */
+        return { title: e.title, description: e.description || '', location: e.location || '', tag: e.tag || '',
+            month: ist(s, { month: 'short' }).toUpperCase(), day: ist(s, { day: 'numeric' }), endday: multi ? ist(en, { day: 'numeric' }) : '',
+            time: multi ? `${hm(s)}, ${ist(s, { day: 'numeric', month: 'short' })} – ${ist(en, { day: 'numeric', month: 'short' })}` : en ? `${hm(s)} – ${hm(en)}` : hm(s),
+            eventdate: ymd(s), enddate: en ? ymd(en) : '', totalslots: e.capacity || '', filledslots: e.taken || 0 };
+    });
+    /* upcoming first (soonest on top), then past (newest on top) */
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }), over = r => (r.enddate || r.eventdate) < today;
+    return rows.sort((a, b) => over(a) - over(b) || (over(a) ? b.eventdate.localeCompare(a.eventdate) : a.eventdate.localeCompare(b.eventdate)));
+}
+const loadAppEvents = () => fetch(CONFIG.APP_SUPABASE_URL + '/rest/v1/rpc/public_events', { method: 'POST', headers: { apikey: CONFIG.APP_SUPABASE_KEY, Authorization: 'Bearer ' + CONFIG.APP_SUPABASE_KEY, 'Content-Type': 'application/json' }, body: '{}' })
+    .then(r => { if (!r.ok) throw 0; return r.json(); }).then(appEventRows);
+loadAppEvents()
+    .catch(() => fetchCSV(CONFIG.EVENTS_SHEET_URL).then(parseCSV))   /* backup: the old sheet */
+    .then(renderEvents)
     .catch(() => { $('#events-list').innerHTML = '<p class="muted">Events will be listed here soon.</p>'; });
 
 /* Marketplace (rows come from a Google Sheet)

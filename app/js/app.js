@@ -1168,10 +1168,11 @@ async function viewEvents() {
     const list = tab === 'up' ? up : past;
     app.innerHTML = top('Events') + `
         ${isMod() ? '<button class="btn block evt-create" data-act="evt-new">＋ Create event</button>' : ''}
+        ${isAdmin() ? '<button class="btn ghost block" data-act="evt-import" style="margin-top:8px">⇩ Import past events from the website sheet</button>' : ''}
         <div class="seg" role="tablist" style="margin-top:${isMod() ? 14 : 0}px"><button role="tab" aria-selected="${tab === 'up'}" data-act="evt-tab" data-t="up">Upcoming${up.length ? ` (${up.length})` : ''}</button><button role="tab" aria-selected="${tab === 'past'}" data-act="evt-tab" data-t="past">Past</button></div>
         ${list.length ? `<div class="list">${list.map(e => eventCard(e, d)).join('')}</div>`
             : `<div class="card empty"><b>${tab === 'up' ? 'No upcoming events' : 'No past events yet'}</b>${tab === 'up' ? (isMod() ? 'Create a ride or meet-up and every member gets a notification.' : 'Rides and meet-ups posted by the RWB team show up here.') : ''}</div>`}`;
-    actions = { evt: el => location.hash = '#events/' + el.dataset.id, 'evt-new': () => eventForm(), 'evt-tab': el => { state.evtTab = el.dataset.t; viewEvents(); } };
+    actions = { evt: el => location.hash = '#events/' + el.dataset.id, 'evt-new': () => eventForm(), 'evt-import': () => importSheetEvents(), 'evt-tab': el => { state.evtTab = el.dataset.t; viewEvents(); } };
 }
 function faceStack(faces = [], more = 0) {
     return `<span class="faces">${faces.map(f => face(f, 'avatar xs')).join('')}${more > 0 ? `<span class="avatar xs more">+${more}</span>` : ''}</span>`;
@@ -1182,7 +1183,7 @@ function eventCard(e, d) {
     return `<button class="card tap evt-card${e.status === 'cancelled' ? ' cancelled' : ''}" data-act="evt" data-id="${e.id}">
         ${evtTile(e)}
         <span class="grow"><b>${esc(e.title)}</b><span class="small muted">${esc(evtWhen(e, true))}</span>${e.location ? `<span class="small muted">📍 ${esc(e.location)}</span>` : ''}
-            <span class="evt-meta">${e.status === 'cancelled' ? '<span class="badge">Cancelled</span>' : `${n ? faceStack(c.faces, c.going - c.faces.length) : ''}<span class="small muted">${n ? `${n} going` : 'Be the first to join'}${c.maybe ? ` · ${c.maybe} maybe` : ''}</span>`}</span></span>
+            <span class="evt-meta">${e.status === 'cancelled' ? '<span class="badge">Cancelled</span>' : `${n ? faceStack(c.faces, c.going - c.faces.length) : ''}<span class="small muted">${n ? `${n} ${evtPast(e) ? 'went' : 'going'}` : evtPast(e) ? (e.tag ? esc(e.tag) : 'Past event') : 'Be the first to join'}${c.maybe ? ` · ${c.maybe} maybe` : ''}</span>`}</span></span>
         ${me ? `<span class="evt-me ${me.status}">${RSVP_TXT[me.status]}</span>` : ''}</button>`;
 }
 async function eventPage(e) {
@@ -1227,6 +1228,47 @@ function gcalUrl(e) {
     const end = e.ends_at || new Date(new Date(e.starts_at).getTime() + 2 * 36e5).toISOString();
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(e.title)}&dates=${z(e.starts_at)}/${z(end)}&details=${encodeURIComponent((e.description || '') + '\n\nhttps://roninwb.in/app/#events/' + e.id)}&location=${encodeURIComponent(e.location || '')}`;
 }
+/* One-time move: the website's old events sheet → past events in the app (no notifications) */
+function csvRows(text) {
+    const rows = []; let row = [], cur = '', q = false;
+    for (let i = 0; i < text.length; i++) { const c = text[i];
+        if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+        else if (c === '"') q = true; else if (c === ',') { row.push(cur); cur = ''; }
+        else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cur); cur = ''; rows.push(row); row = []; } else cur += c; }
+    if (cur || row.length) { row.push(cur); rows.push(row); }
+    const heads = (rows.shift() || []).map(h => h.trim().toLowerCase().replace(/[\s_]+/g, ''));
+    return rows.filter(r => r.some(v => v.trim())).map(r => Object.fromEntries(heads.map((h, i) => [h, (r[i] || '').trim()])));
+}
+function sheetDate(d, t) {
+    let m = String(d || '').match(/^(\d{4})-(\d{1,2})-(\d{1,2})/), y, mo, da;
+    if (m) [, y, mo, da] = m; else { m = String(d || '').match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/); if (!m) return null; [, da, mo, y] = m; }
+    const tm = String(t || '').match(/(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?/i);
+    let h = tm ? +tm[1] : 6; const mi = tm && tm[2] ? +tm[2] : 0; if (tm && tm[3]) { if (/pm/i.test(tm[3]) && h < 12) h += 12; if (/am/i.test(tm[3]) && h === 12) h = 0; }
+    const pad = x => String(x).padStart(2, '0');
+    return `${y}-${pad(mo)}-${pad(da)}T${pad(h)}:${pad(mi)}:00+05:30`;
+}
+async function importSheetEvents() {
+    const SITE = typeof CONFIG !== 'undefined' ? CONFIG : {};   /* the website's settings (js/data.js) */
+    const url = SITE.EVENTS_SHEET_URL; if (!url) return toast('The website events sheet link was not found', true);
+    toast('Reading the website events sheet…');
+    let text = '';
+    try { text = await fetch(url).then(r => { if (!r.ok) throw 0; return r.text(); }); }
+    catch { try { text = await fetch(SITE.CORS_PROXY + encodeURIComponent(url)).then(r => r.text()); } catch { return toast('Could not read the sheet. Check your internet and try again.', true); } }
+    const today = todayISO();
+    const rows = csvRows(text).filter(r => r.title).map(r => {
+        const d1 = r.eventdate || r.date, d2 = r.enddate, times = String(r.time || '').split(/[–—-]|\bto\b/i);
+        const starts_at = sheetDate(d1, times[0]);
+        let ends_at = d2 && d2 !== d1 ? sheetDate(d2, times[1] || '8 PM') : times[1] ? sheetDate(d1, times[1]) : null;
+        return { title: r.title, description: r.description || r.desc || '', location: r.location || '', tag: r.tag || '', capacity: r.totalslots || '', starts_at, ends_at, past: (d2 || d1 || '') < today && !!starts_at };
+    }).filter(x => x.starts_at);
+    const past = rows.filter(x => new Date(x.ends_at || x.starts_at) < new Date());
+    openSheet('Import past events', `<p class="small muted" style="margin-bottom:10px">${past.length} past event${past.length === 1 ? '' : 's'} found in the website sheet. They're added to the app as past events (no notifications), and stay on roninwb.in. Events already imported are skipped.${rows.length > past.length ? ` ${rows.length - past.length} upcoming one${rows.length - past.length === 1 ? ' is' : 's are'} left out: create upcoming events in the app.` : ''}</p>
+        <div class="group">${past.map(x => `<div class="bike-row"><span class="g-ico">📅</span><span class="grow"><b>${esc(x.title)}</b><span class="small muted">${esc(fmtDate(x.starts_at.slice(0, 10)))}${x.location ? ' · ' + esc(x.location) : ''}${x.tag ? ' · ' + esc(x.tag) : ''}</span></span></div>`).join('') || '<p class="small muted" style="padding:12px">Nothing to import.</p>'}</div>
+        ${past.length ? `<button class="btn block" data-x="go" style="margin-top:14px">Import ${past.length} event${past.length === 1 ? '' : 's'}</button>` : ''}`, body => {
+        const go = body.querySelector('[data-x=go]');
+        if (go) go.onclick = () => busy(go, async () => { const n = await api.importEvents(past.map(({ past: _, ...x }) => x)); await loadEvents(true); closeSheet(); toast(n ? `${n} past event${n === 1 ? '' : 's'} added` : 'Already imported'); state.evtTab = 'past'; render(); });
+    });
+}
 function eventForm(e = null) {
     const r = e ? { ...e } : { reminder_minutes: 60, allow_guests: false };
     const start = toLocalInput(r.starts_at), end = toLocalInput(r.ends_at);
@@ -1240,6 +1282,10 @@ function eventForm(e = null) {
         <label>Google Maps link <span class="hint">(optional; we'll search the location if empty)</span><input name="map_url" type="url" inputmode="url" placeholder="https://maps.app.goo.gl/…" value="${esc(r.map_url || '')}"></label>
         <label>Call link <span class="hint">(optional, WhatsApp or Meet)</span><input name="call_link" type="url" inputmode="url" placeholder="https://call.whatsapp.com/…" value="${esc(r.call_link || '')}"></label>
         <label>Reminder<select name="reminder">${REMINDERS.map(([v, t]) => `<option value="${v ?? ''}"${v === r.reminder_minutes ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+        <div class="grid2"><label>Tag <span class="hint">(optional)</span><input name="tag" maxlength="40" list="evt-tags" placeholder="e.g. Ride" value="${esc(r.tag || '')}"></label>
+            <label>Seats <span class="hint">(optional)</span><input name="capacity" type="number" inputmode="numeric" min="1" max="10000" placeholder="No limit" value="${r.capacity || ''}"></label></div>
+        <datalist id="evt-tags">${['Ride', 'Night ride', 'Breakfast ride', 'Meet-up', 'Trip', 'Workshop', 'Charity'].map(t => `<option value="${t}">`).join('')}</datalist>
+        <label class="switch"><span>Show on roninwb.in<span class="hint" style="display:block">Title, date, place and seats left appear on the website's Events</span></span><input type="checkbox" name="on_website"${r.on_website !== false ? ' checked' : ''}></label>
         <label class="switch"><span>Allow guests<span class="hint" style="display:block">People can bring one additional guest</span></span><input type="checkbox" name="allow_guests"${r.allow_guests ? ' checked' : ''}></label>
         <button class="btn block">${e ? 'Save changes' : 'Publish event'}</button>
         ${e ? '' : '<p class="small muted" style="text-align:center">Every member gets a notification.</p>'}</form>`, body => {
@@ -1255,7 +1301,8 @@ function eventForm(e = null) {
             if (!e && starts < new Date(Date.now() - 36e5) && !confirmBox('This event is in the past. Publish anyway?')) return;
             const rec = { id: e?.id, title: v.title.trim(), description: v.description.trim() || null, starts_at: starts.toISOString(), ends_at: ends ? ends.toISOString() : null,
                 location: v.location.trim() || null, map_url: v.map_url.trim() || null, call_link: v.call_link.trim() || null,
-                reminder_minutes: v.reminder === '' ? null : Number(v.reminder), allow_guests: !!f.allow_guests.checked };
+                reminder_minutes: v.reminder === '' ? null : Number(v.reminder), allow_guests: !!f.allow_guests.checked,
+                tag: v.tag.trim() || null, capacity: v.capacity ? Math.max(1, Math.round(Number(v.capacity))) : null, on_website: !!f.on_website.checked };
             busy(ev.submitter, async () => { const saved = await api.saveEvent(rec); await loadEvents(true); closeSheet(); toast(e ? 'Saved. Members are told if the time or place changed.' : 'Published. Members are notified.'); location.hash = '#events/' + (e?.id ?? saved?.id ?? ''); render(); });
         };
     });
