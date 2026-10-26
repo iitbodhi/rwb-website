@@ -205,7 +205,8 @@ const globalActions = {
     'chat-close': () => { if (history.length > 1 && state.cameFrom) history.back(); else location.hash = '#home'; },
     'odo': () => odoSheet(),
     'wish': () => wishSheet(state.bdays.filter(b => b.day === todayISO())),
-    'hello': el => helloSheet(el.dataset.name)
+    'hello': el => helloSheet(el.dataset.name),
+    'news-open': el => { const n = NEWS_MAP.get(el.dataset.nid); if (n) newsSheet(n); }
 };
 /* Welcome a new Ronin in the RWB WhatsApp group */
 function helloSheet(name) {
@@ -223,7 +224,7 @@ function helloSheet(name) {
 /* =================== Sign in / access =================== */
 /* =================== Member details: the same questions as the RWB join form =================== */
 /* Titles, order and required answers match the Google join form, so the app, the form and the contact sheet stay uniform. */
-const JOIN_REQUIRED = ['full_name', 'dob', 'phone', 'bike', 'vrn', 'blood_group', 'locality', 'emergency_phone'];
+const JOIN_REQUIRED = ['full_name', 'dob', 'phone', 'bike', 'vrn', 'blood_group', 'locality', 'emergency_phone', 'hideout'];
 const BLOOD = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 const RONIN = [['TVS Ronin 225', 'Yes'], ['No Ronin yet', 'Not yet']];
 const normBlood = s => {
@@ -592,13 +593,27 @@ function cluster(services, fuel) {
     </section>`;
 }
 
+/* posts without a page of their own (announcements, blood requests…) open in a window with the full message */
+const NEWS_MAP = new Map();
+const linkifyNews = t => esc(t).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
+    .replace(/(?<![\w/])((?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5})(?!\d)/g, m => { const d = m.replace(/\D/g, '').slice(-10); return `<a href="tel:+91${d}">${m}</a> <a class="wa-mini" href="${waTo(d)}" target="_blank" rel="noopener" aria-label="WhatsApp ${d}">WhatsApp</a>`; });
+function newsSheet(n) {
+    openSheet(n.title, `<p class="small muted" style="margin-bottom:12px">${KIND_ICON[n.kind] || '📣'} ${timeAgo(n.created_at)}${n.audience === 'admins' ? ' · admins only' : n.audience === 'moderators' ? ' · team only' : ''}</p>
+        <div class="news-full">${n.body ? linkifyNews(n.body) : '<span class="muted">No details.</span>'}</div>
+        <button class="btn ghost block" data-x="share" style="margin-top:16px">Share on WhatsApp</button>`, body => {
+        body.querySelector('[data-x=share]').onclick = () => openWA(waShare(`📣 *${n.title}*${n.body ? '\n\n' + n.body : ''}\n\n– RWB App: https://${APP_LINK}`));
+    });
+}
 function newsRow(n, del = false, compact = false) {
+    NEWS_MAP.set(String(n.id), n);
     const href = n.url && n.url.startsWith('#') ? n.url : '#news';
+    const own = !n.url || /^#(news|home)?$/.test(n.url);
     const hello = n.kind === 'member' && /say hello to (.+?)!?$/i.exec(n.body || '');
     if (hello && !del) return newsRow({ ...n, kind: 'member' }, true, compact).replace('<a class="news-row', `<a data-act="hello" data-name="${esc(hello[1])}" class="news-row`).replace(/<button class="icon-btn del"[^]*?<\/button>/, ICON.chev);
-    if (compact) return `<a class="news-row mini ${n.kind}" href="${esc(href)}"><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || '📣'}</span>
+    const openAttr = own ? ` data-act="news-open" data-nid="${n.id}"` : '';
+    if (compact) return `<a class="news-row mini ${n.kind}" href="${esc(href)}"${openAttr}><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || '📣'}</span>
         <span class="grow"><b>${esc(n.title)}</b><span class="news-line">${n.body ? esc(n.body) + ' · ' : ''}${shortAgo(n.created_at)}${n.audience === 'admins' ? ' · admins' : n.audience === 'moderators' ? ' · team' : ''}</span></span>${ICON.chev}</a>`;
-    return `<a class="news-row ${n.kind}" href="${esc(href)}"><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || '📣'}</span>
+    return `<a class="news-row ${n.kind}" href="${esc(href)}"${openAttr}><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || '📣'}</span>
         <span class="grow"><b>${esc(n.title)}</b>${n.body ? `<span class="news-body">${esc(n.body)}</span>` : ''}<span class="small muted">${timeAgo(n.created_at)}${n.audience === 'admins' ? ', admins only' : n.audience === 'moderators' ? ', team only' : ''}</span></span>
         ${del ? `<button class="icon-btn del" data-act="del-news" data-id="${n.id}" aria-label="Delete">✕</button>` : ICON.chev}</a>`;
 }
@@ -612,6 +627,7 @@ function missingOf(m) {
     if (!m.dob) out.push('date of birth');
     if (!m.vrn) out.push('VRN');
     if (!m.locality) out.push('locality');
+    if (!m.hideout) out.push('permanent hideout');
     return out;
 }
 function profileTodo(m) {
@@ -2011,7 +2027,7 @@ function bindFollowUps(inc, all) {
         const tnc = scope.filter(m => m.missing.includes('rules')), other = scope.filter(m => !m.missing.includes('rules'));
         const lists = v === 'gone' ? [['fu-gone', 'Left / removed', 'Say hello, or invite them back.', gone, 'gone']]
             : [['fu-rules', 'Not agreed to the T&C', 'No “read carefully” answer on record, or they said no. Tap Agreed if they confirmed to you.', tnc, 'todo'],
-               ['fu-other', 'Missing details', 'Emergency contact, blood group, birthday, VRN or locality.', other, 'todo'],
+               ['fu-other', 'Missing details', 'Emergency contact, blood group, birthday, VRN, locality or permanent hideout.', other, 'todo'],
                ['fu-sticker', 'RWB sticker not received', 'Tell them where to collect it, or to update the app if they already have one.', v === 'app' ? noSticker.filter(m => m.user_id) : noSticker, 'sticker'],
                ...(v === 'all' ? [['fu-notapp', 'Not on the app', 'Send them the app link with the Android and iPhone install videos.', notApp, 'notapp']] : [])];
         $('#fu-body').innerHTML = `<p class="small muted" style="margin:10px 0">${v === 'gone' ? 'Members who left or were removed.' : 'Members on the app get an in-app reminder every Sunday. For everyone else, tap WhatsApp to send a ready-made reminder.'}</p>
@@ -2406,7 +2422,8 @@ async function viewMotomart() {
     };
     $('#mms').onchange = e => { mmState.status = e.target.value; viewMotomart(); };
     let t; $('#mmq').oninput = e => { clearTimeout(t); t = setTimeout(() => { mmState.q = e.target.value; viewMotomart().then(() => { const i = $('#mmq'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }); }, 300); };
-    if (state.param) { const l = all.find(x => String(x.id) === state.param); if (l) listingDetail(l); else toast('That post is no longer available', true); }
+    /* a post opened by link (e.g. from Home): open it once, then forget it so filters don't reopen it */
+    if (state.param) { const id = state.param; state.param = null; history.replaceState(null, '', '#motomart'); const l = all.find(x => String(x.id) === id); if (l) listingDetail(l); else toast('That post is no longer available', true); }
 }
 
 function sellPostText(l) {

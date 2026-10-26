@@ -998,3 +998,7 @@ details.rules .tnc-doc{margin-top:10px}
 .follow-rwb{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .follow-rwb a{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 6px;border-radius:16px;background:var(--card2,rgba(127,127,127,.1));border:1px solid var(--line,rgba(127,127,127,.2));color:inherit;text-decoration:none;font-size:.82rem;font-weight:600;text-align:center}
 .follow-rwb a .fi{width:40px;height:40px;object-fit:contain;margin-bottom:2px}
+
+.news-full{white-space:pre-line;font-size:1rem;line-height:1.55;overflow-wrap:anywhere}
+.news-full a{color:var(--orange);font-weight:600}
+.news-full a.wa-mini{font-size:.78rem;padding:2px 8px;border-radius:99px;background:#25d36622;color:#1a9e4b;text-decoration:none;margin-left:2px}

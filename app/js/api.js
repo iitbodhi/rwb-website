@@ -537,7 +537,7 @@ function demoApi() {
                 save(); return c;
             },
             incomplete: () => wait(db.members.filter(m => !m.status || m.status === 'active').map(m => ({ id: m.id, full_name: m.full_name, phone: m.phone, on_app: !!m.user_id, tnc_agreed: m.tnc_agreed ?? null, reminded_at: m.reminded_at || null,
-                missing: [m.tnc_agreed !== true && 'rules', !m.emergency_phone && 'emergency contact', !m.blood_group && 'blood group', !m.dob && 'date of birth', !m.vrn && 'VRN', !m.locality && 'locality'].filter(Boolean) })).filter(m => m.missing.length)),
+                missing: [m.tnc_agreed !== true && 'rules', !m.emergency_phone && 'emergency contact', !m.blood_group && 'blood group', !m.dob && 'date of birth', !m.vrn && 'VRN', !m.locality && 'locality', !m.hideout && 'permanent hideout'].filter(Boolean) })).filter(m => m.missing.length)),
             async remindIncomplete() { return db.members.filter(m => m.user_id && m.user_id !== 'me').length; },
             async markReminded(id) { const m = db.members.find(x => x.id === id); m.reminded_at = new Date().toISOString(); save(); },
             async setTnc(id, v) { db.members.find(x => x.id === id).tnc_agreed = v; save(); return v; },

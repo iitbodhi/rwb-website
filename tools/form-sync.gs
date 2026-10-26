@@ -55,6 +55,7 @@ function setup() {
   ScriptApp.newTrigger('publishForm').timeBased().everyHours(1).create();
   ScriptApp.newTrigger('syncAnswers').timeBased().everyDays(1).atHour(3).create();
   columns_(responsesSheet_());
+  makeTabs_();
   publishForm();
   syncTnc();
   syncAnswers();
@@ -340,6 +341,15 @@ function removeRows_(phone, name) {
   } finally { lock.releaseLock(); }
 }
 
+/** The tabs rows move to (made here so admins can see them from day one; rows arrive as things happen). */
+function makeTabs_() {
+  const ss = SpreadsheetApp.getActive(), sheet = responsesSheet_();
+  const heads = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  [['Removed members', ['Removed on']], ['Rejected', ['Rejected on', 'Note']], ['Older entries', ['Moved on', 'Note']]].forEach(([name, first]) => {
+    if (!ss.getSheetByName(name)) ss.insertSheet(name).appendRow(first.concat(heads));
+  });
+}
+
 /** Column numbers (0-based) for each field, adding the app's columns at the end if missing. */
 function columns_(sheet) {
   let heads = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
@@ -462,7 +472,7 @@ const FORM_ID = '1Grrq_WyGn7I_0-QsluloFMHJ9ENdOmhAJllpIiXym34';
 const FORM_REQUIRED = {
   'full name': true, 'date of birth': true, 'whatsapp no': true, 'do you own a ronin bike': true, 'vrn': true,
   'blood group': true, 'current locality': true, 'in case of emergency': true,
-  'permanent hideout': false, 'mobile no. (alternative)': false
+  'permanent hideout': true, 'mobile no. (alternative)': false
 };
 /**
  * Run once from the editor: choose "fixJoinForm" → Run → allow access to Google Forms.
