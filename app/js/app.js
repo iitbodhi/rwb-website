@@ -1300,8 +1300,10 @@ async function importSheetEvents() {
         if (go) go.onclick = () => busy(go, async () => { const n = await api.importEvents(past.map(({ past: _, ...x }) => x)); await loadEvents(true); closeSheet(); toast(n ? `${n} past event${n === 1 ? '' : 's'} added` : 'Already imported'); state.evtTab = 'past'; render(); });
     });
 }
+const EVT_TAGS = ['Small Ride', 'Sunday Highs Ride', 'Long Tour', 'Training Session', 'Service Camp', 'Event'];
 function eventForm(e = null) {
     const r = e ? { ...e } : { reminder_minutes: 60, allow_guests: false };
+    const tagPick = !r.tag ? '' : EVT_TAGS.includes(r.tag) ? r.tag : 'Custom';
     const start = toLocalInput(r.starts_at), end = toLocalInput(r.ends_at), sameDay = !end || end.slice(0, 10) === start.slice(0, 10);
     openSheet(e ? 'Edit event' : 'Create event', `<form id="evf" class="evt-form">
         <input name="title" class="evt-name" required maxlength="100" placeholder="Event name" value="${esc(r.title || '')}" aria-label="Event name">
@@ -1313,9 +1315,9 @@ function eventForm(e = null) {
         <label>Google Maps link <span class="hint">(optional; we'll search the location if empty)</span><input name="map_url" type="url" inputmode="url" placeholder="https://maps.app.goo.gl/…" value="${esc(r.map_url || '')}"></label>
         <label>Call link <span class="hint">(optional, WhatsApp or Meet)</span><input name="call_link" type="url" inputmode="url" placeholder="https://call.whatsapp.com/…" value="${esc(r.call_link || '')}"></label>
         <label>Reminder<select name="reminder">${REMINDERS.map(([v, t]) => `<option value="${v ?? ''}"${v === r.reminder_minutes ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
-        <div class="grid2"><label>Tag <span class="hint">(optional)</span><input name="tag" maxlength="40" list="evt-tags" placeholder="e.g. Ride" value="${esc(r.tag || '')}"></label>
+        <div class="grid2"><label>Tag <span class="hint">(optional)</span><select name="tag_pick">${['', ...EVT_TAGS, 'Custom'].map(t => `<option value="${esc(t)}"${t === tagPick ? ' selected' : ''}>${t ? esc(t) : 'No tag'}</option>`).join('')}</select></label>
             <label>Seats <span class="hint">(optional)</span><input name="capacity" type="number" inputmode="numeric" min="1" max="10000" placeholder="No limit" value="${r.capacity || ''}"></label></div>
-        <datalist id="evt-tags">${['Ride', 'Night ride', 'Breakfast ride', 'Meet-up', 'Trip', 'Workshop', 'Charity'].map(t => `<option value="${t}">`).join('')}</datalist>
+        <label id="tag-custom"${tagPick === 'Custom' ? '' : ' hidden'}>Custom tag<input name="tag" maxlength="40" placeholder="e.g. Night Ride" value="${esc(tagPick === 'Custom' ? r.tag || '' : '')}"></label>
         <label class="switch"><span>Show on roninwb.in<span class="hint" style="display:block">Title, date, place and seats left appear on the website's Events</span></span><input type="checkbox" name="on_website"${r.on_website !== false ? ' checked' : ''}></label>
         <label class="switch"><span>Allow guests<span class="hint" style="display:block">People can bring one additional guest</span></span><input type="checkbox" name="allow_guests"${r.allow_guests ? ' checked' : ''}></label>
         <button class="btn block">${e ? 'Save changes' : 'Publish event'}</button>
@@ -1329,6 +1331,7 @@ function eventForm(e = null) {
             if (!same && f.d1.value && (!f.d2.value || f.d2.value <= f.d1.value)) f.d2.value = nextDay(f.d1.value);
         };
         sd.onchange = syncEnd; f.d1.addEventListener('change', syncEnd); syncEnd();
+        f.tag_pick.onchange = () => { const c = f.tag_pick.value === 'Custom'; body.querySelector('#tag-custom').hidden = !c; if (c) setTimeout(() => f.tag.focus(), 30); };
         if (!e) setTimeout(() => f.title.focus(), 60);
         f.onsubmit = ev => {
             ev.preventDefault();
@@ -1341,7 +1344,7 @@ function eventForm(e = null) {
             const rec = { id: e?.id, title: v.title.trim(), description: v.description.trim() || null, starts_at: starts.toISOString(), ends_at: ends ? ends.toISOString() : null,
                 location: v.location.trim() || null, map_url: v.map_url.trim() || null, call_link: v.call_link.trim() || null,
                 reminder_minutes: v.reminder === '' ? null : Number(v.reminder), allow_guests: !!f.allow_guests.checked,
-                tag: v.tag.trim() || null, capacity: v.capacity ? Math.max(1, Math.round(Number(v.capacity))) : null, on_website: !!f.on_website.checked };
+                tag: (v.tag_pick === 'Custom' ? (v.tag || '').trim() : v.tag_pick) || null, capacity: v.capacity ? Math.max(1, Math.round(Number(v.capacity))) : null, on_website: !!f.on_website.checked };
             busy(ev.submitter, async () => { const saved = await api.saveEvent(rec); await loadEvents(true); closeSheet(); toast(e ? 'Saved. Members are told if the time or place changed.' : 'Published. Members are notified.'); location.hash = '#events/' + (e?.id ?? saved?.id ?? ''); render(); });
         };
     });
