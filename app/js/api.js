@@ -86,6 +86,7 @@ async function supabaseApi(url, key) {
         directory: async () => must(await sb.rpc('member_directory')),
         setSharing: async p => must(await sb.rpc('set_my_sharing', { p })),
         vrnCheck: async v => must(await sb.rpc('vrn_check', { p_vrn: v })),
+        agreeTnc: async () => { const r = await sb.rpc('agree_tnc'); if (r.error && /could not find|function/i.test(r.error.message || '')) return must(await sb.rpc('request_change', { p_kind: 'tnc', p_value: 'agree' })); return must(r); },
         withdrawTnc: async () => { const r = await sb.rpc('withdraw_tnc'); if (r.error && /could not find|function/i.test(r.error.message || '')) return must(await sb.rpc('request_change', { p_kind: 'tnc', p_value: 'disagree' })); return must(r); },
         leaveRwb: async note => must(await sb.rpc('leave_rwb', { p_note: note || null })),
         rwbAdmins: async () => must(await sb.rpc('rwb_admins')),
@@ -423,7 +424,8 @@ function demoApi() {
         directory: () => demoDir().then(list => list.map(demoHide)),
         setSharing: p => { const out = Object.fromEntries(['vrn', 'bike', 'locality', 'mileage'].map(k => [k, !!p[k]])); me().share = out; save(); return wait(out); },
         vrnCheck: v => wait(db.members.some(m => (!m.status || m.status === 'active') && (nk(m.vrn) === nk(v) || (m.member_bikes || []).some(b => nk(b.vrn) === nk(v))))),
-        withdrawTnc: () => { me().tnc_agreed = false; save(); return wait('withdrawn'); },
+        agreeTnc: () => { Object.assign(me(), { tnc_agreed: true, tnc_version: window.RWB_TNC?.version || null, tnc_agreed_at: new Date().toISOString() }); save(); return wait('ok'); },
+        withdrawTnc: () => { Object.assign(me(), { tnc_agreed: false, tnc_version: null }); save(); return wait('withdrawn'); },
         leaveRwb: () => { me().status = 'left'; save(); return wait('left'); },
         rwbAdmins: () => wait(db.members.filter(m => ['superadmin', 'admin'].includes(m.role) && (!m.status || m.status === 'active')).map(m => ({ full_name: m.full_name, nickname: m.nickname, phone: m.phone, role: m.role }))),
         async boards() {

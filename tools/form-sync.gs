@@ -47,7 +47,7 @@ const APP_COLS = { status: 'App · Status', vrn_verified: 'App · VRN verified',
 const ST = { waiting: 'Waiting for approval', member: 'Member' };
 /* Columns that update the app when an admin edits them here */
 const EDITABLE = ['full_name', 'dob', 'phone', 'email', 'vrn', 'bike', 'blood_group', 'locality', 'hideout', 'emergency_phone', 'alt_phone', 'vrn_verified', 'bike2_vrn', 'bike2_model', 'bike3_vrn', 'bike3_model', 'tnc'];
-const AGREED = 'Understood & agreed', NOT_AGREED = "I don't agree";   // written in the "read carefully" column for answers given in the app
+const AGREED = 'I have read and agree to the RWB Terms & Conditions and Privacy Policy', NOT_AGREED = "I don't agree";   // written in the "read carefully" column for answers given in the app
 
 /** Run once (and again after updating this file). Installs the automatic triggers. */
 function setup() {

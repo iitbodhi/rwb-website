@@ -6,6 +6,7 @@
 -- * VRN check for members: just "an RWB member or not" (vrn_check).
 -- * Terms & Conditions: withdrawing takes effect at once (the app then asks the member to agree, message an admin,
 --   or leave RWB); leave_rwb lets them leave; rwb_admins lists the admins they can message.
+-- * Terms & Conditions version 2.0: every member agrees once to the new Terms (tnc_version records which version).
 -- Safe to run more than once.
 
 -- ---------- 1. What each member shares with other members (nothing, until they choose) ----------
@@ -186,5 +187,48 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function public.rwb_admins() from public, anon;
 grant execute on function public.rwb_admins() to authenticated;
+
+-- ---------- 5. Terms version: everyone agrees to the current Terms once ----------
+alter table public.members add column if not exists tnc_version text;
+alter table public.members add column if not exists tnc_agreed_at timestamptz;
+-- the current version (change it here when the Terms change, and everyone is asked to agree again)
+create or replace function private.tnc_current() returns text language sql immutable as $$ select '2.0' $$;
+
+-- agreeing in the app, or being approved after agreeing on the join form, records the current version
+-- (answers copied from old sheet rows don't: those were agreements to the old rules)
+create or replace function private.tnc_stamp() returns trigger language plpgsql as $$
+begin
+  if new.tnc_agreed is true and coalesce(current_setting('rwb.from_sheet', true), '') <> 'on'
+     and (tg_op = 'INSERT' or old.tnc_agreed is distinct from true) then
+    new.tnc_version := private.tnc_current(); new.tnc_agreed_at := now();
+  end if;
+  if new.tnc_agreed is not true then new.tnc_version := null; end if;
+  return new;
+end $$;
+drop trigger if exists members_tnc_stamp on public.members;
+create trigger members_tnc_stamp before insert or update of tnc_agreed on public.members for each row execute function private.tnc_stamp();
+
+create or replace function public.agree_tnc() returns text
+language plpgsql security definer set search_path = public, private as $$
+begin
+  update members set tnc_agreed = true, tnc_version = private.tnc_current(), tnc_agreed_at = now()
+  where user_id = auth.uid() and status = 'active';
+  if not found then raise exception 'Members only'; end if;
+  return private.tnc_current();
+end $$;
+revoke execute on function public.agree_tnc() from public, anon;
+grant execute on function public.agree_tnc() to authenticated;
+
+-- follow-ups and reminders: "agree to the T&C" until they agree to the current version
+create or replace function private.missing_items(m public.members) returns text[] language sql stable as $$
+  select array_remove(array[
+    case when m.tnc_agreed is not true or m.tnc_version is distinct from private.tnc_current() then 'rules' end,
+    case when nullif(trim(coalesce(m.emergency_phone, '')), '') is null then 'emergency contact' end,
+    case when nullif(trim(coalesce(m.blood_group, '')), '') is null then 'blood group' end,
+    case when m.dob is null then 'date of birth' end,
+    case when nullif(trim(coalesce(m.vrn, '')), '') is null then 'VRN' end,
+    case when nullif(trim(coalesce(m.locality, '')), '') is null then 'locality' end,
+    case when nullif(trim(coalesce(m.hideout, '')), '') is null then 'permanent hideout' end], null)
+$$;
 
 notify pgrst, 'reload schema';

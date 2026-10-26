@@ -640,9 +640,12 @@ function newsRow(n, del = false, compact = false) {
 }
 
 /* What a member still needs to fill in (shown on Home until done) */
+/* agreed to the current version of the Terms? (the version is known once setup file 36 is run) */
+const TNC_VERSION = window.RWB_TNC?.version || '';
+const tncOk = m => m.tnc_agreed === true && (!('tnc_version' in m) || !TNC_VERSION || m.tnc_version === TNC_VERSION);
 function missingOf(m) {
     const out = [];
-    if ('tnc_agreed' in m && m.tnc_agreed !== true) out.push('rules');   /* known once setup file 30 is run */
+    if ('tnc_agreed' in m && !tncOk(m)) out.push('rules');   /* known once setup file 30 is run */
     if (!m.emergency_phone) out.push('emergency contact');
     if (!m.blood_group) out.push('blood group');
     if (!m.dob) out.push('date of birth');
@@ -1699,24 +1702,25 @@ function saveMyDetails(form, m, submitter, done) {
 
 /* =================== Blockers: T&C first, then a complete profile =================== */
 async function gateFor(m) {
-    if ('tnc_agreed' in m && m.tnc_agreed !== true) return 'tnc';
+    if ('tnc_agreed' in m && !tncOk(m)) return 'tnc';
     let miss = missingOf(m).filter(x => x !== 'rules');
     if (miss.includes('VRN') && (state.vrnSent || (await api.myChanges().catch(() => [])).some(c => c.kind === 'vrn' && c.status === 'pending'))) { state.vrnSent = true; miss = miss.filter(x => x !== 'VRN'); }
     return miss.length ? 'profile' : null;
 }
 const gateTop = title => `${demoBar()}<header class="top gate-top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1></header>`;
 function tncGate() {
-    const m = state.me, withdrew = m.tnc_agreed === false;
+    const m = state.me, withdrew = m.tnc_agreed === false, updated = m.tnc_agreed === true;
     app.innerHTML = gateTop('RWB') + `<section class="gate card">
-        <p class="gate-kicker">${withdrew ? 'Your app access is paused' : 'One step before you continue'}</p>
+        <p class="gate-kicker">${withdrew ? 'Your app access is paused' : updated ? 'We\'ve updated our Terms' : 'One step before you continue'}</p>
         <h2>RWB Terms &amp; Conditions</h2>
-        <p class="small muted" style="margin-bottom:12px">${withdrew ? 'You said you no longer agree to the RWB Terms & Conditions. Agree again to keep using the RWB App, talk to an admin, or leave RWB.' : 'Every RWB member agrees to these. Please read them and agree to keep using the RWB App.'}</p>
+        <p class="small muted" style="margin-bottom:12px">${withdrew ? 'You said you no longer agree to the RWB Terms & Conditions. Agree again to keep using the RWB App, talk to an admin, or leave RWB.' : updated ? 'RWB has new, clearer Terms & Conditions, covering privacy, safety, Motomart and more. Please read them and agree once to keep using the RWB App.' : 'Every RWB member agrees to these. Please read them and agree to keep using the RWB App.'}</p>
         <div class="gate-doc">${tncDoc()}</div>
+        <p class="small muted" style="margin-top:8px">How we handle your data: <a href="../privacy.html" target="_blank" rel="noopener">RWB Privacy Policy ↗</a></p>
         <button class="btn block" data-act="g-agree" style="margin-top:14px">I agree to the RWB Terms &amp; Conditions</button>
         <button class="btn ghost block" data-act="g-msg" style="margin-top:8px">💬 Message an admin</button>
         <button class="btn danger block" data-act="g-leave" style="margin-top:8px">Disagree &amp; leave RWB</button></section>`;
     actions = {
-        'g-agree': b => busy(b, async () => { await api.requestChange('tnc', 'agree'); state.me = await api.me(); toast('Thank you! Welcome back.'); render(); }),
+        'g-agree': b => busy(b, async () => { await api.agreeTnc(); state.me = await api.me(); toast('Thank you! Welcome back.'); render(); }),
         'g-msg': () => adminsSheet(),
         'g-leave': b => { if (!confirmBox('Leave Ronin Warriors of Bengal? Your RWB membership ends and you\'ll be signed out of the app. An admin can add you back later if you change your mind.')) return;
             busy(b, async () => { await api.leaveRwb('Did not agree to the RWB Terms & Conditions'); toast('You have left RWB. Ride safe!'); setTimeout(() => api.signOut(), 1200); }); }
@@ -1743,10 +1747,10 @@ function profileGate() {
 
 function rulesSheet(m, done) {
     openSheet('RWB Terms & Conditions', `${tncDoc()}
-        ${m.tnc_agreed !== true ? '<button class="btn block" data-x="agree" style="margin-top:16px">I agree to the RWB Terms & Conditions</button>'
+        ${!tncOk(m) ? '<button class="btn block" data-x="agree" style="margin-top:16px">I agree to the RWB Terms & Conditions</button>'
             : '<p class="small muted" style="margin-top:16px">You agreed to these Terms & Conditions as an RWB member.</p><button class="btn ghost block" data-x="disagree" style="margin-top:8px">I no longer agree</button>'}`, body => {
         const a = body.querySelector('[data-x=agree]'), d = body.querySelector('[data-x=disagree]');
-        if (a) a.onclick = () => busy(a, async () => { await api.requestChange('tnc', 'agree'); state.me = await api.me(); closeSheet(); toast('Thank you!'); render(); });
+        if (a) a.onclick = () => busy(a, async () => { await api.agreeTnc(); state.me = await api.me(); closeSheet(); toast('Thank you!'); render(); });
         if (d) d.onclick = () => { if (confirmBox('No longer agree to the RWB Terms & Conditions? Your access to the RWB App pauses until you agree again, and the admins are told.')) busy(d, async () => { await api.withdrawTnc(); state.me = await api.me(); closeSheet(); render(); }); };
     });
 }
@@ -1787,8 +1791,8 @@ function viewMe() {
         <h2 class="group-title">My bikes <span class="small muted" style="text-transform:none;letter-spacing:0;font-weight:500">up to 3</span></h2>
         <div class="group bikes" id="my-bikes">${bikeRows(m, null)}</div>
         ${'tnc_agreed' in m ? `<h2 class="group-title">Terms & Conditions</h2>
-        <div class="group"><div class="bike-row"><span class="g-ico">📜</span><span class="grow"><b>${m.tnc_agreed === true ? 'You agree to the RWB T&C' : m.tnc_agreed === false ? 'You don\'t agree to the RWB T&C' : 'Please read and agree'}</b><span class="small muted">${m.tnc_agreed === true ? 'From the RWB join form' : 'Needed for every RWB member'}</span></span>
-            <button class="btn sm ${m.tnc_agreed === true ? 'ghost' : ''}" data-act="rules">${m.tnc_agreed === true ? 'Read' : 'Read & agree'}</button></div></div>` : ''}
+        <div class="group"><div class="bike-row"><span class="g-ico">📜</span><span class="grow"><b>${tncOk(m) ? 'You agree to the RWB T&C' : m.tnc_agreed === false ? 'You don\'t agree to the RWB T&C' : 'Please read and agree'}</b><span class="small muted">${tncOk(m) ? (m.tnc_version ? 'Version ' + esc(m.tnc_version) + (m.tnc_agreed_at ? ', agreed ' + fmtDate(String(m.tnc_agreed_at).slice(0, 10)) : '') : 'From the RWB join form') : 'Needed for every RWB member'}</span></span>
+            <button class="btn sm ${tncOk(m) ? 'ghost' : ''}" data-act="rules">${tncOk(m) ? 'Read' : 'Read & agree'}</button></div></div>` : ''}
 
 
         <h2 class="group-title">Appearance</h2>
