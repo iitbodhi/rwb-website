@@ -323,7 +323,7 @@ const SOCIAL = [
     ['WhatsApp channel', 'https://whatsapp.com/channel/0029VaiK6QHEgGfTItym9t2H', /channel/i, 'img/social-whatsapp.png']];
 const FOLLOW = SOCIAL.filter(x => x[1]);
 const SKIP_Q = /^(timestamp|email( address)?|score)$/i;
-const isExtraQ = q => !SKIP_Q.test(String(q).trim()) && !formKey(q);
+const isExtraQ = q => !SKIP_Q.test(String(q).trim()) && !/^\s*[0-9.]*\s*$/.test(String(q)) && !formKey(q);
 const ansText = a => Array.isArray(a) ? a.join(', ') : String(a ?? '').trim();
 /* the join-form answers that don't have their own field in the profile (sticker, social media and so on) */
 const extraAnswers = m => Object.entries(m?.form_answers || {}).filter(([q, a]) => isExtraQ(q) && ansText(a));
@@ -419,6 +419,19 @@ function checkPage(pg, form) {
     }
     return '';
 }
+/* As soon as a VRN is typed: is it already registered to someone else? (only a few characters of their email and number are shown) */
+function vrnWatch(vrnInput, phoneInput) {
+    if (!vrnInput) return;
+    const box = document.createElement('small'); box.className = 'vrn-taken'; box.hidden = true; vrnInput.after(box);
+    let last = '';
+    const check = async () => {
+        const key = vrnInput.value.replace(/[^a-z0-9]/gi, '').toUpperCase(); if (key.length < 6 || key === last) return; last = key;
+        const h = await api.vrnHint(vrnInput.value, phoneInput?.value || '').catch(() => null);
+        box.textContent = h ? '⚠ ' + h : ''; box.hidden = !h;
+    };
+    vrnInput.addEventListener('change', check); vrnInput.addEventListener('blur', check);
+}
+const vrnTaken = form => form.querySelector('.vrn-taken:not([hidden])')?.textContent.replace(/^⚠ /, '') || '';
 function liveJoinForm(def, known, sess, filled = false) {
     const pages = formPages(def);
     let at = 0;
@@ -433,11 +446,13 @@ function liveJoinForm(def, known, sess, filled = false) {
         </form>
         <button type="button" class="btn ghost block" data-act="out" style="margin-top:10px">Use a different Google account</button>`;
     const form = $('#req');
+    const qIdx = key => def.items.findIndex(it => formKey(it.title) === key);
+    vrnWatch(form.querySelector(`[name=q${qIdx('vrn')}]`), form.querySelector(`[name=q${qIdx('phone')}]`));
     const show = n => { at = n; form.querySelectorAll('.gpage').forEach(p => p.hidden = Number(p.dataset.p) !== n); window.scrollTo(0, 0); };
     actions = {
         out: () => api.signOut(),
         'tnc-read': () => showTnc(),
-        gnext: () => { const err = checkPage(pages[at], form); if (err) return toast(err, true); show(at + 1); },
+        gnext: () => { const err = checkPage(pages[at], form) || (form.querySelector(`.gpage[data-p="${at}"] .vrn-taken:not([hidden])`) ? vrnTaken(form) : ''); if (err) return toast(err, true); show(at + 1); },
         gback: () => show(at - 1)
     };
     form.addEventListener('submit', e => {
@@ -447,6 +462,7 @@ function liveJoinForm(def, known, sess, filled = false) {
         if (!f.full_name || !f.phone) return toast('Full Name and WhatsApp No. are needed', true);
         if (f.emergency_phone && f.phone && f.emergency_phone.replace(/\D/g, '').slice(-10) === f.phone.replace(/\D/g, '').slice(-10)) return toast('The emergency contact should be someone else\'s number', true);
         if (!f.tnc) return toast('You need to agree to the RWB Terms & Conditions to join.', true);
+        if (vrnTaken(form)) return toast(vrnTaken(form), true);
         busy(e.submitter, async () => { await api.requestAccess(f); boot(); });
     });
 }
@@ -479,11 +495,13 @@ async function viewAccess(status, sess) {
             <button type="button" class="btn ghost block" data-act="out">Use a different Google account</button>
         </form>`;
     actions = { out: () => api.signOut() };
+    vrnWatch($('#req [name=vrn]'), $('#req [name=phone]'));
     $('#req').addEventListener('submit', e => {
         e.preventDefault();
         const f = joinData(e.target), err = joinCheck(f, 'join');
         if (err) return toast(err, true);
         if (!f.tnc) return toast('Please read and agree to the RWB Terms & Conditions', true);
+        if (vrnTaken(e.target)) return toast(vrnTaken(e.target), true);
         busy(e.submitter, async () => { await api.requestAccess(f); boot(); });
     });
 }

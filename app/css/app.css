@@ -1002,3 +1002,5 @@ details.rules .tnc-doc{margin-top:10px}
 .news-full{white-space:pre-line;font-size:1rem;line-height:1.55;overflow-wrap:anywhere}
 .news-full a{color:var(--orange);font-weight:600}
 .news-full a.wa-mini{font-size:.78rem;padding:2px 8px;border-radius:99px;background:#25d36622;color:#1a9e4b;text-decoration:none;margin-left:2px}
+
+.vrn-taken{display:block;margin-top:6px;padding:8px 10px;border-radius:10px;background:color-mix(in srgb,var(--orange) 14%,transparent);color:var(--text,inherit);font-size:.82rem;line-height:1.4}

@@ -51,6 +51,7 @@ async function supabaseApi(url, key) {
 
         linkAccount: async () => must(await sb.rpc('link_account')),
         joinForm: async () => must(await sb.rpc('join_form')),
+        vrnHint: async (vrn, phone) => { const r = await sb.rpc('vrn_hint', { p_vrn: vrn, p_phone: phone || null }); return r.error ? null : r.data; },
         settings: async () => { const r = await sb.rpc('app_settings'); return r.error ? {} : r.data; },
         myPrefill: async () => must(await sb.rpc('my_prefill')),
         /* filtered to my own member id: admins can read everyone's rows */
@@ -389,6 +390,9 @@ function demoApi() {
         async updateMe(f) { Object.assign(me(), f); save(); return wait(me()); },
         async setAvatar(file) { me().avatar_url = file ? await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); }) : null; save(); return wait(me()); },
         joinForm: () => wait(window.DEMO_JOIN_FORM || null),
+        vrnHint: (vrn, phone) => { const k = x => String(x || '').replace(/[^a-z0-9]/gi, '').toUpperCase(), d = String(phone || '').replace(/\D/g, '').slice(-10);
+            const m = db.members.find(x => k(x.vrn) === k(vrn) && x.phone !== d && (x.status || 'active') === 'active');
+            return wait(m ? `This VRN is already registered with RWB (${m.email ? 'email ' + m.email.slice(0, 2) + '•••@' + m.email.split('@')[1] + ', ' : ''}WhatsApp ${m.phone.slice(0, 2)}••••••${m.phone.slice(-2)}). If that's you, sign in with that email. Otherwise please message an RWB admin.` : null); },
         settings: () => wait({ wa_group_link: db.groupLink || null }),
         myPrefill: () => wait(null),
         myChanges: () => wait((db.changes || []).filter(c => c.member_id === me().id).slice().reverse()),

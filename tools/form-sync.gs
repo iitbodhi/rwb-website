@@ -8,6 +8,9 @@
  * 3. App → sheet: members approved in the app get a row here; changes in the app (Me → Edit, bikes, VRN verified)
  *    update their row. Rows added by the app say "RWB App" in the "Added via" column.
  * 4. A member removed in the app is removed from this sheet; the row is first copied to the "Removed members" tab.
+ * 5. Safety net, every 15 minutes (syncWithApp): VRNs lose their spaces, duplicate VRNs are tidied (the row with the most
+ *    details and the T&C agreed stays), and every row is checked against the app and repaired: app changes are written
+ *    here, anyone missing is added, removed / rejected entries move to their tabs, and gaps in the app are filled from here.
  *
  * SET-UP / UPDATE (keeps the same web address):
  *   a) Extensions → Apps Script → replace everything with this file → put your SYNC_SECRET back → Save.
@@ -49,17 +52,20 @@ const AGREED = 'Understood & agreed', NOT_AGREED = "I don't agree";   // written
 /** Run once (and again after updating this file). Installs the automatic triggers. */
 function setup() {
   const ss = SpreadsheetApp.getActive();
-  ScriptApp.getProjectTriggers().filter(t => ['onFormSubmitSync', 'onSheetEdit', 'publishForm', 'syncAnswers'].includes(t.getHandlerFunction())).forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.getProjectTriggers().filter(t => ['onFormSubmitSync', 'onSheetEdit', 'publishForm', 'syncAnswers', 'syncWithApp'].includes(t.getHandlerFunction())).forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('onFormSubmitSync').forSpreadsheet(ss).onFormSubmit().create();
   ScriptApp.newTrigger('onSheetEdit').forSpreadsheet(ss).onEdit().create();
   ScriptApp.newTrigger('publishForm').timeBased().everyHours(1).create();
   ScriptApp.newTrigger('syncAnswers').timeBased().everyDays(1).atHour(3).create();
+  ScriptApp.newTrigger('syncWithApp').timeBased().everyMinutes(15).create();
   columns_(responsesSheet_());
   makeTabs_();
+  registerWebhook_();
   publishForm();
   syncTnc();
   syncAnswers();
-  console.log('Ready: new form entries go to the approval list, edits here update the app, and the app shows the same join form.');
+  syncWithApp();
+  console.log('Ready: new form entries go to the approval list, edits here update the app, the app shows the same join form, and the sheet is checked against the app every 15 minutes.');
 }
 
 /** Runs by itself for every new form submission: the entry waits for an admin in the app. */
@@ -68,6 +74,7 @@ function onFormSubmitSync(e) {
   const col = columns_(sheet);
   const heads = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const row = sheet.getRange(rowNo, 1, 1, sheet.getLastColumn()).getValues()[0];
+  if (col.vrn !== undefined && cleanVrn_(row[col.vrn]) !== String(row[col.vrn])) { row[col.vrn] = cleanVrn_(row[col.vrn]); sheet.getRange(rowNo, col.vrn + 1).setValue(row[col.vrn]); }
   const m = toMember_(heads, row);
   const res = send_([m]);
   if (String(res[0]) === 'pending') {
@@ -172,7 +179,7 @@ function answers_(heads, row) {
   const skip = /^(timestamp|added via|updated in app|app ·)/i, out = {};
   heads.forEach((h, i) => {
     const t = String(h).trim(); let v = row[i];
-    if (!t || skip.test(t) || v === '' || v == null) return;
+    if (!t || skip.test(t) || isHelperHead_(t) || v === '' || v == null) return;
     if (v instanceof Date) v = Utilities.formatDate(v, 'Asia/Kolkata', /date of birth/i.test(t) ? 'dd/MM/yyyy' : 'dd/MM/yyyy HH:mm');
     out[t] = String(v);
   });
@@ -419,6 +426,226 @@ function syncAnswers() {
     n += Number(r.getContentText()) || 0;
   }
   console.log('Answers sent for ' + rows.length + ' rows; ' + n + ' members updated in the app.');
+}
+
+/* ======================= Safety net: the sheet always matches the app ======================= */
+/* Column titles that are just numbers (helper / count columns) are not form questions */
+function isHelperHead_(t) { return /^\s*[0-9.]*\s*$/.test(String(t)); }
+/* WB 02 AB-1234 → WB02AB1234 */
+function cleanVrn_(v) { const s = String(v == null ? '' : v).toUpperCase().replace(/[^A-Z0-9]/g, ''); return s.length >= 4 ? s : String(v == null ? '' : v).trim(); }
+const p10_ = x => String(x == null ? '' : x).replace(/\D/g, '').slice(-10);
+
+/** Tells the app this sheet's web address, so its instant updates always arrive here. */
+function registerWebhook_() {
+  let url = ''; try { url = ScriptApp.getService().getUrl() || ''; } catch (e) { /* not deployed yet */ }
+  if (!/\/exec$/.test(url)) { console.log('Web app not deployed yet (Deploy → New deployment → Web app), so instant updates from the app are off. The 15-minute check still works.'); return; }
+  const r = UrlFetchApp.fetchAll([rpc_('sheet_set_webhook', { p_secret: SYNC_SECRET, p_url: url })])[0];
+  console.log('Web address sent to the app: ' + r.getContentText());
+}
+
+/**
+ * Runs every 15 minutes by itself (and from setup). Safe to run any time from the editor too.
+ *   1. VRNs: spaces and dashes removed.
+ *   2. Duplicate VRNs: the row with the most details and the T&C agreed stays; the others move to "Older entries"
+ *      (their duplicate member in the app is archived under Left / removed, never someone using the app).
+ *   3. Every member's row is checked against the app: app details are written here, missing members are added,
+ *      removed members and rejected entries move to their tabs, and empty details in the app are filled from here.
+ */
+function syncWithApp() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) { console.log('Another sync is running; skipped.'); return; }
+  try {
+    const vr = tidyVrns_();          // first, so members archived as duplicates aren't added back below
+    const exp = UrlFetchApp.fetchAll([rpc_('sheet_export_all', { p_secret: SYNC_SECRET })])[0];
+    if (exp.getResponseCode() !== 200) { console.log('Could not read the app (run setup file 34 in Supabase first): ' + exp.getContentText().slice(0, 200)); return; }
+    const app = JSON.parse(exp.getContentText());
+    const rc = reconcile_(app);
+    console.log('Sync done. VRNs cleaned: ' + vr.cleaned + '. Duplicate VRN rows moved: ' + vr.moved + (vr.archived ? ' (archived in the app: ' + vr.archived + ')' : '') +
+      '. Cells updated from the app: ' + rc.cells + ' on ' + rc.rows + ' rows. Added: ' + rc.added + '. Moved to Removed members: ' + rc.removed +
+      '. Moved to Rejected: ' + rc.rejected + '. Older duplicate rows moved: ' + rc.older + '. App details filled from the sheet: ' + rc.filled + '.');
+    if (vr.review.length) console.log('Please check by hand (both are on the app, nothing was changed):\n' + vr.review.join('\n'));
+  } finally { lock.releaseLock(); }
+}
+
+/** See what the duplicate-VRN tidy-up would do, without changing anything. */
+function previewDuplicates() { const r = tidyVrns_(true); console.log((r.plan.join('\n') || 'No duplicate VRNs.') + (r.review.length ? '\nCheck by hand:\n' + r.review.join('\n') : '')); }
+
+function tidyVrns_(dry) {
+  const sheet = responsesSheet_(), col = columns_(sheet), last = sheet.getLastRow(), width = sheet.getLastColumn(), out = { cleaned: 0, moved: 0, archived: 0, review: [], plan: [] };
+  if (last < 2 || col.vrn === undefined) return out;
+  const data = sheet.getRange(2, 1, last - 1, width).getValues(), heads = sheet.getRange(1, 1, 1, width).getValues()[0];
+  /* 1. no spaces in VRNs (main bike, bikes 2 and 3) */
+  ['vrn', 'bike2_vrn', 'bike3_vrn'].forEach(k => {
+    if (col[k] === undefined) return;
+    const cells = []; let n = 0;
+    data.forEach(r => { const c = cleanVrn_(r[col[k]]); if (c !== String(r[col[k]])) { r[col[k]] = c; n++; } cells.push([r[col[k]]]); });
+    if (n && !dry) { writeColumn_(sheet, col[k], cells); out.cleaned += n; }
+  });
+  /* 2. duplicate VRNs */
+  const groups = {};
+  data.forEach((r, i) => {
+    const v = cleanVrn_(r[col.vrn]); if (v.length < 6 || String(r[col.status]) === ST.waiting) return;
+    (groups[v] = groups[v] || []).push(i);
+  });
+  const dups = Object.keys(groups).filter(v => groups[v].length > 1);
+  if (!dups.length) return out;
+  const phones = [...new Set([].concat(...dups.map(v => groups[v].map(i => p10_(data[i][col.phone])))))].filter(p => p.length === 10);
+  const ow = UrlFetchApp.fetchAll([rpc_('sheet_vrn_owners', { p_secret: SYNC_SECRET, p_phones: phones })])[0];
+  if (ow.getResponseCode() !== 200) { out.review.push('Duplicate VRNs not tidied: run setup file 34 in Supabase first.'); return out; }
+  const own = JSON.parse(ow.getContentText() || '{}') || {};
+  const agreed = r => col.tnc !== undefined && /(agree|understood|accept|yes)/i.test(String(r[col.tnc])) && !/(don'?t|not agree|disagree)/i.test(String(r[col.tnc]));
+  const filled = r => r.filter((x, c) => x !== '' && x != null && !isHelperHead_(heads[c])).length;
+  const when = r => col.joined_at !== undefined && r[col.joined_at] instanceof Date ? r[col.joined_at].getTime() : 0;
+  const score = i => { const r = data[i], o = own[p10_(r[col.phone])] || {};
+    return (o.on_app ? 1e9 : 0) + (o.status === 'active' ? 1e8 : 0) + (agreed(r) || o.tnc ? 1e7 : 0) + filled(r) * 1e4 + when(r) / 1e10; };
+  const move = [], archive = [];
+  dups.forEach(v => {
+    const rows = groups[v].slice().sort((a, b) => score(b) - score(a)), keep = rows[0], keepPhone = p10_(data[keep][col.phone]), keepName = String(data[keep][col.full_name] || '');
+    rows.slice(1).forEach(i => {
+      const p = p10_(data[i][col.phone]), o = own[p] || {}, name = String(data[i][col.full_name] || '');
+      if (p !== keepPhone && o.on_app) { out.review.push(v + ': ' + keepName + ' and ' + name + ' (' + p + ') both use the app'); return; }
+      move.push({ i: i, note: 'Duplicate VRN ' + v + ' (kept ' + keepName + ')' });
+      if (p !== keepPhone && o.status === 'active') archive.push({ phone: p, vrn: v, kept: keepName });
+      out.plan.push(v + ': keep ' + keepName + ' (' + keepPhone + '), move ' + name + ' (' + p + ')' + (p !== keepPhone && o.status === 'active' ? ' and archive them in the app' : ''));
+    });
+  });
+  if (dry || !move.length) return out;
+  if (archive.length) out.archived = Number(UrlFetchApp.fetchAll([rpc_('sheet_archive_duplicates', { p_secret: SYNC_SECRET, p_rows: archive })])[0].getContentText()) || 0;
+  moveRowsFast_(sheet, data, move, 'Older entries', 'Moved on');
+  out.moved = move.length;
+  return out;
+}
+
+/* a birthday in any form (date cell, dd/mm/yyyy, dd/mm, yyyy-mm-dd) → yyyy-mm-dd, year 1904 when unknown */
+function dobKey_(v) {
+  if (v instanceof Date) return birthday_(v);
+  const s = String(v == null ? '' : v).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const dm = s.match(/^(\d{1,2})[\/\-.](\d{1,2})$/);
+  if (dm) return '1904-' + dm[2].padStart(2, '0') + '-' + dm[1].padStart(2, '0');
+  return birthday_(s);
+}
+/* the app's value and the sheet's value mean the same thing? */
+function same_(k, a, b) {
+  const t = x => String(x == null ? '' : x).replace(/\s+/g, ' ').trim().toLowerCase();
+  if (/phone/.test(k)) return p10_(a) === p10_(b);
+  if (/vrn$/.test(k) && k !== 'vrn_verified') return cleanVrn_(a) === cleanVrn_(b);
+  if (k === 'dob') return dobKey_(a) === dobKey_(b);
+  if (k === 'blood_group') { const g = x => t(x).replace(/\s|ve\b/g, '').replace(/pos(itive)?/, '+').replace(/neg(ative)?/, '-'); return g(a) === g(b); }
+  if (k === 'bike') { const g = x => /yeah|yes|ronin/i.test(String(x)) ? 'ronin' : t(x); return g(a) === g(b); }
+  if (k === 'tnc') { const g = x => !t(x) ? '' : /(don'?t|not agree|disagree)/i.test(String(x)) ? 'no' : /(agree|understood|accept|yes)/i.test(String(x)) ? 'yes' : t(x); return g(a) === g(b); }
+  if (k === 'vrn_verified') { const g = x => /^(yes|y|✓|✔|true|verified)$/i.test(t(x)) ? 'yes' : ''; return g(a) === g(b); }
+  return t(a instanceof Date ? Utilities.formatDate(a, 'Asia/Kolkata', 'dd/MM/yyyy') : a) === t(b instanceof Date ? Utilities.formatDate(b, 'Asia/Kolkata', 'dd/MM/yyyy') : b);
+}
+
+function reconcile_(app) {
+  const sheet = responsesSheet_(), col = columns_(sheet), width = sheet.getLastColumn(), last = sheet.getLastRow();
+  const heads = sheet.getRange(1, 1, 1, width).getValues()[0].map(h => String(h).trim());
+  const data = last > 1 ? sheet.getRange(2, 1, last - 1, width).getValues() : [];
+  const out = { cells: 0, rows: 0, added: 0, removed: 0, rejected: 0, older: 0, filled: 0 };
+  const byPhone = {}, byEmail = {};
+  data.forEach((r, i) => {
+    const p = p10_(r[col.phone]); if (p.length === 10) (byPhone[p] = byPhone[p] || []).push(i);
+    const e = col.email === undefined ? '' : String(r[col.email] || '').trim().toLowerCase(); if (e) (byEmail[e] = byEmail[e] || []).push(i);
+  });
+  const waiting = new Set((app.waiting || []).map(w => p10_(w.phone)));
+  const active = (app.members || []).filter(m => m.status === 'active'), activeSet = new Set(active.map(m => p10_(m.phone)));
+  const changed = {}, touched = new Set(), gone = new Set(), fills = [], appends = [];
+  const put = (i, c, v) => { if (c === undefined || c < 0) return; data[i][c] = v; (changed[c] = changed[c] || new Set()).add(i); touched.add(i); out.cells++; };
+  const move = { older: [], removed: [], rejected: [] };
+  const coreKeys = ['full_name', 'dob', 'phone', 'email', 'vrn', 'bike', 'blood_group', 'locality', 'hideout', 'emergency_phone', 'alt_phone'];
+  const filledCount = r => r.filter(x => x !== '' && x != null).length;
+
+  active.forEach(m => {
+    const p = p10_(m.phone), em = String(m.email || '').trim().toLowerCase();
+    if (p.length !== 10) return;
+    let rows = (byPhone[p] || []).filter(i => !gone.has(i));
+    if (!rows.length && em) rows = (byEmail[em] || []).filter(i => !gone.has(i) && !activeSet.has(p10_(data[i][col.phone])));
+    if (waiting.has(p)) rows = rows.filter(i => String(data[i][col.status]) !== ST.waiting);   // their new entry waits for an admin
+    if (!rows.length) {
+      if (waiting.has(p) && (byPhone[p] || []).length) return;
+      const vals = sheetValues_(m), a = appValues_(m), row = new Array(width).fill('');
+      Object.keys(vals).forEach(k => { if (col[k] !== undefined) row[col[k]] = vals[k]; });
+      Object.keys(a).forEach(k => { if (col[k] !== undefined) row[col[k]] = a[k]; });
+      answerCells_(heads, col, m.answers).forEach(([c, v]) => { row[c] = v; });
+      if (col.joined_at !== undefined) row[col.joined_at] = m.joined_at ? new Date(m.joined_at) : new Date();
+      row[col.added] = 'RWB App'; if (col.updated !== undefined) row[col.updated] = new Date();
+      appends.push(row); return;
+    }
+    /* their row: the member's row, else the fullest one; older copies with the same number move away */
+    rows.sort((a, b) => (String(data[b][col.status]) === ST.member) - (String(data[a][col.status]) === ST.member) || filledCount(data[b]) - filledCount(data[a]));
+    const i = rows[0];
+    rows.slice(1).forEach(j => { if (p10_(data[j][col.phone]) === p) { move.older.push({ i: j, note: 'Older entry of ' + m.full_name }); gone.add(j); } });
+    const row = data[i], sm = toMember_(heads, row), vals = sheetValues_(m), fill = {};
+    coreKeys.forEach(k => {
+      if (col[k] === undefined) return;
+      const appHas = m[k] != null && String(m[k]).trim() !== '', sheetHas = String(row[col[k]] == null ? '' : row[col[k]]).trim() !== '';
+      if (!appHas) { if (sheetHas && sm[k]) fill[k] = sm[k]; return; }
+      if (!same_(k, row[col[k]], k === 'bike' ? vals.bike : m[k])) put(i, col[k], vals[k]);
+    });
+    if (Object.keys(fill).length) fills.push(Object.assign({ phone: p }, fill));
+    const a = appValues_(m);
+    Object.keys(a).forEach(k => { if (col[k] !== undefined && !same_(k, row[col[k]], a[k])) put(i, col[k], a[k]); });
+    answerCells_(heads, col, m.answers).forEach(([c, v]) => { if (!same_('answer', row[c], v)) put(i, c, v); });
+  });
+
+  /* members who left or were removed in the app: their rows go to "Removed members" */
+  (app.members || []).filter(m => m.status !== 'active' && !activeSet.has(p10_(m.phone))).forEach(m => {
+    const p = p10_(m.phone); if (waiting.has(p)) return;
+    (byPhone[p] || []).forEach(i => { if (!gone.has(i) && String(data[i][col.status]) !== ST.waiting) { move.removed.push({ i: i, note: (m.status === 'left' ? 'Left' : 'Removed') + (m.removed_note ? ': ' + m.removed_note : '') }); gone.add(i); } });
+  });
+  /* entries an admin rejected in the app */
+  (app.rejected || []).forEach(r => {
+    const p = p10_(r.phone); if (activeSet.has(p) || waiting.has(p)) return;
+    (byPhone[p] || []).forEach(i => { if (!gone.has(i) && String(data[i][col.status]) === ST.waiting) { move.rejected.push({ i: i, note: r.reason || '' }); gone.add(i); } });
+  });
+  /* entries waiting for an admin are labelled */
+  waiting.forEach(p => { if (activeSet.has(p)) return; (byPhone[p] || []).forEach(i => { if (!gone.has(i) && !String(data[i][col.status])) put(i, col.status, ST.waiting); }); });
+
+  /* write: whole columns at once where the column has no formulas, else cell by cell */
+  touched.forEach(i => { if (col.updated !== undefined && !gone.has(i)) { data[i][col.updated] = new Date(); (changed[col.updated] = changed[col.updated] || new Set()).add(i); } });
+  Object.keys(changed).forEach(c => {
+    c = +c; const rowsSet = changed[c], f = sheet.getRange(2, c + 1, data.length, 1).getFormulas();
+    if (f.every(x => !x[0])) writeColumn_(sheet, c, data.map(r => [r[c]]));
+    else rowsSet.forEach(i => { if (!f[i][0]) sheet.getRange(i + 2, c + 1).setValue(data[i][c]); });
+  });
+  out.rows = [...touched].filter(i => !gone.has(i)).length;
+  if (appends.length) { sheet.getRange(sheet.getLastRow() + 1, 1, appends.length, width).setValues(appends); out.added = appends.length; }
+  /* moves last (rows below shift up), all three tabs in one pass */
+  const all = [].concat(move.older.map(x => Object.assign({ tab: 'Older entries', title: 'Moved on' }, x)), move.removed.map(x => Object.assign({ tab: 'Removed members', title: 'Removed on' }, x)), move.rejected.map(x => Object.assign({ tab: 'Rejected', title: 'Rejected on' }, x)));
+  ['Older entries', 'Removed members', 'Rejected'].forEach(t => { const list = all.filter(x => x.tab === t); if (list.length) copyRows_(sheet, data, list, t, list[0].title); });
+  [...new Set(all.map(x => x.i))].sort((a, b) => b - a).forEach(i => sheet.deleteRow(i + 2));
+  out.older = move.older.length; out.removed = move.removed.length; out.rejected = move.rejected.length;
+  for (let k = 0; k < fills.length; k += 100) out.filled += Number(UrlFetchApp.fetchAll([rpc_('sheet_fill_members', { p_secret: SYNC_SECRET, p_rows: fills.slice(k, k + 100) })])[0].getContentText()) || 0;
+  return out;
+}
+
+/* the member's other answers (sticker, social media…) → [column, value] for columns with the same title */
+function answerCells_(heads, col, answers) {
+  const own = new Set(Object.values(col)), out = [];
+  Object.keys(answers || {}).forEach(t => {
+    const c = heads.indexOf(String(t).trim()), v = answers[t];
+    if (c < 0 || own.has(c) || isHelperHead_(t) || v == null || String(v).trim() === '') return;
+    out.push([c, v]);
+  });
+  return out;
+}
+
+function writeColumn_(sheet, c, cells) { if (cells.length) sheet.getRange(2, c + 1, cells.length, 1).setValues(cells); }
+
+/* copy rows (by index in data) to a tab with a date and a note, in one write */
+function copyRows_(sheet, data, list, tabName, dateTitle) {
+  const ss = SpreadsheetApp.getActive(), width = sheet.getLastColumn();
+  let tab = ss.getSheetByName(tabName);
+  const first = tabName === 'Removed members' ? [dateTitle] : [dateTitle, 'Note'];
+  if (!tab) { tab = ss.insertSheet(tabName); tab.appendRow(first.concat(sheet.getRange(1, 1, 1, width).getValues()[0])); }
+  const rows = list.map(x => (tabName === 'Removed members' ? [new Date()] : [new Date(), x.note || '']).concat(data[x.i]));
+  const w = Math.max(...rows.map(r => r.length)); rows.forEach(r => { while (r.length < w) r.push(''); });
+  tab.getRange(tab.getLastRow() + 1, 1, rows.length, w).setValues(rows);
+}
+function moveRowsFast_(sheet, data, list, tabName, dateTitle) {
+  copyRows_(sheet, data, list, tabName, dateTitle);
+  [...new Set(list.map(x => x.i))].sort((a, b) => b - a).forEach(i => sheet.deleteRow(i + 2));
 }
 
 /* ======================= Catch-up ======================= */
