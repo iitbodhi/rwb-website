@@ -1004,3 +1004,14 @@ details.rules .tnc-doc{margin-top:10px}
 .news-full a.wa-mini{font-size:.78rem;padding:2px 8px;border-radius:99px;background:#25d36622;color:#1a9e4b;text-decoration:none;margin-left:2px}
 
 .vrn-taken{display:block;margin-top:6px;padding:8px 10px;border-radius:10px;background:color-mix(in srgb,var(--orange) 14%,transparent);color:var(--text,inherit);font-size:.82rem;line-height:1.4}
+.vrn-check{display:flex;flex-direction:column;gap:2px;margin-bottom:14px}
+.vrn-check input{text-transform:uppercase}
+.vcr{margin-top:10px;padding:12px 14px;border-radius:14px;display:flex;flex-direction:column;gap:4px;font-size:.92rem;line-height:1.45}
+.vcr.yes{background:color-mix(in srgb,#22a565 16%,transparent)}
+.vcr.no{background:color-mix(in srgb,var(--orange) 14%,transparent)}
+.vcr a{color:var(--orange);font-weight:600}
+body[data-route=gate] .pookie-fab{display:none!important}
+.gate{margin-top:6px}
+.gate h2{font:800 1.7rem/1.05 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:2px 0 8px}
+.gate-kicker{color:var(--orange);font-weight:700;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase}
+.gate-doc{max-height:46vh;overflow:auto;padding:12px 14px;border-radius:14px;background:var(--card2,rgba(127,127,127,.08));border:1px solid var(--line,rgba(127,127,127,.2))}

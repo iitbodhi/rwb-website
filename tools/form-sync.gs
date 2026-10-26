@@ -803,4 +803,23 @@ function fixJoinForm() {
 }
 
 
+/**
+ * Run once from the editor: choose "tncAgreeOnly" → Run → allow access to Google Forms.
+ * The join form's Terms & Conditions question keeps only the "agree" answer and becomes required,
+ * so nobody can send the form without agreeing (the app's join form already works this way).
+ */
+function tncAgreeOnly() {
+  const form = FormApp.openById(FORM_ID);
+  const item = form.getItems().find(it => TNC_HEAD.test(String(it.getTitle())) && [FormApp.ItemType.MULTIPLE_CHOICE, FormApp.ItemType.CHECKBOX, FormApp.ItemType.LIST].includes(it.getType()));
+  if (!item) { console.log('No Terms & Conditions question found on the form.'); return; }
+  const q = item.getType() === FormApp.ItemType.MULTIPLE_CHOICE ? item.asMultipleChoiceItem() : item.getType() === FormApp.ItemType.CHECKBOX ? item.asCheckboxItem() : item.asListItem();
+  const keep = q.getChoices().map(c => c.getValue()).filter(v => !/(don'?t|do not|not agree|disagree)/i.test(v));
+  if (!keep.length) keep.push(AGREED);
+  q.setChoices(keep.map(v => q.createChoice(v)));
+  q.setRequired(true);
+  try { if (q.showOtherOption) q.showOtherOption(false); } catch (e) { /* not available */ }
+  console.log('"' + item.getTitle() + '" now only offers: ' + keep.join(', ') + ' (required).');
+  publishForm();
+}
+
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }

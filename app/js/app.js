@@ -120,7 +120,7 @@ function wishSheet(people) {
 const load = {
     services: async (force) => (state.services = !force && state.services || await api.services()),
     fuel: async (force) => (state.fuel = !force && state.fuel || await api.fuel()),
-    bdays: async () => (state.bdays ??= await api.birthdays(isAdmin() ? 7 : 0).catch(() => [])),
+    bdays: async () => (state.bdays ??= isMod() ? await api.birthdays(isAdmin() ? 7 : 0).catch(() => []) : []),   /* birthdays: admins and coordinators only */
     listings: async (force) => (state.listings = !force && state.listings || await api.listings()),
     news: async (force) => (state.news = !force && state.news || await api.news().catch(() => [])),
     docs: async (force) => (state.docs = !force && state.docs || await api.docs().catch(() => []))
@@ -163,6 +163,8 @@ let renderChain = Promise.resolve();
 function render() { renderChain = renderChain.then(doRender, doRender); return renderChain; }
 async function doRender() {
     if (!state.me) return;          /* signed out / not loaded yet: boot() shows the right screen */
+    const gate = await gateFor(state.me);
+    if (gate) { tabbar.hidden = true; document.body.dataset.route = 'gate'; return gate === 'tnc' ? tncGate() : profileGate(); }
     const [name, param] = (location.hash.slice(1) || 'home').split('?')[0].split('/');
     state.param = param || null;
     const view = ROUTES[name] || viewHome;
@@ -370,6 +372,7 @@ function prefillFor(item, known) {
 function formItemHtml(item, i, val) {
     const k = formKey(item.title), name = `q${i}`, req = item.required ? ' required' : '';
     const head = `<span class="fq-title">${esc(item.title)}${item.required ? ' <span class="req">*</span>' : ''}</span>${item.help ? `<span class="fq-help">${esc(item.help)}</span>` : ''}`;
+    if (k === 'tnc' && item.choices) item = { ...item, choices: item.choices.filter(c => !/(don'?t|do not|not agree|disagree)/i.test(c.value)) };   /* joining means agreeing */
     if (item.type === 'MULTIPLE_CHOICE' || item.type === 'CHECKBOX') {
         const multi = item.type === 'CHECKBOX', vals = multi ? String(val || '').split(/,\s*/) : [val];
         return `<fieldset class="fq${k === 'tnc' ? ' fq-tnc' : ''}" data-i="${i}"${item.required ? ' data-req="1"' : ''}><legend>${head}</legend>${k === 'tnc' ? '<button type="button" class="link-btn tnc-link" data-act="tnc-read">Read the full RWB Terms & Conditions ›</button>' : ''}${item.choices.map(c => `<label class="fq-choice"><input type="${multi ? 'checkbox' : 'radio'}" name="${name}" value="${esc(c.value)}"${vals.includes(c.value) ? ' checked' : ''}${c.ends ? ' data-ends="1"' : ''}><span>${esc(c.value)}</span></label>`).join('')}</fieldset>`;
@@ -685,7 +688,7 @@ async function viewHome() {
         ${docWarn ? `<a class="banner doc-warn ${docWarn.st.level}" href="#docs"><span class="b-ico">📄</span><span class="grow"><b>${esc(docName(docWarn.d))}</b> ${docWarn.st.days < 0 ? `expired on ${fmtDate(docWarn.d.expiry_date)}` : docWarn.st.days === 0 ? 'expires today' : `expires in ${docWarn.st.days} day${docWarn.st.days === 1 ? '' : 's'}`}. Renew it and update My documents.</span>${ICON.chev}</a>` : ''}
         ${nextEvt ? `<a class="banner evt-banner" href="#events/${nextEvt.id}"><span class="evt-mini">${evtTile(nextEvt)}</span><span class="grow"><b>${esc(nextEvt.title)}</b><span class="small muted">${esc(evtWhen(nextEvt, true))}${nextEvt.location ? ' · ' + esc(nextEvt.location) : ''}</span></span>${evd.mine[nextEvt.id] ? `<span class="evt-me ${evd.mine[nextEvt.id].status}">${RSVP_TXT[evd.mine[nextEvt.id].status]}</span>` : '<span class="evt-me ask">RSVP</span>'}</a>` : ''}
         ${today.length ? `<div class="banner bday"><span class="b-ico">🎂</span><span class="grow"><b>${esc(names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : names[0])}</b> ${names.length > 1 ? 'have' : 'has'} a birthday today</span><button class="btn sm wa" data-act="wish">Wish</button></div>` : ''}
-        ${pushAsk ? `<div class="banner"><span class="b-ico">🔔</span><span class="grow">Get birthdays, Motomart posts and ride news as notifications</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
+        ${pushAsk ? `<div class="banner"><span class="b-ico">🔔</span><span class="grow">${isMod() ? 'Get birthdays, Motomart posts and ride news as notifications' : 'Get ride news, events and Motomart posts as notifications'}</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
         ${feed.length ? `<section class="section"><h2>Latest from RWB <span class="h-acts">${feed.some(n => !STICKY(n)) ? '<button data-act="clear-feed">Clear</button>' : ''}<a href="#news">See all</a></span></h2><div class="group news-mini">${feed.slice(0, 3).map(n => newsRow(n, false, true)).join('')}</div></section>` : ''}
         <section class="section"><h2>Fresh on Motomart <a href="#motomart">See all</a></h2>
             ${fresh.length ? `<div class="strip">${fresh.map(listingCard).join('')}</div>` : `<a class="group-row-card" href="#motomart"><span class="g-ico">${ICON.tag}</span><span class="grow"><b>Nothing for sale yet</b><span class="small muted">Selling old gear? Post it here for fellow riders.</span></span>${ICON.chev}</a>`}</section>
@@ -1676,13 +1679,75 @@ function changesBox(list) {
     return `<div class="card section chg-box">${wait.map(c => `<p>⏳ <b>${esc(CHANGE_TXT[c.kind])}</b> → ${esc(c.kind === 'tnc' ? 'no longer agree' : c.new_value + (c.new_model ? ' · ' + c.new_model : ''))} <span class="muted">· waiting for an admin</span></p>`).join('')}
         ${no.map(c => `<p>✕ <b>${esc(CHANGE_TXT[c.kind])}</b> change to ${esc(c.new_value)} wasn't approved${c.reject_reason ? `: ${esc(c.reject_reason)}` : ''}</p>`).join('')}</div>`;
 }
+/* Me → Edit (and the "complete your profile" screen): important details go to the admins, the rest saves now */
+function saveMyDetails(form, m, submitter, done) {
+    const d = joinData(form), err = joinCheck(d, 'me', m.phone);
+    if (err) return toast(err, true);
+    Object.keys(d).forEach(k => d[k] = d[k] || null);
+    const ask = [];
+    if (d.full_name && d.full_name !== m.full_name) ask.push(['name', d.full_name]);
+    if (d.phone && d.phone.replace(/\D/g, '').slice(-10) !== m.phone) ask.push(['phone', d.phone]);
+    if ((d.vrn && vrnKey(d.vrn) !== vrnKey(m.vrn)) || (d.bike && d.bike !== m.bike)) ask.push(['vrn', d.vrn || m.vrn, d.bike || m.bike]);
+    ['full_name', 'phone', 'vrn', 'bike'].forEach(k => delete d[k]);
+    busy(submitter, async () => {
+        state.me = await api.updateMe(d);
+        for (const [kind, v, model] of ask) { await api.requestChange(kind, v, null, model); if (kind === 'vrn') state.vrnSent = true; }
+        done();
+        toast(ask.length ? `Saved. ${ask.map(a => CHANGE_TXT[a[0]]).join(', ')} sent to the admins for approval` : 'Details saved');
+    });
+}
+
+/* =================== Blockers: T&C first, then a complete profile =================== */
+async function gateFor(m) {
+    if ('tnc_agreed' in m && m.tnc_agreed !== true) return 'tnc';
+    let miss = missingOf(m).filter(x => x !== 'rules');
+    if (miss.includes('VRN') && (state.vrnSent || (await api.myChanges().catch(() => [])).some(c => c.kind === 'vrn' && c.status === 'pending'))) { state.vrnSent = true; miss = miss.filter(x => x !== 'VRN'); }
+    return miss.length ? 'profile' : null;
+}
+const gateTop = title => `${demoBar()}<header class="top gate-top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1></header>`;
+function tncGate() {
+    const m = state.me, withdrew = m.tnc_agreed === false;
+    app.innerHTML = gateTop('RWB') + `<section class="gate card">
+        <p class="gate-kicker">${withdrew ? 'Your app access is paused' : 'One step before you continue'}</p>
+        <h2>RWB Terms &amp; Conditions</h2>
+        <p class="small muted" style="margin-bottom:12px">${withdrew ? 'You said you no longer agree to the RWB Terms & Conditions. Agree again to keep using the RWB App, talk to an admin, or leave RWB.' : 'Every RWB member agrees to these. Please read them and agree to keep using the RWB App.'}</p>
+        <div class="gate-doc">${tncDoc()}</div>
+        <button class="btn block" data-act="g-agree" style="margin-top:14px">I agree to the RWB Terms &amp; Conditions</button>
+        <button class="btn ghost block" data-act="g-msg" style="margin-top:8px">💬 Message an admin</button>
+        <button class="btn danger block" data-act="g-leave" style="margin-top:8px">Disagree &amp; leave RWB</button></section>`;
+    actions = {
+        'g-agree': b => busy(b, async () => { await api.requestChange('tnc', 'agree'); state.me = await api.me(); toast('Thank you! Welcome back.'); render(); }),
+        'g-msg': () => adminsSheet(),
+        'g-leave': b => { if (!confirmBox('Leave Ronin Warriors of Bengal? Your RWB membership ends and you\'ll be signed out of the app. An admin can add you back later if you change your mind.')) return;
+            busy(b, async () => { await api.leaveRwb('Did not agree to the RWB Terms & Conditions'); toast('You have left RWB. Ride safe!'); setTimeout(() => api.signOut(), 1200); }); }
+    };
+}
+async function adminsSheet() {
+    const list = await api.rwbAdmins().catch(() => []);
+    const me = firstName(state.me);
+    openSheet('Message an admin', `<p class="small muted" style="margin-bottom:10px">Choose who to message on WhatsApp.</p>
+        <div class="group">${list.length ? list.map(a => `<div class="bike-row"><span class="g-ico">🛡️</span><span class="grow"><b>${esc(a.full_name)}</b><span class="small muted">${a.role === 'superadmin' ? 'Super admin' : 'Admin'}</span></span>
+            <a class="btn sm wa" target="_blank" rel="noopener" href="${waTo(a.phone, `Hi ${firstName(a)}, it's ${me} from RWB. I have a question about the RWB Terms & Conditions.`)}">WhatsApp</a></div>`).join('') : '<p class="small muted" style="padding:12px">Could not load the admins. Please try again.</p>'}</div>`);
+}
+function profileGate() {
+    const m = state.me, miss = missingOf(m).filter(x => x !== 'rules' && !(x === 'VRN' && state.vrnSent));
+    app.innerHTML = gateTop('RWB') + `<section class="gate card">
+        <p class="gate-kicker">Almost there, ${esc(firstName(m))}</p>
+        <h2>Complete your profile</h2>
+        <p class="small muted" style="margin-bottom:8px">Every RWB member keeps these details up to date, for rides, emergencies and the member list. Please fill in what's missing to continue.</p>
+        <div class="fu-miss" style="margin-bottom:14px">${miss.map(x => `<span>${esc(x)}</span>`).join('')}</div>
+        <form id="mf">${joinFields(m, 'me')}<button class="btn block">Save and continue</button></form></section>`;
+    actions = {};
+    $('#mf').onsubmit = e => { e.preventDefault(); saveMyDetails(e.target, m, e.submitter, () => render()); };
+}
+
 function rulesSheet(m, done) {
     openSheet('RWB Terms & Conditions', `${tncDoc()}
         ${m.tnc_agreed !== true ? '<button class="btn block" data-x="agree" style="margin-top:16px">I agree to the RWB Terms & Conditions</button>'
             : '<p class="small muted" style="margin-top:16px">You agreed to these Terms & Conditions as an RWB member.</p><button class="btn ghost block" data-x="disagree" style="margin-top:8px">I no longer agree</button>'}`, body => {
         const a = body.querySelector('[data-x=agree]'), d = body.querySelector('[data-x=disagree]');
         if (a) a.onclick = () => busy(a, async () => { await api.requestChange('tnc', 'agree'); state.me = await api.me(); closeSheet(); toast('Thank you!'); render(); });
-        if (d) d.onclick = () => { if (confirmBox('Tell the admins you no longer agree to the RWB Terms & Conditions? They may remove you from RWB.')) busy(d, async () => { await api.requestChange('tnc', 'disagree'); closeSheet(); toast('Sent to the admins'); done(); }); };
+        if (d) d.onclick = () => { if (confirmBox('No longer agree to the RWB Terms & Conditions? Your access to the RWB App pauses until you agree again, and the admins are told.')) busy(d, async () => { await api.withdrawTnc(); state.me = await api.me(); closeSheet(); render(); }); };
     });
 }
 const BIKE_MODELS = ['TVS Ronin 225', 'TVS Apache RTR 160 4V', 'TVS Apache RTR 200 4V', 'TVS Apache RTR 310', 'Royal Enfield Hunter 350', 'Royal Enfield Classic 350', 'Honda CB350', 'Bajaj Pulsar', 'KTM Duke'];
@@ -1736,12 +1801,15 @@ function viewMe() {
         <h2 class="group-title">Notifications</h2>
         <div class="card" id="notif-card"><p id="push-state">Checking…</p><div id="push-btn" style="margin-top:10px"></div></div>
         <div class="group" style="margin-top:10px">
-            ${[['birthday', 'Birthdays'], ['motomart', 'New Motomart posts'], ['member', 'New members on the app']].map(([k, l]) => `<label class="toggle-row"><span class="grow">${l}</span><span class="switch-only"><input type="checkbox" data-pref="${k}"${(m.notify || {})[k] !== false ? ' checked' : ''}></span></label>`).join('')}
+            ${[...(isMod() ? [['birthday', 'Birthdays']] : []), ['motomart', 'New Motomart posts'], ['member', 'New members on the app']].map(([k, l]) => `<label class="toggle-row"><span class="grow">${l}</span><span class="switch-only"><input type="checkbox" data-pref="${k}"${(m.notify || {})[k] !== false ? ' checked' : ''}></span></label>`).join('')}
         </div>
         <p class="small muted" style="margin:8px 4px 0">RWB announcements always come through.</p>
 
         <h2 class="group-title">Privacy</h2>
-        <div class="group"><label class="toggle-row"><span class="grow">Show me on the leaderboards<span class="small muted">Other members see your name, photo, km, average mileage and how many services you've logged</span></span><span class="switch-only"><input type="checkbox" id="lb"${m.show_on_leaderboard !== false ? ' checked' : ''}></span></label></div>
+        <p class="small muted" style="margin:-4px 0 8px">Other members always see your name, nickname and photo. Choose what else they see. RWB admins and coordinators can always see your details.</p>
+        <div class="group" id="share-box">${SHARE_OPTS.map(([k, t, d]) => `<label class="toggle-row"><span class="grow">${t}<span class="small muted">${d}</span></span><span class="switch-only"><input type="checkbox" data-share="${k}"${m.share?.[k] ? ' checked' : ''}></span></label>`).join('')}
+            <button class="bike-add" data-act="share-all">${SHARE_OPTS.every(([k]) => m.share?.[k]) ? '🔒 Hide all from members' : '👁 Share all with members'}</button></div>
+        <div class="group" style="margin-top:12px"><label class="toggle-row"><span class="grow">Show me on the leaderboards<span class="small muted">Other members see your name, photo, km, average mileage and how many services you've logged</span></span><span class="switch-only"><input type="checkbox" id="lb"${m.show_on_leaderboard !== false ? ' checked' : ''}></span></label></div>
 
         <h2 class="group-title">App</h2>
         <div class="group">
@@ -1772,24 +1840,7 @@ function viewMe() {
             <p class="small muted" style="margin-bottom:10px">Changes to your Full Name, WhatsApp No. and main bike (VRN) are checked by an admin first. Everything else saves straight away. <span class="req">*</span> marks answers every member needs.</p>
             ${joinFields(m, 'me')}
             <button class="btn block">Save details</button></form>`, body => {
-            body.querySelector('#mf').onsubmit = e => {
-                e.preventDefault();
-                const d = joinData(e.target), err = joinCheck(d, 'me', m.phone);
-                if (err) return toast(err, true);
-                Object.keys(d).forEach(k => d[k] = d[k] || null);
-                /* important details go to the admins; the rest saves now */
-                const ask = [];
-                if (d.full_name && d.full_name !== m.full_name) ask.push(['name', d.full_name]);
-                if (d.phone && d.phone.replace(/\D/g, '').slice(-10) !== m.phone) ask.push(['phone', d.phone]);
-                if ((d.vrn && vrnKey(d.vrn) !== vrnKey(m.vrn)) || (d.bike && d.bike !== m.bike)) ask.push(['vrn', d.vrn || m.vrn, d.bike || m.bike]);
-                ['full_name', 'phone', 'vrn', 'bike'].forEach(k => delete d[k]);
-                busy(e.submitter, async () => {
-                    state.me = await api.updateMe(d);
-                    for (const [kind, v, model] of ask) await api.requestChange(kind, v, null, model);
-                    closeSheet(); render();
-                    toast(ask.length ? `Saved. ${ask.map(a => CHANGE_TXT[a[0]]).join(', ')} sent to the admins for approval` : 'Details saved');
-                });
-            };
+            body.querySelector('#mf').onsubmit = e => { e.preventDefault(); saveMyDetails(e.target, m, e.submitter, () => { closeSheet(); render(); }); };
         })
     };
     app.querySelectorAll('[data-pref]').forEach(cb => cb.onchange = async () => {
@@ -1797,6 +1848,12 @@ function viewMe() {
         try { state.me = await api.updateMe({ notify }); toast('Saved'); } catch (e) { cb.checked = !cb.checked; toast(e.message, true); }
     });
     const wa = $('#wa-app'); if (wa) wa.onchange = () => { try { localStorage.setItem('rwb-wa-app', wa.value); } catch { /* ignore */ } toast(`WhatsApp links open in ${WA_APPS[wa.value][0] === 'Let my phone decide' ? 'whichever app your phone picks' : WA_APPS[wa.value][0]}`); };
+    const saveShare = async next => { try { const out = await api.setSharing(next); state.me = { ...state.me, share: out }; m.share = out; state.dir = null; state.board = null;
+            $('#share-box').querySelectorAll('[data-share]').forEach(x => x.checked = !!out[x.dataset.share]);
+            $('#share-box [data-act=share-all]').textContent = SHARE_OPTS.every(([k]) => out[k]) ? '🔒 Hide all from members' : '👁 Share all with members'; return out; }
+        catch (err) { toast(err.message, true); $('#share-box').querySelectorAll('[data-share]').forEach(x => x.checked = !!m.share?.[x.dataset.share]); } };
+    $('#share-box').querySelectorAll('[data-share]').forEach(x => x.onchange = async () => { const next = Object.fromEntries(SHARE_OPTS.map(([k]) => [k, !!m.share?.[k]])); next[x.dataset.share] = x.checked; if (await saveShare(next)) toast(x.checked ? 'Shared with members' : 'Hidden from members'); });
+    actions['share-all'] = async () => { const all = !SHARE_OPTS.every(([k]) => m.share?.[k]); if (await saveShare(Object.fromEntries(SHARE_OPTS.map(([k]) => [k, all])))) toast(all ? 'Your details are shared with members' : 'Your details are hidden from members'); };
     $('#lb').onchange = async e => {
         try { state.me = await api.updateMe({ show_on_leaderboard: e.target.checked }); state.board = null; state.dir = null; toast(e.target.checked ? 'You\'re on the leaderboards' : 'Hidden from the leaderboards'); }
         catch (err) { e.target.checked = !e.target.checked; toast(err.message, true); }
@@ -2737,14 +2794,16 @@ async function viewCrew() {
             ${team.map(m => `<div class="row member-row team-row">${face(m, 'avatar sm')}
                 <div class="grow"><div class="who">${name(m)} ${roleBadge(m)}</div><div class="meta">${esc(m.phone ? m.phone.replace(/(\d{5})(\d{5})/, '$1 $2') : '')}${m.vrn ? ` · ${esc(m.vrn)}` : ''}${m.avg_kmpl ? ` · <b class="kmpl-tag">${kmplTxt(m.avg_kmpl)}</b>` : ''}</div></div>
                 ${m.phone ? `<a class="icon-btn call" href="tel:+91${esc(m.phone)}" aria-label="Call ${esc(m.full_name)}">${ICON_PHONE}</a><a class="icon-btn wa-btn" href="${waTo(m.phone)}" target="_blank" rel="noopener" aria-label="WhatsApp ${esc(m.full_name)}">${ICON_WA}</a>` : ''}</div>`).join('')}</div>` : '')
-        + `<input class="search" type="search" id="cq" placeholder="Search name, bike number or place" value="${esc(state.crewSearch || '')}" aria-label="Search members">
+        + (isMod() ? '' : `<form class="card vrn-check" id="vcf"><b>🔎 VRN check</b><span class="small muted">Spotted a Ronin? See if the rider is in RWB.</span>
+            <div class="row" style="gap:8px;margin-top:8px"><input name="v" autocapitalize="characters" placeholder="WB 02 AB 1234" aria-label="Vehicle number" style="flex:1"><button class="btn">Check</button></div><div id="vcr" class="vcr" hidden></div></form>`)
+        + `<input class="search" type="search" id="cq" placeholder="${isMod() ? 'Search name, bike number or place' : 'Search members by name'}" value="${esc(state.crewSearch || '')}" aria-label="Search members">
         <p class="small muted" id="ccount" style="margin:-4px 0 10px"></p><div class="list" id="cl"></div><button class="btn ghost block section" id="cmore" hidden>Show more</button>`;
     let limit = 50;
     const draw = () => {
         const q = (state.crewSearch || '').trim().toLowerCase(), qv = vrnKey(q);
         const pool = q ? all : others;   /* while searching, the team is included too */
         const hits = pool.filter(m => !q || [m.full_name, m.nickname, m.bike, m.locality].some(v => (v || '').toLowerCase().includes(q)) || (qv.length >= 2 && [m.vrn, ...(m.bikes || []).map(b => b.vrn)].some(v => vrnKey(v).includes(qv))));
-        $('#ccount').textContent = q ? `${hits.length} found${qv.length >= 4 && !hits.length ? '. That bike isn\'t registered with RWB.' : ''}` : `${all.length} members in RWB`;
+        $('#ccount').textContent = q ? `${hits.length} found${isMod() && qv.length >= 4 && !hits.length ? '. That bike isn\'t registered with RWB.' : ''}` : `${all.length} members in RWB`;
         $('#cl').innerHTML = hits.slice(0, limit).map(m => `<div class="card row member-row">${face(m, 'avatar sm')}
             <div class="grow"><div class="who">${name(m)} ${roleBadge(m)}</div>
             <div class="meta">${m.avg_kmpl ? `<b class="kmpl-tag">${kmplTxt(m.avg_kmpl)}</b> · ` : ''}${esc([m.bike, m.locality].filter(Boolean).join(', ') || 'RWB member')}</div></div>
@@ -2752,9 +2811,15 @@ async function viewCrew() {
         $('#cmore').hidden = hits.length <= limit;
     };
     $('#cq').oninput = e => { state.crewSearch = e.target.value; limit = 50; draw(); };
+    const vcf = $('#vcf');
+    if (vcf) vcf.onsubmit = e => { e.preventDefault(); const v = e.target.v.value, out = $('#vcr');
+        if (vrnKey(v).length < 6) return toast('Type the full bike number, e.g. WB 02 AB 1234', true);
+        busy(e.submitter, async () => { const yes = await api.vrnCheck(v); out.hidden = false; out.className = 'vcr ' + (yes ? 'yes' : 'no');
+            out.innerHTML = yes ? '<b>✅ Yeah! RWB Member.</b>' : '<b>❌ Naah. Not an RWB Member.</b><span>Approach the rider politely and let them know about RWB (Ronin Warriors of Bengal) or simply ask them to visit <a href="https://roninwb.in" target="_blank" rel="noopener">roninwb.in</a></span>'; }); };
     $('#cmore').onclick = () => { limit += 100; draw(); };
     draw();
 }
+const SHARE_OPTS = [['vrn', 'VRN and bike numbers', 'Your registration numbers'], ['bike', 'Bike model', 'e.g. TVS Ronin 225'], ['locality', 'Locality', 'The area you live in'], ['mileage', 'Average mileage', 'In the member list']];
 const ICON_PHONE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>';
 const ICON_WA = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.8-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2s.2-1.1.2-1.2-.2-.2-.4-.3z"/></svg>';
 

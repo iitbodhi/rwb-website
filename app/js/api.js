@@ -84,6 +84,11 @@ async function supabaseApi(url, key) {
         },
         birthdays: async (days = 0) => must(await sb.rpc('birthdays', { p_days: days })),
         directory: async () => must(await sb.rpc('member_directory')),
+        setSharing: async p => must(await sb.rpc('set_my_sharing', { p })),
+        vrnCheck: async v => must(await sb.rpc('vrn_check', { p_vrn: v })),
+        withdrawTnc: async () => { const r = await sb.rpc('withdraw_tnc'); if (r.error && /could not find|function/i.test(r.error.message || '')) return must(await sb.rpc('request_change', { p_kind: 'tnc', p_value: 'disagree' })); return must(r); },
+        leaveRwb: async note => must(await sb.rpc('leave_rwb', { p_note: note || null })),
+        rwbAdmins: async () => must(await sb.rpc('rwb_admins')),
         updateMyAnswers: async answers => { const r = await sb.rpc('update_my_answers', { p_answers: answers }); if (r.error && /could not find|function/i.test(r.error.message || '')) throw new Error('Please ask an RWB admin to run setup file 32 first.'); return must(r); },
         myBikes: async () => must(await sb.from('member_bikes').select('slot, vrn, model, verified').eq('member_id', await myMemberId()).order('slot')),
         saveBike: async (slot, vrn, model, memberId = null) => must(await sb.rpc('save_bike', { p_slot: slot, p_vrn: vrn || '', p_model: model || null, p_member_id: memberId })),
@@ -371,9 +376,16 @@ function demoApi() {
     const nid = () => ++db.nextId;
     const personOf = uidv => { const m = db.members.find(x => x.user_id === uidv) || {}; return { full_name: m.full_name || 'Rider', nickname: m.nickname || '', avatar_url: m.avatar_url || null }; };
     const me = () => db.members.find(m => m.user_id === 'me');
+    const STAFF = ['superadmin', 'admin', 'coordinator'], nk = x => String(x || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+    /* what a regular member may see of someone else (admins and coordinators see all) */
+    const demoHide = d => { const src = db.members.find(x => x.id === d.id) || {}, sh = k => !!(src.share || {})[k];
+        if (STAFF.includes(me().role) || src.user_id === 'me') return d;
+        return { ...d, bike: sh('bike') ? d.bike : null, vrn: sh('vrn') ? d.vrn : null, vrn_verified: sh('vrn') ? d.vrn_verified : null, bikes: sh('vrn') ? d.bikes : null, locality: sh('locality') ? d.locality : null, avg_kmpl: sh('mileage') ? d.avg_kmpl : null }; };
+
     const wait = (v) => new Promise(r => setTimeout(() => r(clone(v)), 120));
     const authFns = [];
     const isBirthday = (dob, d) => dob && dob.slice(5) === iso(d).slice(5);
+    const demoDir = () => wait(db.members.filter(m => !m.status || m.status === 'active').map(m => ({ id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url, bike: m.bike, vrn: m.vrn, vrn_verified: !!m.vrn_verified, bikes: m.member_bikes || null, locality: m.locality, role: m.role, phone: ['superadmin', 'admin', 'coordinator'].includes(m.role) ? m.phone : null, on_app: !!m.user_id, avg_kmpl: m.user_id === 'me' ? m.avg_kmpl : ({ 2: 41.9, 3: 44.6, 4: 36.8, 5: 38.2 })[m.id] ?? null })).sort((a, b) => a.full_name.localeCompare(b.full_name)));
 
     return {
         demo: true,
@@ -408,7 +420,12 @@ function demoApi() {
         updateMyAnswers: answers => { me().form_answers = { ...(me().form_answers || {}), ...answers }; save(); return wait(answers); },
         myBikes: () => wait((me().member_bikes || []).slice().sort((a, b) => a.slot - b.slot)),
         async saveBike(slot, vrn, model, mid = null) { if (!mid) return this.requestChange('bike', vrn, slot, model); const m = db.members.find(x => x.id === mid); m.member_bikes = (m.member_bikes || []).filter(b => b.slot !== slot); if (vrn) m.member_bikes.push({ slot, vrn: vrn.toUpperCase(), model: model || null, verified: false }); save(); return vrn ? 'saved' : 'removed'; },
-        directory: () => wait(db.members.filter(m => !m.status || m.status === 'active').map(m => ({ id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url, bike: m.bike, vrn: m.vrn, vrn_verified: !!m.vrn_verified, bikes: m.member_bikes || null, locality: m.locality, role: m.role, phone: ['superadmin', 'admin', 'coordinator'].includes(m.role) ? m.phone : null, on_app: !!m.user_id, avg_kmpl: m.user_id === 'me' ? m.avg_kmpl : ({ 2: 41.9, 3: 44.6, 4: 36.8, 5: 38.2 })[m.id] ?? null })).sort((a, b) => a.full_name.localeCompare(b.full_name))),
+        directory: () => demoDir().then(list => list.map(demoHide)),
+        setSharing: p => { const out = Object.fromEntries(['vrn', 'bike', 'locality', 'mileage'].map(k => [k, !!p[k]])); me().share = out; save(); return wait(out); },
+        vrnCheck: v => wait(db.members.some(m => (!m.status || m.status === 'active') && (nk(m.vrn) === nk(v) || (m.member_bikes || []).some(b => nk(b.vrn) === nk(v))))),
+        withdrawTnc: () => { me().tnc_agreed = false; save(); return wait('withdrawn'); },
+        leaveRwb: () => { me().status = 'left'; save(); return wait('left'); },
+        rwbAdmins: () => wait(db.members.filter(m => ['superadmin', 'admin'].includes(m.role) && (!m.status || m.status === 'active')).map(m => ({ full_name: m.full_name, nickname: m.nickname, phone: m.phone, role: m.role }))),
         async boards() {
             const myKm = Math.max(0, me().odo_km || 0, ...db.fuel.map(f => f.odometer_km), ...db.services.map(x => x.odometer_km));
             const rows = [['Rahul Ghosh', 'Rocket', 18420, 36.8, 5, 'TVS Ronin 225'], ['Arjun Sen', 'Sultan', 11250, 41.9, 3, 'TVS Ronin 225'], ['Sourav Paul', '', 5310, 38.2, 1, 'TVS Apache RTR 200 4V'], ['Priya Dutta', '', 2400, 44.6, 2, 'TVS Ronin 225'], ['Kaustabh Roy', 'Pookie', 26100, 34.1, 7, 'TVS Ronin 225']]
