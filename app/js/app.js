@@ -635,6 +635,10 @@ function visibleNews(list) {
     const h = hiddenNews();
     return list.filter(n => !h.has(Number(n.id)) && (IMPORTANT(n) || n.id > clearedAt));
 }
+function onlyTeamSheet(n) {
+    openSheet('Important alert', `<p style="margin-bottom:6px"><b>${esc(n.title)}</b></p><p class="small muted" style="margin-bottom:14px">Only RWB admins and coordinators can remove important alerts (announcements and events). It will go away once an admin removes it or the event is over.</p>
+        <button class="btn block" data-x="ok">OK</button>`, body => { body.querySelector('[data-x=ok]').onclick = () => closeSheet(); });
+}
 function askHideImportant(n, yes0, no0) {
     let done = false; const yes = () => { if (!done) { done = true; yes0(); } }, no = () => { if (!done) { done = true; no0(); } };
     openSheet('Hide this alert?', `<p style="margin-bottom:6px"><b>${esc(n.title)}</b></p><p class="small muted" style="margin-bottom:14px">This is an important ${n.kind === 'event' ? 'event' : 'announcement from the RWB admins'}. It will be hidden on this phone only; it stays for other members.</p>
@@ -669,7 +673,8 @@ function swipeToDismiss(root, after) {
             el.classList.remove('swiping'); el.dataset.swiped = '1'; setTimeout(() => delete el.dataset.swiped, 400);
             if (Math.abs(dx) < el.offsetWidth * 0.33) return reset();
             const n = NEWS_MAP.get(String(el.dataset.swipe));
-            if (n && IMPORTANT(n)) { el.style.transform = `translateX(${Math.sign(dx) * el.offsetWidth * 0.33}px)`; askHideImportant(n, gone, reset); } else gone();
+            if (n && IMPORTANT(n) && !isMod()) { reset(); onlyTeamSheet(n); }   /* members can't remove announcements or events */
+            else if (n && IMPORTANT(n)) { el.style.transform = `translateX(${Math.sign(dx) * el.offsetWidth * 0.33}px)`; askHideImportant(n, gone, reset); } else gone();
         };
         el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
         el.addEventListener('click', e => { if (el.dataset.swiped) { e.preventDefault(); e.stopPropagation(); } }, true);
@@ -680,7 +685,7 @@ function clearNews(list) {
     const routine = visibleNews(list).filter(n => !IMPORTANT(n));
     try { localStorage.setItem('rwb-feed-cleared', String(Math.max(0, ...list.map(n => n.id)))); } catch { /* ignore */ }
     hideNews(routine.map(n => n.id));
-    render(); toast(routine.length ? 'Cleared. Announcements and events stay.' : 'Only announcements and events left. Swipe one to hide it.');
+    render(); toast(routine.length ? 'Cleared. Announcements and events stay.' : (isMod() ? 'Only announcements and events left. Swipe one to hide it.' : 'Only announcements and events left. Admins remove these.'));
 }
 const linkifyNews = t => esc(t).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
     .replace(/(?<![\w/])((?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5})(?!\d)/g, m => { const d = m.replace(/\D/g, '').slice(-10); return `<a href="tel:+91${d}">${m}</a> <a class="wa-mini" href="${waTo(d)}" target="_blank" rel="noopener" aria-label="WhatsApp ${d}">WhatsApp</a>`; });
