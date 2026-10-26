@@ -2041,7 +2041,7 @@ const VRN_SITES = [
     ['CarInfo', 'https://www.carinfo.app/rto-vehicle-registration-detail', 'Quick lookup, no sign-in'],
     ['Motorpedia', 'https://themotorpedia.com/vahan-check', 'Vahan check: owner and RC details'],
     ['VAHAN (official, Govt. of India)', 'https://vahan.parivahan.gov.in/nrservices/', 'Know Your Vehicle Details · free, mobile OTP sign-in']];
-const vrnSites = vrn => `<p class="small muted" style="margin:12px 0 8px">Tap a site. <b class="vrn">${esc(vrn)}</b> is copied, so just paste it there. Mark it verified only if the owner name matches.</p>
+const vrnSites = (vrn, hint = 'Mark it verified only if the owner name matches.') => `<p class="small muted" style="margin:12px 0 8px">Tap a site. <b class="vrn">${esc(vrn)}</b> is copied, so just paste it there. ${hint}</p>
     <div class="vrn-sites">${VRN_SITES.map(([n, u, d], i) => `<a class="vrn-site" href="${u}" target="_blank" rel="noopener" data-vrn="${esc(vrn)}"><span class="n">${i + 1}</span><span class="grow"><b>${esc(n)}</b><small>${esc(d)}</small></span>${ICON.out}</a>`).join('')}</div>`;
 document.addEventListener('click', e => { const a = e.target.closest('a.vrn-site'); if (a) navigator.clipboard?.writeText(a.dataset.vrn).catch(() => {}); });
 function vrnSheet(vrn) {
@@ -2968,6 +2968,12 @@ function bindVrnCheck() {
             out.insertAdjacentHTML('afterbegin', '<button type="button" class="vcr-x" aria-label="Close">✕</button>');
             out.querySelector('.vcr-x').onclick = () => { out.hidden = true; out.innerHTML = ''; vcf.reset(); };
             const op = out.querySelector('[data-x=vc-open]'); if (op) op.onclick = () => memberSheet(full);
+            if (!yes && isAdmin()) out.insertAdjacentHTML('beforeend', vrnLookup(v.toUpperCase().replace(/[^A-Z0-9]/g, ''), 'Not in RWB, but you can still see who it\'s registered to.'));
+            const vb = out.querySelector('[data-x=vc-verify]');
+            if (vb && full) vb.onclick = () => { const slot = vrnKey(full.vrn) === key ? 1 : (full.member_bikes || []).find(b => vrnKey(b.vrn) === key)?.slot;
+                if (!slot) return; busy(vb, async () => { await api.admin.setVrnVerified(full.id, slot, true); if (slot === 1) full.vrn_verified = true; else (full.member_bikes.find(b => b.slot === slot) || {}).verified = true;
+                    state.dir = null; toast('VRN marked as verified'); out.innerHTML = vrnAdminCard(full, key); out.insertAdjacentHTML('afterbegin', '<button type="button" class="vcr-x" aria-label="Close">✕</button>');
+                    out.querySelector('.vcr-x').onclick = () => { out.hidden = true; out.innerHTML = ''; vcf.reset(); }; const o2 = out.querySelector('[data-x=vc-open]'); if (o2) o2.onclick = () => memberSheet(full); }); };
         });
     };
 }
@@ -2986,8 +2992,12 @@ function vrnAdminCard(m, key) {
             ${row('Birthday', m.dob ? fmtDayMonth(m.dob) : '')}${row('Member since', m.joined_at ? fmtDate(String(m.joined_at).slice(0, 10)) : '')}
             ${row('T&C', tncOk(m) ? 'Agreed' : m.tnc_agreed === false ? 'Does not agree' : 'Not agreed yet')}
         </div>
-        <div class="btns" style="margin-top:10px">${m.phone ? `<a class="btn sm ghost" href="tel:+91${esc(m.phone)}">📞 Call</a><a class="btn sm wa" href="${waTo(m.phone)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}<button type="button" class="btn sm" data-x="vc-open">Open profile</button></div>`;
+        <div class="btns" style="margin-top:10px">${m.phone ? `<a class="btn sm ghost" href="tel:+91${esc(m.phone)}">📞 Call</a><a class="btn sm wa" href="${waTo(m.phone)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}<button type="button" class="btn sm" data-x="vc-open">Open profile</button></div>
+        ${vrnLookup(String(bike.vrn || key).toUpperCase().replace(/[^A-Z0-9]/g, ''), `Check that the owner name matches <b>${esc(m.full_name)}</b>.`, bike.slot ? { verified: !!bike.verified } : null)}`;
 }
+/* admins: the 3 VRN lookup sites (same as in approvals), right under a VRN check result */
+const vrnLookup = (vrn, hint, ver = null) => `<div class="vc-sites"><b class="vc-sub">Check this VRN</b>${vrnSites(vrn, hint)}
+    ${ver ? (ver.verified ? '<p class="small muted" style="margin-top:8px">✓ This VRN is already marked as verified.</p>' : '<button type="button" class="btn sm block" data-x="vc-verify" style="margin-top:10px">✓ Name matches: mark VRN verified</button>') : ''}</div>`;
 const SHARE_OPTS = [['vrn', 'VRN and bike numbers', 'Your registration numbers'], ['bike', 'Bike model', 'e.g. TVS Ronin 225'], ['locality', 'Locality', 'The area you live in'], ['mileage', 'Average mileage', 'In the member list']];
 const ICON_PHONE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>';
 const ICON_WA = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.8-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2s.2-1.1.2-1.2-.2-.2-.4-.3z"/></svg>';

@@ -1044,6 +1044,11 @@ body[data-route=gate] .pookie-fab{display:none!important}
 .vcr a.btn.wa{color:#fff}
 .vcr a.btn.ghost{color:inherit}
 .vcr{position:relative}
+.vc-sites{margin-top:12px;padding-top:12px;border-top:1px solid color-mix(in srgb,currentColor 14%,transparent)}
+.vc-sub{display:block;font-size:.95rem}
+.vcr .vc-sites .small{margin-top:4px!important}
+.vcr .vrn-site{background:var(--card);color:var(--ink)}
+.vcr .vrn-site b{color:var(--ink)}
 .vcr>b:first-of-type{padding-right:34px}
 .vcr-x{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;border:0;background:rgba(0,0,0,.08);color:inherit;font-size:.85rem;line-height:1;cursor:pointer;display:grid;place-items:center}
 .gate-sub{font:800 1.15rem/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:18px 0 8px}
