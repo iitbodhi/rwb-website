@@ -4,7 +4,7 @@
  * ONE WAY TO JOIN: roninwb.in → Join us → the RWB join form → a row in "Form responses 3".
  * 1. Join form → approval: every new form entry goes to the app's approval list (it is not a member yet).
  *    Its row here says "Waiting for approval" in the "App · Status" column until an admin decides.
- *      Approved → "Member" (the rider signs in to the app with the same email; their details are already there).
+ *      Approved → "Member". Once they sign in to the app (same email; their details are already there) → "In App".
  *      Rejected → the row is deleted from this tab.
  *    The T&C answer is always written as "Understood & agreed".
  * 2. Sheet → app: editing a member's details here (name, number, VRN, locality…) updates the app within seconds.
@@ -47,7 +47,11 @@ const TNC_HEAD = /read carefully|agree|terms|t\s*&\s*c|tnc|rules|declar|consent/
 /* Columns the app keeps up to date, added at the end of the sheet when missing */
 const ADDED_VIA = 'Added via', UPDATED_IN_APP = 'Updated in app';
 const APP_COLS = { status: 'App · Status', vrn_verified: 'App · VRN verified', bike2_vrn: 'App · Bike 2 VRN', bike2_model: 'App · Bike 2 model', bike3_vrn: 'App · Bike 3 VRN', bike3_model: 'App · Bike 3 model' };
-const ST = { waiting: 'Waiting for approval', member: 'Member' };
+/* "App · Status": Waiting for approval (new form entry) → Member (approved, hasn't signed in to the app yet) → In App (approved and signed in) */
+const ST = { waiting: 'Waiting for approval', member: 'Member', inApp: 'In App' };
+const isMemberSt_ = v => v === ST.member || v === ST.inApp;
+/* the label for an approved member; null when the app didn't say whether they use it (keep what's there) */
+const memberSt_ = m => m.on_app == null ? null : m.on_app ? ST.inApp : ST.member;
 /* Columns that update the app when an admin edits them here */
 const EDITABLE = ['full_name', 'dob', 'phone', 'email', 'vrn', 'bike', 'blood_group', 'locality', 'hideout', 'emergency_phone', 'alt_phone', 'vrn_verified', 'bike2_vrn', 'bike2_model', 'bike3_vrn', 'bike3_model', 'tnc'];
 const AGREED = 'Understood & agreed', NOT_AGREED = "I don't agree";   // the T&C answer, the same from the form, the app and the sheet
@@ -334,13 +338,17 @@ function doPost(e) {
       /* form answers: only filled-in values are written, so answers already in the sheet are never blanked */
       Object.keys(vals).forEach(k => { if (col[k] !== undefined && vals[k] !== '') sheet.getRange(rowNo, col[k] + 1).setValue(vals[k]); });
       /* the app's own columns always follow the app */
-      Object.keys(app).forEach(k => { if (col[k] !== undefined) sheet.getRange(rowNo, col[k] + 1).setValue(app[k]); });
+      Object.keys(app).forEach(k => {
+        if (col[k] === undefined) return;
+        if (k === 'status' && app[k] == null) { const cur = sheet.getRange(rowNo, col[k] + 1).getValues()[0][0]; if (isMemberSt_(String(cur))) return; app[k] = ST.member; }
+        sheet.getRange(rowNo, col[k] + 1).setValue(app[k]);
+      });
       sheet.getRange(rowNo, col.updated + 1).setValue(new Date());
       return json_({ ok: true, result: 'updated', row: rowNo });
     }
     const row = new Array(sheet.getLastColumn()).fill('');
     Object.keys(vals).forEach(k => { if (col[k] !== undefined) row[col[k]] = vals[k]; });
-    Object.keys(app).forEach(k => { if (col[k] !== undefined) row[col[k]] = app[k]; });
+    Object.keys(app).forEach(k => { if (col[k] !== undefined) row[col[k]] = app[k] == null ? ST.member : app[k]; });
     Object.keys(extra).forEach(i => { row[+i] = extra[i]; });
     if (col.joined_at !== undefined) row[col.joined_at] = m.joined_at ? new Date(m.joined_at) : new Date();
     row[col.added] = 'RWB App';
@@ -365,7 +373,7 @@ function setStatus_(b) {
     if (b.status === 'approved') {
       /* keep their newest row as the member's row; older duplicate entries move to a tab of their own */
       mine.sort((a, c) => at(c) - at(a));
-      sheet.getRange(mine[0].r, col.status + 1).setValue(ST.member);
+      if (!isMemberSt_(String(mine[0].row[col.status]))) sheet.getRange(mine[0].r, col.status + 1).setValue(ST.member);
       const older = mine.slice(1);
       if (older.length) moveRows_(sheet, older.map(x => x.r), 'Older entries', 'Moved on', '');
       return json_({ ok: true, result: 'member', moved: older.length });
@@ -453,7 +461,7 @@ function sheetValues_(m) {
 /* The app's own columns (and the rules answer, when the app knows it) */
 function appValues_(m) {
   const t = v => v == null ? '' : String(v);
-  return { ...(m.tnc_agreed == null ? {} : { tnc: m.tnc_agreed ? AGREED : NOT_AGREED }), status: ST.member, vrn_verified: m.vrn_verified ? 'Yes' : '', bike2_vrn: t(m.bike2_vrn), bike2_model: t(m.bike2_model), bike3_vrn: t(m.bike3_vrn), bike3_model: t(m.bike3_model) };
+  return { ...(m.tnc_agreed == null ? {} : { tnc: m.tnc_agreed ? AGREED : NOT_AGREED }), status: memberSt_(m), vrn_verified: m.vrn_verified ? 'Yes' : '', bike2_vrn: t(m.bike2_vrn), bike2_model: t(m.bike2_model), bike3_vrn: t(m.bike3_vrn), bike3_model: t(m.bike3_model) };
 }
 
 /**
@@ -656,14 +664,14 @@ function reconcile_(app) {
       if (waiting.has(p) && (byPhone[p] || []).length) return;
       const vals = sheetValues_(m), a = appValues_(m), row = new Array(width).fill('');
       Object.keys(vals).forEach(k => { if (col[k] !== undefined) row[col[k]] = vals[k]; });
-      Object.keys(a).forEach(k => { if (col[k] !== undefined) row[col[k]] = a[k]; });
+      Object.keys(a).forEach(k => { if (col[k] !== undefined) row[col[k]] = a[k] == null ? ST.member : a[k]; });
       answerCells_(heads, col, m.answers).forEach(([c, v]) => { row[c] = v; });
       if (col.joined_at !== undefined) row[col.joined_at] = m.joined_at ? new Date(m.joined_at) : new Date();
       row[col.added] = 'RWB App'; if (col.updated !== undefined) row[col.updated] = new Date();
       appends.push(row); return;
     }
     /* their row: the member's row, else the fullest one; older copies with the same number move away */
-    rows.sort((a, b) => (String(data[b][col.status]) === ST.member) - (String(data[a][col.status]) === ST.member) || filledCount(data[b]) - filledCount(data[a]));
+    rows.sort((a, b) => isMemberSt_(String(data[b][col.status])) - isMemberSt_(String(data[a][col.status])) || filledCount(data[b]) - filledCount(data[a]));
     const i = rows[0];
     rows.slice(1).forEach(j => { if (p10_(data[j][col.phone]) === p) { move.older.push({ i: j, note: 'Older entry of ' + m.full_name }); gone.add(j); } });
     const row = data[i], sm = toMember_(heads, row), vals = sheetValues_(m), fill = {};
@@ -675,7 +683,8 @@ function reconcile_(app) {
     });
     if (Object.keys(fill).length) fills.push(Object.assign({ phone: p }, fill));
     const a = appValues_(m);
-    Object.keys(a).forEach(k => { if (col[k] !== undefined && !same_(k, row[col[k]], a[k])) put(i, col[k], a[k]); });
+    Object.keys(a).forEach(k => { if (col[k] === undefined || (k === 'status' && a[k] == null && isMemberSt_(String(row[col[k]])))) return;
+      const v = k === 'status' && a[k] == null ? ST.member : a[k]; if (!same_(k, row[col[k]], v)) put(i, col[k], v); });
     answerCells_(heads, col, m.answers).forEach(([c, v]) => { if (!same_('answer', row[c], v)) put(i, c, v); });
     /* join date: the sheet's Timestamp when it's earlier than the app's (an edit, or an older entry) */
     if (col.joined_at !== undefined) { const t = tsIso_(row[col.joined_at]); if (t && (!m.joined_at || new Date(t).getTime() < new Date(m.joined_at).getTime() - 60000)) joins.push({ phone: p, joined_at: t }); }
@@ -810,7 +819,8 @@ function addMissingFromApp() {
     const memberSet = new Set(members.map(m => p10(m.phone))), waitSet = new Set(waiting.map(m => p10(m.phone)));
     let labelled = 0;
     sheetPhones.forEach((p, i) => {
-      const want = memberSet.has(p) ? ST.member : waitSet.has(p) ? ST.waiting : null;
+      const m = memberSet.has(p) ? members.find(x => p10(x.phone) === p) : null;
+      const want = m ? (memberSt_(m) || (isMemberSt_(String(status[i][0])) ? status[i][0] : ST.member)) : waitSet.has(p) ? ST.waiting : null;
       if (want && status[i][0] !== want) { status[i][0] = want; labelled++; }
     });
     if (status.length) sheet.getRange(2, col.status + 1, status.length, 1).setValues(status);
@@ -823,7 +833,7 @@ function addMissingFromApp() {
       have.add(p);
       const vals = sheetValues_(m), app = appValues_(m), row = new Array(sheet.getLastColumn()).fill('');
       Object.keys(vals).forEach(k => { if (col[k] !== undefined) row[col[k]] = vals[k]; });
-      Object.keys(app).forEach(k => { if (col[k] !== undefined) row[col[k]] = app[k]; });
+      Object.keys(app).forEach(k => { if (col[k] !== undefined) row[col[k]] = app[k] == null ? ST.member : app[k]; });
       if (col.joined_at !== undefined) row[col.joined_at] = m.joined_at ? new Date(m.joined_at) : new Date();
       row[col.added] = 'RWB App';
       rows.push(row); added.push(m.full_name + ' (' + p + ')');
