@@ -1,5 +1,6 @@
 /* RWB App — screens and interactions */
 import { createApi } from './api.js';
+import { registerPlugin as capRegister } from '../vendor/capacitor/core.js';   /* Capacitor 7.6.9 (MIT): the Android app's plugins */
 
 /* settings from config.js and the website's js/data.js (top-level consts, read by name) */
 const C = typeof APP_CONFIG !== 'undefined' ? APP_CONFIG : {}, SITE = typeof CONFIG !== 'undefined' ? CONFIG : {};
@@ -3418,7 +3419,7 @@ function rideLive(e) {
    the Back button, links to WhatsApp / phone / Maps, and background location for Track. */
 const NATIVE = !!window.Capacitor?.isNativePlatform?.();
 const nativePlugins = {};
-function Native(name) { return NATIVE ? (nativePlugins[name] ??= window.Capacitor.registerPlugin(name)) : null; }
+function Native(name) { if (!NATIVE) return null; try { return nativePlugins[name] ??= capRegister(name); } catch (e) { console.error(e); return null; } }
 const FCM_KEY = 'rwb-fcm';
 async function nativePushOn(ask = true) {
     const P = Native('PushNotifications'); if (!P) return false;
@@ -3430,7 +3431,7 @@ async function nativePushOn(ask = true) {
     await P.register();
     return true;
 }
-if (NATIVE) {
+if (NATIVE) try {
     document.documentElement.classList.add('native-app');
     const P = Native('PushNotifications'), App = Native('App');
     P.addListener('registration', t => { try { localStorage.setItem(FCM_KEY, t.value); } catch { /* ignore */ } if (state.me) api.saveFcm(t.value).catch(() => {}); });
@@ -3461,7 +3462,7 @@ if (NATIVE) {
         if (a.target === '_blank' || external) { e.preventDefault(); location.href = href; }
     }, true);
     window.open = url => { if (url) location.href = url; return null; };
-}
+} catch (e) { console.error('Android app setup', e); }
 
 /* =================== Pookie bubble: floats gently; drag it anywhere with a finger, it sticks to the nearest side =================== */
 (function pookieDrag() {

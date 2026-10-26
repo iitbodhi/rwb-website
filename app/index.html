@@ -37,7 +37,18 @@
 </head>
 <body>
 <div id="boot" aria-hidden="true"><div class="dial"><svg viewBox="0 0 176 176"><circle class="trk" cx="88" cy="88" r="66"/><circle class="rev" cx="88" cy="88" r="66"/></svg><img src="icons/logo-384.png" alt=""></div><b>Explore. Evolve. Inspire.</b></div>
-<script>window.BOOT_T = performance.now();</script>
+<script>window.BOOT_T = performance.now();
+/* if the app hasn't started after 15 s, show what went wrong (a screenshot of this tells us the cause) */
+window.BOOT_ERR = [];
+addEventListener('error', e => { BOOT_ERR.push((e.message || (e.target && (e.target.src || e.target.href)) || 'error') + (e.filename ? ' @ ' + e.filename.split('/').pop() + ':' + e.lineno : '')); }, true);
+addEventListener('unhandledrejection', e => { BOOT_ERR.push('promise: ' + (e.reason && (e.reason.message || e.reason))); });
+setTimeout(() => { const b = document.getElementById('boot'); if (!b || b.dataset.out) return;
+  const ua = (navigator.userAgent.match(/(Chrome|Version)\/[\d.]+/g) || []).join(' ');
+  const d = document.createElement('div'); d.style.cssText = 'max-width:330px;text-align:center;color:#d9d4cf;font:13px/1.5 system-ui,sans-serif;padding:0 16px';
+  d.innerHTML = '<p style="margin:0 0 10px">The app is taking too long to start.</p><button style="padding:12px 22px;border:0;border-radius:99px;background:#e8662e;color:#fff;font-weight:600;font-size:15px" onclick="location.reload()">Try again</button><pre style="white-space:pre-wrap;text-align:left;margin-top:14px;color:#8f8a85;font-size:11px"></pre>';
+  d.querySelector('pre').textContent = 'Details for RWB admins:\n' + (BOOT_ERR.join('\n') || 'no errors') + '\n' + ua + (window.androidBridge ? ' · Android app' : '') + (navigator.onLine ? '' : ' · OFFLINE');
+  b.appendChild(d); }, 15000);
+</script>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
 <div id="app" aria-live="polite">
   <div class="splash"><img src="icons/logo-128.png" alt="" width="96" height="96"><p>Loading…</p></div>
