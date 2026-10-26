@@ -1004,7 +1004,7 @@ details.rules .tnc-doc{margin-top:10px}
 .news-full a.wa-mini{font-size:.78rem;padding:2px 8px;border-radius:99px;background:#25d36622;color:#1a9e4b;text-decoration:none;margin-left:2px}
 
 .vrn-taken{display:block;margin-top:6px;padding:8px 10px;border-radius:10px;background:color-mix(in srgb,var(--orange) 14%,transparent);color:var(--text,inherit);font-size:.82rem;line-height:1.4}
-.vrn-check{display:flex;flex-direction:column;gap:2px;margin-bottom:14px}
+.vrn-check{display:flex;flex-direction:column;gap:2px;margin:14px 0}
 .vrn-check input{text-transform:uppercase}
 .vcr{margin-top:10px;padding:12px 14px;border-radius:14px;display:flex;flex-direction:column;gap:4px;font-size:.92rem;line-height:1.45}
 .vcr.yes{background:color-mix(in srgb,#22a565 16%,transparent)}

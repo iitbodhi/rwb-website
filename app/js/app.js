@@ -751,6 +751,7 @@ async function viewHome() {
         ${nextEvt ? `<a class="banner evt-banner" href="#events/${nextEvt.id}"><span class="evt-mini">${evtTile(nextEvt)}</span><span class="grow"><b>${esc(nextEvt.title)}</b><span class="small muted">${esc(evtWhen(nextEvt, true))}${nextEvt.location ? ' · ' + esc(nextEvt.location) : ''}</span></span>${evd.mine[nextEvt.id] ? `<span class="evt-me ${evd.mine[nextEvt.id].status}">${RSVP_TXT[evd.mine[nextEvt.id].status]}</span>` : '<span class="evt-me ask">RSVP</span>'}</a>` : ''}
         ${today.length ? `<div class="banner bday"><span class="b-ico">🎂</span><span class="grow"><b>${esc(names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : names[0])}</b> ${names.length > 1 ? 'have' : 'has'} a birthday today</span><button class="btn sm wa" data-act="wish">Wish</button></div>` : ''}
         ${pushAsk ? `<div class="banner"><span class="b-ico">🔔</span><span class="grow">${isMod() ? 'Get birthdays, Motomart posts and ride news as notifications' : 'Get ride news, events and Motomart posts as notifications'}</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
+        ${vrnCheckCard()}
         ${feed.length ? `<section class="section"><h2>Latest from RWB <span class="h-acts"><button data-act="clear-feed">Clear</button><a href="#news">See all</a></span></h2><div class="group news-mini">${feed.slice(0, 3).map(n => newsRow(n, false, true)).join('')}</div></section>` : ''}
         <section class="section"><h2>Fresh on Motomart <a href="#motomart">See all</a></h2>
             ${fresh.length ? `<div class="strip">${fresh.map(listingCard).join('')}</div>` : `<a class="group-row-card" href="#motomart"><span class="g-ico">${ICON.tag}</span><span class="grow"><b>Nothing for sale yet</b><span class="small muted">Selling old gear? Post it here for fellow riders.</span></span>${ICON.chev}</a>`}</section>
@@ -760,6 +761,7 @@ async function viewHome() {
             <a href="https://roninwb.in" target="_blank" rel="noopener"><span class="g-ico">${ICON.globe}</span><span class="grow"><b>roninwb.in</b><span class="small muted">Rides, events, gallery and the team</span></span>${ICON.out}</a>
         </div></section>`;
     swipeToDismiss(app, () => { if (!app.querySelector('.news-mini [data-swipe]')) render(); });
+    bindVrnCheck();
     actions = {
         'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); render(); }),
         'push-later': () => { try { localStorage.setItem('rwb-push-dismissed', '1'); } catch { /* ignore */ } render(); },
@@ -2858,8 +2860,6 @@ async function viewCrew() {
             ${team.map(m => `<div class="row member-row team-row">${face(m, 'avatar sm')}
                 <div class="grow"><div class="who">${name(m)} ${roleBadge(m)}</div><div class="meta">${esc(m.phone ? m.phone.replace(/(\d{5})(\d{5})/, '$1 $2') : '')}${m.vrn ? ` · ${esc(m.vrn)}` : ''}${m.avg_kmpl ? ` · <b class="kmpl-tag">${kmplTxt(m.avg_kmpl)}</b>` : ''}</div></div>
                 ${m.phone ? `<a class="icon-btn call" href="tel:+91${esc(m.phone)}" aria-label="Call ${esc(m.full_name)}">${ICON_PHONE}</a><a class="icon-btn wa-btn" href="${waTo(m.phone)}" target="_blank" rel="noopener" aria-label="WhatsApp ${esc(m.full_name)}">${ICON_WA}</a>` : ''}</div>`).join('')}</div>` : '')
-        + (isMod() ? '' : `<form class="card vrn-check" id="vcf"><b>🔎 VRN check</b><span class="small muted">Spotted a Ronin? See if the rider is in RWB.</span>
-            <div class="row" style="gap:8px;margin-top:8px"><input name="v" autocapitalize="characters" placeholder="WB 02 AB 1234" aria-label="Vehicle number" style="flex:1"><button class="btn">Check</button></div><div id="vcr" class="vcr" hidden></div></form>`)
         + `<input class="search" type="search" id="cq" placeholder="${isMod() ? 'Search name, bike number or place' : 'Search members by name'}" value="${esc(state.crewSearch || '')}" aria-label="Search members">
         <p class="small muted" id="ccount" style="margin:-4px 0 10px"></p><div class="list" id="cl"></div><button class="btn ghost block section" id="cmore" hidden>Show more</button>`;
     let limit = 50;
@@ -2875,13 +2875,25 @@ async function viewCrew() {
         $('#cmore').hidden = hits.length <= limit;
     };
     $('#cq').oninput = e => { state.crewSearch = e.target.value; limit = 50; draw(); };
-    const vcf = $('#vcf');
-    if (vcf) vcf.onsubmit = e => { e.preventDefault(); const v = e.target.v.value, out = $('#vcr');
-        if (vrnKey(v).length < 6) return toast('Type the full bike number, e.g. WB 02 AB 1234', true);
-        busy(e.submitter, async () => { const yes = await api.vrnCheck(v); out.hidden = false; out.className = 'vcr ' + (yes ? 'yes' : 'no');
-            out.innerHTML = yes ? '<b>✅ Yeah! RWB Member.</b>' : '<b>❌ Naah. Not an RWB Member.</b><span>Approach the rider politely and let them know about RWB (Ronin Warriors of Bengal) or simply ask them to visit <a href="https://roninwb.in" target="_blank" rel="noopener">roninwb.in</a></span>'; }); };
     $('#cmore').onclick = () => { limit += 100; draw(); };
     draw();
+}
+/* VRN check on Home: members learn only "member or not"; admins and coordinators also see who it is */
+const vrnCheckCard = () => `<form class="card vrn-check" id="vcf"><b>🔎 VRN check</b><span class="small muted">Spotted a Ronin? See if the rider is in RWB.</span>
+    <div class="row" style="gap:8px;margin-top:8px"><input name="v" autocapitalize="characters" autocomplete="off" placeholder="WB 02 AB 1234" aria-label="Vehicle number" style="flex:1"><button class="btn">Check</button></div><div id="vcr" class="vcr" hidden></div></form>`;
+function bindVrnCheck() {
+    const vcf = $('#vcf'); if (!vcf) return;
+    vcf.onsubmit = e => {
+        e.preventDefault(); const v = e.target.v.value, out = $('#vcr');
+        if (vrnKey(v).length < 6) return toast('Type the full bike number, e.g. WB 02 AB 1234', true);
+        busy(e.submitter, async () => {
+            const yes = await api.vrnCheck(v);
+            let who = '';
+            if (yes && isMod()) { const dir = state.dir ??= teamFirst(await api.directory().catch(() => [])); const m = dir.find(x => [x.vrn, ...(x.bikes || []).map(b => b.vrn)].some(z => vrnKey(z) === vrnKey(v))); if (m) who = m.full_name; }
+            out.hidden = false; out.className = 'vcr ' + (yes ? 'yes' : 'no');
+            out.innerHTML = yes ? `<b>✅ Yeah! RWB Member.</b>${who ? `<span>${esc(who)}</span>` : ''}` : '<b>❌ Naah. Not an RWB Member.</b><span>Approach the rider politely and let them know about RWB (Ronin Warriors of Bengal) or simply ask them to visit <a href="https://roninwb.in" target="_blank" rel="noopener">roninwb.in</a></span>';
+        });
+    };
 }
 const SHARE_OPTS = [['vrn', 'VRN and bike numbers', 'Your registration numbers'], ['bike', 'Bike model', 'e.g. TVS Ronin 225'], ['locality', 'Locality', 'The area you live in'], ['mileage', 'Average mileage', 'In the member list']];
 const ICON_PHONE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>';
