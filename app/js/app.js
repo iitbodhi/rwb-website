@@ -2895,6 +2895,8 @@ function bindVrnCheck() {
             out.hidden = false; out.className = 'vcr ' + (yes ? 'yes' : 'no');
             out.innerHTML = !yes ? '<b>❌ Naah. Not an RWB Member.</b><span>Approach the rider politely and let them know about RWB (Ronin Warriors of Bengal) or simply ask them to visit <a href="https://roninwb.in" target="_blank" rel="noopener">roninwb.in</a></span>'
                 : full ? vrnAdminCard(full, key) : `<b>✅ Yeah! RWB Member.</b>${who ? `<span>${esc(who)}</span>` : ''}`;
+            out.insertAdjacentHTML('afterbegin', '<button type="button" class="vcr-x" aria-label="Close">✕</button>');
+            out.querySelector('.vcr-x').onclick = () => { out.hidden = true; out.innerHTML = ''; vcf.reset(); };
             const op = out.querySelector('[data-x=vc-open]'); if (op) op.onclick = () => memberSheet(full);
         });
     };
