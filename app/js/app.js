@@ -786,7 +786,7 @@ async function viewHome() {
             </div></section>` : isMod() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
         ${profileTodo(state.me)}
         ${docWarn ? `<a class="banner doc-warn ${docWarn.st.level}" href="#docs"><span class="b-ico">📄</span><span class="grow"><b>${esc(docName(docWarn.d))}</b> ${docWarn.st.days < 0 ? `expired on ${fmtDate(docWarn.d.expiry_date)}` : docWarn.st.days === 0 ? 'expires today' : `expires in ${docWarn.st.days} day${docWarn.st.days === 1 ? '' : 's'}`}. Renew it and update My documents.</span>${ICON.chev}</a>` : ''}
-        ${nextEvt ? `<a class="banner evt-banner" href="#events/${nextEvt.id}"><span class="evt-mini">${evtTile(nextEvt)}</span><span class="grow"><b>${esc(nextEvt.title)}</b><span class="small muted">${esc(evtWhen(nextEvt, true))}${nextEvt.location ? ' · ' + esc(nextEvt.location) : ''}</span></span>${evd.mine[nextEvt.id] ? `<span class="evt-me ${evd.mine[nextEvt.id].status}">${RSVP_TXT[evd.mine[nextEvt.id].status]}</span>` : '<span class="evt-me ask">RSVP</span>'}</a>` : ''}
+        ${nextEvt ? `<div class="home-evt">${eventCard(nextEvt, evd)}</div>` : ''}
         ${today.length ? `<div class="banner bday"><span class="b-ico">🎂</span><span class="grow"><b>${esc(names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : names[0])}</b> ${names.length > 1 ? 'have' : 'has'} a birthday today</span><button class="btn sm wa" data-act="wish">Wish</button></div>` : ''}
         ${pushAsk ? `<div class="banner"><span class="b-ico">🔔</span><span class="grow">${isMod() ? 'Get birthdays, Motomart posts and ride news as notifications' : 'Get ride news, events and Motomart posts as notifications'}</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
         ${vrnCheckCard()}
@@ -801,6 +801,7 @@ async function viewHome() {
     swipeToDismiss(app, () => { if (!app.querySelector('.news-mini [data-swipe]')) render(); });
     bindVrnCheck();
     actions = {
+        evt: el => location.hash = '#events/' + el.dataset.id,
         'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); render(); }),
         'push-later': () => { try { localStorage.setItem('rwb-push-dismissed', '1'); } catch { /* ignore */ } render(); },
         sell: () => listingForm(),
@@ -1222,7 +1223,7 @@ function eventCard(e, d) {
         <span class="grow">${evtEyebrow(e)}<b>${esc(e.title)}</b><span class="evt-fact">${EVT_ICON.clock}${esc(evtWhen(e, true))}</span>${e.location ? `<span class="evt-fact">${EVT_ICON.pin}${esc(e.location)}</span>` : ''}
             ${e.status !== 'cancelled' && !evtPast(e) ? evtSlots(e, n) : ''}
             <span class="evt-meta">${e.status === 'cancelled' ? '<span class="badge">Cancelled</span>' : `${n ? faceStack(c.faces, c.going - c.faces.length) : ''}<span class="small muted">${n ? `${n} ${evtPast(e) ? 'went' : 'going'}` : evtPast(e) ? 'Past event' : 'Be the first to join'}${c.maybe ? ` · ${c.maybe} maybe` : ''}</span>`}</span></span>
-        ${me ? `<span class="evt-me ${me.status}">${RSVP_TXT[me.status]}</span>` : ''}</button>`;
+        ${me ? `<span class="evt-me ${me.status}">${RSVP_TXT[me.status]}</span>` : e.status === 'live' && !evtPast(e) ? '<span class="evt-me ask">RSVP</span>' : ''}</button>`;
 }
 async function eventPage(e) {
     const d = state.evd, me = d.mine[e.id], mod = isMod(), myUid = state.myId ??= await api.myId();

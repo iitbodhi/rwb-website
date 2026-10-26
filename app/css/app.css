@@ -1085,3 +1085,6 @@ body[data-route=gate] .pookie-fab{display:none!important}
 .vcr>b:first-of-type{padding-right:34px}
 .vcr-x{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;border:0;background:rgba(0,0,0,.08);color:inherit;font-size:.85rem;line-height:1;cursor:pointer;display:grid;place-items:center}
 .gate-sub{font:800 1.15rem/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:18px 0 8px}
+
+.home-evt{margin-top:14px}
+.home-evt .evt-card{width:100%}
