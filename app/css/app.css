@@ -1167,3 +1167,7 @@ body[data-route=track] .pookie-fab{display:none}
 .promo-card .small{font-size:.8rem}
 .promo-ico{font-size:2.6rem;line-height:1}
 @keyframes promo-in{from{opacity:0}to{opacity:1}}
+.get-app{display:inline-flex;align-items:center;gap:3px;height:30px;padding:0 9px 0 7px;border-radius:99px;background:var(--orange);color:#fff;font:700 .72rem/1 var(--body);text-decoration:none;flex:none;animation:get-pulse 2s ease-out infinite}
+.get-app svg{width:15px;height:15px;fill:none;stroke:#fff;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+@keyframes get-pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--orange) 70%,transparent)}70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@media (max-width:360px){.get-app span{display:none}.get-app{padding:0 7px}}

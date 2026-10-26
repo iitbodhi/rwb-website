@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Get the RWB App</title>
+<meta name="description" content="Download the RWB App: Track, service records, mileage, Motomart, events and more for Ronin Warriors of Bengal.">
+<meta property="og:title" content="Get the RWB App">
+<meta property="og:description" content="Live Track, SOS, service records, mileage, Motomart and events for RWB members.">
+<meta property="og:image" content="https://roninwb.in/app/icons/icon-512.png">
+<meta name="theme-color" content="#121110">
+<link rel="icon" href="../assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+/* the right place for this phone: the Android app → the app file; iPhone and computers → the web app */
+(function () {
+  var ua = navigator.userAgent, android = /android/i.test(ua) && !/RWB-Android-App/.test(ua);
+  if (!android) location.replace('/app/' + (/iphone|ipad|ipod/i.test(ua) ? '#install' : ''));
+})();
+</script>
+<style>
+  :root{--orange:#d4501a;--ink:#f1efec;--muted:#a29d97}
+  *{box-sizing:border-box;margin:0}
+  body{min-height:100dvh;display:grid;place-items:center;padding:24px 18px;background:radial-gradient(90% 55% at 50% 30%,#3a1c0e 0%,#151210 55%,#0d0c0b 100%);color:var(--ink);font:400 16px/1.55 Barlow,system-ui,sans-serif}
+  main{width:min(420px,100%);display:grid;gap:18px;text-align:center}
+  img.logo{width:120px;height:120px;border-radius:50%;margin:0 auto;box-shadow:0 0 0 6px rgba(255,255,255,.05),0 18px 60px -10px rgba(232,102,46,.6)}
+  h1{font:800 2.4rem/1 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.01em}
+  .lead{color:var(--muted)}
+  .btn{display:block;padding:17px 22px;border-radius:99px;background:linear-gradient(135deg,#ec7a3c,var(--orange));color:#fff;font-weight:600;font-size:1.1rem;text-decoration:none;box-shadow:0 14px 30px -12px rgba(232,102,46,.8)}
+  .ghost{background:none;box-shadow:none;border:1px solid rgba(255,255,255,.2);font-size:.95rem;padding:13px}
+  ol{text-align:left;display:grid;gap:8px;padding:16px 16px 16px 36px;border-radius:18px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08)}
+  .feat{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
+  .feat span{font-size:.8rem;padding:5px 10px;border-radius:99px;background:rgba(255,255,255,.07);color:#d9d4cf}
+  a.small{color:var(--muted);font-size:.85rem}
+</style>
+</head>
+<body>
+<main>
+  <img class="logo" src="../app/icons/logo-384.png" alt="RWB">
+  <h1>Get the RWB App</h1>
+  <p class="lead">For members of Ronin Warriors of Bengal. Free, no ads.</p>
+  <div class="feat"><span>📍 Live Track</span><span>🆘 SOS</span><span>🔧 Service</span><span>⛽ Mileage</span><span>🛒 Motomart</span><span>📅 Events</span><span>🤖 Pookie AI</span></div>
+  <a class="btn" href="../download/RWB-App.apk" download="RWB-App.apk">⬇ Download the RWB App</a>
+  <ol>
+    <li>Tap <b>Download</b>, then open the file.</li>
+    <li>If Android asks, allow installs from your browser, then tap <b>Install</b> (or <b>Update</b> if you have the RWB app).</li>
+    <li>Open RWB and <b>sign in with Google</b> using the email you gave on the RWB join form.</li>
+  </ol>
+  <a class="btn ghost" href="../app/">Use it in the browser instead</a>
+  <a class="small" href="../#join">Not a member yet? Join RWB</a>
+</main>
+</body>
+</html>
