@@ -2887,13 +2887,34 @@ function bindVrnCheck() {
         e.preventDefault(); const v = e.target.v.value, out = $('#vcr');
         if (vrnKey(v).length < 6) return toast('Type the full bike number, e.g. WB 02 AB 1234', true);
         busy(e.submitter, async () => {
-            const yes = await api.vrnCheck(v);
-            let who = '';
-            if (yes && isMod()) { const dir = state.dir ??= teamFirst(await api.directory().catch(() => [])); const m = dir.find(x => [x.vrn, ...(x.bikes || []).map(b => b.vrn)].some(z => vrnKey(z) === vrnKey(v))); if (m) who = m.full_name; }
+            const yes = await api.vrnCheck(v), key = vrnKey(v);
+            const owns = x => vrnKey(x.vrn) === key || (x.member_bikes || x.bikes || []).some(b => vrnKey(b.vrn) === key);
+            let who = '', full = null;
+            if (yes && isAdmin()) { const all = state.adminMembers ??= await api.admin.members().catch(() => []); full = all.find(x => !isGone(x) && owns(x)); }
+            else if (yes && isMod()) { const dir = state.dir ??= teamFirst(await api.directory().catch(() => [])); const m = dir.find(owns); if (m) who = m.full_name; }
             out.hidden = false; out.className = 'vcr ' + (yes ? 'yes' : 'no');
-            out.innerHTML = yes ? `<b>✅ Yeah! RWB Member.</b>${who ? `<span>${esc(who)}</span>` : ''}` : '<b>❌ Naah. Not an RWB Member.</b><span>Approach the rider politely and let them know about RWB (Ronin Warriors of Bengal) or simply ask them to visit <a href="https://roninwb.in" target="_blank" rel="noopener">roninwb.in</a></span>';
+            out.innerHTML = !yes ? '<b>❌ Naah. Not an RWB Member.</b><span>Approach the rider politely and let them know about RWB (Ronin Warriors of Bengal) or simply ask them to visit <a href="https://roninwb.in" target="_blank" rel="noopener">roninwb.in</a></span>'
+                : full ? vrnAdminCard(full, key) : `<b>✅ Yeah! RWB Member.</b>${who ? `<span>${esc(who)}</span>` : ''}`;
+            const op = out.querySelector('[data-x=vc-open]'); if (op) op.onclick = () => memberSheet(full);
         });
     };
+}
+/* admins: everything about the rider whose VRN was checked */
+function vrnAdminCard(m, key) {
+    const bike = vrnKey(m.vrn) === key ? { slot: 1, vrn: m.vrn, model: m.bike, verified: m.vrn_verified } : (m.member_bikes || []).find(b => vrnKey(b.vrn) === key) || {};
+    const row = (k, v) => v ? `<div><span class="muted">${k}</span><span>${v}</span></div>` : '';
+    return `<b>✅ Yeah! RWB Member.</b>
+        <div class="vc-who">${face(m, 'avatar sm')}<span class="grow"><b>${esc(m.full_name)}</b>${m.nickname ? ` <span class="muted">“${esc(m.nickname)}”</span>` : ''}<span class="small muted">${m.user_id ? 'On the app' : 'Not on the app yet'}${m.role !== 'member' ? ' · ' + esc(ROLE[m.role] || m.role) : ''}</span></span></div>
+        <div class="vc-facts">
+            ${row('Bike', esc([bike.model || (bike.slot === 1 ? m.bike : ''), bike.slot > 1 ? `bike ${bike.slot}` : 'main bike'].filter(Boolean).join(' · ')))}
+            ${row('VRN', `<span class="vrn${bike.verified ? ' ok' : ''}">${esc(bike.vrn || '')}</span> ${bike.verified ? '✓ verified' : 'not verified yet'}`)}
+            ${row('WhatsApp', esc(m.phone || ''))}${row('Alternative', esc(m.alt_phone || ''))}
+            ${row('Locality', esc(m.locality || ''))}${row('Hometown', esc(m.hideout || ''))}
+            ${row('Blood group', esc(m.blood_group || ''))}${row('Emergency', esc(m.emergency_phone || ''))}
+            ${row('Birthday', m.dob ? fmtDayMonth(m.dob) : '')}${row('Member since', m.joined_at ? fmtDate(String(m.joined_at).slice(0, 10)) : '')}
+            ${row('T&C', tncOk(m) ? 'Agreed' : m.tnc_agreed === false ? 'Does not agree' : 'Not agreed yet')}
+        </div>
+        <div class="btns" style="margin-top:10px">${m.phone ? `<a class="btn sm ghost" href="tel:+91${esc(m.phone)}">📞 Call</a><a class="btn sm wa" href="${waTo(m.phone)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}<button type="button" class="btn sm" data-x="vc-open">Open profile</button></div>`;
 }
 const SHARE_OPTS = [['vrn', 'VRN and bike numbers', 'Your registration numbers'], ['bike', 'Bike model', 'e.g. TVS Ronin 225'], ['locality', 'Locality', 'The area you live in'], ['mileage', 'Average mileage', 'In the member list']];
 const ICON_PHONE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>';

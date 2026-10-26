@@ -1020,3 +1020,12 @@ body[data-route=gate] .pookie-fab{display:none!important}
 .toast.has-act{display:flex;align-items:center;gap:12px;pointer-events:auto}
 .toast-act{background:none;border:0;color:var(--orange);font:inherit;font-weight:700;padding:2px 4px;cursor:pointer}
 .swipe-hint{margin:-2px 0 8px}
+.vc-who{display:flex;align-items:center;gap:10px;margin:8px 0 4px}
+.vc-who .grow{display:flex;flex-direction:column}
+.vc-facts{display:grid;gap:4px;font-size:.88rem}
+.vc-facts>div{display:flex;justify-content:space-between;gap:12px}
+.vc-facts>div>span:last-child{text-align:right;font-weight:600;overflow-wrap:anywhere}
+.vcr .btns{display:flex;gap:8px;flex-wrap:wrap}
+.vcr .btns .btn{flex:1;white-space:nowrap;font-weight:600}
+.vcr a.btn.wa{color:#fff}
+.vcr a.btn.ghost{color:inherit}
