@@ -665,6 +665,55 @@ function moveRowsFast_(sheet, data, list, tabName, dateTitle) {
   [...new Set(list.map(x => x.i))].sort((a, b) => b - a).forEach(i => sheet.deleteRow(i + 2));
 }
 
+/* ======================= Coloured rows: red = removed (broke the T&C), grey = left ======================= */
+const COLOUR_NOTES = { removed: 'Violated the RWB Terms & Conditions', left: 'Left RWB' };
+/* a row's colour (the colour most of its cells have) → 'removed' (red), 'left' (grey) or '' */
+function rowKind_(bgs) {
+  const count = {}; bgs.forEach(c => { c = String(c).toLowerCase(); if (c !== '#ffffff' && c !== 'white') count[c] = (count[c] || 0) + 1; });
+  const top = Object.keys(count).sort((a, b) => count[b] - count[a])[0];
+  if (!top || count[top] < bgs.length / 2) return { kind: '', colour: top || '' };
+  const m = top.match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/); if (!m) return { kind: '', colour: top };
+  const [r, g, b] = [1, 2, 3].map(i => parseInt(m[i], 16));
+  if (r >= 190 && g <= 120 && b <= 120 && r - g >= 90) return { kind: 'removed', colour: top };
+  if (Math.abs(r - g) <= 12 && Math.abs(g - b) <= 12 && r >= 100 && r <= 200) return { kind: 'left', colour: top };
+  return { kind: '', colour: top };
+}
+function colouredRows_() {
+  const sheet = responsesSheet_(), col = columns_(sheet), last = sheet.getLastRow(), width = sheet.getLastColumn();
+  if (last < 2) return { sheet: sheet, col: col, data: [], list: [], colours: {} };
+  const data = sheet.getRange(2, 1, last - 1, width).getValues(), bgs = sheet.getRange(2, 1, last - 1, width).getBackgrounds();
+  const list = [], colours = {};
+  bgs.forEach((row, i) => {
+    const k = rowKind_(row); if (k.colour) colours[k.colour] = (colours[k.colour] || 0) + 1;
+    if (k.kind) list.push({ i: i, kind: k.kind, colour: k.colour, name: String(data[i][col.full_name] || ''), phone: p10_(data[i][col.phone]), vrn: col.vrn === undefined ? '' : String(data[i][col.vrn] || '') });
+  });
+  return { sheet: sheet, col: col, data: data, list: list, colours: colours };
+}
+/** See which rows are red (removed) or grey (left), without changing anything. */
+function previewColouredRows() {
+  const c = colouredRows_();
+  console.log('Row colours found: ' + JSON.stringify(c.colours) + ' (red = removed, grey = left; other colours like yellow are left alone)');
+  console.log(c.list.length ? c.list.map(x => (x.kind === 'removed' ? 'RED  → Removed: ' : 'GREY → Left:    ') + x.name + ' (' + x.phone + (x.vrn ? ', ' + x.vrn : '') + ')').join('\n') : 'No red or grey rows.');
+}
+/**
+ * Red rows: removed from RWB for breaking the T&C. Grey rows: left RWB.
+ * Each is marked so in the app (RWB → Left / removed, with the note; they can be restored there) and the row moves
+ * to the "Removed members" tab (its App · Status says why). Run previewColouredRows first to check the list.
+ */
+function moveColouredRows() {
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const c = colouredRows_();
+    if (!c.list.length) { console.log('No red or grey rows.'); return; }
+    const r = UrlFetchApp.fetchAll([rpc_('sheet_mark_gone', { p_secret: SYNC_SECRET, p_rows: c.list.filter(x => x.phone.length === 10).map(x => ({ phone: x.phone, status: x.kind, note: COLOUR_NOTES[x.kind] })) })])[0];
+    if (r.getResponseCode() !== 200) { console.log('Not done (run setup file 35 in Supabase first): ' + r.getContentText().slice(0, 200)); return; }
+    const res = JSON.parse(r.getContentText() || '{}');
+    c.list.forEach(x => { if (c.col.status !== undefined) c.data[x.i][c.col.status] = x.kind === 'removed' ? 'Removed: ' + COLOUR_NOTES.removed : COLOUR_NOTES.left; });
+    moveRowsFast_(c.sheet, c.data, c.list.map(x => ({ i: x.i })), 'Removed members', 'Removed on');
+    console.log('Moved ' + c.list.length + ' rows to "Removed members".\n' + c.list.map(x => (x.kind === 'removed' ? 'Removed: ' : 'Left: ') + x.name + ' (' + x.phone + ') → app: ' + (res[x.phone] || 'no number')).join('\n'));
+  } finally { lock.releaseLock(); }
+}
+
 /* ======================= Catch-up ======================= */
 /**
  * Adds every app member missing from this sheet (matched by WhatsApp number), and fills in the
