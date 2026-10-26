@@ -435,10 +435,10 @@ function demoApi() {
         leaveRwb: () => { me().status = 'left'; save(); return wait('left'); },
         findMyEmail: (phone, vrn) => { const k = v => (v || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), p = String(phone).replace(/\D/g, '').slice(-10);
             const m = db.members.find(x => x.phone === p && (!x.status || x.status === 'active') && (k(x.vrn) === k(vrn) || (x.member_bikes || []).some(b => k(b.vrn) === k(vrn))));
-            return wait(m ? { found: true, hint: m.email ? m.email.slice(0, 2) + '•••@' + m.email.split('@')[1] : null, on_app: !!m.user_id } : { found: false }); },
+            return wait(m ? { found: true, hint: m.email ? m.email.split('@')[0].slice(0, m.email.split('@')[0].length > 4 ? 3 : 1) + '•••@' + m.email.split('@')[1] : null, on_app: !!m.user_id } : { found: false }); },
         claimMembership: (phone, vrn, dob) => { const p = String(phone).replace(/\D/g, '').slice(-10), m = db.members.find(x => x.phone === p);
-            if (!m || m.dob !== dob) return wait({ ok: false }); if (m.user_id) return Promise.reject(new Error('This membership is already used on the app with another Google account. Sign in with that account, or WhatsApp the admins.'));
-            return wait({ ok: true, name: m.full_name.split(' ')[0] }); },
+            if (!m || m.dob !== dob) return wait({ ok: false });
+            return wait({ ok: true, name: m.full_name.split(' ')[0], moved: !!m.user_id }); },
         joinHelpAdmins: () => wait(db.members.filter(m => ['superadmin', 'admin'].includes(m.role) && (!m.status || m.status === 'active')).map(m => ({ first_name: (m.nickname || m.full_name).split(' ')[0], phone: m.phone }))),
         rwbAdmins: () => wait(db.members.filter(m => ['superadmin', 'admin'].includes(m.role) && (!m.status || m.status === 'active')).map(m => ({ full_name: m.full_name, nickname: m.nickname, phone: m.phone, role: m.role }))),
         async boards() {

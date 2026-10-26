@@ -512,8 +512,8 @@ function bindFindAccount(sess) {
     const f = $('#naf'), out = $('#na-out');
     const read = () => ({ phone: f.phone.value.replace(/\D/g, '').slice(-10), vrn: f.vrn.value.toUpperCase().replace(/[^A-Z0-9]/g, '') });
     const check = v => v.phone.length !== 10 ? 'Enter your 10-digit WhatsApp number' : v.vrn.length < 6 ? 'Enter your full VRN, e.g. WB02AB1234' : '';
-    const verifyForm = (lead = '') => `${lead}<div class="na-verify"><b class="na-h">Can't use that email?</b>
-        <p class="small muted">Verify with your date of birth and continue with the Google account you're signed in with (<b>${esc(sess.email)}</b>). It becomes your RWB email.</p>
+    const verifyForm = (lead = '', moving = false) => `${lead}<div class="na-verify"><b class="na-h">Can't use that email?</b>
+        <p class="small muted">Verify with your date of birth and continue with the Google account you're signed in with (<b>${esc(sess.email)}</b>). It becomes your RWB email.${moving ? ' Your other Google account will no longer open the RWB App, and the admins are told.' : ''}</p>
         <label>Date of birth<input type="date" name="dob" max="${todayISO()}"></label>
         <button type="button" class="btn ghost block" data-x="claim">Verify &amp; continue</button></div>`;
     f.onsubmit = e => {
@@ -522,7 +522,7 @@ function bindFindAccount(sess) {
             const r = await api.findMyEmail(v.phone, v.vrn); out.hidden = false;
             if (!r?.found) { out.innerHTML = '<p class="warn small">No RWB member found with that WhatsApp number and VRN. Check both and try again, or WhatsApp the Admins.</p>'; return; }
             if (r.on_app) { out.innerHTML = `<div class="na-hint"><span class="small muted">This membership is already on the app with</span><b>${esc(r.hint || 'another email')}</b></div>
-                <button type="button" class="btn block" data-x="switch">Sign in with that account</button><p class="small muted" style="margin-top:8px">Lost that account? WhatsApp the Admins.</p>`; }
+                <button type="button" class="btn block" data-x="switch">Sign in with that account</button>` + verifyForm('', true); }
             else out.innerHTML = (r.hint ? `<div class="na-hint"><span class="small muted">You joined RWB with</span><b>${esc(r.hint)}</b></div>
                 <button type="button" class="btn block" data-x="switch">Sign in with that account</button>` : '') + verifyForm(r.hint ? '' : '<p class="small muted">There\'s no email on your RWB record.</p>');
             const sw = out.querySelector('[data-x=switch]'); if (sw) sw.onclick = () => busy(sw, async () => { await api.signOut(); await api.signIn(); });
