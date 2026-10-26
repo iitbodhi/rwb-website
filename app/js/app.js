@@ -766,7 +766,7 @@ async function viewHome() {
     syncKmpl(fuel);
     const today = bdays.filter(b => b.day === todayISO());
     const fresh = listings.filter(l => l.status === 'live').slice(0, 8);
-    let pushAsk = false; try { pushAsk = pushSupported() && Notification.permission === 'default' && !localStorage.getItem('rwb-push-dismissed'); } catch { /* ignore */ }
+    let pushAsk = false; try { pushAsk = NATIVE ? !localStorage.getItem(FCM_KEY) && !localStorage.getItem('rwb-push-dismissed') : pushSupported() && Notification.permission === 'default' && !localStorage.getItem('rwb-push-dismissed'); } catch { /* ignore */ }
     const names = today.map(b => b.full_name.split(' ')[0]);
     /* "Clear" hides birthdays, Motomart and member updates on this phone; admin announcements stay until an admin deletes them */
     const feed = visibleNews(news);
@@ -2537,9 +2537,10 @@ function setTheme(t) {
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => getTheme() === 'system' && setTheme('system'));
 
 /* =================== Push notifications =================== */
-const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const pushSupported = () => NATIVE || ('serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window);
 const b64ToBytes = s => { const p = '='.repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, c => c.charCodeAt(0)); };
 async function enablePush() {
+    if (NATIVE) { await nativePushOn(true); try { localStorage.setItem('rwb-push-dismissed', '1'); } catch { /* ignore */ } return; }
     if (!pushSupported()) throw new Error(isIOS() ? 'On iPhone: first add RWB to your Home Screen (Share → Add to Home Screen), open it from there, then turn on notifications.' : 'This browser does not support notifications. Try Chrome.');
     if (!C.VAPID_PUBLIC_KEY) throw new Error('Notifications are not set up yet.');
     const perm = await Notification.requestPermission();
@@ -2550,6 +2551,7 @@ async function enablePush() {
     await api.savePush(j.endpoint, j.keys.p256dh, j.keys.auth);
 }
 async function disablePush(quiet = false) {
+    if (NATIVE) { let t = null; try { t = localStorage.getItem(FCM_KEY); } catch { /* ignore */ } if (t) await api.deleteFcm(t).catch(e => { if (!quiet) throw e; }); await Native('PushNotifications').unregister().catch(() => {}); try { localStorage.removeItem(FCM_KEY); } catch { /* ignore */ } return; }
     if (!pushSupported()) return;
     const reg = await navigator.serviceWorker.getRegistration(); if (!reg) return;
     const sub = await reg.pushManager.getSubscription(); if (!sub) return;
@@ -2575,6 +2577,14 @@ async function pushDetails() {
 }
 async function drawPushState() {
     const st = $('#push-state'), btn = $('#push-btn'); if (!st) return;
+    if (NATIVE) {
+        const p = await Native('PushNotifications').checkPermissions().catch(() => ({ receive: 'prompt' }));
+        let tok = null; try { tok = localStorage.getItem(FCM_KEY); } catch { /* ignore */ }
+        const on = p.receive === 'granted' && !!tok;
+        st.textContent = p.receive === 'denied' ? 'Notifications are off for the RWB app. Turn them on in Settings → Apps → RWB → Notifications, then tap Turn on.' : on ? 'On for this phone (RWB app).' : 'Off for this phone.';
+        btn.innerHTML = on ? `<div class="btns">${isAdmin() ? '<button class="btn sm ghost" data-act="push-test">Send test</button>' : ''}<button class="btn sm ghost" data-act="push-off">Turn off</button></div>` : '<button class="btn block" data-act="push-on">Turn on notifications</button>';
+        return;
+    }
     pushDetails().then(t => { const c = $('#notif-card'); if (!c) return; c.querySelector('details.tech')?.remove(); c.insertAdjacentHTML('beforeend', `<details class="tech"><summary>Notification details</summary><pre class="diag">${esc(t)}</pre></details>`); });
     let on = false;
     if (pushSupported()) { const reg = await navigator.serviceWorker.getRegistration(); on = !!(reg && await reg.pushManager.getSubscription()) && Notification.permission === 'granted'; }
@@ -3094,7 +3104,7 @@ async function boot() {
         api.settings().then(v => { state.settings = v || {}; }).catch(() => { state.settings = {}; });
         await load.news(true);
         await render();
-        if (!trk.resumed) { trk.resumed = true; resumeShare(); }
+        if (!trk.resumed) { trk.resumed = true; resumeShare(); if (NATIVE) nativePushOn(false).catch(() => {}); }
     } catch (e) {
         tabbar.hidden = true;
         app.innerHTML = `<section class="signin"><img src="icons/logo-128.png" alt=""><div><h1>Can't connect</h1><p class="lead">${esc(e.message || 'Please check your internet connection.')}</p></div><button class="btn block" onclick="location.reload()">Try again</button></section>`;
@@ -3110,7 +3120,7 @@ const LEAFLET = 'vendor/leaflet/';   /* Leaflet 1.9.4 (BSD-2), bundled with the 
 const TRACK_KEY = 'rwb-track';
 const TRACK_HOURS = [[1, '1 hour'], [4, '4 hours'], [8, '8 hours'], [12, 'Until I stop']];
 const trk = { watch: null, native: null, last: null, sent: null, sentAt: 0, until: 0, event: null, lock: null, tick: null, map: null, L: null, markers: new Map(), sosMarkers: new Map(), data: null, poll: null, fitted: false, filter: null };
-const NativeGeo = () => window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins?.BackgroundGeolocation;
+const NativeGeo = () => Native('BackgroundGeolocation');
 const trackSaved = () => { try { return JSON.parse(localStorage.getItem(TRACK_KEY) || 'null'); } catch { return null; } };
 const trackSave = v => { try { v ? localStorage.setItem(TRACK_KEY, JSON.stringify(v)) : localStorage.removeItem(TRACK_KEY); } catch { /* ignore */ } };
 const sharing = () => trk.until > Date.now();
@@ -3231,7 +3241,7 @@ function shareSheet(eventId = null, eventTitle = '') {
             <button class="btn danger block" data-x="stop" style="margin:12px 0 18px">Stop sharing</button><p class="small muted" style="margin-bottom:8px">Or share for:</p>` : `<p class="small muted" style="margin-bottom:12px">Every RWB member on the app can see you on the Track map while you share.${eventTitle ? ` You'll show as riding <b>${esc(eventTitle)}</b>.` : ''}</p>`}
         <div class="trk-hours">${TRACK_HOURS.map(([h, t]) => `<button type="button" class="chip" data-h="${h}">${t}</button>`).join('')}</div>
         ${NativeGeo() ? '<p class="small muted" style="margin-top:12px">Keeps sharing with the screen locked. A small notification shows while it runs.</p>'
-            : '<p class="small muted trk-tip" style="margin-top:12px">💡 Keep the RWB App open on your phone mount: we keep the screen awake. If you lock the phone or switch apps, sharing pauses until you come back. Plug in a charger for long rides.</p>'}`, body => {
+            : '<p class="small muted trk-tip" style="margin-top:12px">💡 Keep the RWB App open on your phone mount: we keep the screen awake. If you lock the phone or switch apps, sharing pauses until you come back. Plug in a charger for long rides.</p>' + (/android/i.test(navigator.userAgent) ? '<p class="small" style="margin-top:8px">📲 <a href="https://roninwb.in/download/RWB-App.apk"><b>Get the RWB Android app</b></a> to keep sharing with the screen locked.</p>' : '')}`, body => {
         body.querySelector('[data-x=stop]')?.addEventListener('click', e => busy(e.currentTarget, async () => { await stopShare(); closeSheet(); }));
         body.querySelectorAll('[data-h]').forEach(b => b.onclick = () => busy(b, async () => {
             await startShare(Number(b.dataset.h), eventId ?? (on ? trk.event : null)); closeSheet();
@@ -3399,6 +3409,58 @@ function rideLive(e) {
     return `<section class="section"><h2>Ride live</h2><div class="card trk-event">
         <p class="small muted" style="margin-bottom:10px">Share your live location for this ride so the group and the RWB team can see where everyone is.</p>
         <div class="btns"><button class="btn" data-act="evt-track-share">${mine ? '🟢 Sharing · Stop / change' : '📍 Share for this ride'}</button><a class="btn ghost" href="#track/e${e.id}">🗺️ See riders on map</a></div></div></section>`;
+}
+
+
+/* =================== Inside the RWB Android app (Capacitor) =================== */
+/* The Android app opens this same web app; these bits use the phone's own features there:
+   notifications through Firebase (with the SOS siren channel), Google sign-in through the browser,
+   the Back button, links to WhatsApp / phone / Maps, and background location for Track. */
+const NATIVE = !!window.Capacitor?.isNativePlatform?.();
+const nativePlugins = {};
+function Native(name) { return NATIVE ? (nativePlugins[name] ??= window.Capacitor.registerPlugin(name)) : null; }
+const FCM_KEY = 'rwb-fcm';
+async function nativePushOn(ask = true) {
+    const P = Native('PushNotifications'); if (!P) return false;
+    let st = await P.checkPermissions();
+    if (st.receive !== 'granted' && ask) st = await P.requestPermissions();
+    if (st.receive !== 'granted') { if (ask) throw new Error('Notifications are off for the RWB app: Settings → Apps → RWB → Notifications → Allow.'); return false; }
+    await P.createChannel({ id: 'rwb', name: 'RWB updates', description: 'Events, announcements, Motomart and more', importance: 4, visibility: 1, vibration: true }).catch(() => {});
+    await P.createChannel({ id: 'sos', name: 'SOS alerts', description: 'A rider needs help (10-second siren)', importance: 5, visibility: 1, vibration: true, sound: 'sos.wav', lights: true, lightColor: '#FF0000' }).catch(() => {});
+    await P.register();
+    return true;
+}
+if (NATIVE) {
+    document.documentElement.classList.add('native-app');
+    const P = Native('PushNotifications'), App = Native('App');
+    P.addListener('registration', t => { try { localStorage.setItem(FCM_KEY, t.value); } catch { /* ignore */ } if (state.me) api.saveFcm(t.value).catch(() => {}); });
+    P.addListener('pushNotificationActionPerformed', a => { const u = a.notification?.data?.url; if (u && u.startsWith('#')) location.hash = u; });
+    P.addListener('pushNotificationReceived', n => {   /* arrived while the app is open */
+        const d = n.data || {};
+        if (d.sos === '1' && isMod()) sosAlarm(String(n.title || d.title || '').replace(/^🆘 SOS: /, ''));
+        else if (n.title || d.title) toast(n.title || d.title);
+        load.news?.(true).catch(() => {});
+    });
+    App.addListener('appUrlOpen', async e => {
+        const url = e.url || '';
+        if (url.startsWith('in.roninwb.twa://auth')) {
+            try { await api.finishNativeSignIn(url); Native('Browser').close().catch(() => {}); } catch (err) { toast(err.message || 'Sign-in failed', true); }
+        } else if (url.startsWith('https://roninwb.in/app')) { const h = url.split('#')[1]; if (h) location.hash = '#' + h; }
+    });
+    App.addListener('backButton', ({ canGoBack }) => {
+        if (document.querySelector('dialog#sheet[open]')) return closeSheet();
+        if (document.querySelector('.sos-alarm')) return document.querySelector('.sos-alarm').remove();
+        const h = location.hash.slice(1).split('/')[0];
+        if (h && h !== 'home') { if (canGoBack) history.back(); else location.hash = '#home'; } else App.minimizeApp();
+    });
+    App.addListener('resume', () => { if (sharing()) gpsFix(30000).then(sendFix).catch(() => {}); });
+    /* links that leave the app (WhatsApp, phone, Google Maps, Instagram…) open in their own apps */
+    document.addEventListener('click', e => {
+        const a = e.target.closest('a[href]'); if (!a) return;
+        const href = a.href, external = /^(tel|mailto|sms|whatsapp|intent|geo|upi):/i.test(href) || (/^https?:/i.test(href) && new URL(href).host !== location.host);
+        if (a.target === '_blank' || external) { e.preventDefault(); location.href = href; }
+    }, true);
+    window.open = url => { if (url) location.href = url; return null; };
 }
 
 /* =================== Pookie bubble: floats gently; drag it anywhere with a finger, it sticks to the nearest side =================== */

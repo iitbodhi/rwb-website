@@ -44,9 +44,27 @@ async function supabaseApi(url, key) {
             });
         },
         async signIn() {
+            const cap = window.Capacitor;
+            if (cap?.isNativePlatform?.()) {
+                /* RWB Android app: Google doesn't allow sign-in inside apps' web views, so it opens in the browser
+                   and comes back through in.roninwb.twa://auth (handled by finishNativeSignIn) */
+                const { data, error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: 'in.roninwb.twa://auth', skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } } });
+                if (error) throw friendly(error);
+                await cap.registerPlugin('Browser').open({ url: data.url, windowName: '_self' });
+                return;
+            }
             const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname, queryParams: { prompt: 'select_account' } } });
             if (error) throw friendly(error);
         },
+        async finishNativeSignIn(url) {
+            const u = new URL(url.replace('in.roninwb.twa://', 'https://x/')), code = u.searchParams.get('code');
+            const h = new URLSearchParams(u.hash.slice(1)), err = u.searchParams.get('error_description') || h.get('error_description');
+            if (err) throw new Error(err);
+            if (code) { const { error } = await sb.auth.exchangeCodeForSession(code); if (error) throw friendly(error); }
+            else if (h.get('access_token')) { const { error } = await sb.auth.setSession({ access_token: h.get('access_token'), refresh_token: h.get('refresh_token') }); if (error) throw friendly(error); }
+        },
+        saveFcm: async token => must(await sb.rpc('save_fcm_token', { p_token: token })),
+        deleteFcm: async token => must(await sb.rpc('delete_fcm_token', { p_token: token })),
         async signOut() { await sb.auth.signOut(); },
 
         linkAccount: async () => must(await sb.rpc('link_account')),
@@ -557,7 +575,7 @@ function demoApi() {
         news: () => wait([...db.news].sort((a, b) => b.created_at.localeCompare(a.created_at))),
         async announce(title, body) { db.news.push({ id: nid(), kind: 'announcement', title, body, url: '#news', audience: 'all', created_at: new Date().toISOString() }); save(); },
         async deleteNews(id) { db.news = db.news.filter(n => n.id !== id); save(); },
-        savePush: async () => 'saved', deletePush: async () => 'deleted',
+        savePush: async () => 'saved', deletePush: async () => 'deleted', saveFcm: async () => 'saved', deleteFcm: async () => 'deleted', finishNativeSignIn: async () => {},
         async ask(messages) {
             await new Promise(r => setTimeout(r, 700));
             const q = messages.at(-1).text.toLowerCase();

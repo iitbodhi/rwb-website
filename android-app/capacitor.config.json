@@ -1,0 +1,17 @@
+{
+  "appId": "in.roninwb.twa",
+  "appName": "RWB",
+  "webDir": "www",
+  "server": {
+    "url": "https://roninwb.in/app/",
+    "errorPath": "offline.html",
+    "allowNavigation": ["roninwb.in"]
+  },
+  "android": {
+    "backgroundColor": "#121110",
+    "appendUserAgent": "RWB-Android-App"
+  },
+  "plugins": {
+    "PushNotifications": { "presentationOptions": ["badge", "sound", "alert"] }
+  }
+}

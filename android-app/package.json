@@ -1,0 +1,15 @@
+{
+  "name": "rwb-android-app",
+  "private": true,
+  "version": "2.0.0",
+  "description": "RWB App for Android: opens roninwb.in/app with native background location (Track), notifications and the SOS siren.",
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/app": "^7.0.0",
+    "@capacitor/browser": "^7.0.0",
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/push-notifications": "^7.0.0",
+    "@capacitor-community/background-geolocation": "^1.2.20"
+  }
+}
