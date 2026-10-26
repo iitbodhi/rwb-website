@@ -2904,7 +2904,7 @@ function bindVrnCheck() {
             const yes = await api.vrnCheck(v), key = vrnKey(v);
             const owns = x => vrnKey(x.vrn) === key || (x.member_bikes || x.bikes || []).some(b => vrnKey(b.vrn) === key);
             let who = '', full = null;
-            if (yes && isAdmin()) { const all = state.adminMembers ??= await api.admin.members().catch(() => []); full = all.find(x => !isGone(x) && owns(x)); }
+            if (yes && isAdmin()) { const all = await api.admin.members().catch(() => state.adminMembers || []); state.adminMembers = all; full = all.find(x => !isGone(x) && owns(x)); }   /* always fresh */
             else if (yes && isMod()) { const dir = state.dir ??= teamFirst(await api.directory().catch(() => [])); const m = dir.find(owns); if (m) who = m.full_name; }
             out.hidden = false; out.className = 'vcr ' + (yes ? 'yes' : 'no');
             out.innerHTML = !yes ? '<b>❌ Naah. Not an RWB Member.</b><span>Approach the rider politely and let them know about RWB (Ronin Warriors of Bengal) or simply ask them to visit <a href="https://roninwb.in" target="_blank" rel="noopener">roninwb.in</a></span>'
