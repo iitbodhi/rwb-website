@@ -1752,8 +1752,10 @@ function changesBox(list) {
         ${no.map(c => `<p>✕ <b>${esc(CHANGE_TXT[c.kind])}</b> change to ${esc(c.new_value)} wasn't approved${c.reject_reason ? `: ${esc(c.reject_reason)}` : ''}</p>`).join('')}</div>`;
 }
 /* Me → Edit (and the "complete your profile" screen): important details go to the admins, the rest saves now */
+const PROFILE_FIELDS = ['full_name', 'nickname', 'dob', 'phone', 'alt_phone', 'bike', 'vrn', 'blood_group', 'locality', 'hideout', 'emergency_phone'];
 function saveMyDetails(form, m, submitter, done) {
-    const d = joinData(form), err = joinCheck(d, 'me', m.phone);
+    const all = joinData(form), d = Object.fromEntries(Object.entries(all).filter(([k]) => PROFILE_FIELDS.includes(k)));   /* only real profile fields (not "More from RWB" answers) */
+    const err = joinCheck(d, 'me', m.phone);
     if (err) return toast(err, true);
     Object.keys(d).forEach(k => d[k] = d[k] || null);
     const ask = [];

@@ -400,7 +400,7 @@ function demoApi() {
         requestAccess: () => wait('pending'),
         myRequest: () => wait(null),
         me: () => wait(me()),
-        async updateMe(f) { Object.assign(me(), f); save(); return wait(me()); },
+        async updateMe(f) { const bad = Object.keys(f).filter(k => !['full_name', 'nickname', 'dob', 'phone', 'alt_phone', 'bike', 'vrn', 'blood_group', 'locality', 'hideout', 'emergency_phone', 'avatar_url', 'show_on_leaderboard', 'notify', 'odo_km', 'odo_date', 'avg_kmpl', 'kmpl_tanks'].includes(k)); if (bad.length) throw new Error(`Could not find the '${bad[0]}' column of 'members' in the schema cache`); Object.assign(me(), f); save(); return wait(me()); },   /* strict like the real database */
         async setAvatar(file) { me().avatar_url = file ? await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); }) : null; save(); return wait(me()); },
         joinForm: () => wait(window.DEMO_JOIN_FORM || null),
         vrnHint: (vrn, phone) => { const k = x => String(x || '').replace(/[^a-z0-9]/gi, '').toUpperCase(), d = String(phone || '').replace(/\D/g, '').slice(-10);
