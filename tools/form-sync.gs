@@ -96,6 +96,13 @@ function onSheetEdit(e) {
   Object.keys(col).forEach(k => byIdx[col[k]] = k);
   const edited = [];
   for (let c = c0; c < c0 + nc; c++) { const k = byIdx[c - 1]; if (k && EDITABLE.includes(k)) edited.push(k); }
+  /* the Timestamp (when they joined) was changed by hand: the app's "Member since" follows */
+  if (col.joined_at !== undefined && col.joined_at + 1 >= c0 && col.joined_at + 1 < c0 + nc) {
+    const f = Math.max(2, r0), l = Math.min(r0 + nr - 1, f + 99);
+    const vals = sheet.getRange(f, 1, l - f + 1, sheet.getLastColumn()).getValues();
+    const rows = vals.map(r => ({ phone: p10_(r[col.phone]), joined_at: r[col.joined_at] instanceof Date ? r[col.joined_at].toISOString() : '' })).filter(x => x.phone.length === 10 && x.joined_at);
+    if (rows.length) console.log('Join date sent to the app: ' + UrlFetchApp.fetchAll([rpc_('sheet_set_joined', { p_secret: SYNC_SECRET, p_rows: rows })])[0].getContentText());
+  }
   if (!edited.length) return;
   const first = Math.max(2, r0), last = Math.min(r0 + nr - 1, first + 99);
   const heads = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
