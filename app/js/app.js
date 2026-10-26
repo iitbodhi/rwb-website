@@ -1146,13 +1146,18 @@ const REMINDERS = [[null, 'No reminder'], [0, 'At start time'], [15, '15 minutes
 const evtPast = e => new Date(e.ends_at || new Date(new Date(e.starts_at).getTime() + 6 * 36e5)) < new Date();
 const tfmt = (iso, o) => new Date(iso).toLocaleString('en-IN', o);
 const evtTime = iso => tfmt(iso, { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase();
+/* an event over more than one calendar day (e.g. a weekend trip) */
+const evtMulti = e => !!e.ends_at && new Date(e.starts_at).toDateString() !== new Date(e.ends_at).toDateString();
+const evtDays = e => Math.round((new Date(new Date(e.ends_at).toDateString()) - new Date(new Date(e.starts_at).toDateString())) / 864e5) + 1;
 function evtWhen(e, short = false) {
-    const day = tfmt(e.starts_at, short ? { weekday: 'short', day: 'numeric', month: 'short' } : { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    if (!e.ends_at) return `${day}, ${evtTime(e.starts_at)}`;
-    const sameDay = new Date(e.starts_at).toDateString() === new Date(e.ends_at).toDateString();
-    return `${day}, ${evtTime(e.starts_at)} – ${sameDay ? '' : tfmt(e.ends_at, { day: 'numeric', month: 'short' }) + ', '}${evtTime(e.ends_at)}`;
+    const wd = iso => tfmt(iso, { weekday: 'short' });
+    if (evtMulti(e)) return short ? `${wd(e.starts_at)}, ${evtTime(e.starts_at)} → ${wd(e.ends_at)}, ${evtTime(e.ends_at)} · ${evtDays(e)} days`
+        : `${tfmt(e.starts_at, { weekday: 'short', day: 'numeric', month: 'short' })}, ${evtTime(e.starts_at)} → ${tfmt(e.ends_at, { weekday: 'short', day: 'numeric', month: 'short' })}, ${evtTime(e.ends_at)}`;
+    const day = short ? wd(e.starts_at) : tfmt(e.starts_at, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    return `${day}, ${evtTime(e.starts_at)}${e.ends_at ? ' – ' + evtTime(e.ends_at) : ''}`;
 }
-const evtTile = e => `<span class="evt-tile${e.status === 'cancelled' ? ' off' : ''}"><i>${tfmt(e.starts_at, { month: 'short' }).toUpperCase()}</i><b>${tfmt(e.starts_at, { day: 'numeric' })}</b></span>`;
+const evtDay = iso => `<span class="evt-d"><i>${tfmt(iso, { month: 'short' }).toUpperCase()}</i><b>${tfmt(iso, { day: 'numeric' })}</b></span>`;
+const evtTile = e => `<span class="evt-tile${e.status === 'cancelled' ? ' off' : ''}${evtMulti(e) ? ' multi' : ''}">${evtDay(e.starts_at)}${evtMulti(e) ? `<span class="evt-arr" aria-label="to">↓</span>${evtDay(e.ends_at)}` : ''}</span>`;
 const mapsUrl = e => e.map_url || (e.location ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(e.location) : '');
 const toLocalInput = iso => { if (!iso) return ''; const d = new Date(iso); return new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16); };
 async function loadEvents(force) {
@@ -1200,7 +1205,7 @@ async function eventPage(e) {
         <section class="card evt-hero${live ? '' : ' cancelled'}">
             <div class="row" style="align-items:flex-start">${evtTile(e)}<span class="grow"><h2 class="evt-title">${esc(e.title)}</h2>${!live ? '<span class="badge">Cancelled</span>' : past ? '<span class="badge">Ended</span>' : ''}</span></div>
             <div class="evt-facts">
-                <p><span>🗓</span>${esc(evtWhen(e))}</p>
+                ${evtMulti(e) ? `<p><span>🗓</span><span class="evt-span"><span><b>Starts</b>${esc(tfmt(e.starts_at, { weekday: 'long', day: 'numeric', month: 'long' }))}, ${esc(evtTime(e.starts_at))}</span><span><b>Ends</b>${esc(tfmt(e.ends_at, { weekday: 'long', day: 'numeric', month: 'long' }))}, ${esc(evtTime(e.ends_at))}</span><span class="muted">${evtDays(e)} days</span></span></p>` : `<p><span>🗓</span>${esc(evtWhen(e))}</p>`}
                 ${e.location ? `<p><span>📍</span><span>${esc(e.location)}${mapsUrl(e) ? ` · <a href="${esc(mapsUrl(e))}" target="_blank" rel="noopener">Open in Maps</a>` : ''}</span></p>` : ''}
                 ${e.call_link ? `<p><span>📞</span><a href="${esc(e.call_link)}" target="_blank" rel="noopener">Join the call</a></p>` : ''}
                 ${e.reminder_minutes != null ? `<p><span>⏰</span>Reminder ${esc(REMINDERS.find(r => r[0] === e.reminder_minutes)?.[1].toLowerCase() || '')} for people going</p>` : ''}
@@ -1271,13 +1276,13 @@ async function importSheetEvents() {
 }
 function eventForm(e = null) {
     const r = e ? { ...e } : { reminder_minutes: 60, allow_guests: false };
-    const start = toLocalInput(r.starts_at), end = toLocalInput(r.ends_at);
+    const start = toLocalInput(r.starts_at), end = toLocalInput(r.ends_at), sameDay = !end || end.slice(0, 10) === start.slice(0, 10);
     openSheet(e ? 'Edit event' : 'Create event', `<form id="evf" class="evt-form">
         <input name="title" class="evt-name" required maxlength="100" placeholder="Event name" value="${esc(r.title || '')}" aria-label="Event name">
         <textarea name="description" maxlength="2000" placeholder="Description (optional)" aria-label="Description">${esc(r.description || '')}</textarea>
         <div class="grid2"><label>Date<input type="date" name="d1" required value="${start.slice(0, 10)}"></label><label>Time<input type="time" name="t1" required value="${start.slice(11, 16)}"></label></div>
-        <label class="switch">Add end time<input type="checkbox" id="has-end"${end ? ' checked' : ''}></label>
-        <div class="grid2" id="end-wrap"${end ? '' : ' hidden'}><label>End date<input type="date" name="d2" value="${end.slice(0, 10)}"></label><label>End time<input type="time" name="t2" value="${end.slice(11, 16)}"></label></div>
+        <label class="switch"><span>Same day<span class="hint" style="display:block">Turn off for trips or rides that end on another day</span></span><input type="checkbox" id="same-day"${sameDay ? ' checked' : ''}></label>
+        <div class="grid2" id="end-wrap"><label id="d2-wrap"${sameDay ? ' hidden' : ''}>End date<input type="date" name="d2" value="${end.slice(0, 10)}"></label><label>End time <span class="hint" id="t2-hint"${sameDay ? '' : ' hidden'}>(optional)</span><input type="time" name="t2" value="${end.slice(11, 16)}"></label></div>
         <label>Location<input name="location" maxlength="200" placeholder="e.g. Nicco Park gate, Salt Lake" value="${esc(r.location || '')}"></label>
         <label>Google Maps link <span class="hint">(optional; we'll search the location if empty)</span><input name="map_url" type="url" inputmode="url" placeholder="https://maps.app.goo.gl/…" value="${esc(r.map_url || '')}"></label>
         <label>Call link <span class="hint">(optional, WhatsApp or Meet)</span><input name="call_link" type="url" inputmode="url" placeholder="https://call.whatsapp.com/…" value="${esc(r.call_link || '')}"></label>
@@ -1289,15 +1294,23 @@ function eventForm(e = null) {
         <label class="switch"><span>Allow guests<span class="hint" style="display:block">People can bring one additional guest</span></span><input type="checkbox" name="allow_guests"${r.allow_guests ? ' checked' : ''}></label>
         <button class="btn block">${e ? 'Save changes' : 'Publish event'}</button>
         ${e ? '' : '<p class="small muted" style="text-align:center">Every member gets a notification.</p>'}</form>`, body => {
-        const f = body.querySelector('#evf'), he = body.querySelector('#has-end');
-        he.onchange = () => { body.querySelector('#end-wrap').hidden = !he.checked; if (he.checked && !f.d2.value) f.d2.value = f.d1.value; };
+        const f = body.querySelector('#evf'), sd = body.querySelector('#same-day');
+        const nextDay = d => { const x = new Date(d + 'T12:00'); x.setDate(x.getDate() + 1); return x.toLocaleDateString('en-CA'); };
+        const syncEnd = () => {
+            const same = sd.checked;
+            body.querySelector('#d2-wrap').hidden = same; body.querySelector('#t2-hint').hidden = !same;
+            f.d2.required = f.t2.required = !same; f.d2.min = f.d1.value || '';
+            if (!same && f.d1.value && (!f.d2.value || f.d2.value <= f.d1.value)) f.d2.value = nextDay(f.d1.value);
+        };
+        sd.onchange = syncEnd; f.d1.addEventListener('change', syncEnd); syncEnd();
         if (!e) setTimeout(() => f.title.focus(), 60);
         f.onsubmit = ev => {
             ev.preventDefault();
-            const v = Object.fromEntries(new FormData(f));
-            const starts = new Date(`${v.d1}T${v.t1}`), ends = he.checked && v.d2 && v.t2 ? new Date(`${v.d2}T${v.t2}`) : null;
+            const v = Object.fromEntries(new FormData(f)), same = sd.checked;
+            const starts = new Date(`${v.d1}T${v.t1}`), ends = same ? (v.t2 ? new Date(`${v.d1}T${v.t2}`) : null) : new Date(`${v.d2}T${v.t2}`);
             if (isNaN(starts)) { toast('Pick a date and time', true); return; }
-            if (ends && ends <= starts) { toast('The end time must be after the start', true); return; }
+            if (!same && (isNaN(ends) || v.d2 <= v.d1)) { toast('Pick an end date after the start date, or turn on Same day', true); return; }
+            if (same && ends && ends <= starts) { toast('The end time must be after the start. Ends after midnight? Turn off Same day.', true); return; }
             if (!e && starts < new Date(Date.now() - 36e5) && !confirmBox('This event is in the past. Publish anyway?')) return;
             const rec = { id: e?.id, title: v.title.trim(), description: v.description.trim() || null, starts_at: starts.toISOString(), ends_at: ends ? ends.toISOString() : null,
                 location: v.location.trim() || null, map_url: v.map_url.trim() || null, call_link: v.call_link.trim() || null,

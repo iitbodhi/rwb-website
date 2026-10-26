@@ -721,9 +721,14 @@ body:has(#app .btn.fab) .pookie-fab{bottom:calc(var(--tab-h) + 82px + env(safe-a
 
 /* ===== Events ===== */
 .evt-create{margin-top:2px}
-.evt-tile{flex:none;width:52px;border-radius:14px;overflow:hidden;text-align:center;background:var(--card);border:1px solid var(--hair);box-shadow:var(--lift);display:grid}
-.evt-tile i{font:700 .62rem/1 var(--body);font-style:normal;letter-spacing:.08em;color:#fff;background:var(--orange);padding:5px 0 4px}
-.evt-tile b{font:800 1.45rem/1.25 var(--display);padding:3px 0 4px}
+.evt-tile{flex:none;width:52px;display:grid;justify-items:center;gap:2px}
+.evt-d{width:100%;border-radius:14px;overflow:hidden;text-align:center;background:var(--card);border:1px solid var(--hair);box-shadow:var(--lift);display:grid}
+.evt-arr{font-size:.85rem;line-height:1;color:var(--orange);font-weight:700}
+.evt-tile.multi .evt-d{border-radius:12px}
+.evt-tile.multi b{font-size:1.25rem;line-height:1.2}
+.evt-tile.off .evt-arr{color:var(--muted)}
+.evt-d i{font:700 .62rem/1 var(--body);font-style:normal;letter-spacing:.08em;color:#fff;background:var(--orange);padding:5px 0 4px}
+.evt-d b{font:800 1.45rem/1.25 var(--display);padding:3px 0 4px}
 .evt-tile.off i{background:var(--muted)}
 .evt-card{display:flex;align-items:flex-start;gap:14px;text-align:left;color:inherit}
 .evt-card .grow{display:grid;gap:3px;min-width:0;flex:1}
@@ -748,7 +753,9 @@ body:has(#app .btn.fab) .pookie-fab{bottom:calc(var(--tab-h) + 82px + env(safe-a
 .evt-facts p{display:flex;gap:10px;align-items:flex-start}
 .evt-facts p > span:first-child{flex:none;width:20px;text-align:center}
 .evt-facts a{color:var(--orange);font-weight:600}
-.evt-desc{margin-top:10px;font-size:.92rem;color:var(--stone);overflow-wrap:anywhere}
+.evt-span{display:grid;gap:3px}
+.evt-span b{display:inline-block;min-width:4.4em;margin-right:.35em;font-weight:600;color:var(--muted);font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}
+.evt-desc{margin-top:10px;line-height:1.55;font-size:.92rem;color:var(--stone);overflow-wrap:anywhere}
 .evt-rsvp{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}
 .evt-rsvp button{min-height:44px;border-radius:12px;border:1px solid var(--hair);background:var(--surface);font-weight:600;font-size:.88rem;cursor:pointer;color:var(--ink)}
 .evt-rsvp button.on.going{background:var(--ok);border-color:var(--ok);color:#fff}
@@ -760,7 +767,8 @@ body:has(#app .btn.fab) .pookie-fab{bottom:calc(var(--tab-h) + 82px + env(safe-a
 .evt-plist{display:grid;gap:8px;margin-top:10px}
 .evt-plist .row{font-size:.9rem}
 .banner.evt-banner{gap:12px}
-.evt-mini .evt-tile{width:40px;border-radius:10px;box-shadow:none}
+.evt-mini .evt-tile{width:40px}
+.evt-mini .evt-d{border-radius:10px;box-shadow:none}
 .evt-mini .evt-tile b{font-size:1.1rem}
 .evt-mini .evt-tile i{font-size:.54rem;padding:3px 0}
 .banner.evt-banner .grow{display:grid;gap:1px}
