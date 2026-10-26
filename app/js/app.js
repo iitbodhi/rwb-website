@@ -618,7 +618,7 @@ function cluster(services, fuel) {
 /* posts without a page of their own (announcements, blood requests…) open in a window with the full message */
 const NEWS_MAP = new Map();
 /* Alerts hidden on this phone (swipe left, or Clear). Important ones ask first. */
-const IMPORTANT = n => n.kind === 'announcement' || n.kind === 'event' || n.kind === 'admin' || n.kind === 'personal';
+const IMPORTANT = n => n.kind === 'announcement' || n.kind === 'event';   /* admin announcements and events */
 const hiddenNews = () => { try { return new Set(JSON.parse(localStorage.getItem('rwb-news-hidden') || '[]')); } catch { return new Set(); } };
 const hideNews = ids => { const h = hiddenNews(); ids.forEach(id => h.add(Number(id))); try { localStorage.setItem('rwb-news-hidden', JSON.stringify([...h].slice(-400))); } catch { /* ignore */ } };
 const unhideNews = id => { const h = hiddenNews(); h.delete(Number(id)); try { localStorage.setItem('rwb-news-hidden', JSON.stringify([...h])); } catch { /* ignore */ } };
@@ -626,11 +626,11 @@ const unhideNews = id => { const h = hiddenNews(); h.delete(Number(id)); try { l
 function visibleNews(list) {
     let clearedAt = 0; try { clearedAt = Number(localStorage.getItem('rwb-feed-cleared') || 0); } catch { /* ignore */ }
     const h = hiddenNews();
-    return list.filter(n => !h.has(Number(n.id)) && (STICKY(n) || IMPORTANT(n) || n.id > clearedAt));
+    return list.filter(n => !h.has(Number(n.id)) && (IMPORTANT(n) || n.id > clearedAt));
 }
 function askHideImportant(n, yes0, no0) {
     let done = false; const yes = () => { if (!done) { done = true; yes0(); } }, no = () => { if (!done) { done = true; no0(); } };
-    openSheet('Hide this alert?', `<p style="margin-bottom:6px"><b>${esc(n.title)}</b></p><p class="small muted" style="margin-bottom:14px">This is an important ${n.kind === 'event' ? 'event' : n.kind === 'personal' ? 'message for you' : 'announcement'}. It will be hidden on this phone only; it stays for other members${n.kind === 'personal' ? '' : ' and in RWB'}.</p>
+    openSheet('Hide this alert?', `<p style="margin-bottom:6px"><b>${esc(n.title)}</b></p><p class="small muted" style="margin-bottom:14px">This is an important ${n.kind === 'event' ? 'event' : 'announcement from the RWB admins'}. It will be hidden on this phone only; it stays for other members.</p>
         <button class="btn danger block" data-x="hide">Yes, hide it</button><button class="btn ghost block" data-x="keep" style="margin-top:8px">Keep it</button>`, body => {
         body.querySelector('[data-x=hide]').onclick = () => { closeSheet(); yes(); };
         body.querySelector('[data-x=keep]').onclick = () => { closeSheet(); no(); };
@@ -645,7 +645,7 @@ function swipeToDismiss(root, after) {
         const reset = () => { el.style.transition = 'transform .2s, opacity .2s'; el.style.transform = ''; el.style.opacity = ''; };
         const gone = () => {
             const id = el.dataset.swipe, h = el.offsetHeight;
-            el.style.transition = 'transform .2s, opacity .2s'; el.style.transform = 'translateX(-110%)'; el.style.opacity = '0';
+            el.style.transition = 'transform .2s, opacity .2s'; el.style.transform = `translateX(${dx > 0 ? 110 : -110}%)`; el.style.opacity = '0';
             setTimeout(() => { el.style.transition = 'height .2s, padding .2s, margin .2s'; el.style.height = h + 'px'; el.style.overflow = 'hidden';
                 requestAnimationFrame(() => { el.style.height = '0px'; el.style.paddingTop = '0'; el.style.paddingBottom = '0'; el.style.marginTop = '0'; el.style.marginBottom = '0'; }); }, 180);
             setTimeout(() => { hideNews([id]); el.remove(); after?.(); toast('Hidden', false, 'Undo', () => { unhideNews(id); render(); }); }, 420);
@@ -654,33 +654,26 @@ function swipeToDismiss(root, after) {
         el.addEventListener('pointermove', e => {
             if (!drag) return;
             const mx = e.clientX - x0, my = e.clientY - y0;
-            if (!locked) { if (Math.abs(mx) < 10 && Math.abs(my) < 10) return; if (Math.abs(my) > Math.abs(mx) || mx > 0) { drag = false; return; } locked = true; try { el.setPointerCapture(pid); } catch { /* ignore */ } el.classList.add('swiping'); }
-            dx = Math.min(0, mx); el.style.transform = `translateX(${dx}px)`; el.style.opacity = String(1 - Math.min(.55, -dx / el.offsetWidth));
+            if (!locked) { if (Math.abs(mx) < 10 && Math.abs(my) < 10) return; if (Math.abs(my) > Math.abs(mx)) { drag = false; return; } locked = true; try { el.setPointerCapture(pid); } catch { /* ignore */ } el.classList.add('swiping'); }
+            dx = mx; el.style.transform = `translateX(${dx}px)`; el.style.opacity = String(1 - Math.min(.55, Math.abs(dx) / el.offsetWidth));
         });
         const end = () => {
             if (!drag) return; drag = false; if (!locked) return;
             el.classList.remove('swiping'); el.dataset.swiped = '1'; setTimeout(() => delete el.dataset.swiped, 400);
-            if (-dx < el.offsetWidth * 0.33) return reset();
+            if (Math.abs(dx) < el.offsetWidth * 0.33) return reset();
             const n = NEWS_MAP.get(String(el.dataset.swipe));
-            if (n && IMPORTANT(n)) { el.style.transform = `translateX(${-el.offsetWidth * 0.33}px)`; askHideImportant(n, gone, reset); } else gone();
+            if (n && IMPORTANT(n)) { el.style.transform = `translateX(${Math.sign(dx) * el.offsetWidth * 0.33}px)`; askHideImportant(n, gone, reset); } else gone();
         };
         el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
         el.addEventListener('click', e => { if (el.dataset.swiped) { e.preventDefault(); e.stopPropagation(); } }, true);
     });
 }
-/* "Clear": routine updates at once; important ones only if the member says so */
+/* "Clear": routine updates only; admin announcements and events stay (swipe them away one by one) */
 function clearNews(list) {
-    const vis = visibleNews(list), imp = vis.filter(IMPORTANT), routine = vis.filter(n => !IMPORTANT(n));
-    const clearRoutine = () => { try { localStorage.setItem('rwb-feed-cleared', String(Math.max(0, ...list.map(n => n.id)))); } catch { /* ignore */ } hideNews(routine.map(n => n.id)); };
-    if (!imp.length) { clearRoutine(); render(); toast('Cleared'); return; }
-    openSheet('Clear notifications?', `<p class="small muted" style="margin-bottom:14px">You have ${imp.length} important alert${imp.length > 1 ? 's' : ''} (announcements, events or messages for you). Clear ${imp.length > 1 ? 'them' : 'it'} too? This only affects this phone.</p>
-        ${routine.length ? `<button class="btn block" data-x="routine">Clear ${routine.length} update${routine.length > 1 ? 's' : ''}, keep important</button>` : ''}
-        <button class="btn danger block" data-x="all" style="margin-top:8px">Clear everything, including important</button>
-        <button class="btn ghost block" data-x="no" style="margin-top:8px">Cancel</button>`, body => {
-        const r = body.querySelector('[data-x=routine]'); if (r) r.onclick = () => { clearRoutine(); closeSheet(); render(); toast('Updates cleared. Important alerts kept.'); };
-        body.querySelector('[data-x=all]').onclick = () => { clearRoutine(); hideNews(imp.map(n => n.id)); closeSheet(); render(); toast('All cleared'); };
-        body.querySelector('[data-x=no]').onclick = () => closeSheet();
-    });
+    const routine = visibleNews(list).filter(n => !IMPORTANT(n));
+    try { localStorage.setItem('rwb-feed-cleared', String(Math.max(0, ...list.map(n => n.id)))); } catch { /* ignore */ }
+    hideNews(routine.map(n => n.id));
+    render(); toast(routine.length ? 'Cleared. Announcements and events stay.' : 'Only announcements and events left. Swipe one to hide it.');
 }
 const linkifyNews = t => esc(t).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
     .replace(/(?<![\w/])((?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5})(?!\d)/g, m => { const d = m.replace(/\D/g, '').slice(-10); return `<a href="tel:+91${d}">${m}</a> <a class="wa-mini" href="${waTo(d)}" target="_blank" rel="noopener" aria-label="WhatsApp ${d}">WhatsApp</a>`; });
@@ -2509,7 +2502,7 @@ async function viewNews() {
             <label>Message<textarea name="body" maxlength="1000" placeholder="Meeting point, time, anything members should know"></textarea></label>
             <p class="small muted">Goes to everyone's feed and as a notification to every phone that has them on.</p>
             <button class="btn block">Send to all members</button></form></details>` : ''}
-        <section class="section">${news.length ? `<p class="small muted swipe-hint">Swipe left on an alert to hide it.</p><div class="group">${news.map(n => newsRow(n, isAdmin())).join('')}</div>` : `<div class="card empty"><b>${all.length ? 'All caught up' : 'No news yet'}</b>Announcements, birthdays and new Motomart posts show up here.</div>`}</section>`;
+        <section class="section">${news.length ? `<p class="small muted swipe-hint">Swipe an alert left or right to hide it.</p><div class="group">${news.map(n => newsRow(n, isAdmin())).join('')}</div>` : `<div class="card empty"><b>${all.length ? 'All caught up' : 'No news yet'}</b>Announcements, birthdays and new Motomart posts show up here.</div>`}</section>`;
     swipeToDismiss(app, () => { if (!app.querySelector('[data-swipe]')) render(); });
     actions = {
         'clear-news': () => clearNews(all), 'del-news': b => { if (confirmBox('Delete this from the feed?')) busy(b, async () => { await api.deleteNews(Number(b.dataset.id)); render(); }); } };
