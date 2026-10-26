@@ -144,18 +144,16 @@ function renderEvents(rows) {
     const draw = f => {
         const shown = events.filter(e => f === 'all' || e.state === f);
         list.innerHTML = shown.length ? shown.map(r => `<article class="ev ${r.state}" data-i="${events.indexOf(r)}">
-                <div class="ev-head">${evCal(r)}<div class="ev-main">${evEyebrow(r) ? `<p class="ev-eyebrow">${evEyebrow(r)}</p>` : ''}<h3>${esc(r.title)}</h3>${evFacts(r)}</div></div>
-                ${r.description ? `<div class="ev-desc">${evText(r.description)}</div><button class="ev-more" hidden>Read more</button>` : ''}
+                <div class="ev-head">${evCal(r)}<div class="ev-main">${evEyebrow(r) ? `<p class="ev-eyebrow">${evEyebrow(r)}</p>` : ''}<h3>${esc(r.title)}</h3>${evFacts(r)}<button class="ev-more">See details ›</button></div></div>
                 ${r.state === 'past' ? '' : `<div class="ev-foot">${slotsHTML(r)}${evActions(r)}</div>`}</article>`).join('')
             : '<p class="muted">Nothing here yet. Check back soon.</p>';
         list.scrollLeft = 0;
-        list.querySelectorAll('.ev-desc').forEach(d => { if (d.scrollHeight > d.clientHeight + 4) d.nextElementSibling.hidden = false; });
     };
     list.onclick = e => {
         const b = e.target.closest('.ev-more'); if (!b) return;
         const r = events[b.closest('.ev').dataset.i];
         openDialog(`<div class="ev-head">${evCal(r)}<div class="ev-main">${evEyebrow(r) ? `<p class="ev-eyebrow">${evEyebrow(r)}</p>` : ''}<h3>${esc(r.title)}</h3>${evFacts(r)}</div></div>
-            <div class="ev-desc full">${evText(r.description)}</div>${r.state === 'past' ? '' : `<div class="ev-foot">${slotsHTML(r)}${evActions(r)}</div>`}`, 'ev-dialog');
+            ${r.description ? `<div class="ev-desc full">${evText(r.description)}</div>` : ''}${r.state === 'past' ? '' : `<div class="ev-foot">${slotsHTML(r)}${evActions(r)}</div>`}`, 'ev-dialog');
     };
     const first = events.some(e => e.state === 'upcoming') ? 'upcoming' : events.some(e => e.state === 'live') ? 'live' : 'all';
     $$('#event-tabs button').forEach(b => b.classList.toggle('active', b.dataset.filter === first));
