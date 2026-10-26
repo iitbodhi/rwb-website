@@ -100,8 +100,9 @@ function onSheetEdit(e) {
   if (col.joined_at !== undefined && col.joined_at + 1 >= c0 && col.joined_at + 1 < c0 + nc) {
     const f = Math.max(2, r0), l = Math.min(r0 + nr - 1, f + 99);
     const vals = sheet.getRange(f, 1, l - f + 1, sheet.getLastColumn()).getValues();
-    const rows = vals.map(r => ({ phone: p10_(r[col.phone]), joined_at: r[col.joined_at] instanceof Date ? r[col.joined_at].toISOString() : '' })).filter(x => x.phone.length === 10 && x.joined_at);
+    const rows = vals.map(r => ({ phone: p10_(r[col.phone]), joined_at: tsIso_(r[col.joined_at]) })).filter(x => x.phone.length === 10 && x.joined_at);
     if (rows.length) console.log('Join date sent to the app: ' + UrlFetchApp.fetchAll([rpc_('sheet_set_joined', { p_secret: SYNC_SECRET, p_rows: rows })])[0].getContentText());
+    else console.log('Timestamp edited, but it is not a date the app understands (use dd/mm/yyyy hh:mm:ss): ' + JSON.stringify(vals.map(r => String(r[col.joined_at]))));
   }
   if (!edited.length) return;
   const first = Math.max(2, r0), last = Math.min(r0 + nr - 1, first + 99);
@@ -450,6 +451,24 @@ function syncAnswers() {
     n += Number(r.getContentText()) || 0;
   }
   console.log('Answers sent for ' + rows.length + ' rows; ' + n + ' members updated in the app.');
+}
+
+/* a Timestamp cell (a date, or text like 05/11/2024 20:47:21, India time) → ISO time, or '' */
+function tsIso_(v) {
+  if (v instanceof Date && !isNaN(v)) return v.toISOString();
+  const m = String(v || '').trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})(?:[ T,]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (!m) return '';
+  const pad = x => String(x || 0).padStart(2, '0');
+  return m[3] + '-' + pad(m[2]) + '-' + pad(m[1]) + 'T' + pad(m[4]) + ':' + pad(m[5]) + ':' + pad(m[6]) + '+05:30';
+}
+/** Select one or more member rows in the sheet, then run this: their Timestamp is sent to the app as the join date. */
+function sendJoinDates() {
+  const sheet = responsesSheet_(), col = columns_(sheet), sel = SpreadsheetApp.getActiveRange();
+  if (!sel || sel.getSheet().getSheetId() !== sheet.getSheetId()) { console.log('Select the member rows in "' + sheet.getName() + '" first.'); return; }
+  const f = Math.max(2, sel.getRow()), l = sel.getRow() + sel.getNumRows() - 1;
+  const vals = sheet.getRange(f, 1, l - f + 1, sheet.getLastColumn()).getValues();
+  const rows = vals.map(r => ({ phone: p10_(r[col.phone]), joined_at: tsIso_(r[col.joined_at]) })).filter(x => x.phone.length === 10 && x.joined_at);
+  console.log(rows.length ? 'Join dates sent: ' + rows.map(x => x.phone + ' → ' + x.joined_at).join(', ') + '. Members updated: ' + UrlFetchApp.fetchAll([rpc_('sheet_set_joined', { p_secret: SYNC_SECRET, p_rows: rows })])[0].getContentText() : 'No rows with a WhatsApp number and a Timestamp were selected.');
 }
 
 /* ======================= Safety net: the sheet always matches the app ======================= */
