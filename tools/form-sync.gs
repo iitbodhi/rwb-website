@@ -5,6 +5,8 @@
  * 1. Join form → approval: every new form entry goes to the app's approval list (it is not a member yet).
  *    Its row here says "Waiting for approval" in the "App · Status" column until an admin decides.
  *      Approved → "Member". Once they sign in to the app (same email; their details are already there) → "In App".
+ *    An existing member who fills the form again with the same name, VRN and email is updated straight away (no approval);
+ *    a different name, VRN or email waits for an admin.
  *      Rejected → the row is deleted from this tab.
  *    The T&C answer is always written as "Understood & agreed".
  * 2. Sheet → app: editing a member's details here (name, number, VRN, locality…) updates the app within seconds.
@@ -88,6 +90,12 @@ function onFormSubmitSync(e) {
   if (String(res[0]) === 'pending') {
     sheet.getRange(rowNo, col.status + 1).setValue(ST.waiting);
     UrlFetchApp.fetchAll([rpc_('sheet_upsert_member_answers', { p_secret: SYNC_SECRET, p_phone: m.phone, p_answers: answers_(heads, row) })]);
+  } else if (String(res[0]) === 'updated') {
+    /* an existing member filled the form again with the same name, VRN and email: their details are updated (no approval);
+       this newest row becomes their row and older copies move to "Older entries" */
+    sheet.getRange(rowNo, col.status + 1).setValue(ST.member);
+    UrlFetchApp.fetchAll([rpc_('sheet_set_answers', { p_secret: SYNC_SECRET, p_rows: [{ phone: m.phone, answers: answers_(heads, row) }] })]);
+    setStatus_({ status: 'approved', phone: m.phone });
   }
   console.log('New form entry: ' + res.join(', '));
 }
