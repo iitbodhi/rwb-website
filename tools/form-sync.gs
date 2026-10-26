@@ -1,9 +1,12 @@
 /**
  * RWB App ⇄ RWB contact sheet (the Google Sheet with the join form responses)
  *
+ * ONE WAY TO JOIN: roninwb.in → Join us → the RWB join form → a row in "Form responses 3".
  * 1. Join form → approval: every new form entry goes to the app's approval list (it is not a member yet).
  *    Its row here says "Waiting for approval" in the "App · Status" column until an admin decides.
- *      Approved → "Member".   Rejected → the row moves to the "Rejected" tab (with the reason).
+ *      Approved → "Member" (the rider signs in to the app with the same email; their details are already there).
+ *      Rejected → the row is deleted from this tab.
+ *    The T&C answer is always written as "Understood & agreed".
  * 2. Sheet → app: editing a member's details here (name, number, VRN, locality…) updates the app within seconds.
  * 3. App → sheet: members approved in the app get a row here; changes in the app (Me → Edit, bikes, VRN verified)
  *    update their row. Rows added by the app say "RWB App" in the "Added via" column.
@@ -17,8 +20,8 @@
  *   b) Choose "setup" in the function list → Run → allow access. (Installs the form and edit triggers.)
  *   c) Deploy → Manage deployments → ✏️ → Version: New version → Deploy.
  *   d) Optional: run "addMissingFromApp" once to label every row's status and add anyone missing.
- * The app's join form copies the Google Form (questions, choices, required answers, the "read carefully" part).
- * It updates by itself every hour; after editing the form, run "publishForm" to update the app straight away.
+ * The app reads the form's questions (for "More from RWB"). They update by itself every hour; after editing the
+ * form, run "publishForm" to update the app straight away. New riders can only join through the form.
  */
 const SUPABASE_URL = 'https://hcowcybshljgkeixudry.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhjb3djeWJzaGxqZ2tlaXh1ZHJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3NDI2MjMsImV4cCI6MjEwODMxODYyM30.LLYjaairRQZ3-Ddwo9kschTeVXjEv84n45RrqEUhi0g';
@@ -47,7 +50,7 @@ const APP_COLS = { status: 'App · Status', vrn_verified: 'App · VRN verified',
 const ST = { waiting: 'Waiting for approval', member: 'Member' };
 /* Columns that update the app when an admin edits them here */
 const EDITABLE = ['full_name', 'dob', 'phone', 'email', 'vrn', 'bike', 'blood_group', 'locality', 'hideout', 'emergency_phone', 'alt_phone', 'vrn_verified', 'bike2_vrn', 'bike2_model', 'bike3_vrn', 'bike3_model', 'tnc'];
-const AGREED = 'I have read and agree to the RWB Terms & Conditions and Privacy Policy', NOT_AGREED = "I don't agree";   // written in the "read carefully" column for answers given in the app
+const AGREED = 'Understood & agreed', NOT_AGREED = "I don't agree";   // the T&C answer, the same from the form, the app and the sheet
 
 /** Run once (and again after updating this file). Installs the automatic triggers. */
 function setup() {
@@ -367,12 +370,12 @@ function setStatus_(b) {
       if (older.length) moveRows_(sheet, older.map(x => x.r), 'Older entries', 'Moved on', '');
       return json_({ ok: true, result: 'member', moved: older.length });
     }
-    /* rejected: only the entry that was rejected leaves (an existing member's older row stays) */
+    /* rejected: only the entry that was rejected is deleted (an existing member's older row stays) */
     let hit = mine.filter(x => ts && Math.abs(at(x) - ts) < 2000);
     if (!hit.length) hit = mine.filter(x => String(x.row[col.status]) === ST.waiting);
     if (!hit.length) return json_({ ok: true, result: 'not found' });
-    moveRows_(sheet, hit.map(x => x.r), 'Rejected', 'Rejected on', b.reason || '');
-    return json_({ ok: true, result: 'rejected', rows: hit.length });
+    hit.map(x => x.r).sort((a, c) => c - a).forEach(r => sheet.deleteRow(r));
+    return json_({ ok: true, result: 'rejected', deleted: hit.length });
   } finally { lock.releaseLock(); }
 }
 
@@ -409,7 +412,7 @@ function removeRows_(phone, name) {
 function makeTabs_() {
   const ss = SpreadsheetApp.getActive(), sheet = responsesSheet_();
   const heads = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  [['Removed members', ['Removed on']], ['Rejected', ['Rejected on', 'Note']], ['Older entries', ['Moved on', 'Note']]].forEach(([name, first]) => {
+  [['Removed members', ['Removed on']], ['Older entries', ['Moved on', 'Note']]].forEach(([name, first]) => {
     if (!ss.getSheetByName(name)) ss.insertSheet(name).appendRow(first.concat(heads));
   });
 }
@@ -524,7 +527,8 @@ function registerWebhook_() {
  *   2. Duplicate VRNs: the row with the most details and the T&C agreed stays; the others move to "Older entries"
  *      (their duplicate member in the app is archived under Left / removed, never someone using the app).
  *   3. Every member's row is checked against the app: app details are written here, missing members are added,
- *      removed members and rejected entries move to their tabs, and empty details in the app are filled from here.
+ *      removed members move to their tab, rejected entries are deleted, and empty details in the app are filled from here.
+ *   4. T&C answers: every "agree" answer is written the same way, "Understood & agreed".
  */
 function syncWithApp() {
   const lock = LockService.getScriptLock();
@@ -539,8 +543,8 @@ function syncWithApp() {
     const app = JSON.parse(exp.getContentText());
     const rc = reconcile_(app);
     console.log('Sync done. VRNs cleaned: ' + vr.cleaned + '. Duplicate VRN rows moved: ' + vr.moved + (vr.archived ? ' (archived in the app: ' + vr.archived + ')' : '') +
-      '. Cells updated from the app: ' + rc.cells + ' on ' + rc.rows + ' rows. Added: ' + rc.added + '. Moved to Removed members: ' + rc.removed +
-      '. Moved to Rejected: ' + rc.rejected + '. Older duplicate rows moved: ' + rc.older + '. App details filled from the sheet: ' + rc.filled + '. Join dates updated from the sheet: ' + (rc.joined || 0) + '.');
+      (vr.tnc ? '. T&C answers set to "' + AGREED + '": ' + vr.tnc : '') + '. Cells updated from the app: ' + rc.cells + ' on ' + rc.rows + ' rows. Added: ' + rc.added + '. Moved to Removed members: ' + rc.removed +
+      '. Rejected entries deleted: ' + rc.rejected + '. Older duplicate rows moved: ' + rc.older + '. App details filled from the sheet: ' + rc.filled + '. Join dates updated from the sheet: ' + (rc.joined || 0) + '.');
     if (vr.review.length) console.log('Please check by hand (both are on the app, nothing was changed):\n' + vr.review.join('\n'));
   } finally { lock.releaseLock(); }
 }
@@ -559,6 +563,14 @@ function tidyVrns_(dry) {
     data.forEach(r => { const c = cleanVrn_(r[col[k]]); if (c !== String(r[col[k]])) { r[col[k]] = c; n++; } cells.push([r[col[k]]]); });
     if (n && !dry) { writeColumn_(sheet, col[k], cells); out.cleaned += n; }
   });
+  /* 1b. every "agree" answer to the T&C question is written the same way */
+  if (col.tnc !== undefined) {
+    const cells = []; let n = 0;
+    data.forEach(r => { const v = String(r[col.tnc] == null ? '' : r[col.tnc]).trim();
+      if (v && v !== AGREED && /(agree|understood|accept|^yes)/i.test(v) && !/(don'?t|do not|not agree|disagree)/i.test(v)) { r[col.tnc] = AGREED; n++; }
+      cells.push([r[col.tnc]]); });
+    if (n && !dry) { const f = sheet.getRange(2, col.tnc + 1, data.length, 1).getFormulas(); if (f.every(x => !x[0])) { writeColumn_(sheet, col.tnc, cells); out.tnc = n; } }
+  }
   /* 2. duplicate VRNs */
   const groups = {};
   data.forEach((r, i) => {
@@ -611,7 +623,7 @@ function same_(k, a, b) {
   if (k === 'dob') return dobKey_(a) === dobKey_(b);
   if (k === 'blood_group') { const g = x => t(x).replace(/\s|ve\b/g, '').replace(/pos(itive)?/, '+').replace(/neg(ative)?/, '-'); return g(a) === g(b); }
   if (k === 'bike') { const g = x => /yeah|yes|ronin/i.test(String(x)) ? 'ronin' : t(x); return g(a) === g(b); }
-  if (k === 'tnc') { const g = x => !t(x) ? '' : /(don'?t|not agree|disagree)/i.test(String(x)) ? 'no' : /(agree|understood|accept|yes)/i.test(String(x)) ? 'yes' : t(x); return g(a) === g(b); }
+  if (k === 'tnc') return String(a == null ? '' : a).trim() === String(b == null ? '' : b).trim();   // exact, so every row says "Understood & agreed"
   if (k === 'vrn_verified') { const g = x => /^(yes|y|✓|✔|true|verified)$/i.test(t(x)) ? 'yes' : ''; return g(a) === g(b); }
   return t(a instanceof Date ? Utilities.formatDate(a, 'Asia/Kolkata', 'dd/MM/yyyy') : a) === t(b instanceof Date ? Utilities.formatDate(b, 'Asia/Kolkata', 'dd/MM/yyyy') : b);
 }
@@ -674,10 +686,10 @@ function reconcile_(app) {
     const p = p10_(m.phone); if (waiting.has(p)) return;
     (byPhone[p] || []).forEach(i => { if (!gone.has(i) && String(data[i][col.status]) !== ST.waiting) { move.removed.push({ i: i, note: (m.status === 'left' ? 'Left' : 'Removed') + (m.removed_note ? ': ' + m.removed_note : '') }); gone.add(i); } });
   });
-  /* entries an admin rejected in the app */
+  /* entries an admin rejected in the app: deleted (no copy kept) */
   (app.rejected || []).forEach(r => {
     const p = p10_(r.phone); if (activeSet.has(p) || waiting.has(p)) return;
-    (byPhone[p] || []).forEach(i => { if (!gone.has(i) && String(data[i][col.status]) === ST.waiting) { move.rejected.push({ i: i, note: r.reason || '' }); gone.add(i); } });
+    (byPhone[p] || []).forEach(i => { if (!gone.has(i) && String(data[i][col.status]) === ST.waiting) { move.rejected.push({ i: i }); gone.add(i); } });
   });
   /* entries waiting for an admin are labelled */
   waiting.forEach(p => { if (activeSet.has(p)) return; (byPhone[p] || []).forEach(i => { if (!gone.has(i) && !String(data[i][col.status])) put(i, col.status, ST.waiting); }); });
@@ -691,9 +703,9 @@ function reconcile_(app) {
   });
   out.rows = [...touched].filter(i => !gone.has(i)).length;
   if (appends.length) { sheet.getRange(sheet.getLastRow() + 1, 1, appends.length, width).setValues(appends); out.added = appends.length; }
-  /* moves last (rows below shift up), all three tabs in one pass */
-  const all = [].concat(move.older.map(x => Object.assign({ tab: 'Older entries', title: 'Moved on' }, x)), move.removed.map(x => Object.assign({ tab: 'Removed members', title: 'Removed on' }, x)), move.rejected.map(x => Object.assign({ tab: 'Rejected', title: 'Rejected on' }, x)));
-  ['Older entries', 'Removed members', 'Rejected'].forEach(t => { const list = all.filter(x => x.tab === t); if (list.length) copyRows_(sheet, data, list, t, list[0].title); });
+  /* moves last (rows below shift up): older and removed rows are copied to their tabs, rejected ones just deleted */
+  const all = [].concat(move.older.map(x => Object.assign({ tab: 'Older entries', title: 'Moved on' }, x)), move.removed.map(x => Object.assign({ tab: 'Removed members', title: 'Removed on' }, x)), move.rejected.map(x => Object.assign({ tab: '' }, x)));
+  ['Older entries', 'Removed members'].forEach(t => { const list = all.filter(x => x.tab === t); if (list.length) copyRows_(sheet, data, list, t, list[0].title); });
   [...new Set(all.map(x => x.i))].sort((a, b) => b - a).forEach(i => sheet.deleteRow(i + 2));
   out.older = move.older.length; out.removed = move.removed.length; out.rejected = move.rejected.length;
   for (let k = 0; k < fills.length; k += 100) out.filled += Number(UrlFetchApp.fetchAll([rpc_('sheet_fill_members', { p_secret: SYNC_SECRET, p_rows: fills.slice(k, k + 100) })])[0].getContentText()) || 0;
@@ -869,16 +881,15 @@ function fixJoinForm() {
 
 /**
  * Run once from the editor: choose "tncAgreeOnly" → Run → allow access to Google Forms.
- * The join form's Terms & Conditions question keeps only the "agree" answer and becomes required,
- * so nobody can send the form without agreeing (the app's join form already works this way).
+ * The join form's Terms & Conditions question gets one answer, "Understood & agreed", and becomes required,
+ * so nobody can send the form without agreeing.
  */
 function tncAgreeOnly() {
   const form = FormApp.openById(FORM_ID);
   const item = form.getItems().find(it => TNC_HEAD.test(String(it.getTitle())) && [FormApp.ItemType.MULTIPLE_CHOICE, FormApp.ItemType.CHECKBOX, FormApp.ItemType.LIST].includes(it.getType()));
   if (!item) { console.log('No Terms & Conditions question found on the form.'); return; }
   const q = item.getType() === FormApp.ItemType.MULTIPLE_CHOICE ? item.asMultipleChoiceItem() : item.getType() === FormApp.ItemType.CHECKBOX ? item.asCheckboxItem() : item.asListItem();
-  const keep = q.getChoices().map(c => c.getValue()).filter(v => !/(don'?t|do not|not agree|disagree)/i.test(v));
-  if (!keep.length) keep.push(AGREED);
+  const keep = [AGREED];             // the only answer, stored the same way everywhere
   q.setChoices(keep.map(v => q.createChoice(v)));
   q.setRequired(true);
   try { if (q.showOtherOption) q.showOtherOption(false); } catch (e) { /* not available */ }

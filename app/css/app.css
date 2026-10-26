@@ -166,6 +166,12 @@ dl.facts dd{font-weight:500;overflow-wrap:anywhere}
 .signin img{width:120px;height:120px;margin:0 auto}
 .signin h1{font-size:2.6rem}
 .signin .lead{color:var(--muted);max-width:34ch;margin:0 auto}
+.signin .lead b{color:var(--ink);overflow-wrap:anywhere}
+.no-acct{gap:16px}
+.no-acct h1{font-size:2.2rem}
+.na-card{text-align:left;padding:16px 18px;font-size:.98rem;line-height:1.5}
+.na-card a,.linkish{color:var(--orange);font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.linkish{background:none;border:0;padding:0;font:inherit;font-weight:700;cursor:pointer}
 .gbtn{background:var(--card);color:var(--ink);border-color:var(--line)}
 .gbtn:hover{background:var(--paper-2);border-color:var(--ink)}
 .gbtn svg{width:20px;height:20px}

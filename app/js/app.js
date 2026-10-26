@@ -306,7 +306,7 @@ function viewSignIn() {
         <img src="icons/logo-384.png" alt="Ronin Warriors of Bengal">
         <div><h1>RWB App</h1><p class="lead">For members of Ronin Warriors of Bengal. Sign in with the Google account you used on the RWB join form.</p></div>
         <button class="btn gbtn block" data-act="google">${G_ICON} Continue with Google</button>
-        <p class="small muted">Not a member yet? <a href="${esc(SITE.JOIN_FORM_URL || 'https://roninwb.in')}" target="_blank" rel="noopener">Join RWB</a> first, or sign in and ask the admins for access.</p>
+        <p class="small muted">Not a member yet? <a href="${esc(JOIN_URL)}" target="_blank" rel="noopener">Join RWB here</a> with the RWB join form. Once an admin approves you, sign in with the same email.</p>
     </section>`;
     actions = { google: b => busy(b, () => api.signIn()) };
 }
@@ -478,43 +478,32 @@ function liveJoinForm(def, known, sess, filled = false) {
     });
 }
 
+/* Not a member (yet). The only way to join is the RWB join form on roninwb.in: an admin approves the entry, then the
+   rider signs in here with the same email and their details are already filled in. */
+const JOIN_URL = SITE.JOIN_FORM_URL || 'https://roninwb.in';
 async function viewAccess(status, sess) {
     tabbar.hidden = true;
-    const req = status === 'pending' || status === 'rejected' ? await api.myRequest().catch(() => null) : null;
+    actions = { recheck: b => busy(b, boot), out: () => api.signOut(), 'help-admins': () => joinHelpSheet(sess) };
     if (status === 'pending') {
         app.innerHTML = `${demoBar()}<section class="signin"><img src="icons/logo-128.png" alt="">
-            <div><h1>Request sent</h1><p class="lead">Thanks${req ? ', ' + esc(firstName(req)) : ''}! An RWB admin will check your details and let you in, usually within a day.</p></div>
+            <div><h1>Waiting for approval</h1><p class="lead">We've got your RWB join form. An RWB admin will check your details, usually within a day.</p></div>
+            <p class="small muted">Once you're approved you'll get a WhatsApp message. Then open the app and sign in with <b>${esc(sess.email)}</b>: your details will already be there.</p>
             <button class="btn block" data-act="recheck">Check again</button>
-            <button class="btn ghost block" data-act="edit-req">Edit my details</button>
             <button class="btn ghost block" data-act="out">Sign out</button></section>`;
-        actions = { recheck: b => busy(b, boot), out: () => api.signOut(),
-            'edit-req': async b => { const def = await loadJoinForm(); if (def?.items?.length) liveJoinForm(def, { ...(req || {}), answers: req?.answers || {} }, sess, true); else viewAccess('not_found', sess); } };
         return;
     }
-    const [def, pre] = await Promise.all([loadJoinForm(), api.myPrefill().catch(() => null)]);
-    const known = req || pre ? { ...(pre || {}), ...(req || {}), answers: { ...(pre?.answers || {}), ...(req?.answers || {}) } } : null;
-    if (status === 'rejected' && def) toast('Your earlier request was not approved. You can check your details and send them again.', true);
-    if (def?.items?.length) return liveJoinForm(def, known || (sess.name ? { full_name: sess.name } : null), sess, !!known);
-    app.innerHTML = `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>Almost there</h1></header>
-        ${status === 'rejected' ? '<p class="warn">Your earlier request was not approved. If you think this is a mistake, message an RWB admin on WhatsApp, or send the details again.</p><br>' : ''}
-        <p>We couldn't find <b>${esc(sess.email)}</b> in the RWB members list. Maybe you used a different email on the join form.</p>
-        <p class="muted" style="margin:8px 0 18px">Fill this in and an admin will link you to your membership. Use the WhatsApp number you're in the RWB group with.</p>
-        <form id="req">
-            ${joinFields({ ...(known || {}), full_name: known?.full_name || sess.name || '' }, 'join')}
-            ${rulesBlock()}
-            <button class="btn block">Send to admins</button>
-            <button type="button" class="btn ghost block" data-act="out">Use a different Google account</button>
-        </form>`;
-    actions = { out: () => api.signOut() };
-    vrnWatch($('#req [name=vrn]'), $('#req [name=phone]'));
-    $('#req').addEventListener('submit', e => {
-        e.preventDefault();
-        const f = joinData(e.target), err = joinCheck(f, 'join');
-        if (err) return toast(err, true);
-        if (!f.tnc) return toast('Please read and agree to the RWB Terms & Conditions', true);
-        if (vrnTaken(e.target)) return toast(vrnTaken(e.target), true);
-        busy(e.submitter, async () => { await api.requestAccess(f); boot(); });
-    });
+    app.innerHTML = `${demoBar()}<section class="signin no-acct"><img src="icons/logo-128.png" alt="">
+        <div><h1>No Account Found!</h1><p class="lead">There's no RWB membership for <b>${esc(sess.email)}</b>.</p></div>
+        <div class="card na-card"><p>If you have already joined RWB, <button class="linkish" data-act="help-admins">WhatsApp the Admins</button> to know your registered email.</p></div>
+        <div class="card na-card"><p>Not joined yet? <a href="${esc(JOIN_URL)}" target="_blank" rel="noopener">Join here</a></p></div>
+        <button class="btn ghost block" data-act="out">Use a different Google account</button></section>`;
+}
+async function joinHelpSheet(sess) {
+    const list = await api.joinHelpAdmins().catch(() => []);
+    const msg = a => `Hi ${a.first_name}, I'm ${sess.name || 'an RWB member'}. I signed in to the RWB App with ${sess.email}, but it says No Account Found. Could you tell me which email I registered with?`;
+    openSheet('WhatsApp the Admins', `<p class="small muted" style="margin-bottom:10px">Choose an admin. They'll tell you the email you joined with, so you can sign in with it.</p>
+        <div class="group">${list.length ? list.map(a => `<div class="bike-row"><span class="g-ico">🛡️</span><span class="grow"><b>${esc(a.first_name)}</b><span class="small muted">RWB admin</span></span>
+            <a class="btn sm wa" target="_blank" rel="noopener" href="${waTo(a.phone, msg(a))}">WhatsApp</a></div>`).join('') : '<p class="small muted" style="padding:12px">Could not load the admins. Please try again, or message RWB on Instagram.</p>'}</div>`);
 }
 
 /* =================== Home =================== */
@@ -2130,9 +2119,9 @@ const APP_LINK = 'roninwb.in/app';
 function waMsg(kind, x = {}) {
     const first = firstName(x) || 'Warrior', me = firstName(state.me) || 'RWB';
     const T = {
-        welcome: `Hi ${first}! 🎉\n\nWelcome to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nMeanwhile, get the RWB App: ${APP_LINK}\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
+        welcome: `Hi ${first}! 🎉\n\nWelcome to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nMeanwhile, get the RWB App: https://${APP_LINK}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}. Your details are already there.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
         existing: `Hi Warrior ${first}! 👋\n\nYou're already in our RWB WhatsApp group, so nothing to worry about. Your RWB App account is ready: just open the app and explore.\n\n🔧 Service: records, bills and next-service reminders\n⛽ Mileage: your real km/l and fuel spends\n🛒 Motomart: buy and sell used riding gear\n📘 Guides: maintenance help and tested gear\n📅 Events: rides, RSVPs and shared expenses\n🏍️ RWB: members and leaderboards\n🤖 Pookie: our AI for any bike question\n\nPlease also update your details in the Me tab (you can set your bike model and add up to 3 bikes).\n\n${APP_LINK}\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
-        returning: `Hi ${first}! 🎉\n\nWelcome back to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nThe RWB App: ${APP_LINK}\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
+        returning: `Hi ${first}! 🎉\n\nWelcome back to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nThe RWB App: https://${APP_LINK}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
         rejected: `Hi ${first},\n\nThank you for your interest in Ronin Warriors of Bengal. We're sorry, we couldn't approve your registration this time${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'}\n\nIf you think this is a mistake, or things change, just reply here and we'll be happy to help.\n\nRide safe! 🙏\n– ${me}, RWB`,
         change_ok: `Hi ${first}! ✅ Your ${x.what || 'profile'} update in the RWB App is approved. Thanks for keeping your details up to date.\n– ${me}, RWB`,
         change_no: `Hi ${first}, we couldn't approve your ${x.what || 'profile'} update in the RWB App${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'} Just reply here if you'd like help with it. 🙏\n– ${me}, RWB`,
@@ -2184,7 +2173,7 @@ function changeCard(c) {
 async function adminRequests() {
     const [reqs, chg, inc, all] = await Promise.all([api.admin.requests(), api.admin.changes().catch(() => []), api.admin.incomplete().catch(() => null), state.adminMembers ? Promise.resolve(state.adminMembers) : api.admin.members().then(m => (state.adminMembers = m)).catch(() => [])]);
     const digest = () => `🛡️ RWB App: ${reqs.length + chg.length} waiting for approval\n${reqs.length ? `\nNew entries (${reqs.length}):\n${azSort(reqs).slice(0, 15).map(r => `• ${r.full_name} (${r.source === 'form' ? 'form' : 'app'})`).join('\n')}` : ''}${chg.length ? `\n\nProfile changes (${chg.length}):\n${azSort(chg).slice(0, 15).map(c => `• ${c.full_name}: ${CHANGE_TXT[c.kind]}`).join('\n')}` : ''}\n\nOpen: ${APP_LINK} → Home → Admin`;
-    $('#admin-body').innerHTML = (reqs.length || chg.length ? `<button class="btn ghost block share-admins" data-act="digest">📣 Share this list to the admin WhatsApp group</button>` : '') + (reqs.length || chg.length ? `${reqs.length ? `<p class="small muted" style="margin-bottom:10px">New entries from the join form and the app. Check the 4 points, then approve. Nobody is a member until approved.</p>
+    $('#admin-body').innerHTML = (reqs.length || chg.length ? `<button class="btn ghost block share-admins" data-act="digest">📣 Share this list to the admin WhatsApp group</button>` : '') + (reqs.length || chg.length ? `${reqs.length ? `<p class="small muted" style="margin-bottom:10px">New entries from the RWB join form. Check the 4 points, then approve and add them to the WhatsApp group. Rejected entries are deleted from the sheet.</p>
         <div class="list">${reqs.map(reqCard).join('')}</div>` : ''}
         ${chg.length ? `<h2 class="group-title" style="margin-top:${reqs.length ? 22 : 0}px">Changes to approve</h2><p class="small muted" style="margin-bottom:10px">Members changed an important detail in their profile.</p><div class="list">${chg.map(changeCard).join('')}</div>` : ''}`
         : '<div class="card empty"><b>All clear</b>Nothing waiting for approval.</div>') + (inc ? followUps(inc, all) : '');
@@ -2211,7 +2200,7 @@ async function adminRequests() {
             const r = byId(b.dataset.id), miss = checksOf(r).filter(c => !c.ok).map(c => c.t);
             if (miss.length && !confirmBox(`Not all 4 checks are ticked:\n• ${miss.join('\n• ')}\n\nApprove ${r.full_name} anyway?`)) return;
             busy(b, async () => {
-                await api.admin.approve(r.id); state.adminMembers = null; state.dir = null; toast(`${r.full_name} approved`); await viewAdmin();
+                await api.admin.approve(r.id); state.adminMembers = null; state.dir = null; toast(`${r.full_name} approved. Now add them to the RWB WhatsApp group.`); await viewAdmin();
                 const kind = r.check_entry === 'existing' || r.check_entry === 'recent' ? 'existing' : r.check_entry === 'returning' ? 'returning' : 'welcome';
                 tellOnWhatsApp(`Let ${firstName(r)} know`, r.phone, waMsg(kind, r));
             });
@@ -2337,7 +2326,7 @@ function reasonSheet(title, quick, done) {
 }
 function rejectSheet(r) {
     const quick = ['Not a Ronin owner', 'VRN could not be verified', 'Duplicate entry', 'Did not agree to the T&C'];
-    openSheet('Reject ' + firstName(r), `<form id="rj"><p class="small muted" style="margin-bottom:10px">${r.source === 'form' ? 'Their sheet row moves to the “Rejected” tab.' : 'They see that the request was not approved.'} The reason is kept for admins.</p>
+    openSheet('Reject ' + firstName(r), `<form id="rj"><p class="small muted" style="margin-bottom:10px">${r.source === 'form' ? 'Their entry is deleted from the sheet (Form responses 3).' : 'They see that the request was not approved.'} The reason is kept for admins for 60 days.</p>
         <div class="chips" style="margin-bottom:10px">${quick.map(q => `<button type="button" class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
         <label>Reason (optional)<textarea name="reason" rows="2" maxlength="200"></textarea></label>
         <button class="btn danger block">Reject</button></form>`, body => {

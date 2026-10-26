@@ -7,13 +7,15 @@ window.RWB_TNC = {
     ['About RWB and these Terms', [
         'Ronin Warriors of Bengal (“RWB”, “we”, “us”) is a free, non-profit, volunteer-run community of TVS Ronin owners in West Bengal. RWB is not a company and is not affiliated with, endorsed by or sponsored by TVS Motor Company.',
         'These Terms & Conditions (“Terms”) apply to everyone who joins or takes part in RWB: the RWB WhatsApp groups and channel, rides and events, the RWB App (roninwb.in/app), the website roninwb.in and RWB Motomart.',
-        'By submitting the RWB join form, agreeing in the RWB App, or continuing as a member, you confirm that you have read, understood and agree to these Terms and to the RWB Privacy Policy (roninwb.in/privacy.html). If you do not agree, please do not join, or leave RWB.'
+        'By submitting the RWB join form (choosing “Understood & agreed”), agreeing in the RWB App, or continuing as a member, you confirm that you have read, understood and agree to these Terms and to the RWB Privacy Policy (roninwb.in/privacy.html). If you do not agree, please do not join, or leave RWB.'
     ]],
     ['Eligibility and membership', [
         'Membership is mainly for owners of a TVS Ronin, including riders whose Ronin is booked and awaiting delivery. RWB admins may, at their sole discretion, also admit riders of other motorcycles.',
         'You must be at least 18 years old and hold a valid driving licence for motorcycles.',
         'Membership is free. RWB never charges a joining or membership fee.',
-        'Every registration, whether through the join form or the app, is reviewed by RWB admins. Approval is at their discretion, and they may ask you to confirm your details before approving you.',
+        'The only way to join RWB is the official RWB join form on roninwb.in (“Join us”). Registrations made any other way are not accepted.',
+        'Every registration is reviewed by RWB admins. Approval is at their sole discretion, and they may ask you to confirm your details before approving you. If a registration is not approved, the entry is deleted.',
+        'Once approved, you are added to the RWB WhatsApp group by an admin, and you can sign in to the RWB App with the same email address you gave on the join form. Your details from the join form are already in the app.',
         'One person may hold only one membership. Each vehicle registration number (VRN) can belong to only one member at a time.'
     ]],
     ['Your information', [

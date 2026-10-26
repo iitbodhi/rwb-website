@@ -90,6 +90,7 @@ async function supabaseApi(url, key) {
         withdrawTnc: async () => { const r = await sb.rpc('withdraw_tnc'); if (r.error && /could not find|function/i.test(r.error.message || '')) return must(await sb.rpc('request_change', { p_kind: 'tnc', p_value: 'disagree' })); return must(r); },
         leaveRwb: async note => must(await sb.rpc('leave_rwb', { p_note: note || null })),
         rwbAdmins: async () => must(await sb.rpc('rwb_admins')),
+        joinHelpAdmins: async () => must(await sb.rpc('join_help_admins')),
         updateMyAnswers: async answers => { const r = await sb.rpc('update_my_answers', { p_answers: answers }); if (r.error && /could not find|function/i.test(r.error.message || '')) throw new Error('Please ask an RWB admin to run setup file 32 first.'); return must(r); },
         myBikes: async () => must(await sb.from('member_bikes').select('slot, vrn, model, verified').eq('member_id', await myMemberId()).order('slot')),
         saveBike: async (slot, vrn, model, memberId = null) => must(await sb.rpc('save_bike', { p_slot: slot, p_vrn: vrn || '', p_model: model || null, p_member_id: memberId })),
@@ -430,6 +431,7 @@ function demoApi() {
         agreeTnc: () => { Object.assign(me(), { tnc_agreed: true, tnc_version: window.RWB_TNC?.version || null, tnc_agreed_at: new Date().toISOString() }); save(); return wait('ok'); },
         withdrawTnc: () => { Object.assign(me(), { tnc_agreed: false, tnc_version: null }); save(); return wait('withdrawn'); },
         leaveRwb: () => { me().status = 'left'; save(); return wait('left'); },
+        joinHelpAdmins: () => wait(db.members.filter(m => ['superadmin', 'admin'].includes(m.role) && (!m.status || m.status === 'active')).map(m => ({ first_name: (m.nickname || m.full_name).split(' ')[0], phone: m.phone }))),
         rwbAdmins: () => wait(db.members.filter(m => ['superadmin', 'admin'].includes(m.role) && (!m.status || m.status === 'active')).map(m => ({ full_name: m.full_name, nickname: m.nickname, phone: m.phone, role: m.role }))),
         async boards() {
             const myKm = Math.max(0, me().odo_km || 0, ...db.fuel.map(f => f.odometer_km), ...db.services.map(x => x.odometer_km));
