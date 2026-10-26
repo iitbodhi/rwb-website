@@ -60,6 +60,7 @@ function setup() {
   ScriptApp.newTrigger('syncWithApp').timeBased().everyMinutes(15).create();
   columns_(responsesSheet_());
   makeTabs_();
+  console.log('Working on the tab "' + responsesSheet_().getName() + '"');
   registerWebhook_();
   publishForm();
   syncTnc();
@@ -126,9 +127,25 @@ function syncAll() {
 }
 
 /* ---------- helpers ---------- */
+/* The tab the join form writes into. Set the exact name here if the tab is ever renamed. */
+const RESPONSES_TAB = 'Form responses 3';
+let responsesCache_;
 function responsesSheet_() {
-  const ss = SpreadsheetApp.getActive();
-  return ss.getSheets().find(s => /form responses/i.test(s.getName())) || ss.getSheets()[0];
+  if (responsesCache_) return responsesCache_;
+  const ss = SpreadsheetApp.getActive(), all = ss.getSheets();
+  const byName = RESPONSES_TAB && ss.getSheetByName(RESPONSES_TAB);
+  /* else: the visible tab linked to the join form (old, hidden response tabs are never used) */
+  const linked = all.filter(s => { try { return !!s.getFormUrl(); } catch (e) { return false; } });
+  const named = all.filter(s => /form responses/i.test(s.getName()));
+  responsesCache_ = byName || linked.find(s => String(s.getFormUrl()).indexOf(FORM_ID) >= 0 && !s.isSheetHidden()) || linked.find(s => !s.isSheetHidden())
+    || named.find(s => !s.isSheetHidden()) || linked[0] || named[0] || all[0];
+  return responsesCache_;
+}
+/** Run from the editor to see which tab the script works on, and every tab in this spreadsheet. */
+function whichTab() {
+  console.log('Working on: "' + responsesSheet_().getName() + '"');
+  SpreadsheetApp.getActive().getSheets().forEach(s => { let f = ''; try { f = s.getFormUrl() || ''; } catch (e) { /* none */ }
+    console.log('- ' + s.getName() + (s.isSheetHidden() ? ' (hidden)' : '') + (f ? ' (linked to a form)' : '') + ', ' + (s.getLastRow() - 1) + ' rows'); });
 }
 
 function rpc_(fn, payload) {
