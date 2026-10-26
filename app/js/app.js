@@ -1494,6 +1494,7 @@ function docStatus(d) {
 }
 /* =================== How-to videos (short guides, also posted as RWB Instagram stories) =================== */
 const VIDEOS = [
+    ['track', 'Track ✨ New', 'Live location, SOS and how to update', 206],
     ['service', 'Service', 'Log services, bills and reminders', 43],
     ['mileage', 'Mileage', 'Your real km per litre', 44],
     ['motomart', 'Motomart', 'Buy and sell used riding gear', 43],
@@ -1506,10 +1507,10 @@ const VIDEOS = [
 function viewVideos() {
     const list = VIDEOS.filter(v => v[4] !== 'team' || isMod());
     app.innerHTML = `${top('Videos')}
-        <p class="muted" style="margin:-4px 0 16px">Short guides to every part of the app, under a minute each, with sound and subtitles.</p>
+        <p class="muted" style="margin:-4px 0 16px">Short guides to every part of the app, with sound and subtitles.</p>
         <div class="vid-grid">${list.map(([id, title, sub, sec, who]) => `
             <button class="vid-tile" data-act="play" data-id="${id}" aria-label="Play: ${esc(title)}, ${sec} seconds">
-                <span class="vid-cover"><img src="videos/${id}.jpg" alt="" loading="lazy"><i class="vid-play">▶</i><em>0:${String(sec).padStart(2, '0')}</em></span>
+                <span class="vid-cover"><img src="videos/${id}.jpg" alt="" loading="lazy"><i class="vid-play">▶</i><em>${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}</em></span>
                 <b>${esc(title)}${who ? ' <span class="badge coord">Team</span>' : ''}</b><span class="small muted">${esc(sub)}</span>
             </button>`).join('')}</div>
         <p class="small muted" style="text-align:center;margin:18px 0 8px">Also on the RWB Instagram highlights.</p>`;
@@ -2192,7 +2193,7 @@ function waMsg(kind, x = {}) {
     };
     return T[kind];
 }
-const INSTALL_ANDROID = 'https://roninwb.in/app/videos/install-android.mp4', INSTALL_IPHONE = 'https://roninwb.in/app/videos/install-iphone.mp4';
+const INSTALL_ANDROID = 'https://roninwb.in/app/videos/track.mp4', INSTALL_IPHONE = 'https://roninwb.in/app/videos/install-iphone.mp4';
 /* Send a message to the RWB WhatsApp group: with the saved group link it's copied and the group opens (paste it);
    otherwise WhatsApp's share screen opens with the message ready (long lists use the phone's share sheet). */
 async function toGroup(text) {
