@@ -124,7 +124,7 @@ const load = {
     fuel: async (force) => (state.fuel = !force && state.fuel || await api.fuel()),
     bdays: async () => (state.bdays ??= isMod() ? await api.birthdays(isAdmin() ? 7 : 0).catch(() => []) : []),   /* birthdays: admins and coordinators only */
     listings: async (force) => (state.listings = !force && state.listings || await api.listings()),
-    news: async (force) => (state.news = !force && state.news || await api.news().catch(() => [])),
+    news: async (force) => (state.news = !force && state.news || (await api.news().catch(() => [])).filter(n => !isFam() || n.kind === 'announcement')),   /* RWB FAM: admin announcements only */
     docs: async (force) => (state.docs = !force && state.docs || await api.docs().catch(() => []))
 };
 
@@ -165,11 +165,12 @@ let renderChain = Promise.resolve();
 function render() { renderChain = renderChain.then(doRender, doRender); return renderChain; }
 async function doRender() {
     if (!state.me) return;          /* signed out / not loaded yet: boot() shows the right screen */
-    const gate = await gateFor(state.me);
+    const gate = isFam() ? null : await gateFor(state.me);
     if (gate) { tabbar.hidden = true; document.body.dataset.route = 'gate'; return gate === 'tnc' ? tncGate() : profileGate(); }
     const [name, param] = (location.hash.slice(1) || 'home').split('?')[0].split('/');
     state.param = param || null;
-    const view = ROUTES[name] || viewHome;
+    if (isFam() && !FAM_ROUTES.includes(name)) { location.hash = '#home'; return; }
+    const view = isFam() ? famView(name) : ROUTES[name] || viewHome;
     if (name === 'admin' && !isAdmin()) { location.hash = '#home'; return; }
     if (name === 'admin' && param) state.adminTab = param;
     tabbar.hidden = false;
@@ -214,7 +215,9 @@ const globalActions = {
     'odo': () => odoSheet(),
     'wish': () => wishSheet(state.bdays.filter(b => b.day === todayISO())),
     'hello': el => helloSheet(el.dataset.name),
-    'news-open': el => { const n = NEWS_MAP.get(el.dataset.nid); if (n) newsSheet(n); }
+    'news-open': el => { const n = NEWS_MAP.get(el.dataset.nid); if (n) newsSheet(n); },
+    fam: () => famSheet(),
+    'fam-all': () => famAdminSheet()
 };
 /* Welcome a new Ronin in the RWB WhatsApp group */
 function helloSheet(name) {
@@ -488,7 +491,7 @@ function liveJoinForm(def, known, sess, filled = false) {
 const JOIN_URL = SITE.JOIN_FORM_URL || 'https://roninwb.in';
 async function viewAccess(status, sess) {
     tabbar.hidden = true;
-    actions = { recheck: b => busy(b, boot), out: () => api.signOut(), 'help-admins': () => joinHelpSheet(sess) };
+    actions = { recheck: b => busy(b, boot), out: () => api.signOut(), 'help-admins': () => joinHelpSheet(sess), 'fam-join': () => famJoinScreen(sess) };
     if (status === 'pending') {
         app.innerHTML = `${demoBar()}<section class="signin"><img src="icons/logo-128.png" alt="">
             <div><h1>Waiting for approval</h1><p class="lead">We've got your RWB join form. An RWB admin will check your details, usually within a day.</p></div>
@@ -509,6 +512,7 @@ async function viewAccess(status, sess) {
         </form>
         <div class="card na-card"><p>Still stuck? <button type="button" class="linkish" data-act="help-admins">WhatsApp the Admins</button> to know your registered email.</p></div>
         <div class="card na-card"><p>Not joined yet? <a href="${esc(JOIN_URL)}" target="_blank" rel="noopener">Join here</a></p></div>
+        <div class="card na-card"><p>Family of an RWB member? <button type="button" class="linkish" data-act="fam-join">Join RWB FAM with an invite code</button></p></div>
         <button class="btn ghost block" data-act="out">Use a different Google account</button></section>`;
     bindFindAccount(sess);
 }
@@ -704,7 +708,7 @@ function swipeToDismiss(root, after) {
             el.classList.remove('swiping'); el.dataset.swiped = '1'; setTimeout(() => delete el.dataset.swiped, 400);
             if (Math.abs(dx) < el.offsetWidth * 0.33) return reset();
             const n = NEWS_MAP.get(String(el.dataset.swipe));
-            if (n && IMPORTANT(n) && !isMod()) { reset(); onlyTeamSheet(n); }   /* members can't remove announcements or events */
+            if (n && IMPORTANT(n) && !isMod() && !isFam()) { reset(); onlyTeamSheet(n); }   /* members can't remove announcements or events */
             else if (n && IMPORTANT(n)) { el.style.transform = `translateX(${Math.sign(dx) * el.offsetWidth * 0.33}px)`; askHideImportant(n, gone, reset); } else gone();
         };
         el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
@@ -713,6 +717,15 @@ function swipeToDismiss(root, after) {
 }
 /* "Clear": routine updates only; admin announcements and events stay (swipe them away one by one) */
 function clearNews(list) {
+    if (isFam()) {
+        const all = visibleNews(list); if (!all.length) return;
+        openSheet('Clear notifications?', `<p class="small muted" style="margin-bottom:14px">All ${all.length} notification${all.length > 1 ? 's' : ''} will be hidden on this phone. You can't bring them back.</p>
+            <button class="btn danger block" data-x="yes">Yes, clear all</button><button class="btn ghost block" data-x="no" style="margin-top:8px">Cancel</button>`, body => {
+            body.querySelector('[data-x=no]').onclick = () => closeSheet();
+            body.querySelector('[data-x=yes]').onclick = () => { hideNews(all.map(n => n.id)); closeSheet(); render(); toast('Cleared'); };
+        });
+        return;
+    }
     const routine = visibleNews(list).filter(n => !IMPORTANT(n));
     try { localStorage.setItem('rwb-feed-cleared', String(Math.max(0, ...list.map(n => n.id)))); } catch { /* ignore */ }
     hideNews(routine.map(n => n.id));
@@ -778,6 +791,7 @@ async function viewHome() {
         <nav class="quick" aria-label="Quick actions">
             <button data-act="add-fuel"><span>${ICON.fuel}</span>Add fuel</button>
             <button data-act="add-service"><span>${ICON.wrench}</span>Log service</button>
+            <button data-act="fam"><span>${FAM_ICON}</span>FAM</button>
             <button data-act="sell"><span>${ICON.tag}</span>Sell gear</button>
             <a href="#docs" aria-label="Documents${docsAlert() ? ' (something needs renewing)' : ''}"><span>${DOC_ICON}${docsAlert() ? '<i class="dot dot-red"></i>' : ''}</span>Documents</a>
         </nav>
@@ -1227,12 +1241,12 @@ function eventCard(e, d) {
         ${evtTile(e)}
         <span class="grow">${evtEyebrow(e)}<b>${esc(e.title)}</b><span class="evt-fact">${EVT_ICON.clock}${esc(evtWhen(e, true))}</span>${e.location ? `<span class="evt-fact">${EVT_ICON.pin}${esc(e.location)}</span>` : ''}
             ${e.status !== 'cancelled' && !evtPast(e) ? evtSlots(e, n) : ''}
-            <span class="evt-meta">${e.status === 'cancelled' ? '<span class="badge">Cancelled</span>' : `${n ? faceStack(c.faces, c.going - c.faces.length) : ''}<span class="small muted">${n ? `${n} ${evtPast(e) ? 'went' : 'going'}` : evtPast(e) ? 'Past event' : 'Be the first to join'}${c.maybe ? ` · ${c.maybe} maybe` : ''}</span>`}</span></span>
-        ${me ? `<span class="evt-me ${me.status}">${RSVP_TXT[me.status]}</span>` : e.status === 'live' && !evtPast(e) ? '<span class="evt-me ask">RSVP</span>' : ''}</button>`;
+            <span class="evt-meta">${e.status === 'cancelled' ? '<span class="badge">Cancelled</span>' : isFam() ? '' : `${n ? faceStack(c.faces, c.going - c.faces.length) : ''}<span class="small muted">${n ? `${n} ${evtPast(e) ? 'went' : 'going'}` : evtPast(e) ? 'Past event' : isFam() ? 'RWB event' : 'Be the first to join'}${c.maybe ? ` · ${c.maybe} maybe` : ''}</span>`}</span></span>
+        ${me ? `<span class="evt-me ${me.status}">${RSVP_TXT[me.status]}</span>` : e.status === 'live' && !evtPast(e) && !isFam() ? '<span class="evt-me ask">RSVP</span>' : ''}</button>`;
 }
 async function eventPage(e) {
-    const d = state.evd, me = d.mine[e.id], mod = isMod(), myUid = state.myId ??= await api.myId();
-    const people = await api.eventPeople(e.id).catch(() => []);
+    const d = state.evd, me = d.mine[e.id], mod = isMod(), myUid = state.myId ??= await api.myId(), fam = isFam();
+    const people = fam ? [] : await api.eventPeople(e.id).catch(() => []);
     const going = people.filter(p => p.status === 'going'), maybe = people.filter(p => p.status === 'maybe'), no = people.filter(p => p.status === 'no');
     const guests = going.reduce((a, p) => a + p.guests, 0);
     const inGroup = me && me.status !== 'no';
@@ -1254,13 +1268,13 @@ async function eventPage(e) {
                 ${e.reminder_minutes != null ? `<p><span>⏰</span>Reminder ${esc(REMINDERS.find(r => r[0] === e.reminder_minutes)?.[1].toLowerCase() || '')} for people going</p>` : ''}
             </div>
             ${e.description ? `<p class="evt-desc">${linkify(e.description)}</p>` : ''}
-            ${live && !past ? `<div class="evt-rsvp" role="group" aria-label="Your response">${['going', 'maybe', 'no'].map(k => `<button class="${me?.status === k ? 'on ' + k : ''}" data-act="rsvp" data-s="${k}" aria-pressed="${me?.status === k}">${{ going: '✓ Going', maybe: '? Maybe', no: "✕ Can't go" }[k]}</button>`).join('')}</div>
+            ${live && !past && !fam ? `<div class="evt-rsvp" role="group" aria-label="Your response">${['going', 'maybe', 'no'].map(k => `<button class="${me?.status === k ? 'on ' + k : ''}" data-act="rsvp" data-s="${k}" aria-pressed="${me?.status === k}">${{ going: '✓ Going', maybe: '? Maybe', no: "✕ Can't go" }[k]}</button>`).join('')}</div>
                 ${e.allow_guests && me?.status === 'going' ? `<label class="switch" style="margin-top:10px">Bringing a guest (+1)<input type="checkbox" id="evt-guest"${me.guests ? ' checked' : ''}></label>` : ''}` : ''}
-            <div class="btns evt-actions"><button class="btn sm ghost" data-act="evt-share">Share</button>${live && !past ? `<a class="btn sm ghost" href="${esc(gcalUrl(e))}" target="_blank" rel="noopener">Add to calendar</a>` : ''}</div>
+            <div class="btns evt-actions">${fam ? '' : '<button class="btn sm ghost" data-act="evt-share">Share</button>'}${live && !past ? `<a class="btn sm ghost" href="${esc(gcalUrl(e))}" target="_blank" rel="noopener">Add to calendar</a>` : ''}</div>
         </section>
         ${rideLive(e)}
-        <section class="section"><h2>Who's coming</h2><div class="card">${people.length ? ppl(going, 'Going') + ppl(maybe, 'Maybe') + ppl(no, "Can't go") : '<p class="muted small">No responses yet.</p>'}</div></section>
-        <section class="section" id="exp-sec"><h2>Expenses</h2><div id="exp-body">${inGroup || mod ? '<p class="muted small">Loading…</p>' : `<div class="card empty"><b>Split costs with the group</b>Respond Going or Maybe to see and add shared expenses for this event.</div>`}</div></section>
+        ${fam ? '' : `<section class="section"><h2>Who's coming</h2><div class="card">${people.length ? ppl(going, 'Going') + ppl(maybe, 'Maybe') + ppl(no, "Can't go") : '<p class="muted small">No responses yet.</p>'}</div></section>
+        <section class="section" id="exp-sec"><h2>Expenses</h2><div id="exp-body">${inGroup || mod ? '<p class="muted small">Loading…</p>' : `<div class="card empty"><b>Split costs with the group</b>Respond Going or Maybe to see and add shared expenses for this event.</div>`}</div></section>`}
         ${mod ? `<section class="section"><h2>Organiser</h2><div class="btns">${live ? '<button class="btn ghost" data-act="evt-edit">Edit</button><button class="btn ghost" data-act="evt-cancel">Cancel event</button>' : ''}<button class="btn danger" data-act="evt-del">Delete</button></div></section>` : ''}`;
     actions = {
         rsvp: b => busy(b, async () => { await api.rsvp(e.id, b.dataset.s, b.dataset.s === 'going' ? (me?.guests || 0) : 0); await loadEvents(true); toast(b.dataset.s === 'going' ? "You're going 🏍️" : b.dataset.s === 'maybe' ? 'Marked as maybe' : 'Marked as can\'t go'); render(); }),
@@ -1271,7 +1285,7 @@ async function eventPage(e) {
         'evt-del': b => { if (confirmBox(`Delete “${e.title}” with its RSVPs and expenses? This can't be undone.`)) busy(b, async () => { await api.deleteEvent(e.id); await loadEvents(true); location.hash = '#events'; toast('Deleted'); }); }
     };
     const g = $('#evt-guest'); if (g) g.onchange = () => busy(null, async () => { await api.rsvp(e.id, 'going', g.checked ? 1 : 0); await loadEvents(true); toast(g.checked ? 'Guest added' : 'Guest removed'); render(); });
-    if (inGroup || mod) drawExpenses(e, people, myUid);
+    if (!fam && (inGroup || mod)) drawExpenses(e, people, myUid);
 }
 function gcalUrl(e) {
     const z = iso => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -1505,9 +1519,10 @@ const VIDEOS = [
     ['coordinators-and-admins', 'Team tools', 'For coordinators and admins', 45, 'team']
 ];
 function viewVideos() {
-    const list = VIDEOS.filter(v => v[4] !== 'team' || isMod());
+    const list = isFam() ? VIDEOS.filter(v => v[4] === 'fam') : VIDEOS.filter(v => v[4] !== 'fam' && (v[4] !== 'team' || isMod()));
     app.innerHTML = `${top('Videos')}
-        <p class="muted" style="margin:-4px 0 16px">Short guides to every part of the app, with sound and subtitles.</p>
+        <p class="muted" style="margin:-4px 0 16px">${isFam() ? 'Short guides to the RWB App for RWB FAM, with sound and subtitles.' : 'Short guides to every part of the app, with sound and subtitles.'}</p>
+        ${!list.length ? '<div class="card empty"><b>Coming soon</b>How-to videos for RWB FAM are on the way.</div>' : ''}
         <div class="vid-grid">${list.map(([id, title, sub, sec, who]) => `
             <button class="vid-tile" data-act="play" data-id="${id}" aria-label="Play: ${esc(title)}, ${sec} seconds">
                 <span class="vid-cover"><img src="videos/${id}.jpg" alt="" loading="lazy"><i class="vid-play">▶</i><em>${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}</em></span>
@@ -2009,7 +2024,6 @@ function viewMe() {
 
         <h2 class="group-title">App</h2>
         <div class="group">
-            ${isStandalone() ? '' : `<button data-act="install"><span class="g-ico">${ICON.dl}</span><span class="grow"><b>Install the app</b><span class="small muted">${isIOS() ? 'Safari → Share → Add to Home Screen' : 'Add RWB to your home screen'}</span></span>${ICON.chev}</button>`}
             <a href="../privacy.html" target="_blank" rel="noopener"><span class="g-ico">${ICON.shield}</span><span class="grow"><b>Privacy</b></span>${ICON.out}</a>
             <button data-act="out" class="danger-row"><span class="grow"><b>Sign out</b></span></button>
         </div>
@@ -2031,7 +2045,6 @@ function viewMe() {
         'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); drawPushState(); }),
         'push-off': b => busy(b, async () => { await disablePush(); toast('Notifications are off on this phone'); drawPushState(); }),
         'push-test': b => busy(b, async () => { await api.testPush(); toast('Test sent. It should arrive in a few seconds.'); }),
-        install: () => installEvt ? (async () => { installEvt.prompt(); await installEvt.userChoice; installEvt = null; render(); })() : installSheet(),
         edit: () => openSheet('My details', `<form id="mf">
             <p class="small muted" style="margin-bottom:10px">Changes to your Full Name, WhatsApp No. and main bike (VRN) are checked by an admin first. Everything else saves straight away. <span class="req">*</span> marks answers every member needs.</p>
             ${joinFields(m, 'me')}
@@ -2402,7 +2415,7 @@ async function adminMembers() {
     const F = { all: 'Everyone', new: `New${nNew ? ` (${nNew})` : ''}`, app: `On app (${nApp})`, noapp: `Not on app (${live.length - nApp})`, admins: 'RWB team', gone: `Left / removed${nGone ? ` (${nGone})` : ''}` };
     state.memberFilter ||= 'all'; state.memberSort ||= 'team';
     const SORTS = { team: 'Team, A–Z', new: 'Newest first', old: 'Oldest first' };
-    $('#admin-body').innerHTML = `<div class="chips" style="margin-bottom:10px">${Object.entries(F).map(([k, v]) => `<button class="chip" data-act="mf" data-f="${k}" aria-pressed="${state.memberFilter === k}">${v}</button>`).join('')}</div>
+    $('#admin-body').innerHTML = `<div class="chips" style="margin-bottom:10px">${Object.entries(F).map(([k, v]) => `<button class="chip" data-act="mf" data-f="${k}" aria-pressed="${state.memberFilter === k}">${v}</button>`).join('')}<button class="chip fam-chip" data-act="fam-all">👨‍👩‍👧 RWB FAM</button></div>
     ${state.memberFilter === 'admins' ? `<p class="small muted" style="margin-bottom:10px">Tap a person to ${state.me.role === 'superadmin' ? 'make them an admin or a coordinator' : 'make them a coordinator'} or change their role. Coordinators can approve Motomart posts.</p>` : ''}${state.memberFilter === 'gone' ? '<p class="small muted" style="margin-bottom:10px">Members who left or were removed, newest first. Their app account and data are deleted; this record stays so you know who left and when. Tap someone to <b>restore</b> them.</p>' : ''}${state.memberFilter === 'new' ? '<p class="small muted" style="margin-bottom:10px">Joined in the last 7 days, through the join form or the app. Add them to the RWB WhatsApp group; the <b>New Member</b> tag goes away after 7 days.</p>' : ''}
     <div class="row" style="gap:8px;margin-bottom:12px"><input class="search" type="search" id="mq" placeholder="Search name, number, bike no. or place" value="${esc(state.adminSearch)}" aria-label="Search members" style="margin:0;flex:1">
         <select id="msort" aria-label="Sort" style="width:auto;flex:none;max-width:44%">${Object.entries(SORTS).map(([k, v]) => `<option value="${k}"${state.memberSort === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>
@@ -2645,7 +2658,7 @@ async function viewNews() {
             <label>Message<textarea name="body" maxlength="1000" placeholder="Meeting point, time, anything members should know"></textarea></label>
             <p class="small muted">Goes to everyone's feed and as a notification to every phone that has them on.</p>
             <button class="btn block">Send to all members</button></form></details>` : ''}
-        <section class="section">${news.length ? `<p class="small muted swipe-hint">Swipe an alert left or right to hide it.</p><div class="group">${news.map(n => newsRow(n, isAdmin())).join('')}</div>` : `<div class="card empty"><b>${all.length ? 'All caught up' : 'No news yet'}</b>Announcements, birthdays and new Motomart posts show up here.</div>`}</section>`;
+        <section class="section">${news.length ? `<p class="small muted swipe-hint">Swipe an alert left or right to hide it.</p><div class="group">${news.map(n => newsRow(n, isAdmin())).join('')}</div>` : `<div class="card empty"><b>${all.length ? 'All caught up' : 'No news yet'}</b>${isFam() ? 'Important announcements from the RWB admins show up here.' : 'Announcements, birthdays and new Motomart posts show up here.'}</div>`}</section>`;
     swipeToDismiss(app, () => { if (!app.querySelector('[data-swipe]')) render(); });
     actions = {
         'clear-news': () => clearNews(all), 'del-news': b => { if (confirmBox('Delete this from the feed?')) busy(b, async () => { await api.deleteNews(Number(b.dataset.id)); render(); }); } };
@@ -2978,7 +2991,7 @@ function boardHtml(key, raw) {
             ${face(r, 'avatar pod-face')}<span class="pod-medal">${MEDAL[r.rank - 1]}</span><b>${esc(r.nickname || r.full_name.split(' ')[0])}</b><span class="pod-km">${B.big(r)}</span><span class="pod-sub">${esc(B.small(r))}</span></div>` : '<div></div>').join('')}</div>` : '';
     return `<div class="seg board-seg" role="tablist" aria-label="Leaderboard">${Object.entries(BOARDS).map(([k, b]) => `<button role="tab" aria-selected="${k === key}" data-act="board" data-b="${k}">${b.title.replace(' Warriors', '')}</button>`).join('')}</div>
             <div class="row" style="justify-content:space-between;align-items:baseline;margin-bottom:2px"><h2 class="board-title">${B.title}</h2><span class="small muted">${board.length} rider${board.length === 1 ? '' : 's'}</span></div>
-            <p class="small muted" style="margin-bottom:6px">${B.sub}</p>${B.how ? `<p class="small board-how">${B.how}</p>` : ''}
+            <p class="small muted" style="margin-bottom:6px">${B.sub}</p>${B.how && !isFam() ? `<p class="small board-how">${B.how}</p>` : ''}
             ${board.length ? podium + (rest.length ? `<ol class="board-list" start="4">${rest.map(r => `<li class="${r.is_me ? 'me' : ''}"><span class="rk">${r.rank}</span>${face(r, 'avatar sm')}<span class="grow"><b>${esc(r.full_name)}</b><span class="small muted">${esc(r.bike || '')}</span></span><span class="num km">${B.big(r)}<small>${esc(B.small(r))}</small></span></li>`).join('')}</ol>` : '')
                 + (me && me.rank > 6 ? `<p class="board-me">You're <b>#${me.rank}</b> of ${board.length} with ${B.big(me)}</p>` : '')
                 + (!me ? `<p class="small muted" style="margin-top:10px">${state.me.show_on_leaderboard === false ? 'You\'re hidden from the leaderboards (Me → Privacy).' : B.empty}</p>` : '')
@@ -3006,6 +3019,7 @@ async function viewCrew() {
         const i = keys.indexOf(state.boardKey), j = Math.min(keys.length - 1, Math.max(0, i + (dx < 0 ? 1 : -1)));
         if (j !== i) showBoard(keys[j], dx < 0 ? 1 : -1);
     }, { passive: true });
+    if (isMod() && !isAdmin()) $('#crew-body').insertAdjacentHTML('beforebegin', '<button class="btn ghost block" data-act="fam-all" style="margin-bottom:12px">👨‍👩‍👧 RWB FAM members</button>');
     if (isAdmin()) {   /* admins get their full member tools here too */
         $('#crew-body').id = 'admin-body';
         await adminMembers(); return;
@@ -3103,7 +3117,13 @@ async function boot() {
         const sess = await api.session();
         if (!sess) return viewSignIn();
         const status = await api.linkAccount();
-        if (status !== 'member') return viewAccess(status, sess);
+        if (status !== 'member') {   /* not a member: in someone's RWB FAM, or joining with an invite code? */
+            const fam = status === 'pending' ? null : await api.famMe().catch(() => null);
+            if (fam) return bootFam(fam);
+            if (status !== 'pending' && famCodeSaved()) return famJoinScreen(sess);
+            return viewAccess(status, sess);
+        }
+        state.fam = null; delete document.body.dataset.fam;
         state.me = await api.me();
         api.settings().then(v => { state.settings = v || {}; }).catch(() => { state.settings = {}; });
         await load.news(true);
@@ -3122,6 +3142,7 @@ async function boot() {
    View: a map of everyone sharing (refreshed every 15 s while it's open). SOS: an urgent alert to the RWB team. */
 const LEAFLET = 'vendor/leaflet/';   /* Leaflet 1.9.4 (BSD-2), bundled with the app */
 const TRACK_KEY = 'rwb-track';
+const TRACK_NOTE_MAX = 60;
 const TRACK_HOURS = [[1, '1 hour'], [4, '4 hours'], [8, '8 hours'], [12, 'Until I stop']];
 const trk = { watch: null, native: null, last: null, sent: null, sentAt: 0, until: 0, event: null, lock: null, tick: null, map: null, L: null, markers: new Map(), sosMarkers: new Map(), data: null, poll: null, fitted: false, filter: null };
 const NativeGeo = () => Native('BackgroundGeolocation');
@@ -3197,11 +3218,12 @@ function stopWatch() {
     if (trk.native != null) { NativeGeo()?.removeWatcher({ id: trk.native }).catch(() => {}); trk.native = null; }
     clearInterval(trk.tick); keepAwake(false);
 }
-async function startShare(hours, eventId = null) {
+async function startShare(hours, eventId = null, note = '') {
     const p = await gpsFix(30000);
-    const until = await api.trackStart(p.lat, p.lng, p.acc, hours, eventId);
-    trk.until = Date.parse(until) || Date.now() + hours * 36e5; trk.event = eventId; trk.sent = p; trk.sentAt = Date.now(); trk.last = p;
-    trackSave({ until: trk.until, event: eventId });
+    note = String(note || '').replace(/\s+/g, ' ').trim().slice(0, TRACK_NOTE_MAX);
+    const until = await api.trackStart(p.lat, p.lng, p.acc, hours, eventId, note);
+    trk.until = Date.parse(until) || Date.now() + hours * 36e5; trk.event = eventId; trk.note = note; trk.sent = p; trk.sentAt = Date.now(); trk.last = p;
+    trackSave({ until: trk.until, event: eventId, note });
     startWatch();
     toast(`You're sharing your live location 📍 ${hours >= 12 ? 'until you stop' : 'for ' + TRACK_HOURS.find(h => h[0] === hours)[1]}`);
 }
@@ -3215,7 +3237,7 @@ async function stopShare(quiet = false) {
 function resumeShare() {
     const s = trackSaved(); if (!s) return;
     if (s.until <= Date.now()) { trackSave(null); return; }
-    trk.until = s.until; trk.event = s.event || null; startWatch();
+    trk.until = s.until; trk.event = s.event || null; trk.note = s.note || ''; startWatch();
     gpsFix(60000).then(sendFix).catch(() => {});
 }
 document.addEventListener('visibilitychange', () => {
@@ -3227,7 +3249,7 @@ document.addEventListener('visibilitychange', () => {
 function trackBadge() { document.getElementById('track-tab')?.classList.toggle('live', sharing()); }
 
 /* ---------- the middle button: Share / View / SOS ---------- */
-document.getElementById('track-tab')?.addEventListener('click', e => { e.preventDefault(); if (state.me) trackMenu(); });
+document.getElementById('track-tab')?.addEventListener('click', e => { e.preventDefault(); if (!state.me) return; if (isFam()) { if (location.hash.startsWith('#track')) refreshTrack(); else location.hash = '#track'; } else trackMenu(); });
 function trackMenu() {
     const on = sharing();
     openSheet('Track', `<div class="trk-menu">
@@ -3243,12 +3265,14 @@ function shareSheet(eventId = null, eventTitle = '') {
     const on = sharing();
     openSheet(on ? 'Sharing your location' : 'Share live location', `${on ? `<div class="trk-live"><span class="dot"></span><span class="grow"><b>You're sharing live</b><span class="small muted">${esc(leftTxt(trk.until))}${trk.event ? ' · for an event ride' : ''}</span></span></div>
             <button class="btn danger block" data-x="stop" style="margin:12px 0 18px">Stop sharing</button><p class="small muted" style="margin-bottom:8px">Or share for:</p>` : `<p class="small muted" style="margin-bottom:12px">Every RWB member on the app can see you on the Track map while you share.${eventTitle ? ` You'll show as riding <b>${esc(eventTitle)}</b>.` : ''}</p>`}
+        <label class="trk-note">Add a note <span class="muted small">(optional)</span><input id="trk-note" maxlength="${TRACK_NOTE_MAX}" placeholder="e.g. towards Simlipal!" value="${esc(on ? trk.note || '' : '')}" autocomplete="off"><small class="hint"><span id="trk-note-n">${on ? (trk.note || '').length : 0}</span>/${TRACK_NOTE_MAX} · shows next to your name on the map</small></label>
         <div class="trk-hours">${TRACK_HOURS.map(([h, t]) => `<button type="button" class="chip" data-h="${h}">${t}</button>`).join('')}</div>
         ${NativeGeo() ? '<p class="small muted" style="margin-top:12px">Keeps sharing with the screen locked. A small notification shows while it runs.</p>'
             : '<p class="small muted trk-tip" style="margin-top:12px">💡 Keep the RWB App open on your phone mount: we keep the screen awake. If you lock the phone or switch apps, sharing pauses until you come back. Plug in a charger for long rides.</p>' + (/android/i.test(navigator.userAgent) ? '<p class="small" style="margin-top:8px">📲 <a href="https://roninwb.in/download/RWB-App.apk"><b>Get the RWB Android app</b></a> to keep sharing with the screen locked.</p>' : '')}`, body => {
         body.querySelector('[data-x=stop]')?.addEventListener('click', e => busy(e.currentTarget, async () => { await stopShare(); closeSheet(); }));
+        const note = body.querySelector('#trk-note'); note.oninput = () => { body.querySelector('#trk-note-n').textContent = note.value.length; };
         body.querySelectorAll('[data-h]').forEach(b => b.onclick = () => busy(b, async () => {
-            await startShare(Number(b.dataset.h), eventId ?? (on ? trk.event : null)); closeSheet();
+            await startShare(Number(b.dataset.h), eventId ?? (on ? trk.event : null), note.value); closeSheet();
             if (!location.hash.startsWith('#track') && !location.hash.startsWith('#events/')) location.hash = '#track'; else refreshTrack();
         }));
     });
@@ -3300,15 +3324,16 @@ async function viewTrack() {
     const param = state.param || '';
     trk.filter = /^e\d+$/.test(param) ? Number(param.slice(1)) : null;
     app.innerHTML = top('Track') + `<section class="trk-wrap">
-        <div id="trk-map" class="trk-map"><p class="muted" style="padding:20px">Loading the map…</p></div>
+        <div class="trk-map-box"><div id="trk-map" class="trk-map"><p class="muted" style="padding:20px">Loading the map…</p></div><div class="trk-signal" id="trk-signal" role="status" hidden></div></div>
         <div class="trk-bar">
             <div class="trk-status" id="trk-status"></div>
-            <div class="trk-actions"><button class="btn" data-act="trk-share" id="trk-share"></button><button class="btn sos-btn" data-act="trk-sos">🆘 SOS</button></div>
+            <div class="trk-actions"${isFam() ? ' hidden' : ''}><button class="btn" data-act="trk-share" id="trk-share"></button><button class="btn sos-btn" data-act="trk-sos">🆘 SOS</button></div>
         </div>
         <div id="trk-list" class="trk-list"></div></section>`;
     actions = { 'trk-share': () => shareSheet(trk.filter, trk.filter ? (state.evd?.events || []).find(e => e.id === trk.filter)?.title : ''), 'trk-sos': () => sosSheet(),
         'trk-all': () => { location.hash = '#track'; }, 'trk-rider': el => openRider(el.dataset.k), 'trk-fit': () => fitAll(true) };
-    trk.fitted = false; trk.sosFocused = false; trk.markers.clear(); trk.sosMarkers.clear(); trk.map = null;
+    if (isFam()) trk.filter = null;
+    trk.fitted = false; trk.sosFocused = false; trk.focus = null; trk.markers.clear(); trk.sosMarkers.clear(); trk.map = null;
     let L; try { L = trk.L = await loadLeaflet(); } catch (e) { $('#trk-map').innerHTML = `<p class="warn" style="margin:16px">${esc(e.message)}</p>`; }
     if (L && $('#trk-map')) {
         $('#trk-map').innerHTML = '';
@@ -3321,22 +3346,26 @@ async function viewTrack() {
     await refreshTrack();
     clearInterval(trk.poll);
     trk.poll = setInterval(() => { if (!location.hash.startsWith('#track')) return clearInterval(trk.poll); if (document.visibilityState === 'visible') refreshTrack(); }, 15000);
+    clearInterval(trk.sigTick);
+    trk.sigTick = setInterval(() => { if (!location.hash.startsWith('#track')) return clearInterval(trk.sigTick); trackSignal(); }, 7000);
 }
 async function refreshTrack() {
     if (!$('#trk-status')) return;
     let d; try { d = trk.data = await api.trackView(); } catch (e) { $('#trk-status').innerHTML = `<span class="warn small">${esc(e.message)}</span>`; return; }
     const riders = trk.filter ? d.riders.filter(r => r.event_id === trk.filter) : d.riders;
     const ev = trk.filter ? (state.evd?.events || []).find(e => e.id === trk.filter) : null;
-    $('#trk-status').innerHTML = `${sharing() ? `<span class="trk-live-pill"><span class="dot"></span>You're live · ${esc(leftTxt(trk.until))}</span>` : ''}
+    const rider = d.fam ? riders.find(r => r.mine) : null, rName = esc(firstName(state.fam?.member));
+    $('#trk-status').innerHTML = d.fam ? `<span class="small muted">${rider ? `<b>${rName}</b> is sharing live${riders.length > 1 ? ` · ${riders.length - 1} more on the same ride` : ''}` : `${rName} isn't sharing a live location right now. You'll see them here when they share on Track.`}${d.sos.length ? ' · <b class="sos-txt">SOS</b>' : ''}</span>` : `${sharing() ? `<span class="trk-live-pill"><span class="dot"></span>You're live · ${esc(leftTxt(trk.until))}</span>` : ''}
         <span class="small muted">${riders.length ? `${riders.length} rider${riders.length === 1 ? '' : 's'} live${ev ? ` on ${esc(ev.title)}` : ''}` : 'No one is sharing right now'}${d.sos.length ? ` · <b class="sos-txt">${d.sos.length} SOS</b>` : ''}</span>
         ${trk.filter ? '<button class="linkish small" data-act="trk-all">Show everyone</button>' : ''}`;
-    $('#trk-share').textContent = sharing() ? '🟢 Sharing · Stop / change' : '📍 Share my location';
+    const sb = $('#trk-share'); if (sb) sb.textContent = sharing() ? '🟢 Sharing · Stop / change' : '📍 Share my location';
     $('#trk-list').innerHTML = [...d.sos.map(s => ({ ...s, k: 's' + s.id, sos: true })), ...riders.map(r => ({ ...r, k: 'r' + r.id }))].map(r => `<button class="trk-row${r.sos ? ' sos' : ''}" data-act="trk-rider" data-k="${r.k}">${face({ full_name: r.name, avatar_url: r.avatar }, 'avatar sm')}
-        <span class="grow"><b>${r.sos ? '🆘 ' : ''}${esc(r.name)}${r.me ? ' <span class="muted">(you)</span>' : ''}</b><span class="small muted">${r.sos ? 'SOS ' + timeAgo(r.at) : `${r.spd > 1 ? Math.round(r.spd * 3.6) + ' km/h · ' : ''}updated ${timeAgo(r.at)}`}${trk.last && !r.me ? ' · ' + kmAway(r) : ''}</span></span><span class="chev">›</span></button>`).join('');
+        <span class="grow"><b>${r.sos ? '🆘 ' : ''}${esc(r.name)}${r.me ? ' <span class="muted">(you)</span>' : r.mine ? ' <span class="muted">(your rider)</span>' : ''}</b>${r.note && !r.sos ? `<span class="trk-note-txt">“${esc(r.note)}”</span>` : ''}<span class="small muted">${r.sos ? 'SOS ' + timeAgo(r.at) : `${r.spd > 1 ? Math.round(r.spd * 3.6) + ' km/h · ' : ''}updated ${timeAgo(r.at)}`}${trk.last && !r.me ? ' · ' + kmAway(r) : ''}</span></span><span class="chev">›</span></button>`).join('');
     drawMarkers(riders, d.sos);
     if (!trk.fitted && trk.map) { trk.fitted = true; fitAll(false); }
     if (state.param === 'sos' && d.sos[0] && trk.map && !trk.sosFocused) { trk.sosFocused = true; trk.map.setView([d.sos[0].lat, d.sos[0].lng], 15); }
     if (d.staff) alertNewSos(d.sos);
+    trackSignal();
 }
 const kmAway = r => { const m = distM(trk.last, r); return m < 1000 ? `${Math.round(m)} m away` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km away`; };
 function drawMarkers(riders, sos) {
@@ -3361,9 +3390,11 @@ function openRider(k) {
     const d = trk.data; if (!d) return;
     const r = k[0] === 's' ? d.sos.find(s => 's' + s.id === k) : d.riders.find(x => 'r' + x.id === k); if (!r) return;
     const sos = k[0] === 's', mine = r.me;
+    if (!sos && !mine) { trk.focus = r.id; trackSignal(); }
     trk.map?.setView([r.lat, r.lng], Math.max(trk.map.getZoom(), 14));
     openSheet(sos ? '🆘 SOS' : r.name, `<div class="vc-who" style="margin-bottom:12px">${face({ full_name: r.name, avatar_url: r.avatar }, 'avatar')}<span class="grow"><b>${esc(r.name)}</b>${r.nick ? ` <span class="muted">“${esc(r.nick)}”</span>` : ''}
         <span class="small muted">${sos ? 'Sent SOS ' + timeAgo(r.at) : `Updated ${timeAgo(r.at)}${r.spd > 1 ? ' · ' + Math.round(r.spd * 3.6) + ' km/h' : ''}${r.acc ? ' · ±' + Math.round(r.acc) + ' m' : ''}`}${trk.last && !mine ? ' · ' + kmAway(r) : ''}</span></span></div>
+        ${r.note && !sos ? `<p class="trk-note-txt big">“${esc(r.note)}”</p>` : ''}
         <div class="btns">${r.phone ? `<a class="btn" href="tel:+91${esc(r.phone)}">📞 Call</a>` : ''}<a class="btn ghost" href="${mapsLink(r)}" target="_blank" rel="noopener">🗺️ Open in Google Maps</a></div>
         ${sos && (mine || d.staff) ? `<button class="btn ${mine ? '' : 'ghost'} block" data-x="safe" style="margin-top:12px">${mine ? "✅ I'm safe now" : '✅ Mark as resolved'}</button>` : ''}`, body => {
         body.querySelector('[data-x=safe]')?.addEventListener('click', e => busy(e.currentTarget, async () => { await api.trackSosResolve(r.id); closeSheet(); toast('SOS closed. The RWB team is told.'); refreshTrack(); }));
@@ -3410,11 +3441,255 @@ function rideLive(e) {
     const s = Date.parse(e.starts_at), en = Date.parse(e.ends_at || e.starts_at) + (e.ends_at ? 0 : 6 * 36e5);
     if (e.status !== 'live' || Date.now() < s - 6 * 36e5 || Date.now() > en + 6 * 36e5) return '';
     const mine = sharing() && trk.event === e.id;
+    if (isFam()) return `<section class="section"><h2>Ride live</h2><div class="card trk-event"><p class="small muted" style="margin-bottom:10px">See your rider and the group on the map while they share their live location for this ride.</p>
+        <a class="btn" href="#track">🗺️ See on map</a></div></section>`;
     return `<section class="section"><h2>Ride live</h2><div class="card trk-event">
         <p class="small muted" style="margin-bottom:10px">Share your live location for this ride so the group and the RWB team can see where everyone is.</p>
         <div class="btns"><button class="btn" data-act="evt-track-share">${mine ? '🟢 Sharing · Stop / change' : '📍 Share for this ride'}</button><a class="btn ghost" href="#track/e${e.id}">🗺️ See riders on map</a></div></div></section>`;
 }
 
+
+/* =================== RWB FAM: up to 3 family members per RWB member =================== */
+/* A member shares an invite (link + code). Family members sign in with any Google account and get a simple, read-only RWB App:
+   their rider's odometer and live location (when shared on Track), RWB events, admin announcements, members and the VRN check.
+   They can turn RWB FAM off at any time (nothing is shown then) and alert the admins if they were added without their consent. */
+const FAM_MAX = 3;
+const isFam = () => state.me?.role === 'fam';
+const famOn = () => isFam() && state.fam?.approved !== false && state.fam?.active !== false;
+const FAM_ROUTES = ['home', 'track', 'events', 'me', 'news', 'crew', 'videos'];
+const FAM_CODE_KEY = 'rwb-fam-code';
+const FAM_ICON = '<svg viewBox="0 0 24 24"><circle cx="8" cy="7.5" r="2.6"/><circle cx="16.5" cy="8.5" r="2.1"/><path d="M3.5 19c.4-3.4 2.2-5.6 4.5-5.6s4.1 2.2 4.5 5.6M13.4 14.6c.8-.9 1.8-1.4 3.1-1.4 2 0 3.5 1.7 3.9 4.6"/><path d="M12 21.2s-2.6-1.6-2.6-3.3a1.4 1.4 0 0 1 2.6-.7 1.4 1.4 0 0 1 2.6.7c0 1.7-2.6 3.3-2.6 3.3z"/></svg>';
+const famCodeNorm = c => { const t = String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return t ? 'RWB-' + t.replace(/^RWB/, '').slice(0, 8) : ''; };
+const famCodeSaved = () => { try { return localStorage.getItem(FAM_CODE_KEY) || ''; } catch { return ''; } };
+const famLink = code => `https://roninwb.in/fam/?c=${encodeURIComponent(code)}`;
+/* roninwb.in/app/?fam=RWB-XXXX (from the invite page): remember the code until the person signs in */
+(() => { try { const u = new URL(location.href), c = u.searchParams.get('fam'); if (!c) return;
+    localStorage.setItem(FAM_CODE_KEY, famCodeNorm(c)); u.searchParams.delete('fam'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch { /* ignore */ } })();
+
+/* signed in, not a member, but in someone's RWB FAM */
+async function bootFam(f) {
+    state.fam = f;
+    state.me = { role: 'fam', full_name: f.full_name, phone: f.phone, address: f.address, email: f.email, avatar_url: null, notify: {} };
+    document.body.dataset.fam = famOn() ? '1' : 'off';
+    try { localStorage.removeItem(FAM_CODE_KEY); } catch { /* ignore */ }
+    if (famOn()) await load.news(true); else state.news = [];
+    await render();
+    if (!trk.resumed) { trk.resumed = true; if (NATIVE) nativePushOn(false).catch(() => {}); else setTimeout(appPromo, 1500); }
+}
+async function famReload() { state.fam = await api.famMe(); state.news = null; state.evd = null; state.board = null; state.dir = null; await bootFam(state.fam); }
+function famView(name) {
+    if (name === 'me') return viewFamMe;
+    if (!famOn()) return viewFamOff;
+    return name === 'home' ? viewFamHome : ROUTES[name];
+}
+
+/* ---------- joining with an invite code ---------- */
+function famJoinScreen(sess, code = famCodeSaved()) {
+    tabbar.hidden = true; document.body.dataset.route = 'gate';
+    app.innerHTML = `${demoBar()}<section class="signin fam-join"><img src="icons/logo-128.png" alt="">
+        <div><h1>Join RWB FAM</h1><p class="lead">An RWB member invited you to their family circle in the RWB App.</p></div>
+        <form class="card na-card" id="fj" novalidate>
+            <label>Invite code<input name="code" autocapitalize="characters" autocomplete="off" placeholder="RWB-XXXX" value="${esc(code)}" required></label>
+            <p class="small fam-who" id="fj-who" hidden></p>
+            <label>Your name<input name="name" autocomplete="name" maxlength="80" value="${esc(sess.name || '')}" required></label>
+            <label>Mobile number <span class="muted small">(optional)</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="98300 11111"></label>
+            <label>Address <span class="muted small">(optional)</span><textarea name="address" rows="2" maxlength="300" placeholder="Area, city"></textarea></label>
+            <div class="fam-remember"><b>🔑 Remember this Google account</b><span>${esc(sess.email)}</span><span class="small muted">You'll sign in with it every time. If you forget it, only the RWB member who invited you can help.</span></div>
+            <label class="check-row"><input type="checkbox" name="agree"><span>I have read and agree to the <button type="button" class="linkish" data-x="tnc">RWB Terms &amp; Conditions</button> and <a href="../privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>
+            <button class="btn block" data-x="join">Join RWB FAM</button>
+        </form>
+        <button class="btn ghost block" data-x="out">Use a different Google account</button></section>`;
+    const f = $('#fj'), who = $('#fj-who');
+    const look = async () => { const c = famCodeNorm(f.code.value); if (c.length < 8) { who.hidden = true; return; }
+        const r = await api.famInviteInfo(c).catch(() => null); who.hidden = false;
+        who.innerHTML = !r ? '<span class="warn">That code isn\'t valid. Check it with the person who invited you.</span>' : r.left > 0 ? `✓ Invited by <b>${esc(r.name)}</b>` : `<span class="warn">${esc(r.name)}'s RWB FAM is full (3 of 3).</span>`; };
+    f.code.addEventListener('change', look); f.code.addEventListener('blur', look); if (code) look();
+    app.querySelector('[data-x=tnc]').onclick = () => openSheet('RWB Terms & Conditions', tncDoc());
+    app.querySelector('[data-x=out]').onclick = () => api.signOut();
+    f.onsubmit = e => {
+        e.preventDefault(); const c = famCodeNorm(f.code.value), ph = f.phone.value.replace(/\D/g, '').slice(-10);
+        if (c.length < 8) return toast('Enter the invite code, e.g. RWB-K7Q2', true);
+        if (f.name.value.trim().length < 2) return toast('Please enter your name', true);
+        if (f.phone.value.trim() && ph.length !== 10) return toast('Enter a 10-digit mobile number, or leave it empty', true);
+        if (!f.agree.checked) return toast('Please agree to the Terms & Conditions and Privacy Policy', true);
+        busy(f.querySelector('[data-x=join]'), async () => { await api.famJoin(c, f.name.value.trim(), ph, f.address.value.trim(), true); toast('Welcome to RWB FAM 🧡'); boot(); });
+    };
+}
+
+/* ---------- FAM: Home ---------- */
+async function viewFamHome() {
+    const f = state.fam, m = f.member || {}, first = firstName(m);
+    const [news, evd] = await Promise.all([load.news(), loadEvents().catch(() => null)]);
+    const up = evd ? evd.events.filter(e => e.status === 'live' && !evtPast(e)).slice(0, 3) : [];
+    const feed = visibleNews(news);
+    let pushAsk = false; try { pushAsk = NATIVE ? !localStorage.getItem(FCM_KEY) && !localStorage.getItem('rwb-push-dismissed') : pushSupported() && Notification.permission === 'default' && !localStorage.getItem('rwb-push-dismissed'); } catch { /* ignore */ }
+    app.innerHTML = top(`Hi, ${firstName(state.me)}`) + `
+        <section class="card fam-rider">
+            <div class="row">${face(m, 'avatar lg')}<span class="grow"><span class="small muted">Your RWB rider</span><b>${esc(m.full_name || 'RWB member')}</b>${m.nickname ? `<span class="small muted">“${esc(m.nickname)}”</span>` : ''}</span></div>
+            <div class="fam-odo"><span class="fam-odo-l">${esc(m.bike || 'Motorcycle')} · odometer</span><b>${m.odo ? Number(m.odo).toLocaleString('en-IN') : '–'}</b><em>km</em></div>
+            <a class="btn block" href="#track">📍 Where is ${esc(first)}?</a>
+        </section>
+        ${pushAsk ? `<div class="banner"><span class="b-ico">🔔</span><span class="grow">Get important RWB announcements as notifications</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
+        ${vrnCheckCard()}
+        ${up.length ? `<section class="section"><h2>RWB events <a href="#events">See all</a></h2><div class="list home-evt">${up.map(e => eventCard(e, evd)).join('')}</div></section>` : ''}
+        ${feed.length ? `<section class="section"><h2>Important updates <span class="h-acts"><a href="#news">See all</a></span></h2><div class="group news-mini">${feed.slice(0, 3).map(n => newsRow(n, false, true)).join('')}</div></section>` : ''}
+        <section class="section"><h2>Explore</h2><div class="group">
+            <a href="https://roninwb.in" target="_blank" rel="noopener"><span class="g-ico">${ICON.globe}</span><span class="grow"><b>roninwb.in</b><span class="small muted">Rides, events, gallery and the team</span></span>${ICON.out}</a>
+        </div></section>`;
+    swipeToDismiss(app, () => { if (!app.querySelector('.news-mini [data-swipe]')) render(); });
+    bindVrnCheck();
+    actions = {
+        evt: el => location.hash = '#events/' + el.dataset.id,
+        'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); render(); }),
+        'push-later': () => { try { localStorage.setItem('rwb-push-dismissed', '1'); } catch { /* ignore */ } render(); }
+    };
+}
+/* FAM turned off: nothing is shown */
+function viewFamOff() {
+    const gone = state.fam?.active === false;
+    app.innerHTML = top('RWB') + `<div class="card empty fam-off"><span class="fam-off-ico">${FAM_ICON}</span>
+        <b>${gone ? 'RWB FAM is paused' : 'RWB FAM is turned off'}</b>${gone ? 'The RWB member who invited you is no longer active in RWB, so nothing is shared with you right now.' : 'You turned off RWB FAM, so you can\'t see any rider, location or event. Turn it back on any time in Me → RWB FAM.'}
+        <p style="margin-top:14px"><a class="btn sm" href="#me">Open Me</a></p></div>`;
+    actions = {};
+}
+
+/* ---------- FAM: Me ---------- */
+function viewFamMe() {
+    const f = state.fam, m = f.member || {}, theme = getTheme();
+    const row = (k, v) => `<div><span class="muted">${k}</span><span class="rt">${esc(v || '–')}</span></div>`;
+    app.innerHTML = top('Me') + `
+        <section class="profile">${face(state.me, 'avatar xl')}
+            <div class="grow"><h2>${esc(f.full_name)}</h2><p class="muted">RWB FAM</p></div>
+            <button class="btn sm ghost" data-act="edit">Edit</button></section>
+        <div class="group kv">${row('Name', f.full_name)}${row('Contact', f.phone ? f.phone.replace(/(\d{5})(\d{5})/, '$1 $2') : '')}${row('Address', f.address)}${row('Google account', f.email)}</div>
+
+        <h2 class="group-title">RWB FAM</h2>
+        <div class="group"><div class="bike-row fam-by">${face(m, 'avatar')}<span class="grow"><span class="small muted">Added by</span><b>${esc(m.full_name || 'An RWB member')}</b><span class="small muted">${f.created_at ? 'Since ' + fmtDate(String(f.created_at).slice(0, 10)) : ''}</span></span></div>
+            <label class="toggle-row"><span class="grow">${f.approved ? 'RWB FAM is on' : 'RWB FAM is off'}<span class="small muted">${f.approved ? `You can see ${esc(firstName(m))}'s live location when shared, odometer and RWB events` : 'Nothing is shared with you. Turn on to see it again.'}</span></span><span class="switch-only"><input type="checkbox" id="fam-ok"${f.approved ? ' checked' : ''}></span></label></div>
+
+        <h2 class="group-title">Follow RWB</h2>${followRwb()}
+
+        <h2 class="group-title">Terms & Conditions</h2>
+        <div class="group"><div class="bike-row"><span class="g-ico">📜</span><span class="grow"><b>You agree to the RWB T&C</b><span class="small muted">When you joined RWB FAM${f.created_at ? ', ' + fmtDate(String(f.created_at).slice(0, 10)) : ''}</span></span><button class="btn sm ghost" data-act="rules">Read</button></div></div>
+
+        <h2 class="group-title">Appearance</h2>
+        <div class="seg" role="radiogroup" aria-label="Theme">${[['light', 'Light'], ['dark', 'Dark'], ['system', 'Auto']].map(([k, l]) => `<button role="radio" aria-selected="${theme === k}" aria-checked="${theme === k}" data-act="theme" data-t="${k}">${l}</button>`).join('')}</div>
+
+        <h2 class="group-title">Notifications</h2>
+        <div class="card" id="notif-card"><p id="push-state">Checking…</p><div id="push-btn" style="margin-top:10px"></div></div>
+        <p class="small muted" style="margin:8px 4px 0">You get important RWB announcements only.</p>
+
+        <h2 class="group-title">App</h2>
+        <div class="group">
+            <a href="../privacy.html" target="_blank" rel="noopener"><span class="g-ico">${ICON.shield}</span><span class="grow"><b>Privacy</b></span>${ICON.out}</a>
+            <button data-act="out" class="danger-row"><span class="grow"><b>Sign out</b></span></button>
+        </div>
+        <p class="small muted" style="text-align:center;margin-top:24px">RWB App · RWB FAM</p>`;
+    actions = {
+        rules: () => openSheet('RWB Terms & Conditions', tncDoc() + '<p class="small muted" style="margin-top:16px">You agreed to these when you joined RWB FAM. To stop, turn RWB FAM off or ask the member who invited you to remove you.</p>'),
+        out: async () => { await disablePush(true).catch(() => {}); api.signOut(); },
+        theme: el => { setTheme(el.dataset.t); app.querySelectorAll('[data-act=theme]').forEach(b => { const on = b === el; b.setAttribute('aria-selected', on); b.setAttribute('aria-checked', on); }); },
+        'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); drawPushState(); }),
+        'push-off': b => busy(b, async () => { await disablePush(); toast('Notifications are off on this phone'); drawPushState(); }),
+        edit: () => openSheet('My details', `<form id="ff">
+            <label>Name<input name="name" maxlength="80" required value="${esc(f.full_name)}"></label>
+            <label>Contact number<input name="phone" type="tel" inputmode="numeric" placeholder="98300 11111" value="${esc(f.phone || '')}"></label>
+            <label>Address<textarea name="address" rows="2" maxlength="300">${esc(f.address || '')}</textarea></label>
+            <button class="btn block">Save</button></form>`, body => {
+            const ff = body.querySelector('#ff');
+            ff.onsubmit = e => { e.preventDefault(); const ph = ff.phone.value.replace(/\D/g, '').slice(-10);
+                if (ff.phone.value.trim() && ph.length !== 10) return toast('Enter a 10-digit number, or leave it empty', true);
+                busy(e.submitter, async () => { await api.famUpdate(ff.name.value.trim(), ph, ff.address.value.trim()); closeSheet(); toast('Saved'); await famReload(); }); };
+        })
+    };
+    $('#fam-ok').onchange = async e => {
+        const on = e.target.checked;
+        try { await api.famSetApproved(on); } catch (err) { e.target.checked = !on; return toast(err.message, true); }
+        await famReload();
+        if (on) toast('RWB FAM is on again'); else famAlertAsk(m);
+    };
+    drawPushState();
+}
+/* after turning RWB FAM off: tell the admins? */
+function famAlertAsk(m) {
+    openSheet('RWB FAM is off', `<p style="margin-bottom:14px">Do you want to alert the RWB Admins about this member adding you to RWB FAM without your consent/knowledge?</p>
+        <div class="fam-by bike-row" style="margin-bottom:14px">${face(m, 'avatar')}<span class="grow"><b>${esc(m.full_name || 'RWB member')}</b><span class="small muted">Added you to RWB FAM</span></span></div>
+        <button class="btn danger block" data-x="msg">Message the RWB Admins</button><button class="btn ghost block" data-x="no" style="margin-top:8px">Cancel</button>`, body => {
+        body.querySelector('[data-x=no]').onclick = () => closeSheet();
+        body.querySelector('[data-x=msg]').onclick = e => busy(e.currentTarget, async () => {
+            const r = await api.famAlert().catch(() => 'sent');
+            const list = await api.joinHelpAdmins().catch(() => []), me = state.fam;
+            const msg = a => `Hi ${a.first_name}, I'm ${me.full_name}${me.phone ? ' (' + me.phone + ')' : ''}. ${m.full_name || 'An RWB member'} added me to their RWB FAM without my consent/knowledge. I've turned it off in the RWB App. Please look into it.`;
+            openSheet('Admins alerted', `<p class="small" style="margin-bottom:10px">${r === 'already' ? 'The RWB Admins were already alerted today.' : '✓ The RWB Admins got an alert in the app.'} You can also WhatsApp an admin:</p>
+                <div class="group">${list.length ? list.map(a => `<div class="bike-row"><span class="g-ico">🛡️</span><span class="grow"><b>${esc(a.first_name)}</b><span class="small muted">RWB admin</span></span>
+                    <a class="btn sm wa" target="_blank" rel="noopener" href="${waTo(a.phone, msg(a))}">WhatsApp</a></div>`).join('') : '<p class="small muted" style="padding:12px">Could not load the admins right now.</p>'}</div>`);
+        });
+    });
+}
+
+/* ---------- members: my RWB FAM (Home → FAM) ---------- */
+async function famSheet() {
+    let d; try { d = await api.myFam(); } catch (e) { return toast(/function|schema/i.test(e.message) ? 'RWB FAM is coming soon' : e.message, true); }
+    const list = d.fam || [], max = d.max || FAM_MAX, full = list.length >= max, me = state.me;
+    const msg = `Hi! 🧡 I've added you to my RWB FAM in the RWB App (Ronin Warriors of Bengal).\n\nYou'll see where I am when I share my live location on rides, my bike's odometer, RWB events and important updates.\n\n1️⃣ Open ${famLink(d.code)}\n2️⃣ Sign in with any Google account (remember which one!)\n3️⃣ Enter my code: *${d.code}*\n\n– ${firstName(me)}`;
+    openSheet('RWB FAM', `<div class="fam-intro"><span class="fam-intro-ico">${FAM_ICON}</span><p><b>Keep your family in the loop.</b> Invite up to ${max} family members. On the RWB App they see your live location when you share it on Track (and riders on the same event ride), your odometer, RWB events and important announcements.</p></div>
+        <p class="small muted" style="margin:10px 0">They can't see expenses, RSVPs, Motomart, Service, Mileage or anyone's phone numbers, and they can't share or send SOS.</p>
+        <h3 class="group-title" style="margin-top:6px">Your FAM <span class="small muted" style="text-transform:none;letter-spacing:0">${list.length} of ${max}</span></h3>
+        <div class="group" id="fam-list">${list.length ? list.map(x => `<div class="bike-row">${face(x, 'avatar sm')}<span class="grow"><b>${esc(x.full_name)}</b><span class="small muted">${x.phone ? esc(x.phone.replace(/(\d{5})(\d{5})/, '$1 $2')) + ' · ' : ''}joined ${fmtDate(String(x.created_at).slice(0, 10))}${x.approved === false ? ' · <b class="warn">turned off by them</b>' : ''}</span></span>
+            <button class="btn sm ghost" data-rm="${x.id}" data-n="${esc(x.full_name)}">Remove</button></div>`).join('') : '<p class="small muted" style="padding:14px">No one yet. Share your invite below.</p>'}</div>
+        ${full ? `<p class="small muted" style="margin-top:12px">Your RWB FAM is full (${max} of ${max}). Remove someone to invite another person; the invite link and code stop working while it's full.</p>` : `
+        <h3 class="group-title">Invite</h3>
+        <ol class="small help-steps"><li>Send your invite on WhatsApp or SMS.</li><li>They open the link: Android gets the RWB app, iPhone uses the web app.</li><li>They sign in with any Google account and enter your code.</li></ol>
+        <div class="fam-code"><span class="small muted">Your invite code</span><b>${esc(d.code)}</b></div>
+        <p class="small muted" style="margin:8px 0 12px">Tell them to remember the Google account they use. If they forget it, only you can help them.</p>
+        <div class="btns"><button class="btn wa" data-x="wa">WhatsApp</button><a class="btn ghost" href="sms:?&body=${encodeURIComponent(msg.replace(/\*/g, ''))}">SMS</a><button class="btn ghost" data-x="copy">Copy</button></div>`}
+        ${isMod() ? '<button class="btn ghost block" data-x="all" style="margin-top:16px">👨‍👩‍👧 See all RWB FAM members</button>' : ''}`, body => {
+        body.querySelector('[data-x=wa]')?.addEventListener('click', () => openWA(waShare(msg)));
+        body.querySelector('[data-x=copy]')?.addEventListener('click', () => { navigator.clipboard?.writeText(msg.replace(/\*/g, '')).then(() => toast('Invite copied'), () => toast(famLink(d.code))); });
+        body.querySelector('[data-x=all]')?.addEventListener('click', () => famAdminSheet());
+        body.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { if (confirmBox(`Remove ${b.dataset.n} from your RWB FAM? They lose access straight away.`)) busy(b, async () => { await api.removeFam(Number(b.dataset.rm)); toast('Removed'); famSheet(); }); });
+    });
+}
+
+/* ---------- admins and coordinators: every RWB FAM member ---------- */
+async function famAdminSheet() {
+    let list; try { list = await api.adminFamList(); } catch (e) { return toast(e.message, true); }
+    const card = x => `<div class="card fam-adm${x.approved === false ? ' off' : ''}" data-q="${esc([x.full_name, x.phone, x.email, x.member?.full_name, x.member?.nickname].join(' ').toLowerCase())}">
+        <div class="row">${face(x, 'avatar sm')}<span class="grow"><b>${esc(x.full_name)}</b><span class="small muted">FAM of <b>${esc(x.member?.full_name || '–')}</b>${x.member?.nickname ? ` “${esc(x.member.nickname)}”` : ''}</span></span>
+            ${x.approved === false ? '<span class="badge">Turned off</span>' : '<span class="badge ok">On</span>'}</div>
+        ${x.alerted_at ? `<p class="small warn" style="margin-top:8px">⚠️ Says they were added without consent (${timeAgo(x.alerted_at)})</p>` : ''}
+        <dl class="facts small" style="margin:10px 0 0">${x.phone ? `<dt>Contact</dt><dd><a href="tel:+91${esc(x.phone)}">${esc(x.phone)}</a> · <a href="${waTo(x.phone)}" target="_blank" rel="noopener">WhatsApp</a></dd>` : ''}
+            <dt>Google</dt><dd>${esc(x.email || '–')}</dd>${x.address ? `<dt>Address</dt><dd>${esc(x.address)}</dd>` : ''}<dt>Joined</dt><dd>${fmtDate(String(x.created_at).slice(0, 10))}</dd>
+            ${x.member?.phone ? `<dt>Member</dt><dd><a href="tel:+91${esc(x.member.phone)}">${esc(x.member.phone)}</a></dd>` : ''}</dl>
+        ${isAdmin() ? `<button class="btn sm danger" data-rm="${x.id}" data-n="${esc(x.full_name)}" style="margin-top:10px">Remove from RWB FAM</button>` : ''}</div>`;
+    openSheet(`RWB FAM (${list.length})`, `<p class="small muted" style="margin-bottom:10px">Family members invited by RWB members (up to 3 each). ${isAdmin() ? 'You can remove anyone.' : 'Only admins can remove someone.'}</p>
+        ${list.length > 4 ? '<input class="search" type="search" id="fam-q" placeholder="Search name, number or member" aria-label="Search RWB FAM">' : ''}
+        <div class="list" id="fam-all">${list.length ? list.map(card).join('') : '<div class="card empty"><b>No RWB FAM members yet</b>Members invite family from Home → FAM.</div>'}</div>`, body => {
+        const q = body.querySelector('#fam-q'); if (q) q.oninput = () => { const t = q.value.trim().toLowerCase(); body.querySelectorAll('.fam-adm').forEach(c => c.hidden = !!t && !c.dataset.q.includes(t)); };
+        body.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { if (confirmBox(`Remove ${b.dataset.n} from RWB FAM? They lose access straight away.`)) busy(b, async () => { await api.removeFam(Number(b.dataset.rm)); toast('Removed'); famAdminSheet(); }); });
+    });
+}
+
+/* ---------- Track: "don't panic" while a rider's location isn't updating ---------- */
+/* 13 openers × 16 lines; stepping both together runs through 203 different messages before repeating */
+const SIG_OPEN = ["Don't panic.", "Don't worry.", 'Stay calm.', 'No need to worry.', 'All okay.', 'Relax.', 'Hang tight.', 'Take a breath.', 'Nothing to fear.', 'Keep calm.', 'Just a signal gap.', 'This happens on rides.', 'Patience, please.'];
+const SIG_LINE = ['{n} is facing poor signal.', '{n} is passing through a low-network area.', "{n}'s phone is looking for a network.", '{n} may be on a stretch with weak coverage.',
+    "The pin moves again once {n}'s phone finds signal.", '{n} is probably riding through a no-signal zone.', "Mobile networks are patchy here. {n}'s pin will catch up.", '{n} might be in a forest or ghat section with no towers.',
+    "Weak signal on {n}'s route right now.", "{n}'s phone sends the location as soon as it can.", 'Hills and forests often block the signal. {n} will show up again soon.', '{n} could be at a stop with the phone tucked away.',
+    'The last known spot is on the map. {n} should reappear soon.', "Rural roads often lose network. {n}'s pin will refresh.", '{n} is likely between towers. Updates resume on their own.', 'A weak network or battery saver can pause updates for a while.'];
+const SIG_COUNT = 203;
+const signalMsg = (i, n) => `${SIG_OPEN[i % 13]} ${SIG_LINE[i % 16].replaceAll('{n}', n)}`;
+const SIG_STALE = 3 * 6e4;
+function trackSignal() {
+    const el = $('#trk-signal'), d = trk.data; if (!el || !d) return;
+    const r = isFam() ? d.riders.find(x => x.mine) : trk.focus ? d.riders.find(x => x.id === trk.focus && !x.me) : null;
+    const stale = r && Date.now() - Date.parse(r.at) > SIG_STALE;
+    if (!stale || trk.sigHidden === r.id + '@' + r.at) { el.hidden = true; return; }
+    trk.sigI = ((trk.sigI ?? Math.floor(Math.random() * SIG_COUNT)) + 1) % SIG_COUNT;
+    el.hidden = false;
+    el.innerHTML = `<span class="sig-ico" aria-hidden="true">📶</span><span class="grow"><b>${esc(signalMsg(trk.sigI, firstName({ full_name: r.name, nickname: r.nick })))}</b><span class="small">Last update ${timeAgo(r.at)}</span></span><button type="button" class="icon-btn" aria-label="Hide">✕</button>`;
+    el.querySelector('button').onclick = () => { trk.sigHidden = r.id + '@' + r.at; el.hidden = true; };
+}
 
 /* =================== Inside the RWB Android app (Capacitor) =================== */
 /* The Android app opens this same web app; these bits use the phone's own features there:
@@ -3556,6 +3831,6 @@ function appPromo() {
     try { api = await createApi(); }
     catch { app.innerHTML = `<section class="signin"><h1>Can't load</h1><p class="lead">Please check your internet connection.</p><button class="btn block" onclick="location.reload()">Try again</button></section>`; return; }
     if (location.hash === '#install') { history.replaceState(null, '', location.pathname); setTimeout(installSheet, 1200); }
-    api.onAuthChange(ev => { if (ev === 'SIGNED_OUT') { trk.until = 0; trackSave(null); stopWatch(); trk.resumed = false; } chat.msgs = null; chat.left = null; Object.assign(state, { me: null, services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null, board: null, dir: null }); if (ev === 'SIGNED_OUT') history.replaceState(null, '', location.pathname); boot(); });
+    api.onAuthChange(ev => { if (ev === 'SIGNED_OUT') { trk.until = 0; trackSave(null); stopWatch(); trk.resumed = false; } chat.msgs = null; chat.left = null; Object.assign(state, { me: null, fam: null, services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null, board: null, dir: null }); delete document.body.dataset.fam; if (ev === 'SIGNED_OUT') history.replaceState(null, '', location.pathname); boot(); });
     boot();
 })();

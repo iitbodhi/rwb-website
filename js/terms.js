@@ -25,6 +25,13 @@ window.RWB_TNC = {
         'You confirm that the person you name as your emergency contact has agreed to be contacted by RWB in an emergency.',
         'Giving false or misleading information, or registering with someone else\'s details or VRN, may lead to rejection or removal.'
     ]],
+    ['RWB FAM (family of members)', [
+        'An RWB member may invite up to three family members (“RWB FAM”) to a limited, read-only version of the RWB App, using their personal invite link or code. RWB FAM users are not RWB members and have no membership rights.',
+        'RWB FAM users can see their inviting member’s odometer and live location while that member shares it on Track (and riders on the same event ride), RWB events, important RWB announcements, the member list as a member sees it, and the VRN check. They cannot RSVP, see or add expenses, share their own location, send SOS, or use Motomart, Service, Mileage or Pookie.',
+        'A member must invite only family who agree to it, and is responsible for what they share. RWB FAM users must keep what they see private and use it only to stay informed about their family member’s safety.',
+        'RWB FAM users sign in with a Google account of their choice and must remember it; RWB cannot recover it for them, only the inviting member can help. They can turn RWB FAM off at any time in Me (nothing is shared with them while it is off) and can alert the RWB admins if they were added without consent.',
+        'The inviting member and RWB admins can remove an RWB FAM user at any time. When a member leaves or is removed from RWB, their RWB FAM users lose access too.'
+    ]],
     ['Privacy and members\' data', [
         'RWB collects and uses your personal information only to run the community: approving and managing membership, contacting you, organising rides and events, and helping in emergencies. How this works, who can see what, and your rights are set out in the RWB Privacy Policy.',
         'Your personal details are private by default. Other members see only your name, nickname and photo, plus anything you choose to share in the RWB App (Me → Privacy). RWB admins and coordinators can see members\' details to manage the community.',

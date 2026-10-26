@@ -109,7 +109,22 @@ async function supabaseApi(url, key) {
         leaveRwb: async note => must(await sb.rpc('leave_rwb', { p_note: note || null })),
         rwbAdmins: async () => must(await sb.rpc('rwb_admins')),
         joinHelpAdmins: async () => must(await sb.rpc('join_help_admins')),
-        trackStart: async (lat, lng, acc, hours, eventId) => must(await sb.rpc('track_start', { p_lat: lat, p_lng: lng, p_acc: acc, p_hours: hours, p_event: eventId || null })),
+        async trackStart(lat, lng, acc, hours, eventId, note) {
+            const args = { p_lat: lat, p_lng: lng, p_acc: acc, p_hours: hours, p_event: eventId || null };
+            let r = await sb.rpc('track_start', { ...args, p_note: note || null });
+            if (r.error && /function|schema cache|p_note/i.test(r.error.message || '')) r = await sb.rpc('track_start', args);   /* before setup file 45 */
+            return must(r);
+        },
+        /* RWB FAM */
+        famMe: async () => must(await sb.rpc('fam_me')),
+        famInviteInfo: async code => must(await sb.rpc('fam_invite_info', { p_code: code })),
+        myFam: async () => must(await sb.rpc('my_fam')),
+        removeFam: async id => must(await sb.rpc('remove_fam', { p_id: id })),
+        famJoin: async (code, name, phone, address, agree) => must(await sb.rpc('fam_join', { p_code: code, p_name: name, p_phone: phone || null, p_address: address || null, p_agree: !!agree })),
+        famUpdate: async (name, phone, address) => must(await sb.rpc('fam_update', { p_name: name, p_phone: phone || null, p_address: address || null })),
+        famSetApproved: async ok => must(await sb.rpc('fam_set_approved', { p_ok: !!ok })),
+        famAlert: async () => must(await sb.rpc('fam_alert_admins')),
+        adminFamList: async () => must(await sb.rpc('admin_fam_list')),
         trackPing: async (lat, lng, acc, spd, hdg) => must(await sb.rpc('track_ping', { p_lat: lat, p_lng: lng, p_acc: acc, p_spd: spd, p_hdg: hdg })),
         trackStop: async () => must(await sb.rpc('track_stop')),
         trackView: async () => must(await sb.rpc('track_view')),
@@ -408,6 +423,8 @@ function demoApi() {
     const nid = () => ++db.nextId;
     const personOf = uidv => { const m = db.members.find(x => x.user_id === uidv) || {}; return { full_name: m.full_name || 'Rider', nickname: m.nickname || '', avatar_url: m.avatar_url || null }; };
     const me = () => db.members.find(m => m.user_id === 'me');
+    const firstOf = m => (m.nickname || m.full_name).split(' ')[0];
+    const demoFam = () => { try { return localStorage.getItem('rwb-demo-fam') === '1'; } catch { return false; } };
     const STAFF = ['superadmin', 'admin', 'coordinator'], nk = x => String(x || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
     /* what a regular member may see of someone else (admins and coordinators see all) */
     const demoHide = d => { const src = db.members.find(x => x.id === d.id) || {}, sh = k => !!(src.share || {})[k];
@@ -427,7 +444,7 @@ function demoApi() {
         async signOut() { db.signedIn = false; save(); authFns.forEach(f => f('SIGNED_OUT')); },
         resetDemo() { db = seed(); db.signedIn = true; save(); },
 
-        linkAccount: () => wait('member'),
+        linkAccount: () => { let f = null; try { f = localStorage.getItem('rwb-demo-fam'); } catch { /* ignore */ } return wait(f ? 'not_found' : 'member'); },   /* 'join': the RWB FAM join screen */
         requestAccess: () => wait('pending'),
         myRequest: () => wait(null),
         me: () => wait(me()),
@@ -464,12 +481,27 @@ function demoApi() {
         claimMembership: (phone, vrn, dob) => { const p = String(phone).replace(/\D/g, '').slice(-10), m = db.members.find(x => x.phone === p);
             if (!m || m.dob !== dob) return wait({ ok: false });
             return wait({ ok: true, name: m.full_name.split(' ')[0], moved: !!m.user_id }); },
+        /* RWB FAM demo: localStorage rwb-demo-fam = 1 makes this phone a FAM user of Demo Rider */
+        famMe: () => { if (!demoFam()) return wait(null); const m = db.members.find(x => x.user_id === 'me'), f = db.famMe ||= { id: 91, full_name: 'Rina Mallick', phone: '9830012345', address: 'Salt Lake, Kolkata', email: 'rina.m@gmail.com', approved: true, created_at: new Date().toISOString() };
+            return wait({ ...f, active: true, member: f.approved ? { id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url, bike: m.bike, odo: 7982, on_app: true } : { full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url } }); },
+        famInviteInfo: code => wait(code === 'RWB-K7Q2' ? { name: firstOf(me()), left: 3 - (db.fam || [1]).length } : null),
+        myFam: () => wait({ code: 'RWB-K7Q2', max: 3, fam: db.fam ||= [{ id: 91, full_name: 'Rina Mallick', phone: '9830012345', approved: true, created_at: new Date(Date.now() - 3 * 864e5).toISOString() }] }),
+        removeFam: id => { db.fam = (db.fam || []).filter(f => f.id !== id); save(); return wait('removed'); },
+        famJoin: () => { localStorage.setItem('rwb-demo-fam', '1'); return wait('joined'); },
+        famUpdate: (name, phone, address) => { Object.assign(db.famMe, { full_name: name, phone, address }); save(); return wait('saved'); },
+        famSetApproved: ok => { db.famMe.approved = !!ok; save(); return wait(ok ? 'approved' : 'disapproved'); },
+        famAlert: () => wait('sent'),
+        adminFamList: () => wait([{ id: 91, full_name: 'Rina Mallick', phone: '9830012345', address: 'Salt Lake, Kolkata', email: 'rina.m@gmail.com', approved: true, created_at: new Date(Date.now() - 3 * 864e5).toISOString(), member: { id: 1, full_name: me().full_name, nickname: me().nickname, avatar_url: me().avatar_url, phone: me().phone, status: 'active' } },
+            { id: 92, full_name: 'Tapas Sen', phone: '9830098765', address: 'Howrah', email: 'tapas.sen@gmail.com', approved: false, alerted_at: new Date().toISOString(), created_at: new Date(Date.now() - 864e5).toISOString(), member: { id: 2, full_name: 'Arjun Sen', nickname: 'Sultan', phone: '9000000002', status: 'active' } }]),
         /* Track demo: a few sample riders around Kolkata, plus you when sharing */
-        trackStart: (lat, lng, acc, hours) => { db.track = { lat, lng, acc, at: new Date().toISOString(), since: new Date().toISOString(), until: new Date(Date.now() + hours * 36e5).toISOString() }; save(); return wait(db.track.until); },
+        trackStart: (lat, lng, acc, hours, ev, note) => { db.track = { note: note || null, event_id: ev || null, lat, lng, acc, at: new Date().toISOString(), since: new Date().toISOString(), until: new Date(Date.now() + hours * 36e5).toISOString() }; save(); return wait(db.track.until); },
         trackPing: (lat, lng, acc, spd) => { if (!db.track) return wait('stopped'); Object.assign(db.track, { lat, lng, acc, spd, at: new Date().toISOString() }); save(); return wait('ok'); },
         trackStop: () => { db.track = null; save(); return wait('stopped'); },
         trackView: () => { const t = Date.now(), ago = s => new Date(t - s * 1000).toISOString(), m = me();
-            const riders = [{ id: 2, name: 'Arjun Sen', nick: 'Sultan', lat: 22.5850, lng: 88.4170, spd: 14, at: ago(20) }, { id: 4, name: 'Rahul Ghosh', nick: 'Rocket', lat: 22.6420, lng: 88.4310, spd: 0, at: ago(400) }, { id: 3, name: 'Priya Dutta', lat: 22.5000, lng: 88.3600, spd: 9, at: ago(45), event_id: 501 }]
+            if (demoFam()) { if (!db.famMe?.approved && db.famMe) return Promise.reject(new Error('Members only'));
+                return wait({ riders: [{ id: m.id, name: m.full_name, nick: m.nickname, avatar: m.avatar_url, lat: 22.6120, lng: 88.4020, spd: 0, at: ago(260), event_id: 501, note: 'towards Simlipal!', mine: true, me: false, phone: null },
+                    { id: 3, name: 'Priya Dutta', lat: 22.6050, lng: 88.3950, spd: 11, at: ago(30), event_id: 501, mine: false, me: false, phone: null }], sos: [], staff: false, fam: true, rider: m.id, now: new Date(t).toISOString() }); }
+            const riders = [{ id: 2, name: 'Arjun Sen', nick: 'Sultan', lat: 22.5850, lng: 88.4170, spd: 14, at: ago(20), note: 'Tea break at Kona' }, { id: 4, name: 'Rahul Ghosh', nick: 'Rocket', lat: 22.6420, lng: 88.4310, spd: 0, at: ago(400) }, { id: 3, name: 'Priya Dutta', lat: 22.5000, lng: 88.3600, spd: 9, at: ago(45), event_id: 501 }]
                 .map(r => ({ ...r, avatar: null, role: 'member', phone: ['superadmin', 'admin', 'coordinator'].includes(m.role) ? '90000000' + String(r.id).padStart(2, '0') : null, me: false }));
             if (db.track && Date.parse(db.track.until) > t) riders.push({ id: m.id, name: m.full_name, nick: m.nickname, avatar: m.avatar_url, ...db.track, me: true, phone: null });
             const sos = (db.sos || []).filter(s => !s.resolved).map(s => ({ ...s, name: m.full_name, avatar: m.avatar_url, me: true }));
