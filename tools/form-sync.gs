@@ -8,7 +8,7 @@
  * 3. App → sheet: members approved in the app get a row here; changes in the app (Me → Edit, bikes, VRN verified)
  *    update their row. Rows added by the app say "RWB App" in the "Added via" column.
  * 4. A member removed in the app is removed from this sheet; the row is first copied to the "Removed members" tab.
- * 5. Safety net, every 15 minutes (syncWithApp): VRNs lose their spaces, duplicate VRNs are tidied (the row with the most
+ * 5. Safety net, every 10 minutes (syncWithApp): VRNs lose their spaces, duplicate VRNs are tidied (the row with the most
  *    details and the T&C agreed stays), and every row is checked against the app and repaired: app changes are written
  *    here, anyone missing is added, removed / rejected entries move to their tabs, and gaps in the app are filled from here.
  *
@@ -57,7 +57,7 @@ function setup() {
   ScriptApp.newTrigger('onSheetEdit').forSpreadsheet(ss).onEdit().create();
   ScriptApp.newTrigger('publishForm').timeBased().everyHours(1).create();
   ScriptApp.newTrigger('syncAnswers').timeBased().everyDays(1).atHour(3).create();
-  ScriptApp.newTrigger('syncWithApp').timeBased().everyMinutes(15).create();
+  ScriptApp.newTrigger('syncWithApp').timeBased().everyMinutes(10).create();
   columns_(responsesSheet_());
   makeTabs_();
   console.log('Working on the tab "' + responsesSheet_().getName() + '"');
@@ -66,7 +66,7 @@ function setup() {
   syncTnc();
   syncAnswers();
   syncWithApp();
-  console.log('Ready: new form entries go to the approval list, edits here update the app, the app shows the same join form, and the sheet is checked against the app every 15 minutes.');
+  console.log('Ready: new form entries go to the approval list, edits here update the app, the app shows the same join form, and the sheet is checked against the app every 10 minutes.');
 }
 
 /** Runs by itself for every new form submission: the entry waits for an admin in the app. */
@@ -101,7 +101,7 @@ function onSheetEdit(e) {
     const f = Math.max(2, r0), l = Math.min(r0 + nr - 1, f + 99);
     const vals = sheet.getRange(f, 1, l - f + 1, sheet.getLastColumn()).getValues();
     const rows = vals.map(r => ({ phone: p10_(r[col.phone]), joined_at: tsIso_(r[col.joined_at]) })).filter(x => x.phone.length === 10 && x.joined_at);
-    if (rows.length) console.log('Join date sent to the app: ' + UrlFetchApp.fetchAll([rpc_('sheet_set_joined', { p_secret: SYNC_SECRET, p_rows: rows })])[0].getContentText());
+    if (rows.length) sendOrQueue_([{ fn: 'sheet_set_joined', body: { p_secret: SYNC_SECRET, p_rows: rows } }]);
     else console.log('Timestamp edited, but it is not a date the app understands (use dd/mm/yyyy hh:mm:ss): ' + JSON.stringify(vals.map(r => String(r[col.joined_at]))));
   }
   if (!edited.length) return;
@@ -115,11 +115,43 @@ function onSheetEdit(e) {
     let old = m.phone;
     if (edited.includes('phone')) old = nr === 1 && nc === 1 && e.oldValue != null ? String(e.oldValue).replace(/\D/g, '').slice(-10) : '';
     if (!old && !m.phone) return;
-    reqs.push(rpc_('sheet_edit_member', { p_secret: SYNC_SECRET, p: p, p_old_phone: old }));
+    reqs.push({ fn: 'sheet_edit_member', body: { p_secret: SYNC_SECRET, p: p, p_old_phone: old } });
   });
   if (!reqs.length) return;
-  const out = UrlFetchApp.fetchAll(reqs).map(r => r.getContentText());
-  console.log('Sheet edit sent to the app: ' + out.join(', '));
+  sendOrQueue_(reqs);
+}
+
+/* Sheet → app calls: sent now; any that fail (network, Supabase busy) wait and are sent again by syncWithApp */
+function sendOrQueue_(calls) {
+  let res = [];
+  try { res = UrlFetchApp.fetchAll(calls.map(c => rpc_(c.fn, c.body))); } catch (err) { res = []; }
+  const failed = calls.filter((c, i) => !res[i] || res[i].getResponseCode() >= 300);
+  console.log('Sheet edit sent to the app: ' + res.map(r => r.getContentText()).join(', ') + (failed.length ? ' (' + failed.length + ' will be retried)' : ''));
+  if (failed.length) queue_(failed);
+}
+function queue_(calls) {
+  const props = PropertiesService.getScriptProperties();
+  let q = []; try { q = JSON.parse(props.getProperty('retry') || '[]'); } catch (e) { q = []; }
+  q = q.concat(calls.map(c => ({ fn: c.fn, body: Object.assign({}, c.body, { p_secret: undefined }) }))).slice(-300);
+  props.setProperty('retry', JSON.stringify(q));
+}
+function retryQueued_() {
+  const props = PropertiesService.getScriptProperties();
+  let q = []; try { q = JSON.parse(props.getProperty('retry') || '[]'); } catch (e) { q = []; }
+  if (!q.length) return 0;
+  const calls = q.map(c => ({ fn: c.fn, body: Object.assign({}, c.body, { p_secret: SYNC_SECRET }) }));
+  let res = []; try { res = UrlFetchApp.fetchAll(calls.map(c => rpc_(c.fn, c.body))); } catch (err) { return 0; }
+  const left = q.filter((c, i) => !res[i] || res[i].getResponseCode() >= 300);
+  props.setProperty('retry', JSON.stringify(left));
+  return q.length - left.length;
+}
+/* the automatic triggers, reinstalled if one went missing */
+function ensureTriggers_() {
+  const have = ScriptApp.getProjectTriggers().map(t => t.getHandlerFunction()), ss = SpreadsheetApp.getActive(), made = [];
+  if (!have.includes('onFormSubmitSync')) { ScriptApp.newTrigger('onFormSubmitSync').forSpreadsheet(ss).onFormSubmit().create(); made.push('form'); }
+  if (!have.includes('onSheetEdit')) { ScriptApp.newTrigger('onSheetEdit').forSpreadsheet(ss).onEdit().create(); made.push('edit'); }
+  if (!have.includes('syncWithApp')) { ScriptApp.newTrigger('syncWithApp').timeBased().everyMinutes(10).create(); made.push('10-minute check'); }
+  if (made.length) console.log('Triggers reinstalled: ' + made.join(', '));
 }
 
 /** Sends every row to the app. Safe to run any time: rows already handled are skipped. */
@@ -487,7 +519,7 @@ function registerWebhook_() {
 }
 
 /**
- * Runs every 15 minutes by itself (and from setup). Safe to run any time from the editor too.
+ * Runs every 10 minutes by itself (and from setup). Safe to run any time from the editor too.
  *   1. VRNs: spaces and dashes removed.
  *   2. Duplicate VRNs: the row with the most details and the T&C agreed stays; the others move to "Older entries"
  *      (their duplicate member in the app is archived under Left / removed, never someone using the app).
@@ -498,6 +530,9 @@ function syncWithApp() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) { console.log('Another sync is running; skipped.'); return; }
   try {
+    ensureTriggers_();
+    const retried = retryQueued_();   // sheet edits that couldn't reach the app earlier go first, so they aren't overwritten
+    if (retried) console.log('Sheet edits sent again: ' + retried);
     const vr = tidyVrns_();          // first, so members archived as duplicates aren't added back below
     const exp = UrlFetchApp.fetchAll([rpc_('sheet_export_all', { p_secret: SYNC_SECRET })])[0];
     if (exp.getResponseCode() !== 200) { console.log('Could not read the app (run setup file 34 in Supabase first): ' + exp.getContentText().slice(0, 200)); return; }
@@ -505,7 +540,7 @@ function syncWithApp() {
     const rc = reconcile_(app);
     console.log('Sync done. VRNs cleaned: ' + vr.cleaned + '. Duplicate VRN rows moved: ' + vr.moved + (vr.archived ? ' (archived in the app: ' + vr.archived + ')' : '') +
       '. Cells updated from the app: ' + rc.cells + ' on ' + rc.rows + ' rows. Added: ' + rc.added + '. Moved to Removed members: ' + rc.removed +
-      '. Moved to Rejected: ' + rc.rejected + '. Older duplicate rows moved: ' + rc.older + '. App details filled from the sheet: ' + rc.filled + '.');
+      '. Moved to Rejected: ' + rc.rejected + '. Older duplicate rows moved: ' + rc.older + '. App details filled from the sheet: ' + rc.filled + '. Join dates updated from the sheet: ' + (rc.joined || 0) + '.');
     if (vr.review.length) console.log('Please check by hand (both are on the app, nothing was changed):\n' + vr.review.join('\n'));
   } finally { lock.releaseLock(); }
 }
@@ -593,7 +628,7 @@ function reconcile_(app) {
   });
   const waiting = new Set((app.waiting || []).map(w => p10_(w.phone)));
   const active = (app.members || []).filter(m => m.status === 'active'), activeSet = new Set(active.map(m => p10_(m.phone)));
-  const changed = {}, touched = new Set(), gone = new Set(), fills = [], appends = [];
+  const changed = {}, touched = new Set(), gone = new Set(), fills = [], appends = [], joins = [];
   const put = (i, c, v) => { if (c === undefined || c < 0) return; data[i][c] = v; (changed[c] = changed[c] || new Set()).add(i); touched.add(i); out.cells++; };
   const move = { older: [], removed: [], rejected: [] };
   const coreKeys = ['full_name', 'dob', 'phone', 'email', 'vrn', 'bike', 'blood_group', 'locality', 'hideout', 'emergency_phone', 'alt_phone'];
@@ -630,6 +665,8 @@ function reconcile_(app) {
     const a = appValues_(m);
     Object.keys(a).forEach(k => { if (col[k] !== undefined && !same_(k, row[col[k]], a[k])) put(i, col[k], a[k]); });
     answerCells_(heads, col, m.answers).forEach(([c, v]) => { if (!same_('answer', row[c], v)) put(i, c, v); });
+    /* join date: the sheet's Timestamp when it's earlier than the app's (an edit, or an older entry) */
+    if (col.joined_at !== undefined) { const t = tsIso_(row[col.joined_at]); if (t && (!m.joined_at || new Date(t).getTime() < new Date(m.joined_at).getTime() - 60000)) joins.push({ phone: p, joined_at: t }); }
   });
 
   /* members who left or were removed in the app: their rows go to "Removed members" */
@@ -660,6 +697,7 @@ function reconcile_(app) {
   [...new Set(all.map(x => x.i))].sort((a, b) => b - a).forEach(i => sheet.deleteRow(i + 2));
   out.older = move.older.length; out.removed = move.removed.length; out.rejected = move.rejected.length;
   for (let k = 0; k < fills.length; k += 100) out.filled += Number(UrlFetchApp.fetchAll([rpc_('sheet_fill_members', { p_secret: SYNC_SECRET, p_rows: fills.slice(k, k + 100) })])[0].getContentText()) || 0;
+  for (let k = 0; k < joins.length; k += 100) { const r = UrlFetchApp.fetchAll([rpc_('sheet_set_joined', { p_secret: SYNC_SECRET, p_rows: joins.slice(k, k + 100) })])[0]; out.joined = (out.joined || 0) + (r.getResponseCode() === 200 ? Number(r.getContentText()) || 0 : 0); }
   return out;
 }
 
