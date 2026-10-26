@@ -2962,7 +2962,7 @@ const MEDAL = ['🥇', '🥈', '🥉'];
 const kmTxt = n => Number(n).toLocaleString('en-IN') + ' km';
 const kmplTxt = v => Number(v).toFixed(1) + ' km/l';
 const BOARDS = {
-    gps: { title: 'GPS Warriors', sub: 'Kilometres ridden while sharing live location with Track', how: 'How to get on it: tap <b>Track</b> (the middle button) → <b>Share</b> before you ride. Every km you ride while sharing counts, checked by GPS.', has: r => r.km > 0, val: r => Number(r.km), big: r => `${Number(r.km).toLocaleString('en-IN', { maximumFractionDigits: r.km < 100 ? 1 : 0 })} km`, small: r => r.rides ? `${r.rides} ride${r.rides === 1 ? '' : 's'}` : '', empty: 'No one yet! Tap Track → Share on your next ride to be the first GPS Warrior.' },
+    gps: { title: 'Track Warriors', sub: 'Kilometres ridden while sharing live location with Track', how: 'How to get on it: tap <b>Track</b> (the middle button) → <b>Share</b> before you ride. Every km you ride while sharing counts, checked by GPS.', has: r => r.km > 0, val: r => Number(r.km), big: r => `${Number(r.km).toLocaleString('en-IN', { maximumFractionDigits: r.km < 100 ? 1 : 0 })} km`, small: r => r.rides ? `${r.rides} ride${r.rides === 1 ? '' : 's'}` : '', empty: 'No one yet! Tap Track → Share on your next ride to be the first Track Warrior.' },
     mileage: { title: 'Mileage Warriors', sub: 'Best average km/l, from full-tank fill-ups', has: r => r.kmpl > 0, val: r => Number(r.kmpl), big: r => kmplTxt(r.kmpl), small: r => r.km ? kmTxt(r.km) : '', empty: 'Add a full-tank fill-up with your Trip A reading to get on this board.' },
     service: { title: 'Service Warriors', sub: 'Most services logged in the app', has: r => r.services > 0, val: r => r.services * 1e5 + (r.last_service ? Date.parse(r.last_service) / 864e5 : 0), big: r => `${r.services} service${r.services === 1 ? '' : 's'}`, small: r => [r.kmpl ? kmplTxt(r.kmpl) : '', r.last_service ? 'last ' + fmtDayMonth(r.last_service) : ''].filter(Boolean).join(' · '), empty: 'Log your services to get on this board.' },
     road: { title: 'Road Warriors', sub: 'Most km on the odometer', has: r => r.km > 0, val: r => r.km, big: r => kmTxt(r.km), small: r => r.kmpl ? kmplTxt(r.kmpl) : '', empty: 'Update your odometer on Home, or add a fill-up or service, to get on this board.' }
@@ -2986,7 +2986,7 @@ const CREW_F = all => { const n = all.filter(m => m.on_app).length; return { all
 async function viewCrew() {
     const raw = state.board ??= await api.boards().catch(() => api.leaderboard().then(rs => rs.map(r => ({ ...r, services: 0, kmpl: null }))).catch(() => []));
     if (!state.gps || Date.now() - (state.gpsAt || 0) > 120e3) { state.gps = await api.gpsBoard().catch(() => []); state.gpsAt = Date.now(); }
-    state.boardKey = 'gps';   /* GPS Warriors first every time the tab opens */
+    state.boardKey = 'gps';   /* Track Warriors first every time the tab opens */
     app.innerHTML = top('RWB') + `
         <section class="board card" id="board">${boardHtml(state.boardKey, raw)}</section>
         <section class="section"><h2>Members</h2><div id="crew-body"><p class="muted">Loading…</p></div></section>`;
@@ -3105,7 +3105,7 @@ async function boot() {
         api.settings().then(v => { state.settings = v || {}; }).catch(() => { state.settings = {}; });
         await load.news(true);
         await render();
-        if (!trk.resumed) { trk.resumed = true; resumeShare(); if (NATIVE) nativePushOn(false).catch(() => {}); }
+        if (!trk.resumed) { trk.resumed = true; resumeShare(); if (NATIVE) nativePushOn(false).catch(() => {}); else setTimeout(appPromo, 1500); }
     } catch (e) {
         tabbar.hidden = true;
         app.innerHTML = `<section class="signin"><img src="icons/logo-128.png" alt=""><div><h1>Can't connect</h1><p class="lead">${esc(e.message || 'Please check your internet connection.')}</p></div><button class="btn block" onclick="location.reload()">Try again</button></section>`;
@@ -3113,7 +3113,7 @@ async function boot() {
 }
 
 
-/* =================== Track: live location on rides, SOS, GPS Warriors =================== */
+/* =================== Track: live location on rides, SOS, Track Warriors =================== */
 /* Sharing: the phone sends its position adaptively (often while moving, rarely when stopped) and keeps the screen awake.
    Inside the RWB Android app the native background plugin is used instead, so it keeps going with the screen locked.
    View: a map of everyone sharing (refreshed every 15 s while it's open). SOS: an urgent alert to the RWB team. */
@@ -3310,8 +3310,8 @@ async function viewTrack() {
     if (L && $('#trk-map')) {
         $('#trk-map').innerHTML = '';
         const map = trk.map = L.map('trk-map', { zoomControl: false, attributionControl: true }).setView([22.5726, 88.3639], 11);
-        L.tileLayer(`https://{s}.basemaps.cartocdn.com/${darkMode() ? 'dark_all' : 'rastertiles/voyager'}/{z}/{x}/{y}{r}.png`, { maxZoom: 19, subdomains: 'abcd',
-            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>' }).addTo(map);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: darkMode() ? 'trk-tiles-dark' : '',
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map);
         L.control.zoom({ position: 'topright' }).addTo(map);
         const fit = L.control({ position: 'topright' }); fit.onAdd = () => { const d = L.DomUtil.create('button', 'trk-fit'); d.type = 'button'; d.title = 'Show everyone'; d.innerHTML = '⤢'; d.onclick = () => fitAll(true); return d; }; fit.addTo(map);
     }
@@ -3464,6 +3464,31 @@ if (NATIVE) try {
     window.open = url => { if (url) location.href = url; return null; };
 } catch (e) { console.error('Android app setup', e); }
 
+
+/* =================== "Get the new app" pop-ups (web version only) =================== */
+/* Android in the browser or the old app: the new RWB Android app (Track in the background, SOS siren).
+   iPhone: a friendly note that the web app is the iPhone app, and Track works while the screen is on. */
+const APK_URL = 'https://roninwb.in/download/RWB-App.apk';
+function appPromo() {
+    if (NATIVE || document.querySelector('.promo')) return;
+    const android = /android/i.test(navigator.userAgent), ios = isIOS();
+    if (!android && !ios) return;
+    const key = android ? 'rwb-promo-android' : 'rwb-promo-ios';
+    try { if (android ? sessionStorage.getItem(key) : Date.now() - Number(localStorage.getItem(key) || 0) < 7 * 864e5) return; } catch { /* ignore */ }
+    const seen = () => { try { android ? sessionStorage.setItem(key, '1') : localStorage.setItem(key, String(Date.now())); } catch { /* ignore */ } };
+    const el = document.createElement('div'); el.className = 'promo'; el.setAttribute('role', 'dialog');
+    el.innerHTML = android ? `<div class="promo-card"><span class="promo-ico">🚀</span><h2>New update available</h2>
+            <p>The new <b>RWB Android app</b> is here: <b>Live Track keeps going with the screen locked</b>, a real SOS siren and faster notifications.</p>
+            <a class="btn block" href="${APK_URL}" data-x="get">Download the update</a>
+            <p class="small muted">Open the file when it's downloaded and tap <b>Update</b> (or Install). Sign in once and you're set.</p>
+            <button class="btn ghost block" data-x="later">Later</button></div>`
+        : `<div class="promo-card"><span class="promo-ico">🙈</span><h2>Oops, no funds!</h2>
+            <p>An iPhone app costs ₹8,000 a year and RWB runs on pure passion. 🧡</p>
+            <p>So this <b>is</b> your RWB App on iPhone: everything works here, and <b>Live Track works while your screen is on</b>.</p>
+            <button class="btn block" data-x="later">Ride on 🏍️</button></div>`;
+    el.addEventListener('click', e => { const x = e.target.closest('[data-x]')?.dataset.x; if (e.target === el || x === 'later' || x === 'get') { seen(); if (x !== 'get') e.preventDefault(); el.remove(); } });
+    document.body.append(el);
+}
 /* =================== Pookie bubble: floats gently; drag it anywhere with a finger, it sticks to the nearest side =================== */
 (function pookieDrag() {
     const fab = document.getElementById('pookie-fab'); if (!fab) return;
