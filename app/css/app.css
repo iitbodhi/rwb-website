@@ -1015,3 +1015,8 @@ body[data-route=gate] .pookie-fab{display:none!important}
 .gate h2{font:800 1.7rem/1.05 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:2px 0 8px}
 .gate-kicker{color:var(--orange);font-weight:700;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase}
 .gate-doc{max-height:46vh;overflow:auto;padding:12px 14px;border-radius:14px;background:var(--card2,rgba(127,127,127,.08));border:1px solid var(--line,rgba(127,127,127,.2))}
+[data-swipe]{touch-action:pan-y;will-change:transform}
+[data-swipe].swiping{transition:none!important;background:var(--card,inherit)}
+.toast.has-act{display:flex;align-items:center;gap:12px;pointer-events:auto}
+.toast-act{background:none;border:0;color:var(--orange);font:inherit;font-weight:700;padding:2px 4px;cursor:pointer}
+.swipe-hint{margin:-2px 0 8px}
