@@ -2338,7 +2338,8 @@ async function adminMembers() {
     state.adminMembers ??= await api.admin.members();
     const all = state.adminMembers;
     const nNew = all.filter(isNewMember).length, nGone = all.filter(isGone).length;
-    const F = { all: 'Everyone', new: `New${nNew ? ` (${nNew})` : ''}`, app: 'On the app', admins: 'RWB team', gone: `Left / removed${nGone ? ` (${nGone})` : ''}` };
+    const live = all.filter(m => !isGone(m)), nApp = live.filter(m => m.user_id).length;
+    const F = { all: 'Everyone', new: `New${nNew ? ` (${nNew})` : ''}`, app: `On app (${nApp})`, noapp: `Not on app (${live.length - nApp})`, admins: 'RWB team', gone: `Left / removed${nGone ? ` (${nGone})` : ''}` };
     state.memberFilter ||= 'all'; state.memberSort ||= 'team';
     const SORTS = { team: 'Team, A–Z', new: 'Newest first', old: 'Oldest first' };
     $('#admin-body').innerHTML = `<div class="chips" style="margin-bottom:10px">${Object.entries(F).map(([k, v]) => `<button class="chip" data-act="mf" data-f="${k}" aria-pressed="${state.memberFilter === k}">${v}</button>`).join('')}</div>
@@ -2350,13 +2351,13 @@ async function adminMembers() {
     const draw = () => {
         const q = state.adminSearch.trim().toLowerCase(), qd = q.replace(/\D/g, '');
         const gone = state.memberFilter === 'gone';
-        const picked = all.filter(m => gone ? isGone(m) : !isGone(m) && (state.memberFilter === 'app' ? m.user_id : state.memberFilter === 'admins' ? isTeam(m) : state.memberFilter === 'new' ? isNewMember(m) : true));
+        const picked = all.filter(m => gone ? isGone(m) : !isGone(m) && (state.memberFilter === 'app' ? m.user_id : state.memberFilter === 'noapp' ? !m.user_id : state.memberFilter === 'admins' ? isTeam(m) : state.memberFilter === 'new' ? isNewMember(m) : true));
         const jt = m => Date.parse(m.joined_at || m.created_at || 0) || 0;
         const sort = (state.memberFilter === 'new' || gone) && state.memberSort === 'team' ? 'new' : state.memberSort;
         const gt = m => Date.parse(m.removed_at || 0) || 0;
         const pool = gone ? [...picked].sort((a, b) => sort === 'old' ? gt(a) - gt(b) : gt(b) - gt(a)) : sort === 'new' ? [...picked].sort((a, b) => jt(b) - jt(a)) : sort === 'old' ? [...picked].sort((a, b) => jt(a) - jt(b)) : teamFirst(picked);
         const hits = pool.filter(m => !q || m.full_name.toLowerCase().includes(q) || (m.nickname || '').toLowerCase().includes(q) || (qd.length >= 3 && (m.phone || '').includes(qd)) || (vrnKey(q).length >= 2 && [m.vrn, ...(m.member_bikes || []).map(b => b.vrn)].some(v => vrnKey(v).includes(vrnKey(q)))) || (m.locality || '').toLowerCase().includes(q) || (m.hideout || '').toLowerCase().includes(q));
-        $('#mcount').textContent = `${hits.length} ${state.memberFilter === 'app' ? 'on the app' : state.memberFilter === 'admins' ? 'in the RWB team' : state.memberFilter === 'new' ? 'new in the last 7 days' : gone ? 'left or removed' : 'member' + (hits.length === 1 ? '' : 's')}`;
+        $('#mcount').textContent = `${hits.length} ${state.memberFilter === 'app' ? 'on the app' : state.memberFilter === 'noapp' ? 'not on the app yet' : state.memberFilter === 'admins' ? 'in the RWB team' : state.memberFilter === 'new' ? 'new in the last 7 days' : gone ? 'left or removed' : 'member' + (hits.length === 1 ? '' : 's')}`;
         $('#ml').innerHTML = hits.slice(0, limit).map(m => isGone(m) ? `<button class="card tap row member-row gone-row" data-act="member" data-id="${m.id}">${face(m, 'avatar sm')}
             <div class="grow"><div class="who">${esc(m.full_name)} <span class="badge gone-tag ${m.status}">${GONE_TXT[m.status]}</span></div>
             <div class="meta">${GONE_TXT[m.status]} ${m.removed_at ? fmtDate(String(m.removed_at).slice(0, 10)) : ''}${m.removed_by ? ` · by ${esc(m.removed_by)}` : ''}${m.removed_note ? ` · “${esc(m.removed_note)}”` : ''} · ${esc(m.phone || '')}</div></div></button>`
@@ -2899,6 +2900,7 @@ const BOARDS = {
     road: { title: 'Road Warriors', sub: 'Most km on the odometer', has: r => r.km > 0, val: r => r.km, big: r => kmTxt(r.km), small: r => r.kmpl ? kmplTxt(r.kmpl) : '', empty: 'Update your odometer on Home, or add a fill-up or service, to get on this board.' }
 };
 const rankBoard = (rows, key) => rows.filter(BOARDS[key].has).sort((a, b) => BOARDS[key].val(b) - BOARDS[key].val(a) || a.full_name.localeCompare(b.full_name)).map((r, i) => ({ ...r, rank: i + 1 }));
+const CREW_F = all => { const n = all.filter(m => m.on_app).length; return { all: 'Everyone', app: `On app (${n})`, noapp: `Not on app (${all.length - n})` }; };
 async function viewCrew() {
     const raw = state.board ??= await api.boards().catch(() => api.leaderboard().then(rs => rs.map(r => ({ ...r, services: 0, kmpl: null }))).catch(() => []));
     let key = 'mileage'; try { key = localStorage.getItem('rwb-board') || 'mileage'; } catch { /* ignore */ }
@@ -2930,21 +2932,24 @@ async function viewCrew() {
             ${team.map(m => `<div class="row member-row team-row">${face(m, 'avatar sm')}
                 <div class="grow"><div class="who">${name(m)} ${roleBadge(m)}</div><div class="meta">${esc(m.phone ? m.phone.replace(/(\d{5})(\d{5})/, '$1 $2') : '')}${m.vrn ? ` · ${esc(m.vrn)}` : ''}${m.avg_kmpl ? ` · <b class="kmpl-tag">${kmplTxt(m.avg_kmpl)}</b>` : ''}</div></div>
                 ${m.phone ? `<a class="icon-btn call" href="tel:+91${esc(m.phone)}" aria-label="Call ${esc(m.full_name)}">${ICON_PHONE}</a><a class="icon-btn wa-btn" href="${waTo(m.phone)}" target="_blank" rel="noopener" aria-label="WhatsApp ${esc(m.full_name)}">${ICON_WA}</a>` : ''}</div>`).join('')}</div>` : '')
-        + `<input class="search" type="search" id="cq" placeholder="${isMod() ? 'Search name, bike number or place' : 'Search members by name'}" value="${esc(state.crewSearch || '')}" aria-label="Search members">
+        + `<div class="chips" id="cf" style="margin-bottom:10px">${Object.entries(CREW_F(all)).map(([k, v]) => `<button class="chip" data-f="${k}" aria-pressed="${(state.crewFilter || 'all') === k}">${v}</button>`).join('')}</div>
+        <input class="search" type="search" id="cq" placeholder="${isMod() ? 'Search name, bike number or place' : 'Search members by name'}" value="${esc(state.crewSearch || '')}" aria-label="Search members">
         <p class="small muted" id="ccount" style="margin:-4px 0 10px"></p><div class="list" id="cl"></div><button class="btn ghost block section" id="cmore" hidden>Show more</button>`;
     let limit = 50;
     const draw = () => {
         const q = (state.crewSearch || '').trim().toLowerCase(), qv = vrnKey(q);
-        const pool = q ? all : others;   /* while searching, the team is included too */
+        const f = state.crewFilter || 'all', inF = m => f === 'all' || (f === 'app' ? m.on_app : !m.on_app);
+        const pool = (q || f !== 'all' ? all : others).filter(inF);   /* while searching or filtering, the team is included too */
         const hits = pool.filter(m => !q || [m.full_name, m.nickname, m.bike, m.locality].some(v => (v || '').toLowerCase().includes(q)) || (qv.length >= 2 && [m.vrn, ...(m.bikes || []).map(b => b.vrn)].some(v => vrnKey(v).includes(qv))));
-        $('#ccount').textContent = q ? `${hits.length} found${isMod() && qv.length >= 4 && !hits.length ? '. That bike isn\'t registered with RWB.' : ''}` : `${all.length} members in RWB`;
+        $('#ccount').textContent = q ? `${hits.length} found${isMod() && qv.length >= 4 && !hits.length ? '. That bike isn\'t registered with RWB.' : ''}` : f === 'app' ? `${hits.length} members on the app` : f === 'noapp' ? `${hits.length} members not on the app yet` : `${all.length} members in RWB`;
         $('#cl').innerHTML = hits.slice(0, limit).map(m => `<div class="card row member-row">${face(m, 'avatar sm')}
-            <div class="grow"><div class="who">${name(m)} ${roleBadge(m)}</div>
+            <div class="grow"><div class="who">${name(m)} ${roleBadge(m)}${m.on_app ? ' <span class="badge ok">On app</span>' : ''}</div>
             <div class="meta">${m.avg_kmpl ? `<b class="kmpl-tag">${kmplTxt(m.avg_kmpl)}</b> · ` : ''}${esc([m.bike, m.locality].filter(Boolean).join(', ') || 'RWB member')}</div></div>
             ${m.vrn ? `<span class="vrn${m.vrn_verified ? ' ok' : ''}" title="${m.vrn_verified ? 'VRN verified by RWB' : ''}">${esc(qv.length >= 2 && !vrnKey(m.vrn).includes(qv) ? ((m.bikes || []).find(b => vrnKey(b.vrn).includes(qv))?.vrn || m.vrn) : m.vrn)}${m.vrn_verified ? ' ✓' : ''}</span>` : ''}</div>`).join('') || (q ? '<div class="card empty">No one matches.</div>' : '');
         $('#cmore').hidden = hits.length <= limit;
     };
     $('#cq').oninput = e => { state.crewSearch = e.target.value; limit = 50; draw(); };
+    $('#cf').onclick = e => { const b = e.target.closest('[data-f]'); if (!b) return; state.crewFilter = b.dataset.f; limit = 50; $('#cf').querySelectorAll('[data-f]').forEach(x => x.setAttribute('aria-pressed', x === b)); draw(); };
     $('#cmore').onclick = () => { limit += 100; draw(); };
     draw();
 }
