@@ -494,9 +494,46 @@ async function viewAccess(status, sess) {
     }
     app.innerHTML = `${demoBar()}<section class="signin no-acct"><img src="icons/logo-128.png" alt="">
         <div><h1>No Account Found!</h1><p class="lead">There's no RWB membership for <b>${esc(sess.email)}</b>.</p></div>
-        <div class="card na-card"><p>If you have already joined RWB, <button class="linkish" data-act="help-admins">WhatsApp the Admins</button> to know your registered email.</p></div>
+        <form class="card na-card na-find" id="naf" novalidate>
+            <b class="na-h">Already in RWB? Find your account</b>
+            <p class="small muted">Enter the WhatsApp number and VRN you joined RWB with.</p>
+            <label>WhatsApp No.<input name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="98300 11111" required></label>
+            <label>VRN<input name="vrn" autocapitalize="characters" autocomplete="off" placeholder="WB02AB1234" required></label>
+            <button class="btn block" data-x="find">Find my email</button>
+            <div id="na-out" hidden></div>
+        </form>
+        <div class="card na-card"><p>Still stuck? <button type="button" class="linkish" data-act="help-admins">WhatsApp the Admins</button> to know your registered email.</p></div>
         <div class="card na-card"><p>Not joined yet? <a href="${esc(JOIN_URL)}" target="_blank" rel="noopener">Join here</a></p></div>
         <button class="btn ghost block" data-act="out">Use a different Google account</button></section>`;
+    bindFindAccount(sess);
+}
+/* "No Account Found!": find the email you joined with (a hint), or verify with your date of birth and use this Google account */
+function bindFindAccount(sess) {
+    const f = $('#naf'), out = $('#na-out');
+    const read = () => ({ phone: f.phone.value.replace(/\D/g, '').slice(-10), vrn: f.vrn.value.toUpperCase().replace(/[^A-Z0-9]/g, '') });
+    const check = v => v.phone.length !== 10 ? 'Enter your 10-digit WhatsApp number' : v.vrn.length < 6 ? 'Enter your full VRN, e.g. WB02AB1234' : '';
+    const verifyForm = (lead = '') => `${lead}<div class="na-verify"><b class="na-h">Can't use that email?</b>
+        <p class="small muted">Verify with your date of birth and continue with the Google account you're signed in with (<b>${esc(sess.email)}</b>). It becomes your RWB email.</p>
+        <label>Date of birth<input type="date" name="dob" max="${todayISO()}"></label>
+        <button type="button" class="btn ghost block" data-x="claim">Verify &amp; continue</button></div>`;
+    f.onsubmit = e => {
+        e.preventDefault(); const v = read(), err = check(v); if (err) return toast(err, true);
+        busy(f.querySelector('[data-x=find]'), async () => {
+            const r = await api.findMyEmail(v.phone, v.vrn); out.hidden = false;
+            if (!r?.found) { out.innerHTML = '<p class="warn small">No RWB member found with that WhatsApp number and VRN. Check both and try again, or WhatsApp the Admins.</p>'; return; }
+            if (r.on_app) { out.innerHTML = `<div class="na-hint"><span class="small muted">This membership is already on the app with</span><b>${esc(r.hint || 'another email')}</b></div>
+                <button type="button" class="btn block" data-x="switch">Sign in with that account</button><p class="small muted" style="margin-top:8px">Lost that account? WhatsApp the Admins.</p>`; }
+            else out.innerHTML = (r.hint ? `<div class="na-hint"><span class="small muted">You joined RWB with</span><b>${esc(r.hint)}</b></div>
+                <button type="button" class="btn block" data-x="switch">Sign in with that account</button>` : '') + verifyForm(r.hint ? '' : '<p class="small muted">There\'s no email on your RWB record.</p>');
+            const sw = out.querySelector('[data-x=switch]'); if (sw) sw.onclick = () => busy(sw, async () => { await api.signOut(); await api.signIn(); });
+            const cl = out.querySelector('[data-x=claim]');
+            if (cl) cl.onclick = () => { const dob = out.querySelector('[name=dob]').value, v2 = read(), err2 = check(v2);
+                if (err2) return toast(err2, true); if (!dob) return toast('Enter your date of birth', true);
+                busy(cl, async () => { const res = await api.claimMembership(v2.phone, v2.vrn, dob);
+                    if (!res?.ok) return toast('Those details don\'t match your RWB record. Check your date of birth, or WhatsApp the Admins.', true);
+                    toast(`Welcome${res.name ? ', ' + res.name : ''}! You're in. 🏍️`); boot(); }); };
+        });
+    };
 }
 async function joinHelpSheet(sess) {
     const list = await api.joinHelpAdmins().catch(() => []);
@@ -2126,7 +2163,7 @@ function waMsg(kind, x = {}) {
         change_ok: `Hi ${first}! ✅ Your ${x.what || 'profile'} update in the RWB App is approved. Thanks for keeping your details up to date.\n– ${me}, RWB`,
         change_no: `Hi ${first}, we couldn't approve your ${x.what || 'profile'} update in the RWB App${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'} Just reply here if you'd like help with it. 🙏\n– ${me}, RWB`,
         ask: `Hi ${first}! 👋\n\nThanks for registering with Ronin Warriors of Bengal. Before we approve you, could you please help us with:\n${(x.asks || []).map(a => '• ' + a).join('\n') || '• '}\n${(x.asks || []).some(a => /terms/i.test(a)) ? `\n📜 RWB Terms & Conditions: ${TNC_URL}\nIf you agree, just reply “I agree” here.\n` : ''}\n${x.on_app ? 'You can update your details in the RWB App (open it and tap Edit my details), or just reply here.' : 'You can edit your join form response (use the same email), or just reply here.'}\n\nThank you!\n– ${me}, RWB`,
-        invite: `Hi ${first}! 👋\n\nRWB now has its own free app for members: service records and reminders, mileage tracker, Motomart for used gear, events, guides and more.\n\n📲 Get it here: https://${APP_LINK}\nSign in with Google using the email you gave on the RWB join form.\n\n🎥 How to install:\nAndroid: ${INSTALL_ANDROID}\niPhone: ${INSTALL_IPHONE}\n\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
+        invite: `Hi ${first}! 👋\n\nRWB now has its own free app for members: service records and reminders, mileage tracker, Motomart for used gear, events, guides and more.\n\n📲 Get it here: https://${APP_LINK}\nSign in with Google using the email you gave on the RWB join form. Don't remember it? The app will help: on the “No Account Found” screen, enter your WhatsApp number and VRN.\n\n🎥 How to install:\nAndroid: ${INSTALL_ANDROID}\niPhone: ${INSTALL_IPHONE}\n\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
         sticker: `Hi ${first}! 👋\n\nIf you haven't got your RWB sticker yet, you can collect it at our next meet-up or ride. 🏍️\n\nIf you already have one, kindly update it in the RWB App → Me → More from RWB: https://${APP_LINK}/#me\n\nThank you!\n– ${me}, RWB`,
         comeback: `Hi ${first}! 👋\n\nIt's ${me} from Ronin Warriors of Bengal. We miss you on the road! If you'd like to come back to RWB, just reply here or fill the join form again at roninwb.in.\n\nRide safe! 🏍️`,
         remind: `Hi ${first}! 👋\n\nA quick one from the RWB team: please complete your RWB profile.${x.rules ? `\n\n📜 Please read and agree to the RWB Terms & Conditions: ${TNC_URL}\nAgree in the app (Me → Terms & Conditions → Read & agree), or just reply “I agree” here.` : ''}${x.missing?.length ? `\n\nMissing: ${x.missing.join(', ')}.` : ''}\n\nIt takes a minute in the RWB App: ${APP_LINK} → Me.${x.on_app ? '' : ' Sign in with Google using the email you gave on the join form.'}\n\nThank you! Explore. Evolve. Inspire.\n– ${me}, RWB`

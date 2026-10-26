@@ -91,6 +91,8 @@ async function supabaseApi(url, key) {
         leaveRwb: async note => must(await sb.rpc('leave_rwb', { p_note: note || null })),
         rwbAdmins: async () => must(await sb.rpc('rwb_admins')),
         joinHelpAdmins: async () => must(await sb.rpc('join_help_admins')),
+        findMyEmail: async (phone, vrn) => must(await sb.rpc('find_my_email', { p_phone: phone, p_vrn: vrn })),
+        claimMembership: async (phone, vrn, dob) => must(await sb.rpc('claim_membership', { p_phone: phone, p_vrn: vrn, p_dob: dob })),
         updateMyAnswers: async answers => { const r = await sb.rpc('update_my_answers', { p_answers: answers }); if (r.error && /could not find|function/i.test(r.error.message || '')) throw new Error('Please ask an RWB admin to run setup file 32 first.'); return must(r); },
         myBikes: async () => must(await sb.from('member_bikes').select('slot, vrn, model, verified').eq('member_id', await myMemberId()).order('slot')),
         saveBike: async (slot, vrn, model, memberId = null) => must(await sb.rpc('save_bike', { p_slot: slot, p_vrn: vrn || '', p_model: model || null, p_member_id: memberId })),
@@ -431,6 +433,12 @@ function demoApi() {
         agreeTnc: () => { Object.assign(me(), { tnc_agreed: true, tnc_version: window.RWB_TNC?.version || null, tnc_agreed_at: new Date().toISOString() }); save(); return wait('ok'); },
         withdrawTnc: () => { Object.assign(me(), { tnc_agreed: false, tnc_version: null }); save(); return wait('withdrawn'); },
         leaveRwb: () => { me().status = 'left'; save(); return wait('left'); },
+        findMyEmail: (phone, vrn) => { const k = v => (v || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), p = String(phone).replace(/\D/g, '').slice(-10);
+            const m = db.members.find(x => x.phone === p && (!x.status || x.status === 'active') && (k(x.vrn) === k(vrn) || (x.member_bikes || []).some(b => k(b.vrn) === k(vrn))));
+            return wait(m ? { found: true, hint: m.email ? m.email.slice(0, 2) + '•••@' + m.email.split('@')[1] : null, on_app: !!m.user_id } : { found: false }); },
+        claimMembership: (phone, vrn, dob) => { const p = String(phone).replace(/\D/g, '').slice(-10), m = db.members.find(x => x.phone === p);
+            if (!m || m.dob !== dob) return wait({ ok: false }); if (m.user_id) return Promise.reject(new Error('This membership is already used on the app with another Google account. Sign in with that account, or WhatsApp the admins.'));
+            return wait({ ok: true, name: m.full_name.split(' ')[0] }); },
         joinHelpAdmins: () => wait(db.members.filter(m => ['superadmin', 'admin'].includes(m.role) && (!m.status || m.status === 'active')).map(m => ({ first_name: (m.nickname || m.full_name).split(' ')[0], phone: m.phone }))),
         rwbAdmins: () => wait(db.members.filter(m => ['superadmin', 'admin'].includes(m.role) && (!m.status || m.status === 'active')).map(m => ({ full_name: m.full_name, nickname: m.nickname, phone: m.phone, role: m.role }))),
         async boards() {

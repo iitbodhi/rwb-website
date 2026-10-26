@@ -171,6 +171,13 @@ dl.facts dd{font-weight:500;overflow-wrap:anywhere}
 .no-acct h1{font-size:2.2rem}
 .na-card{text-align:left;padding:16px 18px;font-size:.98rem;line-height:1.5}
 .na-card a,.linkish{color:var(--orange);font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.na-find{display:grid;gap:10px}
+.na-find label{text-align:left}
+.na-h{display:block;font-size:1rem}
+.na-hint{display:grid;gap:2px;text-align:center;padding:12px;border-radius:12px;background:color-mix(in srgb,var(--orange) 10%,transparent);margin-bottom:10px}
+.na-hint b{font-size:1.15rem;overflow-wrap:anywhere}
+.na-verify{display:grid;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--hair)}
+#na-out .warn{margin:0}
 .linkish{background:none;border:0;padding:0;font:inherit;font-weight:700;cursor:pointer}
 .gbtn{background:var(--card);color:var(--ink);border-color:var(--line)}
 .gbtn:hover{background:var(--paper-2);border-color:var(--ink)}
