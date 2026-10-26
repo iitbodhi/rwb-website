@@ -335,14 +335,21 @@ const moreQs = m => [...new Set([...(joinFormDef?.items || []).filter(i => i.tit
     ...extraAnswers(m).map(([q]) => q)])];
 const answerRows = (m, mine) => (mine ? moreQs(m).map(q => [q, m.form_answers?.[q]]) : extraAnswers(m)).map(([q, a]) => { const so = SOCIAL.find(x => x[2].test(q)); return `<div class="ans-row"><span class="grow"><small>${esc(q)}</small><b class="${ansText(a) ? '' : 'muted'}">${esc(ansText(a) || 'Not answered yet')}</b></span>${so?.[1] && mine ? `<a class="btn sm ghost" href="${so[1]}" target="_blank" rel="noopener">Visit ↗</a>` : ''}</div>`; }).join('');
 const followRwb = () => `<div class="follow-rwb">${FOLLOW.map(([n, u, , ic]) => `<a href="${u}" target="_blank" rel="noopener"><img class="fi" src="${ic}" alt="" width="40" height="40" loading="lazy">${esc(n)}</a>`).join('')}</div>`;
+/* "More from RWB" questions as form fields; choice questions (sticker, social media) are required, text ones only if the form says so */
+const moreItem = q => (joinFormDef?.items || []).find(i => i.title === q);
+const moreRequired = q => { const it = moreItem(q); return !!it && (it.required || (it.choices || []).length > 0); };
+function moreFieldsHtml(m, qs, strict) {
+    return qs.map((q, i) => { const it = moreItem(q), cur = ansText(m.form_answers?.[q]), ch = (it?.choices || []).map(c => c.value).filter(Boolean), req = strict && moreRequired(q);
+        return `<label><span>${esc(q)}${req ? ' <span class="req">*</span>' : ''}</span>${ch.length ? `<select name="mq${i}"${req ? ' required' : ''}><option value="">Choose…</option>${[...new Set([...ch, ...(cur && !ch.includes(cur) ? [cur] : [])])].map(c => `<option${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select>`
+            : `<input name="mq${i}" maxlength="300" value="${esc(cur)}"${req ? ' required' : ''}>`}</label>`; }).join('');
+}
+const readMore = (form, m, qs) => { const out = {}; qs.forEach((q, i) => { const el = form.elements[`mq${i}`]; if (!el) return; const v = el.value.trim(); if (v !== ansText(m.form_answers?.[q])) out[q] = v; }); return out; };
+const moreMissing = m => moreQs(m).filter(q => moreRequired(q) && !ansText(m.form_answers?.[q]));
 function moreSheet(m, done) {
-    const qs = moreQs(m), item = q => (joinFormDef?.items || []).find(i => i.title === q);
-    openSheet('More from RWB', `<form id="more">${qs.map((q, i) => { const it = item(q), cur = ansText(m.form_answers?.[q]), ch = (it?.choices || []).map(c => c.value).filter(Boolean);
-        return `<label><span>${esc(q)}</span>${ch.length ? `<select name="q${i}"><option value="">Choose…</option>${[...new Set([...ch, ...(cur && !ch.includes(cur) ? [cur] : [])])].map(c => `<option${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select>`
-            : `<input name="q${i}" maxlength="300" value="${esc(cur)}">`}</label>`; }).join('')}
+    const qs = moreQs(m);
+    openSheet('More from RWB', `<form id="more">${moreFieldsHtml(m, qs, false)}
         <p class="small muted" style="margin:-4px 0 12px">Saved straight away, no approval needed.</p><button class="btn block">Save</button></form>`, body => {
-        body.querySelector('#more').onsubmit = e => { e.preventDefault(); const f = e.target, out = {};
-            qs.forEach((q, i) => { const v = f[`q${i}`].value.trim(); if (v !== ansText(m.form_answers?.[q])) out[q] = v; });
+        body.querySelector('#more').onsubmit = e => { e.preventDefault(); const out = readMore(e.target, m, qs);
             if (!Object.keys(out).length) { closeSheet(); return; }
             busy(e.submitter, async () => { const saved = await api.updateMyAnswers(out); m.form_answers = { ...(m.form_answers || {}), ...saved }; closeSheet(); toast('Saved'); done(); }); };
     });
@@ -1767,7 +1774,8 @@ async function gateFor(m) {
     if ('tnc_agreed' in m && !tncOk(m)) return 'tnc';
     let miss = missingOf(m).filter(x => x !== 'rules');
     if (miss.includes('VRN') && (state.vrnSent || (await api.myChanges().catch(() => [])).some(c => c.kind === 'vrn' && c.status === 'pending'))) { state.vrnSent = true; miss = miss.filter(x => x !== 'VRN'); }
-    return miss.length ? 'profile' : null;
+    await loadJoinForm();
+    return miss.length || moreMissing(m).length ? 'profile' : null;
 }
 const gateTop = title => `${demoBar()}<header class="top gate-top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1></header>`;
 function tncGate() {
@@ -1796,15 +1804,21 @@ async function adminsSheet() {
             <a class="btn sm wa" target="_blank" rel="noopener" href="${waTo(a.phone, `Hi ${firstName(a)}, it's ${me} from RWB. I have a question about the RWB Terms & Conditions.`)}">WhatsApp</a></div>`).join('') : '<p class="small muted" style="padding:12px">Could not load the admins. Please try again.</p>'}</div>`);
 }
 function profileGate() {
-    const m = state.me, miss = missingOf(m).filter(x => x !== 'rules' && !(x === 'VRN' && state.vrnSent));
+    const m = state.me, miss = [...missingOf(m).filter(x => x !== 'rules' && !(x === 'VRN' && state.vrnSent)), ...(moreMissing(m).length ? ['More from RWB'] : [])];
+    const qs = moreQs(m);
     app.innerHTML = gateTop('RWB') + `<section class="gate card">
         <p class="gate-kicker">Almost there, ${esc(firstName(m))}</p>
         <h2>Complete your profile</h2>
         <p class="small muted" style="margin-bottom:8px">Every RWB member keeps these details up to date, for rides, emergencies and the member list. Please fill in what's missing to continue.</p>
         <div class="fu-miss" style="margin-bottom:14px">${miss.map(x => `<span>${esc(x)}</span>`).join('')}</div>
-        <form id="mf">${joinFields(m, 'me')}<button class="btn block">Save and continue</button></form></section>`;
+        <form id="mf">${joinFields(m, 'me')}
+            ${qs.length ? `<h3 class="gate-sub">More from RWB</h3>${moreFieldsHtml(m, qs, true)}` : ''}
+            <button class="btn block">Save and continue</button></form></section>`;
     actions = {};
-    $('#mf').onsubmit = e => { e.preventDefault(); saveMyDetails(e.target, m, e.submitter, () => render()); };
+    $('#mf').onsubmit = e => { e.preventDefault(); const form = e.target, more = readMore(form, m, qs);
+        saveMyDetails(form, m, e.submitter, async () => {
+            if (Object.keys(more).length) { const saved = await api.updateMyAnswers(more).catch(err => { toast(err.message, true); return {}; }); state.me.form_answers = { ...(state.me.form_answers || {}), ...saved }; }
+            render(); }); };
 }
 
 function rulesSheet(m, done) {
