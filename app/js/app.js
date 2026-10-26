@@ -1177,12 +1177,18 @@ const evtMulti = e => !!e.ends_at && new Date(e.starts_at).toDateString() !== ne
 const evtDays = e => Math.round((new Date(new Date(e.ends_at).toDateString()) - new Date(new Date(e.starts_at).toDateString())) / 864e5) + 1;
 function evtWhen(e, short = false) {
     const wd = iso => tfmt(iso, { weekday: 'short' });
-    if (evtMulti(e)) return short ? `${wd(e.starts_at)}, ${evtTime(e.starts_at)} → ${wd(e.ends_at)}, ${evtTime(e.ends_at)} · ${evtDays(e)} days`
+    if (evtMulti(e)) return short ? `${wd(e.starts_at)} ${evtTime(e.starts_at)} → ${wd(e.ends_at)} ${evtTime(e.ends_at)}`
         : `${tfmt(e.starts_at, { weekday: 'short', day: 'numeric', month: 'short' })}, ${evtTime(e.starts_at)} → ${tfmt(e.ends_at, { weekday: 'short', day: 'numeric', month: 'short' })}, ${evtTime(e.ends_at)}`;
-    const day = short ? wd(e.starts_at) : tfmt(e.starts_at, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    return `${day}, ${evtTime(e.starts_at)}${e.ends_at ? ' – ' + evtTime(e.ends_at) : ''}`;
+    const day = short ? wd(e.starts_at) + ',' : tfmt(e.starts_at, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    return `${day}${short ? '' : ','} ${evtTime(e.starts_at)}${e.ends_at ? ' – ' + evtTime(e.ends_at) : ''}`;
 }
-const evtDay = iso => `<span class="evt-d"><i>${tfmt(iso, { month: 'short' }).toUpperCase()}</i><b>${tfmt(iso, { day: 'numeric' })}</b></span>`;
+const evtDay = iso => `<span class="evt-d"><i>${tfmt(iso, { month: 'short' }).toUpperCase()}</i><b>${tfmt(iso, { day: 'numeric' })}</b><em>${tfmt(iso, { weekday: 'short' }).toUpperCase()}</em></span>`;
+/* the small line above an event's name, like the website: TAG · 2 DAYS */
+const evtEyebrow = e => { const t = [e.tag, evtMulti(e) ? `${evtDays(e)} days` : ''].filter(Boolean); return t.length ? `<span class="evt-eyebrow">${esc(t.join(' · '))}</span>` : ''; };
+const EVT_ICON = { clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>', pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>' };
+/* slots left (when the event has a limit) */
+const evtSlots = (e, n) => { if (!e.capacity) return ''; const left = Math.max(e.capacity - n, 0), p = Math.min(n / e.capacity, 1);
+    return `<span class="evt-slots ${p >= 1 ? 'full' : p >= .6 ? 'mid' : ''}"><span><b>${left}</b> of ${e.capacity} slots left</span><i><i style="width:${Math.round(p * 100)}%"></i></i></span>`; };
 const evtTile = e => `<span class="evt-tile${e.status === 'cancelled' ? ' off' : ''}${evtMulti(e) ? ' multi' : ''}">${evtDay(e.starts_at)}${evtMulti(e) ? `<span class="evt-arr" aria-label="to">↓</span>${evtDay(e.ends_at)}` : ''}</span>`;
 const mapsUrl = e => e.map_url || (e.location ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(e.location) : '');
 const toLocalInput = iso => { if (!iso) return ''; const d = new Date(iso); return new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16); };
@@ -1213,8 +1219,9 @@ function eventCard(e, d) {
     const n = c.going + c.guests;
     return `<button class="card tap evt-card${e.status === 'cancelled' ? ' cancelled' : ''}" data-act="evt" data-id="${e.id}">
         ${evtTile(e)}
-        <span class="grow"><b>${esc(e.title)}</b><span class="small muted">${esc(evtWhen(e, true))}</span>${e.location ? `<span class="small muted">📍 ${esc(e.location)}</span>` : ''}
-            <span class="evt-meta">${e.status === 'cancelled' ? '<span class="badge">Cancelled</span>' : `${n ? faceStack(c.faces, c.going - c.faces.length) : ''}<span class="small muted">${n ? `${n} ${evtPast(e) ? 'went' : 'going'}` : evtPast(e) ? (e.tag ? esc(e.tag) : 'Past event') : 'Be the first to join'}${c.maybe ? ` · ${c.maybe} maybe` : ''}</span>`}</span></span>
+        <span class="grow">${evtEyebrow(e)}<b>${esc(e.title)}</b><span class="evt-fact">${EVT_ICON.clock}${esc(evtWhen(e, true))}</span>${e.location ? `<span class="evt-fact">${EVT_ICON.pin}${esc(e.location)}</span>` : ''}
+            ${e.status !== 'cancelled' && !evtPast(e) ? evtSlots(e, n) : ''}
+            <span class="evt-meta">${e.status === 'cancelled' ? '<span class="badge">Cancelled</span>' : `${n ? faceStack(c.faces, c.going - c.faces.length) : ''}<span class="small muted">${n ? `${n} ${evtPast(e) ? 'went' : 'going'}` : evtPast(e) ? 'Past event' : 'Be the first to join'}${c.maybe ? ` · ${c.maybe} maybe` : ''}</span>`}</span></span>
         ${me ? `<span class="evt-me ${me.status}">${RSVP_TXT[me.status]}</span>` : ''}</button>`;
 }
 async function eventPage(e) {
@@ -1229,10 +1236,11 @@ async function eventPage(e) {
     app.innerHTML = top('Events') + `
         <a class="back-link" href="#events">‹ All events</a>
         <section class="card evt-hero${live ? '' : ' cancelled'}">
-            <div class="row" style="align-items:flex-start">${evtTile(e)}<span class="grow"><h2 class="evt-title">${esc(e.title)}</h2>${!live ? '<span class="badge">Cancelled</span>' : past ? '<span class="badge">Ended</span>' : ''}</span></div>
+            <div class="row" style="align-items:flex-start">${evtTile(e)}<span class="grow">${evtEyebrow(e)}<h2 class="evt-title">${esc(e.title)}</h2>${!live ? '<span class="badge">Cancelled</span>' : past ? '<span class="badge">Ended</span>' : ''}</span></div>
             <div class="evt-facts">
                 ${evtMulti(e) ? `<p><span>🗓</span><span class="evt-span"><span><b>Starts</b>${esc(tfmt(e.starts_at, { weekday: 'long', day: 'numeric', month: 'long' }))}, ${esc(evtTime(e.starts_at))}</span><span><b>Ends</b>${esc(tfmt(e.ends_at, { weekday: 'long', day: 'numeric', month: 'long' }))}, ${esc(evtTime(e.ends_at))}</span><span class="muted">${evtDays(e)} days</span></span></p>` : `<p><span>🗓</span>${esc(evtWhen(e))}</p>`}
                 ${e.location ? `<p><span>📍</span><span>${esc(e.location)}${mapsUrl(e) ? ` · <a href="${esc(mapsUrl(e))}" target="_blank" rel="noopener">Open in Maps</a>` : ''}</span></p>` : ''}
+                ${live && !past && e.capacity ? `<p><span>🎟</span>${evtSlots(e, going.length + guests)}</p>` : ''}
                 ${e.call_link ? `<p><span>📞</span><a href="${esc(e.call_link)}" target="_blank" rel="noopener">Join the call</a></p>` : ''}
                 ${e.reminder_minutes != null ? `<p><span>⏰</span>Reminder ${esc(REMINDERS.find(r => r[0] === e.reminder_minutes)?.[1].toLowerCase() || '')} for people going</p>` : ''}
             </div>
@@ -1316,9 +1324,9 @@ function eventForm(e = null) {
         <label>Call link <span class="hint">(optional, WhatsApp or Meet)</span><input name="call_link" type="url" inputmode="url" placeholder="https://call.whatsapp.com/…" value="${esc(r.call_link || '')}"></label>
         <label>Reminder<select name="reminder">${REMINDERS.map(([v, t]) => `<option value="${v ?? ''}"${v === r.reminder_minutes ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
         <div class="grid2"><label>Tag <span class="hint">(optional)</span><select name="tag_pick">${['', ...EVT_TAGS, 'Custom'].map(t => `<option value="${esc(t)}"${t === tagPick ? ' selected' : ''}>${t ? esc(t) : 'No tag'}</option>`).join('')}</select></label>
-            <label>Seats <span class="hint">(optional)</span><input name="capacity" type="number" inputmode="numeric" min="1" max="10000" placeholder="No limit" value="${r.capacity || ''}"></label></div>
+            <label>Slots <span class="hint">(optional)</span><input name="capacity" type="number" inputmode="numeric" min="1" max="10000" placeholder="No limit" value="${r.capacity || ''}"></label></div>
         <label id="tag-custom"${tagPick === 'Custom' ? '' : ' hidden'}>Custom tag<input name="tag" maxlength="40" placeholder="e.g. Night Ride" value="${esc(tagPick === 'Custom' ? r.tag || '' : '')}"></label>
-        <label class="switch"><span>Show on roninwb.in<span class="hint" style="display:block">Title, date, place and seats left appear on the website's Events</span></span><input type="checkbox" name="on_website"${r.on_website !== false ? ' checked' : ''}></label>
+        <label class="switch"><span>Show on roninwb.in<span class="hint" style="display:block">Title, date, place and slots left appear on the website's Events</span></span><input type="checkbox" name="on_website"${r.on_website !== false ? ' checked' : ''}></label>
         <label class="switch"><span>Allow guests<span class="hint" style="display:block">People can bring one additional guest</span></span><input type="checkbox" name="allow_guests"${r.allow_guests ? ' checked' : ''}></label>
         <button class="btn block">${e ? 'Save changes' : 'Publish event'}</button>
         ${e ? '' : '<p class="small muted" style="text-align:center">Every member gets a notification.</p>'}</form>`, body => {

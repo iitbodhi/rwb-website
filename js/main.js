@@ -121,8 +121,8 @@ function slotsHTML(row) {
     const total = +(row.totalslots || 0), filled = +(row.filledslots || 0);
     if (!total) return '';
     const p = Math.min(filled / total, 1), cls = p >= 1 ? 'full' : p >= .6 ? 'mid' : '';
-    const label = p >= 1 ? 'Seats full' : p >= .6 ? 'Filling fast' : 'Seats available';
-    return `<div class="slots ${cls}"><span><b>${Math.max(total - filled, 0)}</b> of ${total} seats left</span><em>${label}</em><div class="slots-bar"><i style="width:${Math.round(p * 100)}%"></i></div></div>`;
+    const label = p >= 1 ? 'Slots full' : p >= .6 ? 'Filling fast' : 'Slots available';
+    return `<div class="slots ${cls}"><span><b>${Math.max(total - filled, 0)}</b> of ${total} slots left</span><em>${label}</em><div class="slots-bar"><i style="width:${Math.round(p * 100)}%"></i></div></div>`;
 }
 const dayChip = d => `<span class="ev-day"><small>${esc(d.m)}</small><b>${esc(d.d)}</b><em>${esc(d.w)}</em></span>`;
 function evCal(r) {

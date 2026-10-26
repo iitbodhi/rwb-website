@@ -740,6 +740,18 @@ body:has(#app .btn.fab) .pookie-fab{bottom:calc(var(--tab-h) + 82px + env(safe-a
 .evt-tile.multi .evt-d{border-radius:12px}
 .evt-tile.multi b{font-size:1.25rem;line-height:1.2}
 .evt-tile.off .evt-arr{color:var(--muted)}
+.evt-d em{font:700 .55rem/1 var(--body);font-style:normal;letter-spacing:.1em;color:var(--muted);padding:0 0 5px}
+.evt-tile.multi .evt-d em{padding-bottom:4px}
+.evt-eyebrow{display:block;font:700 .7rem/1.2 var(--body);letter-spacing:.09em;text-transform:uppercase;color:var(--orange);margin-bottom:2px}
+.evt-card.cancelled .evt-eyebrow,.evt-tile.off + .grow .evt-eyebrow{color:var(--muted)}
+.evt-fact{display:flex;align-items:flex-start;gap:6px;font-size:.86rem;color:var(--muted);line-height:1.35}
+.evt-fact svg{flex:none;width:15px;height:15px;margin-top:2px;fill:none;stroke:var(--orange);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.evt-slots{display:grid;gap:4px;font-size:.82rem;color:var(--muted);margin-top:4px;width:100%}
+.evt-slots b{color:var(--ink)}
+.evt-slots > i{display:block;height:5px;border-radius:3px;background:var(--paper-2);overflow:hidden}
+.evt-slots > i > i{display:block;height:100%;background:#2f9e5b}
+.evt-slots.mid > i > i{background:#d9a21b}.evt-slots.full > i > i{background:#c0392b}
+.evt-facts .evt-slots{margin-top:0}
 .evt-d i{font:700 .62rem/1 var(--body);font-style:normal;letter-spacing:.08em;color:#fff;background:var(--orange);padding:5px 0 4px}
 .evt-d b{font:800 1.45rem/1.25 var(--display);padding:3px 0 4px}
 .evt-tile.off i{background:var(--muted)}
@@ -784,6 +796,7 @@ body:has(#app .btn.fab) .pookie-fab{bottom:calc(var(--tab-h) + 82px + env(safe-a
 .evt-mini .evt-d{border-radius:10px;box-shadow:none}
 .evt-mini .evt-tile b{font-size:1.1rem}
 .evt-mini .evt-tile i{font-size:.54rem;padding:3px 0}
+.evt-mini .evt-d em{display:none}
 .banner.evt-banner .grow{display:grid;gap:1px}
 .evt-form .evt-name{font:700 1.2rem var(--body);border:0;border-bottom:1.5px solid var(--line);border-radius:0;padding:10px 2px;background:transparent}
 .evt-form textarea{min-height:64px}
