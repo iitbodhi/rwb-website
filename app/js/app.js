@@ -1236,10 +1236,13 @@ async function eventPage(e) {
     app.innerHTML = top('Events') + `
         <a class="back-link" href="#events">‹ All events</a>
         <section class="card evt-hero${live ? '' : ' cancelled'}">
-            <div class="row" style="align-items:flex-start">${evtTile(e)}<span class="grow">${evtEyebrow(e)}<h2 class="evt-title">${esc(e.title)}</h2>${!live ? '<span class="badge">Cancelled</span>' : past ? '<span class="badge">Ended</span>' : ''}</span></div>
+            <div class="evt-head">${evtTile(e)}<div class="evt-head-main">${evtEyebrow(e)}<h2 class="evt-title">${esc(e.title)}</h2>${!live ? '<span class="badge">Cancelled</span>' : past ? '<span class="badge">Ended</span>' : ''}
+                <div class="evt-when">${evtMulti(e)
+                    ? `<div><span>Starts</span><b>${esc(tfmt(e.starts_at, { weekday: 'short', day: 'numeric', month: 'short' }))}</b><em>${esc(evtTime(e.starts_at))}</em></div><div><span>Ends</span><b>${esc(tfmt(e.ends_at, { weekday: 'short', day: 'numeric', month: 'short' }))}</b><em>${esc(evtTime(e.ends_at))}</em></div>`
+                    : `<div><span>When</span><b>${esc(tfmt(e.starts_at, { weekday: 'short', day: 'numeric', month: 'short' }))}</b><em>${esc(evtTime(e.starts_at))}${e.ends_at ? ' – ' + esc(evtTime(e.ends_at)) : ''}</em></div>`}</div>
+                ${e.location ? `<div class="evt-place">${EVT_ICON.pin}<span><b>${esc(e.location)}</b>${mapsUrl(e) ? `<a href="${esc(mapsUrl(e))}" target="_blank" rel="noopener">Open in Maps ↗</a>` : ''}</span></div>` : ''}
+            </div></div>
             <div class="evt-facts">
-                ${evtMulti(e) ? `<p><span>🗓</span><span class="evt-span"><span><b>Starts</b>${esc(tfmt(e.starts_at, { weekday: 'long', day: 'numeric', month: 'long' }))}, ${esc(evtTime(e.starts_at))}</span><span><b>Ends</b>${esc(tfmt(e.ends_at, { weekday: 'long', day: 'numeric', month: 'long' }))}, ${esc(evtTime(e.ends_at))}</span><span class="muted">${evtDays(e)} days</span></span></p>` : `<p><span>🗓</span>${esc(evtWhen(e))}</p>`}
-                ${e.location ? `<p><span>📍</span><span>${esc(e.location)}${mapsUrl(e) ? ` · <a href="${esc(mapsUrl(e))}" target="_blank" rel="noopener">Open in Maps</a>` : ''}</span></p>` : ''}
                 ${live && !past && e.capacity ? `<p><span>🎟</span>${evtSlots(e, going.length + guests)}</p>` : ''}
                 ${e.call_link ? `<p><span>📞</span><a href="${esc(e.call_link)}" target="_blank" rel="noopener">Join the call</a></p>` : ''}
                 ${e.reminder_minutes != null ? `<p><span>⏰</span>Reminder ${esc(REMINDERS.find(r => r[0] === e.reminder_minutes)?.[1].toLowerCase() || '')} for people going</p>` : ''}
