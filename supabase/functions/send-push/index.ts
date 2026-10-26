@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
     for (let i = 0; i < subs.length; i += 50) {          // 50 at a time
       await Promise.all(subs.slice(i, i + 50).map(async (s) => {
         try {
-          await webpush.sendNotification(s, payload, { TTL: 60 * 60 * 24, urgency: "normal" });
+          await webpush.sendNotification(s, payload, job.urgent ? { TTL: 60 * 60, urgency: "high" } : { TTL: 60 * 60 * 24, urgency: "normal" });   // SOS: delivered at once, even to sleeping phones
           sent++;
         } catch (e) {
           const code = (e as { statusCode?: number }).statusCode;

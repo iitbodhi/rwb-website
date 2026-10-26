@@ -1,6 +1,6 @@
 /* RWB App service worker: keeps the app shell available offline and loads it fast.
    Bump VERSION whenever app files change so phones pick up the new version. */
-const VERSION = 'rwb-app-v85';
+const VERSION = 'rwb-app-v86';
 const SHELL = ['./', 'index.html', 'config.js', 'css/app.css', 'js/app.js', 'js/api.js', '../js/data.js', '../js/terms.js',
     'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
@@ -37,10 +37,17 @@ self.addEventListener('fetch', e => {
 /* ---------- push notifications ---------- */
 self.addEventListener('push', e => {
     let d = {}; try { d = e.data ? e.data.json() : {}; } catch { d = { title: 'RWB', body: e.data && e.data.text() }; }
-    e.waitUntil(self.registration.showNotification(d.title || 'RWB', {
-        body: d.body || '', tag: d.tag, data: { url: d.url || '#home' },
-        icon: 'icons/icon-192.png', badge: 'icons/badge-96.png'
-    }));
+    const sos = !!d.sos;
+    e.waitUntil(Promise.all([
+        self.registration.showNotification(d.title || 'RWB', {
+            body: d.body || '', tag: sos ? 'rwb-sos' : d.tag, data: { url: d.url || '#home' },
+            icon: 'icons/icon-192.png', badge: 'icons/badge-96.png',
+            /* SOS: long strong vibration, stays on screen until tapped, alerts again even if one is showing */
+            ...(sos ? { vibrate: [900, 250, 900, 250, 900, 250, 900, 250, 900, 250, 900, 250, 900], requireInteraction: true, renotify: true, silent: false } : {})
+        }),
+        /* the RWB App is open: it plays the 10-second siren */
+        sos ? clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => list.forEach(c => c.postMessage({ type: 'sos', title: d.title, body: d.body }))) : null
+    ]));
 });
 self.addEventListener('notificationclick', e => {
     e.notification.close();

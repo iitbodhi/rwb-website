@@ -91,6 +91,13 @@ async function supabaseApi(url, key) {
         leaveRwb: async note => must(await sb.rpc('leave_rwb', { p_note: note || null })),
         rwbAdmins: async () => must(await sb.rpc('rwb_admins')),
         joinHelpAdmins: async () => must(await sb.rpc('join_help_admins')),
+        trackStart: async (lat, lng, acc, hours, eventId) => must(await sb.rpc('track_start', { p_lat: lat, p_lng: lng, p_acc: acc, p_hours: hours, p_event: eventId || null })),
+        trackPing: async (lat, lng, acc, spd, hdg) => must(await sb.rpc('track_ping', { p_lat: lat, p_lng: lng, p_acc: acc, p_spd: spd, p_hdg: hdg })),
+        trackStop: async () => must(await sb.rpc('track_stop')),
+        trackView: async () => must(await sb.rpc('track_view')),
+        trackSos: async (lat, lng, acc) => must(await sb.rpc('track_sos', { p_lat: lat, p_lng: lng, p_acc: acc })),
+        trackSosResolve: async id => must(await sb.rpc('track_sos_resolve', { p_id: id })),
+        gpsBoard: async () => must(await sb.rpc('gps_board')),
         findMyEmail: async (phone, vrn) => must(await sb.rpc('find_my_email', { p_phone: phone, p_vrn: vrn })),
         claimMembership: async (phone, vrn, dob) => must(await sb.rpc('claim_membership', { p_phone: phone, p_vrn: vrn, p_dob: dob })),
         updateMyAnswers: async answers => { const r = await sb.rpc('update_my_answers', { p_answers: answers }); if (r.error && /could not find|function/i.test(r.error.message || '')) throw new Error('Please ask an RWB admin to run setup file 32 first.'); return must(r); },
@@ -439,6 +446,19 @@ function demoApi() {
         claimMembership: (phone, vrn, dob) => { const p = String(phone).replace(/\D/g, '').slice(-10), m = db.members.find(x => x.phone === p);
             if (!m || m.dob !== dob) return wait({ ok: false });
             return wait({ ok: true, name: m.full_name.split(' ')[0], moved: !!m.user_id }); },
+        /* Track demo: a few sample riders around Kolkata, plus you when sharing */
+        trackStart: (lat, lng, acc, hours) => { db.track = { lat, lng, acc, at: new Date().toISOString(), since: new Date().toISOString(), until: new Date(Date.now() + hours * 36e5).toISOString() }; save(); return wait(db.track.until); },
+        trackPing: (lat, lng, acc, spd) => { if (!db.track) return wait('stopped'); Object.assign(db.track, { lat, lng, acc, spd, at: new Date().toISOString() }); save(); return wait('ok'); },
+        trackStop: () => { db.track = null; save(); return wait('stopped'); },
+        trackView: () => { const t = Date.now(), ago = s => new Date(t - s * 1000).toISOString(), m = me();
+            const riders = [{ id: 2, name: 'Arjun Sen', nick: 'Sultan', lat: 22.5850, lng: 88.4170, spd: 14, at: ago(20) }, { id: 4, name: 'Rahul Ghosh', nick: 'Rocket', lat: 22.6420, lng: 88.4310, spd: 0, at: ago(400) }, { id: 3, name: 'Priya Dutta', lat: 22.5000, lng: 88.3600, spd: 9, at: ago(45), event_id: 501 }]
+                .map(r => ({ ...r, avatar: null, role: 'member', phone: ['superadmin', 'admin', 'coordinator'].includes(m.role) ? '90000000' + String(r.id).padStart(2, '0') : null, me: false }));
+            if (db.track && Date.parse(db.track.until) > t) riders.push({ id: m.id, name: m.full_name, nick: m.nickname, avatar: m.avatar_url, ...db.track, me: true, phone: null });
+            const sos = (db.sos || []).filter(s => !s.resolved).map(s => ({ ...s, name: m.full_name, avatar: m.avatar_url, me: true }));
+            return wait({ riders, sos, staff: ['superadmin', 'admin', 'coordinator'].includes(m.role), now: new Date().toISOString() }); },
+        trackSos: (lat, lng, acc) => { db.sos = [{ id: Date.now(), lat, lng, acc, at: new Date().toISOString() }]; save(); return wait(db.sos[0].id); },
+        trackSosResolve: id => { (db.sos || []).forEach(s => { if (s.id === id) s.resolved = true; }); save(); return wait('done'); },
+        gpsBoard: () => wait([{ member_id: 2, full_name: 'Arjun Sen', nickname: 'Sultan', km: 412.6, rides: 9 }, { member_id: 3, full_name: 'Priya Dutta', km: 233.1, rides: 5 }, { member_id: 4, full_name: 'Rahul Ghosh', nickname: 'Rocket', km: 188.4, rides: 4 }, { member_id: 1, full_name: me().full_name, km: 96.2, rides: 2, is_me: true }, { member_id: 5, full_name: 'Sourav Paul', km: 41.0, rides: 1 }]),
         joinHelpAdmins: () => wait(db.members.filter(m => ['superadmin', 'admin'].includes(m.role) && (!m.status || m.status === 'active')).map(m => ({ first_name: (m.nickname || m.full_name).split(' ')[0], phone: m.phone }))),
         rwbAdmins: () => wait(db.members.filter(m => ['superadmin', 'admin'].includes(m.role) && (!m.status || m.status === 'active')).map(m => ({ full_name: m.full_name, nickname: m.nickname, phone: m.phone, role: m.role }))),
         async boards() {

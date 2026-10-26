@@ -152,7 +152,7 @@ function mileageStats(logs) {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { videos: viewVideos, docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, crew: viewCrew, events: viewEvents, terms: viewTerms };
+const ROUTES = { videos: viewVideos, docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, crew: viewCrew, events: viewEvents, terms: viewTerms, track: viewTrack };
 /* roninwb.in/app/#terms: Me screen with the Terms & Conditions open, ready to agree */
 function viewTerms() {
     history.replaceState(null, '', '#me'); document.body.dataset.route = 'me';
@@ -188,10 +188,12 @@ const initials = m => (m?.full_name || '?').split(/\s+/).slice(0, 2).map(w => w[
 /* profile photo if the member added one, otherwise their initials */
 const face = (m, cls = 'avatar') => `<span class="${cls}">${m?.avatar_url ? `<img src="${esc(m.avatar_url)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<i>${esc(initials(m))}</i></span>`;
 const DOC_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/><path d="M8 13.5h8M8 16.5h5"/></svg>';
+const CREW_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19.5c.6-3.3 3-5 6-5s5.4 1.7 6 5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.4.2 4 1.7 4.5 4.4"/></svg>';
 const PLAY_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="4"/><path d="M10 9.2v5.6l4.8-2.8z" fill="currentColor"/></svg>';
 const docsAlert = () => (state.docs || []).some(d => docStatus(d).level !== 'ok' && docStatus(d).level !== 'none');
 const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1>${right}
     <a class="icon-btn bell vid-btn" href="#videos" aria-label="How-to videos">${PLAY_ICON}</a>
+    <a class="icon-btn bell crew-btn" href="#crew" aria-label="RWB members and leaderboards">${CREW_ICON}</a>
     <a class="icon-btn bell" href="#news" aria-label="Announcements${unread() ? ' (new)' : ''}">${BELL}${unread() ? '<i class="dot"></i>' : ''}</a>
     <a href="#me" aria-label="My profile" class="avatar-link">${face(state.me)}</a></header>`;
 
@@ -1253,6 +1255,7 @@ async function eventPage(e) {
                 ${e.allow_guests && me?.status === 'going' ? `<label class="switch" style="margin-top:10px">Bringing a guest (+1)<input type="checkbox" id="evt-guest"${me.guests ? ' checked' : ''}></label>` : ''}` : ''}
             <div class="btns evt-actions"><button class="btn sm ghost" data-act="evt-share">Share</button>${live && !past ? `<a class="btn sm ghost" href="${esc(gcalUrl(e))}" target="_blank" rel="noopener">Add to calendar</a>` : ''}</div>
         </section>
+        ${rideLive(e)}
         <section class="section"><h2>Who's coming</h2><div class="card">${people.length ? ppl(going, 'Going') + ppl(maybe, 'Maybe') + ppl(no, "Can't go") : '<p class="muted small">No responses yet.</p>'}</div></section>
         <section class="section" id="exp-sec"><h2>Expenses</h2><div id="exp-body">${inGroup || mod ? '<p class="muted small">Loading…</p>' : `<div class="card empty"><b>Split costs with the group</b>Respond Going or Maybe to see and add shared expenses for this event.</div>`}</div></section>
         ${mod ? `<section class="section"><h2>Organiser</h2><div class="btns">${live ? '<button class="btn ghost" data-act="evt-edit">Edit</button><button class="btn ghost" data-act="evt-cancel">Cancel event</button>' : ''}<button class="btn danger" data-act="evt-del">Delete</button></div></section>` : ''}`;
@@ -1260,6 +1263,7 @@ async function eventPage(e) {
         rsvp: b => busy(b, async () => { await api.rsvp(e.id, b.dataset.s, b.dataset.s === 'going' ? (me?.guests || 0) : 0); await loadEvents(true); toast(b.dataset.s === 'going' ? "You're going 🏍️" : b.dataset.s === 'maybe' ? 'Marked as maybe' : 'Marked as can\'t go'); render(); }),
         'evt-share': () => openWA(waShare(`📅 *${e.title}*\n🗓 ${evtWhen(e)}${e.location ? `\n📍 ${e.location}${mapsUrl(e) ? ' ' + mapsUrl(e) : ''}` : ''}${e.description ? `\n\n${e.description}` : ''}\n\n👉 RSVP in the RWB App: https://roninwb.in/app/#events/${e.id}`)),
         'evt-edit': () => eventForm(e),
+        'evt-track-share': () => shareSheet(e.id, e.title),
         'evt-cancel': b => { if (confirmBox(`Cancel “${e.title}”? Everyone gets a notification.`)) busy(b, async () => { await api.saveEvent({ id: e.id, status: 'cancelled' }); await loadEvents(true); toast('Event cancelled'); render(); }); },
         'evt-del': b => { if (confirmBox(`Delete “${e.title}” with its RSVPs and expenses? This can't be undone.`)) busy(b, async () => { await api.deleteEvent(e.id); await loadEvents(true); location.hash = '#events'; toast('Deleted'); }); }
     };
@@ -2595,7 +2599,7 @@ async function drawPushState() {
 
 /* =================== Announcements =================== */
 const STICKY = n => n.kind === 'announcement' || n.kind === 'event';   /* only admins can remove these */
-const KIND_ICON = { event: '📅', announcement: '📣', birthday: '🎂', motomart: '🛒', member: '🏍️', admin: '🛡️', personal: '🙋' };
+const KIND_ICON = { event: '📅', announcement: '📣', birthday: '🎂', motomart: '🛒', member: '🏍️', admin: '🛡️', personal: '🙋', sos: '🆘' };
 function shortAgo(iso) {
     const s = (Date.now() - new Date(iso)) / 1000;
     if (s < 60) return 'now'; if (s < 3600) return Math.floor(s / 60) + 'm'; if (s < 86400) return Math.floor(s / 3600) + 'h';
@@ -2947,32 +2951,47 @@ const MEDAL = ['🥇', '🥈', '🥉'];
 const kmTxt = n => Number(n).toLocaleString('en-IN') + ' km';
 const kmplTxt = v => Number(v).toFixed(1) + ' km/l';
 const BOARDS = {
+    gps: { title: 'GPS Warriors', sub: 'Kilometres ridden while sharing live location with Track', how: 'How to get on it: tap <b>Track</b> (the middle button) → <b>Share</b> before you ride. Every km you ride while sharing counts, checked by GPS.', has: r => r.km > 0, val: r => Number(r.km), big: r => `${Number(r.km).toLocaleString('en-IN', { maximumFractionDigits: r.km < 100 ? 1 : 0 })} km`, small: r => r.rides ? `${r.rides} ride${r.rides === 1 ? '' : 's'}` : '', empty: 'No one yet! Tap Track → Share on your next ride to be the first GPS Warrior.' },
     mileage: { title: 'Mileage Warriors', sub: 'Best average km/l, from full-tank fill-ups', has: r => r.kmpl > 0, val: r => Number(r.kmpl), big: r => kmplTxt(r.kmpl), small: r => r.km ? kmTxt(r.km) : '', empty: 'Add a full-tank fill-up with your Trip A reading to get on this board.' },
     service: { title: 'Service Warriors', sub: 'Most services logged in the app', has: r => r.services > 0, val: r => r.services * 1e5 + (r.last_service ? Date.parse(r.last_service) / 864e5 : 0), big: r => `${r.services} service${r.services === 1 ? '' : 's'}`, small: r => [r.kmpl ? kmplTxt(r.kmpl) : '', r.last_service ? 'last ' + fmtDayMonth(r.last_service) : ''].filter(Boolean).join(' · '), empty: 'Log your services to get on this board.' },
     road: { title: 'Road Warriors', sub: 'Most km on the odometer', has: r => r.km > 0, val: r => r.km, big: r => kmTxt(r.km), small: r => r.kmpl ? kmplTxt(r.kmpl) : '', empty: 'Update your odometer on Home, or add a fill-up or service, to get on this board.' }
 };
 const rankBoard = (rows, key) => rows.filter(BOARDS[key].has).sort((a, b) => BOARDS[key].val(b) - BOARDS[key].val(a) || a.full_name.localeCompare(b.full_name)).map((r, i) => ({ ...r, rank: i + 1 }));
-const CREW_F = all => { const n = all.filter(m => m.on_app).length; return { all: 'Everyone', app: `On app (${n})`, noapp: `Not on app (${all.length - n})` }; };
-async function viewCrew() {
-    const raw = state.board ??= await api.boards().catch(() => api.leaderboard().then(rs => rs.map(r => ({ ...r, services: 0, kmpl: null }))).catch(() => []));
-    let key = 'mileage'; try { key = localStorage.getItem('rwb-board') || 'mileage'; } catch { /* ignore */ }
-    if (!BOARDS[key]) key = 'mileage';
-    const B = BOARDS[key], board = rankBoard(raw, key);
+function boardHtml(key, raw) {
+    const B = BOARDS[key], board = rankBoard(key === 'gps' ? (state.gps || []) : raw, key);
     const me = board.find(r => r.is_me), top3 = board.slice(0, 3), rest = board.slice(3, 6);
     const podium = top3.length ? `<div class="podium">${[top3[1], top3[0], top3[2]].map((r, i) => r ? `<div class="pod p${[2, 1, 3][i]}${r.is_me ? ' me' : ''}">
             ${face(r, 'avatar pod-face')}<span class="pod-medal">${MEDAL[r.rank - 1]}</span><b>${esc(r.nickname || r.full_name.split(' ')[0])}</b><span class="pod-km">${B.big(r)}</span><span class="pod-sub">${esc(B.small(r))}</span></div>` : '<div></div>').join('')}</div>` : '';
-    app.innerHTML = top('RWB') + `
-        <section class="board card">
-            <div class="seg board-seg" role="tablist" aria-label="Leaderboard">${Object.entries(BOARDS).map(([k, b]) => `<button role="tab" aria-selected="${k === key}" data-act="board" data-b="${k}">${b.title.replace(' Warriors', '')}</button>`).join('')}</div>
+    return `<div class="seg board-seg" role="tablist" aria-label="Leaderboard">${Object.entries(BOARDS).map(([k, b]) => `<button role="tab" aria-selected="${k === key}" data-act="board" data-b="${k}">${b.title.replace(' Warriors', '')}</button>`).join('')}</div>
             <div class="row" style="justify-content:space-between;align-items:baseline;margin-bottom:2px"><h2 class="board-title">${B.title}</h2><span class="small muted">${board.length} rider${board.length === 1 ? '' : 's'}</span></div>
-            <p class="small muted" style="margin-bottom:6px">${B.sub}</p>
+            <p class="small muted" style="margin-bottom:6px">${B.sub}</p>${B.how ? `<p class="small board-how">${B.how}</p>` : ''}
             ${board.length ? podium + (rest.length ? `<ol class="board-list" start="4">${rest.map(r => `<li class="${r.is_me ? 'me' : ''}"><span class="rk">${r.rank}</span>${face(r, 'avatar sm')}<span class="grow"><b>${esc(r.full_name)}</b><span class="small muted">${esc(r.bike || '')}</span></span><span class="num km">${B.big(r)}<small>${esc(B.small(r))}</small></span></li>`).join('')}</ol>` : '')
                 + (me && me.rank > 6 ? `<p class="board-me">You're <b>#${me.rank}</b> of ${board.length} with ${B.big(me)}</p>` : '')
                 + (!me ? `<p class="small muted" style="margin-top:10px">${state.me.show_on_leaderboard === false ? 'You\'re hidden from the leaderboards (Me → Privacy).' : B.empty}</p>` : '')
               : `<p class="muted" style="margin-top:8px">${B.empty}</p>`}
-        </section>
+            <p class="board-dots" aria-hidden="true">${Object.keys(BOARDS).map(k => `<i${k === key ? ' class="on"' : ''}></i>`).join('')}</p>`;
+}
+const CREW_F = all => { const n = all.filter(m => m.on_app).length; return { all: 'Everyone', app: `On app (${n})`, noapp: `Not on app (${all.length - n})` }; };
+async function viewCrew() {
+    const raw = state.board ??= await api.boards().catch(() => api.leaderboard().then(rs => rs.map(r => ({ ...r, services: 0, kmpl: null }))).catch(() => []));
+    if (!state.gps || Date.now() - (state.gpsAt || 0) > 120e3) { state.gps = await api.gpsBoard().catch(() => []); state.gpsAt = Date.now(); }
+    state.boardKey = 'gps';   /* GPS Warriors first every time the tab opens */
+    app.innerHTML = top('RWB') + `
+        <section class="board card" id="board">${boardHtml(state.boardKey, raw)}</section>
         <section class="section"><h2>Members</h2><div id="crew-body"><p class="muted">Loading…</p></div></section>`;
-    actions = { 'board-all': () => { state.boardAll = !state.boardAll; viewCrew(); }, board: el => { try { localStorage.setItem('rwb-board', el.dataset.b); } catch { /* ignore */ } state.boardAll = false; viewCrew(); } };
+    const keys = Object.keys(BOARDS);
+    const showBoard = (k, dir = 0) => { state.boardKey = k; const el = $('#board'); if (!el) return; el.innerHTML = boardHtml(k, raw);
+        if (dir) { el.classList.remove('slide-l', 'slide-r'); void el.offsetWidth; el.classList.add(dir > 0 ? 'slide-l' : 'slide-r'); } };
+    actions = { board: el => showBoard(el.dataset.b, Math.sign(keys.indexOf(el.dataset.b) - keys.indexOf(state.boardKey))) };
+    /* swipe left / right to change leaderboard */
+    let sx = null, sy = 0;
+    $('#board').addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+    $('#board').addEventListener('touchend', e => {
+        if (sx == null) return; const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy; sx = null;
+        if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+        const i = keys.indexOf(state.boardKey), j = Math.min(keys.length - 1, Math.max(0, i + (dx < 0 ? 1 : -1)));
+        if (j !== i) showBoard(keys[j], dx < 0 ? 1 : -1);
+    }, { passive: true });
     if (isAdmin()) {   /* admins get their full member tools here too */
         $('#crew-body').id = 'admin-body';
         await adminMembers(); return;
@@ -3075,10 +3094,311 @@ async function boot() {
         api.settings().then(v => { state.settings = v || {}; }).catch(() => { state.settings = {}; });
         await load.news(true);
         await render();
+        if (!trk.resumed) { trk.resumed = true; resumeShare(); }
     } catch (e) {
         tabbar.hidden = true;
         app.innerHTML = `<section class="signin"><img src="icons/logo-128.png" alt=""><div><h1>Can't connect</h1><p class="lead">${esc(e.message || 'Please check your internet connection.')}</p></div><button class="btn block" onclick="location.reload()">Try again</button></section>`;
     } finally { hideBoot(); }
+}
+
+
+/* =================== Track: live location on rides, SOS, GPS Warriors =================== */
+/* Sharing: the phone sends its position adaptively (often while moving, rarely when stopped) and keeps the screen awake.
+   Inside the RWB Android app the native background plugin is used instead, so it keeps going with the screen locked.
+   View: a map of everyone sharing (refreshed every 15 s while it's open). SOS: an urgent alert to the RWB team. */
+const LEAFLET = 'vendor/leaflet/';   /* Leaflet 1.9.4 (BSD-2), bundled with the app */
+const TRACK_KEY = 'rwb-track';
+const TRACK_HOURS = [[1, '1 hour'], [4, '4 hours'], [8, '8 hours'], [12, 'Until I stop']];
+const trk = { watch: null, native: null, last: null, sent: null, sentAt: 0, until: 0, event: null, lock: null, tick: null, map: null, L: null, markers: new Map(), sosMarkers: new Map(), data: null, poll: null, fitted: false, filter: null };
+const NativeGeo = () => window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins?.BackgroundGeolocation;
+const trackSaved = () => { try { return JSON.parse(localStorage.getItem(TRACK_KEY) || 'null'); } catch { return null; } };
+const trackSave = v => { try { v ? localStorage.setItem(TRACK_KEY, JSON.stringify(v)) : localStorage.removeItem(TRACK_KEY); } catch { /* ignore */ } };
+const sharing = () => trk.until > Date.now();
+const distM = (a, b) => { const R = 6371000, r = x => x * Math.PI / 180, dLa = r(b.lat - a.lat), dLo = r(b.lng - a.lng);
+    return 2 * R * Math.asin(Math.sqrt(Math.sin(dLa / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLo / 2) ** 2)); };
+const leftTxt = until => { const m = Math.max(0, Math.round((until - Date.now()) / 6e4)); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min left` : `${m} min left`; };
+const mapsLink = p => `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`;
+const posOf = p => ({ lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy || 0), spd: p.coords.speed ?? null, hdg: p.coords.heading ?? null, t: p.timestamp || Date.now() });
+
+/* one GPS fix (asks for permission the first time) */
+function gpsFix(maxAge = 15000) {
+    return new Promise((ok, no) => {
+        if (!('geolocation' in navigator)) return no(new Error('This phone can\'t share its location.'));
+        navigator.geolocation.getCurrentPosition(p => ok(posOf(p)), e => no(geoError(e)), { enableHighAccuracy: true, timeout: 20000, maximumAge: maxAge });
+    });
+}
+function geoError(e) {
+    if (e?.code === 1) { setTimeout(locationHelp, 50); return new Error('Location permission is off for the RWB App'); }
+    if (e?.code === 3) return new Error('No GPS signal yet. Step into the open and try again.');
+    return new Error(e?.message || 'Could not get your location');
+}
+function locationHelp() {
+    openSheet('Allow location', `<p class="small" style="margin-bottom:10px">Track needs your location. It's off for the RWB App right now.</p>
+        <ol class="small help-steps"><li>Open your phone's <b>Settings → Apps</b> (or <b>Chrome → Site settings</b>).</li><li>Find <b>RWB</b> (or <b>roninwb.in</b>) → <b>Permissions → Location</b>.</li><li>Choose <b>Allow</b> (or <b>Allow while using the app</b>), then come back and tap Share again.</li></ol>
+        <p class="small muted" style="margin-top:10px">Also turn on <b>Location / GPS</b> in the quick settings.</p>`);
+}
+
+/* the screen stays awake while sharing (browsers pause GPS when the screen goes off) */
+async function keepAwake(on) {
+    try {
+        if (on && !trk.lock && 'wakeLock' in navigator && document.visibilityState === 'visible') { trk.lock = await navigator.wakeLock.request('screen'); trk.lock.addEventListener('release', () => { trk.lock = null; }); }
+        if (!on && trk.lock) { await trk.lock.release(); trk.lock = null; }
+    } catch { /* not supported */ }
+}
+
+/* send a position when it matters: every 10-20 s while moving, every 60 s when stopped */
+function onFix(p) {
+    trk.last = p;
+    if (!sharing()) return;
+    const now = Date.now(), gap = now - trk.sentAt, moved = trk.sent ? distM(trk.sent, p) : Infinity;
+    const fast = (p.spd ?? 0) > 8, every = fast ? 10000 : 20000;
+    if ((moved >= 30 && gap >= every) || gap >= 60000 || (!trk.sent && p.acc <= 100)) sendFix(p);
+}
+async function sendFix(p) {
+    trk.sent = p; trk.sentAt = Date.now();
+    try { const r = await api.trackPing(p.lat, p.lng, p.acc, p.spd, p.hdg); if (r === 'stopped') stopShare(true); }
+    catch { /* offline: the next fix goes */ }
+}
+function startWatch() {
+    stopWatch();
+    const nat = NativeGeo();
+    if (nat) {   /* the RWB Android app: keeps going with the screen locked (a notification shows while it runs) */
+        nat.addWatcher({ backgroundTitle: 'RWB is sharing your location', backgroundMessage: 'Tap to open the RWB App. Stop sharing in Track.', requestPermissions: true, stale: false, distanceFilter: 25 },
+            (loc, err) => { if (err) { if (err.code === 'NOT_AUTHORIZED') locationHelp(); return; } if (loc) onFix({ lat: loc.latitude, lng: loc.longitude, acc: Math.round(loc.accuracy || 0), spd: loc.speed ?? null, hdg: loc.bearing ?? null, t: loc.time || Date.now() }); })
+            .then(id => { trk.native = id; }).catch(() => {});
+    } else if ('geolocation' in navigator) {
+        trk.watch = navigator.geolocation.watchPosition(p => onFix(posOf(p)), e => { if (e.code === 1) { stopShare(); locationHelp(); } }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 60000 });
+        keepAwake(true);
+    }
+    clearInterval(trk.tick);
+    trk.tick = setInterval(() => {   /* heartbeat + the time limit */
+        if (!sharing()) return stopShare();
+        if (trk.last && Date.now() - trk.sentAt > 60000) sendFix(trk.last);
+        trackBadge();
+    }, 30000);
+    trackBadge();
+}
+function stopWatch() {
+    if (trk.watch != null) { navigator.geolocation.clearWatch(trk.watch); trk.watch = null; }
+    if (trk.native != null) { NativeGeo()?.removeWatcher({ id: trk.native }).catch(() => {}); trk.native = null; }
+    clearInterval(trk.tick); keepAwake(false);
+}
+async function startShare(hours, eventId = null) {
+    const p = await gpsFix(30000);
+    const until = await api.trackStart(p.lat, p.lng, p.acc, hours, eventId);
+    trk.until = Date.parse(until) || Date.now() + hours * 36e5; trk.event = eventId; trk.sent = p; trk.sentAt = Date.now(); trk.last = p;
+    trackSave({ until: trk.until, event: eventId });
+    startWatch();
+    toast(`You're sharing your live location 📍 ${hours >= 12 ? 'until you stop' : 'for ' + TRACK_HOURS.find(h => h[0] === hours)[1]}`);
+}
+async function stopShare(quiet = false) {
+    const was = sharing() || trackSaved();
+    trk.until = 0; trk.event = null; trackSave(null); stopWatch(); trackBadge();
+    if (!quiet && was) { await api.trackStop().catch(() => {}); toast('Stopped sharing your location'); }
+    if (location.hash.startsWith('#track')) refreshTrack();
+}
+/* after reopening the app: carry on sharing if the time isn't up */
+function resumeShare() {
+    const s = trackSaved(); if (!s) return;
+    if (s.until <= Date.now()) { trackSave(null); return; }
+    trk.until = s.until; trk.event = s.event || null; startWatch();
+    gpsFix(60000).then(sendFix).catch(() => {});
+}
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (sharing()) { keepAwake(true); if (trk.watch == null && trk.native == null) startWatch(); gpsFix(20000).then(sendFix).catch(() => {}); }
+    if (location.hash.startsWith('#track')) refreshTrack();
+});
+/* the middle Track button shows a live dot while sharing */
+function trackBadge() { document.getElementById('track-tab')?.classList.toggle('live', sharing()); }
+
+/* ---------- the middle button: Share / View / SOS ---------- */
+document.getElementById('track-tab')?.addEventListener('click', e => { e.preventDefault(); if (state.me) trackMenu(); });
+function trackMenu() {
+    const on = sharing();
+    openSheet('Track', `<div class="trk-menu">
+        <button type="button" class="trk-opt share${on ? ' on' : ''}" data-x="share"><span class="trk-ico">${on ? '🟢' : '📍'}</span><b>${on ? 'Sharing live' : 'Share'}</b><small>${on ? esc(leftTxt(trk.until)) + ' · tap to stop or change' : 'Share your live location'}</small></button>
+        <button type="button" class="trk-opt view" data-x="view"><span class="trk-ico">🗺️</span><b>View</b><small>See riders live on the map</small></button>
+        <button type="button" class="trk-opt sos" data-x="sos"><span class="trk-ico">🆘</span><b>SOS</b><small>Alert the RWB team with your location</small></button></div>`, body => {
+        body.querySelector('[data-x=share]').onclick = () => shareSheet();
+        body.querySelector('[data-x=view]').onclick = () => { closeSheet(); location.hash = '#track'; };
+        body.querySelector('[data-x=sos]').onclick = () => sosSheet();
+    });
+}
+function shareSheet(eventId = null, eventTitle = '') {
+    const on = sharing();
+    openSheet(on ? 'Sharing your location' : 'Share live location', `${on ? `<div class="trk-live"><span class="dot"></span><span class="grow"><b>You're sharing live</b><span class="small muted">${esc(leftTxt(trk.until))}${trk.event ? ' · for an event ride' : ''}</span></span></div>
+            <button class="btn danger block" data-x="stop" style="margin:12px 0 18px">Stop sharing</button><p class="small muted" style="margin-bottom:8px">Or share for:</p>` : `<p class="small muted" style="margin-bottom:12px">Every RWB member on the app can see you on the Track map while you share.${eventTitle ? ` You'll show as riding <b>${esc(eventTitle)}</b>.` : ''}</p>`}
+        <div class="trk-hours">${TRACK_HOURS.map(([h, t]) => `<button type="button" class="chip" data-h="${h}">${t}</button>`).join('')}</div>
+        ${NativeGeo() ? '<p class="small muted" style="margin-top:12px">Keeps sharing with the screen locked. A small notification shows while it runs.</p>'
+            : '<p class="small muted trk-tip" style="margin-top:12px">💡 Keep the RWB App open on your phone mount: we keep the screen awake. If you lock the phone or switch apps, sharing pauses until you come back. Plug in a charger for long rides.</p>'}`, body => {
+        body.querySelector('[data-x=stop]')?.addEventListener('click', e => busy(e.currentTarget, async () => { await stopShare(); closeSheet(); }));
+        body.querySelectorAll('[data-h]').forEach(b => b.onclick = () => busy(b, async () => {
+            await startShare(Number(b.dataset.h), eventId ?? (on ? trk.event : null)); closeSheet();
+            if (!location.hash.startsWith('#track') && !location.hash.startsWith('#events/')) location.hash = '#track'; else refreshTrack();
+        }));
+    });
+}
+
+/* ---------- SOS: press and hold, so it can't go by accident ---------- */
+function sosSheet() {
+    openSheet('SOS', `<p class="small" style="margin-bottom:14px">Sends an <b>urgent alert with your location</b> to every RWB admin and coordinator. Use it only in a real emergency.</p>
+        <button type="button" class="sos-hold" id="sos-hold"><span class="sos-fill"></span><b>Hold for 2 seconds</b><small>to send SOS</small></button>
+        <p class="small muted" style="margin:14px 0 8px">In danger right now? Call <a href="tel:112"><b>112</b></a> (emergency).</p>
+        <div id="sos-admins" class="small muted">Loading the RWB team…</div>`, body => {
+        const b = body.querySelector('#sos-hold'); let t = null;
+        const go = () => { b.classList.remove('holding'); b.disabled = true; b.querySelector('b').textContent = 'Sending…'; sendSos().then(ok => { if (!ok) { b.disabled = false; b.querySelector('b').textContent = 'Hold for 2 seconds'; } }); };
+        const down = e => { e.preventDefault(); if (b.disabled) return; b.classList.add('holding'); navigator.vibrate?.(30); t = setTimeout(go, 2000); };
+        const up = () => { clearTimeout(t); b.classList.remove('holding'); };
+        b.addEventListener('pointerdown', down); ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, up));
+        b.addEventListener('contextmenu', e => e.preventDefault());
+        api.rwbAdmins().then(list => { const el = body.querySelector('#sos-admins'); if (el) el.innerHTML = list.length ? `<div class="group">${list.slice(0, 6).map(a => `<div class="bike-row"><span class="grow"><b>${esc(a.full_name)}</b></span><a class="btn sm ghost" href="tel:+91${esc(a.phone)}">📞 Call</a></div>`).join('')}</div>` : ''; }).catch(() => {});
+    });
+}
+async function sendSos() {
+    let p = trk.last && Date.now() - trk.last.t < 120000 ? trk.last : null;
+    try { p = await gpsFix(30000); } catch (e) { if (!p) { toast(e.message, true); return false; } }
+    try { await api.trackSos(p.lat, p.lng, p.acc); }
+    catch (e) { toast(e.message || 'SOS not sent. Call an admin.', true); return false; }
+    navigator.vibrate?.([200, 100, 200]);
+    closeSheet(); toast('🆘 SOS sent to the RWB team with your location');
+    location.hash = '#track/sos';
+    return true;
+}
+
+/* ---------- the map ---------- */
+let leafletReady = null;
+function loadLeaflet() {
+    if (window.L) return Promise.resolve(window.L);
+    return leafletReady ??= new Promise((ok, no) => {
+        const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = LEAFLET + 'leaflet.min.css'; document.head.append(css);
+        const s = document.createElement('script'); s.src = LEAFLET + 'leaflet.min.js'; s.onload = () => ok(window.L); s.onerror = () => { leafletReady = null; no(new Error('The map could not load. Check your internet.')); }; document.head.append(s);
+    });
+}
+const darkMode = () => document.documentElement.dataset.theme === 'dark' || (document.documentElement.dataset.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+function riderIcon(L, r, sos = false) {
+    const stale = !sos && Date.now() - Date.parse(r.at) > 5 * 6e4;
+    const pic = r.avatar ? `<img src="${esc(r.avatar)}" alt="" onerror="this.remove()">` : '';
+    return L.divIcon({ className: 'trk-pin-wrap', iconSize: [46, 58], iconAnchor: [23, 50],
+        html: `<div class="trk-pin${r.me ? ' me' : ''}${stale ? ' stale' : ''}${sos ? ' sos' : ''}"><span class="trk-face">${pic}<i>${esc(initials({ full_name: r.name }))}</i></span>${sos ? '<em>SOS</em>' : `<em>${esc(r.nick || r.name.split(' ')[0])}</em>`}</div>` });
+}
+async function viewTrack() {
+    const param = state.param || '';
+    trk.filter = /^e\d+$/.test(param) ? Number(param.slice(1)) : null;
+    app.innerHTML = top('Track') + `<section class="trk-wrap">
+        <div id="trk-map" class="trk-map"><p class="muted" style="padding:20px">Loading the map…</p></div>
+        <div class="trk-bar">
+            <div class="trk-status" id="trk-status"></div>
+            <div class="trk-actions"><button class="btn" data-act="trk-share" id="trk-share"></button><button class="btn sos-btn" data-act="trk-sos">🆘 SOS</button></div>
+        </div>
+        <div id="trk-list" class="trk-list"></div></section>`;
+    actions = { 'trk-share': () => shareSheet(trk.filter, trk.filter ? (state.evd?.events || []).find(e => e.id === trk.filter)?.title : ''), 'trk-sos': () => sosSheet(),
+        'trk-all': () => { location.hash = '#track'; }, 'trk-rider': el => openRider(el.dataset.k), 'trk-fit': () => fitAll(true) };
+    trk.fitted = false; trk.sosFocused = false; trk.markers.clear(); trk.sosMarkers.clear(); trk.map = null;
+    let L; try { L = trk.L = await loadLeaflet(); } catch (e) { $('#trk-map').innerHTML = `<p class="warn" style="margin:16px">${esc(e.message)}</p>`; }
+    if (L && $('#trk-map')) {
+        $('#trk-map').innerHTML = '';
+        const map = trk.map = L.map('trk-map', { zoomControl: false, attributionControl: true }).setView([22.5726, 88.3639], 11);
+        L.tileLayer(`https://{s}.basemaps.cartocdn.com/${darkMode() ? 'dark_all' : 'rastertiles/voyager'}/{z}/{x}/{y}{r}.png`, { maxZoom: 19, subdomains: 'abcd',
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>' }).addTo(map);
+        L.control.zoom({ position: 'topright' }).addTo(map);
+        const fit = L.control({ position: 'topright' }); fit.onAdd = () => { const d = L.DomUtil.create('button', 'trk-fit'); d.type = 'button'; d.title = 'Show everyone'; d.innerHTML = '⤢'; d.onclick = () => fitAll(true); return d; }; fit.addTo(map);
+    }
+    await refreshTrack();
+    clearInterval(trk.poll);
+    trk.poll = setInterval(() => { if (!location.hash.startsWith('#track')) return clearInterval(trk.poll); if (document.visibilityState === 'visible') refreshTrack(); }, 15000);
+}
+async function refreshTrack() {
+    if (!$('#trk-status')) return;
+    let d; try { d = trk.data = await api.trackView(); } catch (e) { $('#trk-status').innerHTML = `<span class="warn small">${esc(e.message)}</span>`; return; }
+    const riders = trk.filter ? d.riders.filter(r => r.event_id === trk.filter) : d.riders;
+    const ev = trk.filter ? (state.evd?.events || []).find(e => e.id === trk.filter) : null;
+    $('#trk-status').innerHTML = `${sharing() ? `<span class="trk-live-pill"><span class="dot"></span>You're live · ${esc(leftTxt(trk.until))}</span>` : ''}
+        <span class="small muted">${riders.length ? `${riders.length} rider${riders.length === 1 ? '' : 's'} live${ev ? ` on ${esc(ev.title)}` : ''}` : 'No one is sharing right now'}${d.sos.length ? ` · <b class="sos-txt">${d.sos.length} SOS</b>` : ''}</span>
+        ${trk.filter ? '<button class="linkish small" data-act="trk-all">Show everyone</button>' : ''}`;
+    $('#trk-share').textContent = sharing() ? '🟢 Sharing · Stop / change' : '📍 Share my location';
+    $('#trk-list').innerHTML = [...d.sos.map(s => ({ ...s, k: 's' + s.id, sos: true })), ...riders.map(r => ({ ...r, k: 'r' + r.id }))].map(r => `<button class="trk-row${r.sos ? ' sos' : ''}" data-act="trk-rider" data-k="${r.k}">${face({ full_name: r.name, avatar_url: r.avatar }, 'avatar sm')}
+        <span class="grow"><b>${r.sos ? '🆘 ' : ''}${esc(r.name)}${r.me ? ' <span class="muted">(you)</span>' : ''}</b><span class="small muted">${r.sos ? 'SOS ' + timeAgo(r.at) : `${r.spd > 1 ? Math.round(r.spd * 3.6) + ' km/h · ' : ''}updated ${timeAgo(r.at)}`}${trk.last && !r.me ? ' · ' + kmAway(r) : ''}</span></span><span class="chev">›</span></button>`).join('');
+    drawMarkers(riders, d.sos);
+    if (!trk.fitted && trk.map) { trk.fitted = true; fitAll(false); }
+    if (state.param === 'sos' && d.sos[0] && trk.map && !trk.sosFocused) { trk.sosFocused = true; trk.map.setView([d.sos[0].lat, d.sos[0].lng], 15); }
+    if (d.staff) alertNewSos(d.sos);
+}
+const kmAway = r => { const m = distM(trk.last, r); return m < 1000 ? `${Math.round(m)} m away` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km away`; };
+function drawMarkers(riders, sos) {
+    const L = trk.L, map = trk.map; if (!L || !map) return;
+    const sync = (store, list, key, isSos) => {
+        const keep = new Set();
+        list.forEach(r => { const k = key(r); keep.add(k); let m = store.get(k);
+            if (!m) { m = L.marker([r.lat, r.lng], { icon: riderIcon(L, r, isSos), zIndexOffset: isSos ? 1000 : r.me ? 500 : 0 }).addTo(map); m.on('click', () => openRider((isSos ? 's' : 'r') + (isSos ? r.id : r.id))); store.set(k, m); }
+            else { m.setLatLng([r.lat, r.lng]); m.setIcon(riderIcon(L, r, isSos)); } });
+        [...store.keys()].forEach(k => { if (!keep.has(k)) { map.removeLayer(store.get(k)); store.delete(k); } });
+    };
+    sync(trk.markers, riders, r => r.id, false); sync(trk.sosMarkers, sos, s => s.id, true);
+}
+function fitAll(animate) {
+    const map = trk.map, d = trk.data; if (!map || !d) return;
+    const pts = [...(trk.filter ? d.riders.filter(r => r.event_id === trk.filter) : d.riders), ...d.sos].map(r => [r.lat, r.lng]);
+    if (trk.last) pts.push([trk.last.lat, trk.last.lng]);
+    if (!pts.length) { gpsFix(60000).then(p => { trk.last = p; map.setView([p.lat, p.lng], 13); }).catch(() => {}); return; }
+    if (pts.length === 1) map.setView(pts[0], 14, { animate }); else map.fitBounds(pts, { padding: [40, 40], maxZoom: 15, animate });
+}
+function openRider(k) {
+    const d = trk.data; if (!d) return;
+    const r = k[0] === 's' ? d.sos.find(s => 's' + s.id === k) : d.riders.find(x => 'r' + x.id === k); if (!r) return;
+    const sos = k[0] === 's', mine = r.me;
+    trk.map?.setView([r.lat, r.lng], Math.max(trk.map.getZoom(), 14));
+    openSheet(sos ? '🆘 SOS' : r.name, `<div class="vc-who" style="margin-bottom:12px">${face({ full_name: r.name, avatar_url: r.avatar }, 'avatar')}<span class="grow"><b>${esc(r.name)}</b>${r.nick ? ` <span class="muted">“${esc(r.nick)}”</span>` : ''}
+        <span class="small muted">${sos ? 'Sent SOS ' + timeAgo(r.at) : `Updated ${timeAgo(r.at)}${r.spd > 1 ? ' · ' + Math.round(r.spd * 3.6) + ' km/h' : ''}${r.acc ? ' · ±' + Math.round(r.acc) + ' m' : ''}`}${trk.last && !mine ? ' · ' + kmAway(r) : ''}</span></span></div>
+        <div class="btns">${r.phone ? `<a class="btn" href="tel:+91${esc(r.phone)}">📞 Call</a>` : ''}<a class="btn ghost" href="${mapsLink(r)}" target="_blank" rel="noopener">🗺️ Open in Google Maps</a></div>
+        ${sos && (mine || d.staff) ? `<button class="btn ${mine ? '' : 'ghost'} block" data-x="safe" style="margin-top:12px">${mine ? "✅ I'm safe now" : '✅ Mark as resolved'}</button>` : ''}`, body => {
+        body.querySelector('[data-x=safe]')?.addEventListener('click', e => busy(e.currentTarget, async () => { await api.trackSosResolve(r.id); closeSheet(); toast('SOS closed. The RWB team is told.'); refreshTrack(); }));
+    });
+}
+
+/* ---------- SOS alarm for the RWB team: a loud 10-second siren while the app is open ---------- */
+let sirenCtx = null;
+function siren(seconds = 10) {
+    try {
+        sirenCtx ??= new (window.AudioContext || window.webkitAudioContext)(); const ctx = sirenCtx; ctx.resume?.();
+        const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime;
+        o.type = 'sawtooth'; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.1);
+        for (let i = 0; i < seconds * 2; i++) { o.frequency.setValueAtTime(650, t + i * 0.5); o.frequency.linearRampToValueAtTime(1350, t + i * 0.5 + 0.45); }
+        g.gain.setValueAtTime(0.35, t + seconds - 0.2); g.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+        o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + seconds);
+    } catch { /* no audio */ }
+    navigator.vibrate?.([800, 300, 800, 300, 800, 300, 800, 300, 800, 300, 800]);
+}
+/* unlock audio on the first tap, so the siren can play later */
+addEventListener('pointerdown', () => { if (!sirenCtx && isMod()) { try { sirenCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch { /* ignore */ } } }, { once: true });
+const seenSos = () => { try { return JSON.parse(localStorage.getItem('rwb-sos-seen') || '[]'); } catch { return []; } };
+function alertNewSos(list) {
+    const seen = seenSos(), fresh = list.filter(s => !s.me && !seen.includes(s.id) && Date.now() - Date.parse(s.at) < 30 * 6e4);
+    if (!fresh.length) return;
+    try { localStorage.setItem('rwb-sos-seen', JSON.stringify([...seen, ...fresh.map(s => s.id)].slice(-50))); } catch { /* ignore */ }
+    sosAlarm(fresh[0].name, fresh[0].id);
+}
+function sosAlarm(name, id) {
+    siren(10);
+    document.querySelector('.sos-alarm')?.remove();
+    const el = document.createElement('div'); el.className = 'sos-alarm'; el.setAttribute('role', 'alertdialog');
+    el.innerHTML = `<b>🆘 SOS</b><span>${esc(name || 'A rider')} needs help</span><div class="btns"><button class="btn" data-x="see">See on map</button><button class="btn ghost" data-x="ok">Dismiss</button></div>`;
+    el.querySelector('[data-x=see]').onclick = () => { el.remove(); sirenCtx?.suspend?.().then(() => sirenCtx.resume()); location.hash = '#track/sos'; trk.sosFocused = false; };
+    el.querySelector('[data-x=ok]').onclick = () => el.remove();
+    document.body.append(el);
+    if (id) try { localStorage.setItem('rwb-sos-seen', JSON.stringify([...seenSos(), id].slice(-50))); } catch { /* ignore */ }
+}
+/* an SOS push arrived while the app is open (the service worker passes it on) */
+navigator.serviceWorker?.addEventListener('message', e => { if (e.data?.type === 'sos' && state.me && isMod()) sosAlarm(String(e.data.title || '').replace(/^🆘 SOS: /, '')); });
+
+/* ---------- Events: ride live ---------- */
+function rideLive(e) {
+    const s = Date.parse(e.starts_at), en = Date.parse(e.ends_at || e.starts_at) + (e.ends_at ? 0 : 6 * 36e5);
+    if (e.status !== 'live' || Date.now() < s - 6 * 36e5 || Date.now() > en + 6 * 36e5) return '';
+    const mine = sharing() && trk.event === e.id;
+    return `<section class="section"><h2>Ride live</h2><div class="card trk-event">
+        <p class="small muted" style="margin-bottom:10px">Share your live location for this ride so the group and the RWB team can see where everyone is.</p>
+        <div class="btns"><button class="btn" data-act="evt-track-share">${mine ? '🟢 Sharing · Stop / change' : '📍 Share for this ride'}</button><a class="btn ghost" href="#track/e${e.id}">🗺️ See riders on map</a></div></div></section>`;
 }
 
 /* =================== Pookie bubble: floats gently; drag it anywhere with a finger, it sticks to the nearest side =================== */
@@ -3145,6 +3465,6 @@ async function boot() {
     try { api = await createApi(); }
     catch { app.innerHTML = `<section class="signin"><h1>Can't load</h1><p class="lead">Please check your internet connection.</p><button class="btn block" onclick="location.reload()">Try again</button></section>`; return; }
     if (location.hash === '#install') { history.replaceState(null, '', location.pathname); setTimeout(installSheet, 1200); }
-    api.onAuthChange(ev => { chat.msgs = null; chat.left = null; Object.assign(state, { me: null, services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null, board: null, dir: null }); if (ev === 'SIGNED_OUT') history.replaceState(null, '', location.pathname); boot(); });
+    api.onAuthChange(ev => { if (ev === 'SIGNED_OUT') { trk.until = 0; trackSave(null); stopWatch(); trk.resumed = false; } chat.msgs = null; chat.left = null; Object.assign(state, { me: null, services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null, board: null, dir: null }); if (ev === 'SIGNED_OUT') history.replaceState(null, '', location.pathname); boot(); });
     boot();
 })();
