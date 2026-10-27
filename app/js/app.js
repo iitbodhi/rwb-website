@@ -1512,7 +1512,7 @@ function docStatus(d) {
 }
 /* =================== How-to videos (short guides, also posted as RWB Instagram stories) =================== */
 const VIDEOS = [
-    ['track', 'Track ✨ New', 'Live location, SOS and how to update', 206],
+    ['track', 'Track + FAM ✨', 'Live location, SOS and your family in the loop', 111],
     ['service', 'Service', 'Log services, bills and reminders', 43],
     ['mileage', 'Mileage', 'Your real km per litre', 44],
     ['motomart', 'Motomart', 'Buy and sell used riding gear', 43],
