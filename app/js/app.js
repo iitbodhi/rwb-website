@@ -3318,8 +3318,8 @@ async function batteryAsk(force = false) {
     });
 }
 /* ---------- old RWB Android apps: a blocker that can't be skipped ---------- */
-/* Builds before 105 (2.0.5) don't have the new background Track service or the new icon. versionCode = 100 + build number. */
-const MIN_NATIVE_BUILD = 105;
+/* Builds before 106 (2.0.6) don't have the new background Track service or the new icon. versionCode = 100 + build number. */
+const MIN_NATIVE_BUILD = 106;
 async function nativeOutdated() {
     if (!NATIVE) return false;
     try { const i = await Native('App').getInfo(); const b = Number(i.build); if (b) return b < MIN_NATIVE_BUILD; } catch { /* ignore */ }
