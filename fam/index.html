@@ -72,5 +72,9 @@
   }
 })();
 </script>
+<script>
+/* always the newest RWB app build: a fresh ?v= at the moment of the tap, so no cache hands out an older copy */
+document.addEventListener("click", function (e) { var a = e.target.closest && e.target.closest("a[href*=\"RWB-App.apk\"]"); if (a) a.href = a.href.split("?")[0] + "?v=" + Date.now(); }, true);
+</script>
 </body>
 </html>

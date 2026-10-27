@@ -198,7 +198,7 @@ const CREW_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" s
 const PLAY_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="4"/><path d="M10 9.2v5.6l4.8-2.8z" fill="currentColor"/></svg>';
 const docsAlert = () => (state.docs || []).some(d => docStatus(d).level !== 'ok' && docStatus(d).level !== 'none');
 /* Android in the browser (not the RWB Android app): a small pulsing "Get app" button; never shown on iPhone */
-const getAppBtn = () => !NATIVE && /android/i.test(navigator.userAgent) ? `<a class="get-app" href="${APK_URL}" download="RWB-App.apk" aria-label="Download the RWB Android app"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span>App</span></a>` : '';
+const getAppBtn = () => !NATIVE && /android/i.test(navigator.userAgent) ? `<a class="get-app" href="${apkUrl()}" download="RWB-App.apk" aria-label="Download the RWB Android app"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span>App</span></a>` : '';
 const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1>${right}${getAppBtn()}
     <a class="icon-btn bell vid-btn" href="#videos" aria-label="How-to videos">${PLAY_ICON}</a>
     <a class="icon-btn bell crew-btn" href="#crew" aria-label="RWB members and leaderboards">${CREW_ICON}</a>
@@ -3336,7 +3336,7 @@ function nativeBlocker(web = false) {
     </div></div>`;
     app.innerHTML = html;
     const bind = () => app.querySelector('[data-x=get]')?.addEventListener('click', () => {
-        if (web) { const a = document.createElement('a'); a.href = APK_URL; a.download = 'RWB-App.apk'; document.body.append(a); a.click(); a.remove(); return; }
+        if (web) { const a = document.createElement('a'); a.href = apkUrl(); a.download = 'RWB-App.apk'; document.body.append(a); a.click(); a.remove(); return; }
         const url = 'https://roninwb.in/get/';
         (Native('Browser')?.open({ url }) || Promise.reject()).catch(() => { location.href = url; });
     });
@@ -3357,7 +3357,7 @@ async function nativeUpdateAsk() {
         <p class="small muted">Open the file when it's downloaded and tap <b>Update</b>. Your account stays signed in.</p>
         <button class="btn ghost block" data-x="later">Later</button></div>`;
     el.addEventListener('click', e => { const x = e.target.closest('[data-x]')?.dataset.x; if (e.target === el || x === 'later') el.remove();
-        if (x === 'get') { el.remove(); (Native('Browser')?.open({ url: APK_URL }) || Promise.reject()).catch(() => { location.href = APK_URL; }); } });
+        if (x === 'get') { el.remove(); (Native('Browser')?.open({ url: apkUrl() }) || Promise.reject()).catch(() => { location.href = apkUrl(); }); } });
     document.body.append(el);
 }
 /* the middle Track button shows a live dot while sharing */
@@ -3383,7 +3383,7 @@ function shareSheet(eventId = null, eventTitle = '') {
         <label class="trk-note">Add a note <span class="muted small">(optional)</span><input id="trk-note" maxlength="${TRACK_NOTE_MAX}" placeholder="e.g. towards Simlipal!" value="${esc(on ? trk.note || '' : '')}" autocomplete="off"><small class="hint"><span id="trk-note-n">${on ? (trk.note || '').length : 0}</span>/${TRACK_NOTE_MAX} · shows next to your name on the map</small></label>
         <div class="trk-hours">${TRACK_HOURS.map(([h, t]) => `<button type="button" class="chip" data-h="${h}">${t}</button>`).join('')}</div>
         ${NativeGeo() ? '<p class="small muted" style="margin-top:12px">Keeps sharing with the screen locked. A small notification shows while it runs.</p>'
-            : '<p class="small muted trk-tip" style="margin-top:12px">💡 Keep the RWB App open on your phone mount: we keep the screen awake. If you lock the phone or switch apps, sharing pauses until you come back. Plug in a charger for long rides.</p>' + (/android/i.test(navigator.userAgent) ? '<p class="small" style="margin-top:8px">📲 <a href="https://roninwb.in/download/RWB-App.apk"><b>Get the RWB Android app</b></a> to keep sharing with the screen locked.</p>' : '')}`, body => {
+            : '<p class="small muted trk-tip" style="margin-top:12px">💡 Keep the RWB App open on your phone mount: we keep the screen awake. If you lock the phone or switch apps, sharing pauses until you come back. Plug in a charger for long rides.</p>' + (/android/i.test(navigator.userAgent) ? '<p class="small" style="margin-top:8px">📲 <a href="' + apkUrl() + '"><b>Get the RWB Android app</b></a> to keep sharing with the screen locked.</p>' : '')}`, body => {
         body.querySelector('[data-x=stop]')?.addEventListener('click', e => busy(e.currentTarget, async () => { await stopShare(); closeSheet(); }));
         const note = body.querySelector('#trk-note'); note.oninput = () => { body.querySelector('#trk-note-n').textContent = note.value.length; };
         body.querySelectorAll('[data-h]').forEach(b => b.onclick = () => busy(b, async () => {
@@ -3877,7 +3877,10 @@ if (NATIVE) try {
 /* =================== "Get the new app" pop-ups (web version only) =================== */
 /* Android in the browser or the old app: the new RWB Android app (Track in the background, SOS siren).
    iPhone: a friendly note that the web app is the iPhone app, and Track works while the screen is on. */
-const APK_URL = 'https://roninwb.in/download/RWB-App.apk';
+const APK_BASE = 'https://roninwb.in/download/RWB-App.apk';
+/* always the newest build: a fresh ?v= on every link, so no phone, browser or cache hands out an older copy */
+const apkUrl = () => `${APK_BASE}?v=${Date.now()}`;
+const APK_URL = APK_BASE;
 function appPromo() {
     if (NATIVE || document.querySelector('.promo')) return;
     const android = /android/i.test(navigator.userAgent), ios = isIOS();
@@ -3888,7 +3891,7 @@ function appPromo() {
     const el = document.createElement('div'); el.className = 'promo'; el.setAttribute('role', 'dialog');
     el.innerHTML = android ? `<div class="promo-card"><span class="promo-ico">🚀</span><h2>New update available</h2>
             <p>The new <b>RWB Android app</b> is here: <b>Live Track keeps going with the screen locked</b>, a real SOS siren and faster notifications.</p>
-            <a class="btn block" href="${APK_URL}" data-x="get">Download the update</a>
+            <a class="btn block" href="${apkUrl()}" data-x="get">Download the update</a>
             <p class="small muted">Open the file when it's downloaded and tap <b>Update</b> (or Install). Sign in once and you're set.</p>
             <button class="btn ghost block" data-x="later">Later</button></div>`
         : `<div class="promo-card"><span class="promo-ico">🙈</span><h2>Oops, no funds!</h2>

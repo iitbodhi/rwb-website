@@ -104,3 +104,6 @@ function driveImg(u) {
     /* never leave anything hidden (e.g. a printed page or a very tall element) */
     setTimeout(() => document.querySelectorAll('[data-reveal]:not(.in)').forEach(el => { const r = el.getBoundingClientRect(); if (r.top < innerHeight && r.bottom > 0) el.classList.add('in'); }), 2500);
 })();
+
+/* always the newest RWB app build: a fresh ?v= at the moment of the tap, so no cache hands out an older copy */
+document.addEventListener("click", function (e) { var a = e.target.closest && e.target.closest("a[href*=\"RWB-App.apk\"]"); if (a) a.href = a.href.split("?")[0] + "?v=" + Date.now(); }, true);
