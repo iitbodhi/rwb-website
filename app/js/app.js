@@ -3134,7 +3134,7 @@ async function boot() {
         api.settings().then(v => { state.settings = v || {}; }).catch(() => { state.settings = {}; });
         await load.news(true);
         await render();
-        if (!trk.resumed) { trk.resumed = true; resumeShare(); if (NATIVE) nativePushOn(false).catch(() => {}); else setTimeout(appPromo, 1500); }
+        if (!trk.resumed) { trk.resumed = true; resumeShare(); if (NATIVE) { nativePushOn(false).catch(() => {}); setTimeout(nativeUpdateAsk, 2500); } else setTimeout(appPromo, 1500); }
     } catch (e) {
         tabbar.hidden = true;
         app.innerHTML = `<section class="signin"><img src="icons/logo-128.png" alt=""><div><h1>Can't connect</h1><p class="lead">${esc(e.message || 'Please check your internet connection.')}</p></div><button class="btn block" onclick="location.reload()">Try again</button></section>`;
@@ -3190,7 +3190,7 @@ async function keepAwake(on) {
 /* send a position when it matters: every 10-20 s while moving, every 60 s when stopped */
 function onFix(p) {
     trk.last = p;
-    if (!sharing()) return;
+    if (!sharing() || trk.svc) return;   /* the RWB Track service sends positions itself */
     const now = Date.now(), gap = now - trk.sentAt, moved = trk.sent ? distM(trk.sent, p) : Infinity;
     const fast = (p.spd ?? 0) > 8, every = fast ? 10000 : 20000;
     if ((moved >= 30 && gap >= every) || gap >= 60000 || (!trk.sent && p.acc <= 100)) sendFix(p);
@@ -3202,8 +3202,10 @@ async function sendFix(p) {
 }
 function startWatch() {
     stopWatch();
-    const nat = NativeGeo();
-    if (nat) {   /* the RWB Android app: keeps going with the screen locked (a notification shows while it runs) */
+    const nat = trk.svc ? null : NativeGeo();
+    if (trk.svc) {   /* the RWB Track service shares in the background; here we only follow your position for the map */
+        if ('geolocation' in navigator) trk.watch = navigator.geolocation.watchPosition(p => onFix(posOf(p)), () => {}, { enableHighAccuracy: true, maximumAge: 10000, timeout: 60000 });
+    } else if (nat) {   /* the RWB Android app: keeps going with the screen locked (a notification shows while it runs) */
         nat.addWatcher({ backgroundTitle: 'RWB is sharing your location', backgroundMessage: 'Tap to open the RWB App. Stop sharing in Track.', requestPermissions: true, stale: false, distanceFilter: 25 },
             (loc, err) => { if (err) { if (err.code === 'NOT_AUTHORIZED') locationHelp(); return; } if (loc) onFix({ lat: loc.latitude, lng: loc.longitude, acc: Math.round(loc.accuracy || 0), spd: loc.speed ?? null, hdg: loc.bearing ?? null, t: loc.time || Date.now() }); })
             .then(id => { trk.native = id; }).catch(() => {});
@@ -3214,6 +3216,7 @@ function startWatch() {
     clearInterval(trk.tick);
     trk.tick = setInterval(() => {   /* heartbeat + the time limit */
         if (!sharing()) return stopShare();
+        if (trk.svc) { svcCheck(); return trackBadge(); }
         if (trk.last && Date.now() - trk.sentAt > 60000) sendFix(trk.last);
         trackBadge();
     }, 30000);
@@ -3229,13 +3232,17 @@ async function startShare(hours, eventId = null, note = '') {
     note = String(note || '').replace(/\s+/g, ' ').trim().slice(0, TRACK_NOTE_MAX);
     const until = await api.trackStart(p.lat, p.lng, p.acc, hours, eventId, note);
     trk.until = Date.parse(until) || Date.now() + hours * 36e5; trk.event = eventId; trk.note = note; trk.sent = p; trk.sentAt = Date.now(); trk.last = p;
-    trackSave({ until: trk.until, event: eventId, note });
+    trk.svc = false; let svc = null;
+    if (await hasSvc()) svc = await svcStart().catch(() => null);
+    trackSave({ until: trk.until, event: eventId, note, svc: trk.svc });
     startWatch();
+    if (svc && svc.battery === false) setTimeout(() => batteryAsk(), 900);
     toast(`You're sharing your live location 📍 ${hours >= 12 ? 'until you stop' : 'for ' + TRACK_HOURS.find(h => h[0] === hours)[1]}`);
 }
 async function stopShare(quiet = false) {
     const was = sharing() || trackSaved();
     trk.until = 0; trk.event = null; trackSave(null); stopWatch(); trackBadge();
+    if (trk.svc || svcOk) RwbTrack()?.stop().catch(() => {}); trk.svc = false;
     if (!quiet && was) { await api.trackStop().catch(() => {}); toast('Stopped sharing your location'); }
     if (location.hash.startsWith('#track')) refreshTrack();
 }
@@ -3243,14 +3250,59 @@ async function stopShare(quiet = false) {
 function resumeShare() {
     const s = trackSaved(); if (!s) return;
     if (s.until <= Date.now()) { trackSave(null); return; }
-    trk.until = s.until; trk.event = s.event || null; trk.note = s.note || ''; startWatch();
-    gpsFix(60000).then(sendFix).catch(() => {});
+    trk.until = s.until; trk.event = s.event || null; trk.note = s.note || ''; trk.svc = !!s.svc; startWatch();
+    if (trk.svc) svcCheck(); else gpsFix(60000).then(sendFix).catch(() => {});
 }
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
-    if (sharing()) { keepAwake(true); if (trk.watch == null && trk.native == null) startWatch(); gpsFix(20000).then(sendFix).catch(() => {}); }
+    if (sharing() && trk.svc) { if (trk.watch == null) startWatch(); svcCheck(); }
+    else if (sharing()) { keepAwake(true); if (trk.watch == null && trk.native == null) startWatch(); gpsFix(20000).then(sendFix).catch(() => {}); }
     if (location.hash.startsWith('#track')) refreshTrack();
 });
+/* ---------- RWB Track service (RWB Android app from build 2.0.x with the service): shares with the screen off ---------- */
+const RwbTrack = () => Native('RwbTrack');
+let svcOk = null;
+async function hasSvc() {
+    if (!NATIVE) return false; if (svcOk !== null) return svcOk;
+    try { await RwbTrack().status(); svcOk = true; } catch { svcOk = false; }
+    return svcOk;
+}
+async function svcStart() {
+    const key = await api.trackToken();      /* a sharing key that works only while you share (setup file 46) */
+    const r = await RwbTrack().start({ url: C.SUPABASE_URL, anon: C.SUPABASE_ANON_KEY, key, until: trk.until });
+    trk.svc = true; return r;
+}
+/* the service stopped (phone restarted it, killed it…) but the time isn't up: start it again */
+let svcBusy = false;
+async function svcCheck() {
+    if (!trk.svc || svcBusy || !sharing()) return; svcBusy = true;
+    try { const st = await RwbTrack().status(); if (!st.running) await svcStart(); } catch { /* ignore */ } finally { svcBusy = false; }
+}
+/* phones stop apps in the background to save battery: ask once in a while to let RWB run */
+function batteryAsk(force = false) {
+    try { if (!force && Date.now() - Number(localStorage.getItem('rwb-batt-asked') || 0) < 3 * 864e5) return; localStorage.setItem('rwb-batt-asked', String(Date.now())); } catch { /* ignore */ }
+    openSheet('Keep Track running', `<p class="small" style="margin-bottom:10px">Your phone may stop Track to save battery when the screen is off. Allow RWB to run in the background so your live location never pauses.</p>
+        <button class="btn block" data-x="allow">Allow RWB in the background</button>
+        <ol class="small help-steps" style="margin-top:14px"><li>Tap <b>Allow</b> when Android asks.</li><li>On Xiaomi, Redmi, Poco, Realme, Oppo, Vivo or OnePlus, also open <b>Settings → Apps → RWB → Battery</b> and choose <b>No restrictions</b> (or turn on <b>Autostart</b>).</li><li>Don't swipe RWB away from recent apps while you ride.</li></ol>
+        <button class="btn ghost block" data-x="later" style="margin-top:10px">Later</button>`, body => {
+        body.querySelector('[data-x=allow]').onclick = () => { RwbTrack()?.battery().catch(() => {}); closeSheet(); };
+        body.querySelector('[data-x=later]').onclick = () => closeSheet();
+    });
+}
+/* an older RWB Android app (without the Track service): ask to update once per visit */
+async function nativeUpdateAsk() {
+    if (!NATIVE || await hasSvc()) return;
+    try { if (sessionStorage.getItem('rwb-native-update')) return; sessionStorage.setItem('rwb-native-update', '1'); } catch { /* ignore */ }
+    const el = document.createElement('div'); el.className = 'promo'; el.setAttribute('role', 'dialog');
+    el.innerHTML = `<div class="promo-card"><span class="promo-ico">🚀</span><h2>Update the RWB app</h2>
+        <p>The new version keeps <b>Track sharing with your screen off</b> for the whole ride.</p>
+        <button class="btn block" data-x="get">Download the update</button>
+        <p class="small muted">Open the file when it's downloaded and tap <b>Update</b>. Your account stays signed in.</p>
+        <button class="btn ghost block" data-x="later">Later</button></div>`;
+    el.addEventListener('click', e => { const x = e.target.closest('[data-x]')?.dataset.x; if (e.target === el || x === 'later') el.remove();
+        if (x === 'get') { el.remove(); (Native('Browser')?.open({ url: APK_URL }) || Promise.reject()).catch(() => { location.href = APK_URL; }); } });
+    document.body.append(el);
+}
 /* the middle Track button shows a live dot while sharing */
 function trackBadge() { document.getElementById('track-tab')?.classList.toggle('live', sharing()); }
 
@@ -3851,6 +3903,6 @@ function appPromo() {
     try { api = await createApi(); }
     catch { app.innerHTML = `<section class="signin"><h1>Can't load</h1><p class="lead">Please check your internet connection.</p><button class="btn block" onclick="location.reload()">Try again</button></section>`; return; }
     if (location.hash === '#install') { history.replaceState(null, '', location.pathname); setTimeout(installSheet, 1200); }
-    api.onAuthChange(ev => { if (ev === 'SIGNED_OUT') { trk.until = 0; trackSave(null); stopWatch(); trk.resumed = false; } chat.msgs = null; chat.left = null; Object.assign(state, { me: null, fam: null, services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null, board: null, dir: null }); delete document.body.dataset.fam; if (ev === 'SIGNED_OUT') history.replaceState(null, '', location.pathname); boot(); });
+    api.onAuthChange(ev => { if (ev === 'SIGNED_OUT') { trk.until = 0; trackSave(null); stopWatch(); trk.resumed = false; if (trk.svc) RwbTrack()?.stop().catch(() => {}); trk.svc = false; } chat.msgs = null; chat.left = null; Object.assign(state, { me: null, fam: null, services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null, board: null, dir: null }); delete document.body.dataset.fam; if (ev === 'SIGNED_OUT') history.replaceState(null, '', location.pathname); boot(); });
     boot();
 })();

@@ -128,6 +128,7 @@ async function supabaseApi(url, key) {
         trackPing: async (lat, lng, acc, spd, hdg) => must(await sb.rpc('track_ping', { p_lat: lat, p_lng: lng, p_acc: acc, p_spd: spd, p_hdg: hdg })),
         trackStop: async () => must(await sb.rpc('track_stop')),
         trackView: async () => must(await sb.rpc('track_view')),
+        trackToken: async () => must(await sb.rpc('track_token')),
         trackSos: async (lat, lng, acc) => must(await sb.rpc('track_sos', { p_lat: lat, p_lng: lng, p_acc: acc })),
         trackSosResolve: async id => must(await sb.rpc('track_sos_resolve', { p_id: id })),
         gpsBoard: async () => must(await sb.rpc('gps_board')),
@@ -497,6 +498,7 @@ function demoApi() {
         trackStart: (lat, lng, acc, hours, ev, note) => { db.track = { note: note || null, event_id: ev || null, lat, lng, acc, at: new Date().toISOString(), since: new Date().toISOString(), until: new Date(Date.now() + hours * 36e5).toISOString() }; save(); return wait(db.track.until); },
         trackPing: (lat, lng, acc, spd) => { if (!db.track) return wait('stopped'); Object.assign(db.track, { lat, lng, acc, spd, at: new Date().toISOString() }); save(); return wait('ok'); },
         trackStop: () => { db.track = null; save(); return wait('stopped'); },
+        trackToken: () => wait('demo-key'),
         trackView: () => { const t = Date.now(), ago = s => new Date(t - s * 1000).toISOString(), m = me();
             if (demoFam()) { if (!db.famMe?.approved && db.famMe) return Promise.reject(new Error('Members only'));
                 return wait({ riders: [{ id: m.id, name: m.full_name, nick: m.nickname, avatar: m.avatar_url, lat: 22.6120, lng: 88.4020, spd: 0, at: ago(260), event_id: 501, note: 'towards Simlipal!', mine: true, me: false, phone: null },
