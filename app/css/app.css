@@ -1220,3 +1220,12 @@ body[data-fam] .tabbar a{max-width:150px}
 .ms-fam{margin-bottom:14px}
 
 .trk-health{margin:6px 2px 0;color:var(--muted);line-height:1.4}
+
+/* old Android app blocker */
+body.blocked .pookie-fab,body.blocked #tabbar,body.blocked .promo,body.blocked dialog{display:none!important}
+.blocker{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:20px;background:radial-gradient(120% 80% at 50% 0%,#3a1c0e,#121110 60%);overflow:auto}
+.blk-card{width:min(440px,100%);background:var(--card);color:var(--ink);border-radius:24px;padding:26px 22px;box-shadow:0 30px 80px -20px rgba(0,0,0,.7);text-align:left}
+.blk-logo{width:72px;height:72px;border-radius:50%;display:block;margin:0 auto 10px}
+.blk-kicker{text-align:center;font:800 .8rem var(--display,sans-serif);letter-spacing:.18em;text-transform:uppercase;color:var(--orange)}
+.blk-card h1{text-align:center;font:800 1.9rem/1.05 var(--display,sans-serif);text-transform:uppercase;margin:6px 0 12px}
+.blk-steps{margin:14px 0 18px 1.1rem;display:grid;gap:8px;font-size:.95rem}

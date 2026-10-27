@@ -3124,6 +3124,7 @@ function hideBoot() {
 }
 async function boot() {
     try {
+        if (await nativeOutdated()) return nativeBlocker();   /* an old RWB Android app: must install the new build first */
         const sess = await api.session();
         if (!sess) return viewSignIn();
         const status = await api.linkAccount();
@@ -3302,6 +3303,40 @@ function batteryAsk(force = false) {
         body.querySelector('[data-x=allow]').onclick = () => { RwbTrack()?.battery().catch(() => {}); closeSheet(); };
         body.querySelector('[data-x=later]').onclick = () => closeSheet();
     });
+}
+/* ---------- old RWB Android apps: a blocker that can't be skipped ---------- */
+/* Builds before 105 (2.0.5) don't have the new background Track service or the new icon. versionCode = 100 + build number. */
+const MIN_NATIVE_BUILD = 105;
+async function nativeOutdated() {
+    if (!NATIVE) return false;
+    try { const i = await Native('App').getInfo(); const b = Number(i.build); if (b) return b < MIN_NATIVE_BUILD; } catch { /* ignore */ }
+    return !(await hasSvc());
+}
+function nativeBlocker() {
+    tabbar.hidden = true; document.body.dataset.route = 'gate'; document.body.classList.add('blocked');
+    const html = `<div class="blocker" role="alertdialog" aria-modal="true" aria-labelledby="blk-h"><div class="blk-card">
+        <img src="icons/logo-128.png" alt="" class="blk-logo">
+        <p class="blk-kicker">New RWB App</p>
+        <h1 id="blk-h">Get the new RWB app</h1>
+        <p>This version of the RWB app is out of date. <b>Track</b> (live location with the screen off) and <b>RWB FAM</b> only work on the new app.</p>
+        <ol class="blk-steps">
+            <li>Tap <b>Download the new app</b> below (it opens the RWB website).</li>
+            <li><b>Uninstall this RWB app</b>: press and hold the RWB icon → <b>Uninstall</b> (or Settings → Apps → RWB → Uninstall).</li>
+            <li>Open the downloaded file, tap <b>Install</b>, then open RWB and sign in with Google.</li>
+        </ol>
+        <button class="btn block" data-x="get">⬇ Download the new app</button>
+        <p class="small muted" style="margin-top:12px">Or open <b>roninwb.in/get</b> in Chrome. Your RWB account, records and settings stay safe.</p>
+    </div></div>`;
+    app.innerHTML = html;
+    const bind = () => app.querySelector('[data-x=get]')?.addEventListener('click', () => {
+        const url = 'https://roninwb.in/get/';
+        (Native('Browser')?.open({ url }) || Promise.reject()).catch(() => { location.href = url; });
+    });
+    bind();
+    /* keep it on screen whatever happens */
+    new MutationObserver(() => { if (!app.querySelector('.blocker')) { app.innerHTML = html; bind(); } tabbar.hidden = true; }).observe(app, { childList: true, subtree: false });
+    addEventListener('hashchange', () => { if (!app.querySelector('.blocker')) { app.innerHTML = html; bind(); } }, true);
+    document.querySelectorAll('dialog[open]').forEach(d => d.close());
 }
 /* an older RWB Android app (without the Track service): ask to update once per visit */
 async function nativeUpdateAsk() {
@@ -3814,6 +3849,7 @@ if (NATIVE) try {
     });
     App.getLaunchUrl?.().then(r => { if (r?.url?.startsWith('https://roninwb.in/app')) appLink(r.url); }).catch(() => {});
     App.addListener('backButton', ({ canGoBack }) => {
+        if (document.body.classList.contains('blocked')) return App.minimizeApp();
         if (document.querySelector('dialog#sheet[open]')) return closeSheet();
         if (document.querySelector('.sos-alarm')) return document.querySelector('.sos-alarm').remove();
         const h = location.hash.slice(1).split('/')[0];
