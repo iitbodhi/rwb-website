@@ -96,5 +96,7 @@ if (process.env.RWB_KEYSTORE) {
     }`);
   g = must(g.replace(/buildTypes\s*\{\s*release\s*\{/, 'buildTypes {\n        release {\n            signingConfig signingConfigs.release'), 'release build type');
 }
+/* Google's fused location provider for RWB Track (the same location engine WhatsApp live location uses) */
+if (!g.includes('play-services-location')) g = must(g.replace(/dependencies\s*\{/, "dependencies {\n    implementation 'com.google.android.gms:play-services-location:21.3.0'"), 'dependencies block');
 write(bg, g);
 console.log('patch-android: done (versionCode ' + (100 + run) + (process.env.RWB_KEYSTORE ? ', signed' : ', unsigned check build') + ')');

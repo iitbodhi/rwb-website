@@ -67,7 +67,13 @@ public class TrackPlugin extends Plugin {
         JSObject r = new JSObject();
         r.put("running", TrackService.running);
         r.put("battery", ignoring());
-        r.put("version", 1);
+        r.put("version", 2);
+        try {
+            android.content.SharedPreferences st = getContext().getSharedPreferences(TrackService.STATS, 0);
+            for (String k : new String[] { "started", "fix", "sent", "acc", "code" }) r.put(k, (Object) Long.valueOf(st.getLong(k, 0)));
+            r.put("error", st.getString("error", ""));
+            r.put("provider", st.getString("provider", ""));
+        } catch (Exception ignored) { }
         return r;
     }
 }

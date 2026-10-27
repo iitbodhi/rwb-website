@@ -3237,7 +3237,7 @@ async function startShare(hours, eventId = null, note = '') {
     const until = await api.trackStart(p.lat, p.lng, p.acc, hours, eventId, note);
     trk.until = Date.parse(until) || Date.now() + hours * 36e5; trk.event = eventId; trk.note = note; trk.sent = p; trk.sentAt = Date.now(); trk.last = p;
     trk.svc = false; let svc = null;
-    if (await hasSvc()) svc = await svcStart().catch(() => null);
+    if (await hasSvc()) svc = await svcStart().catch(e => { toast(`Background sharing couldn't start: ${e.message || e}. Sharing works while the app is open.`, true); return null; });
     trackSave({ until: trk.until, event: eventId, note, svc: trk.svc });
     startWatch();
     if (svc && svc.battery === false) setTimeout(() => batteryAsk(), 900);
@@ -3281,6 +3281,16 @@ let svcBusy = false;
 async function svcCheck() {
     if (!trk.svc || svcBusy || !sharing()) return; svcBusy = true;
     try { const st = await RwbTrack().status(); if (!st.running) await svcStart(); } catch { /* ignore */ } finally { svcBusy = false; }
+}
+/* on the Track screen: is the background sharing healthy? (last GPS fix, last position sent, last problem) */
+async function svcHealth() {
+    let st; try { st = await RwbTrack().status(); } catch { return; }
+    const el = $('#trk-health') || (() => { const e = document.createElement('p'); e.id = 'trk-health'; e.className = 'small trk-health'; $('#trk-status')?.after(e); return e; })();
+    const ago = ms => !ms ? 'never' : Date.now() - ms < 90e3 ? `${Math.max(1, Math.round((Date.now() - ms) / 1000))} s ago` : `${Math.round((Date.now() - ms) / 6e4)} min ago`;
+    const ok = st.running && st.sent && Date.now() - st.sent < 150e3;
+    el.innerHTML = `${ok ? '🟢' : '🟠'} Background sharing ${st.running ? 'on' : '<b>stopped</b>'} · sent ${ago(st.sent)} · GPS ${ago(st.fix)}${st.acc ? ` (±${st.acc} m)` : ''}${st.error ? `<br><span class="warn">${esc(st.error)}</span>` : ''}${st.battery ? '' : ' · <button class="linkish" data-act="trk-batt">Allow in background</button>'}`;
+    actions['trk-batt'] = () => batteryAsk(true);
+    if (!st.running) svcCheck();
 }
 /* phones stop apps in the background to save battery: ask once in a while to let RWB run */
 function batteryAsk(force = false) {
@@ -3417,6 +3427,7 @@ async function refreshTrack() {
     const riders = trk.filter ? d.riders.filter(r => r.event_id === trk.filter) : d.riders;
     const ev = trk.filter ? (state.evd?.events || []).find(e => e.id === trk.filter) : null;
     const rider = d.fam ? riders.find(r => r.mine) : null, rName = esc(firstName(state.fam?.member));
+    if (trk.svc && sharing()) svcHealth();
     $('#trk-status').innerHTML = d.fam ? `<span class="small muted">${rider ? `<b>${rName}</b> is sharing live${riders.length > 1 ? ` · ${riders.length - 1} more on the same ride` : ''}` : `${rName} isn't sharing a live location right now. You'll see them here when they share on Track.`}${d.sos.length ? ' · <b class="sos-txt">SOS</b>' : ''}</span>` : `${sharing() ? `<span class="trk-live-pill"><span class="dot"></span>You're live · ${esc(leftTxt(trk.until))}</span>` : ''}
         <span class="small muted">${riders.length ? `${riders.length} rider${riders.length === 1 ? '' : 's'} live${ev ? ` on ${esc(ev.title)}` : ''}` : 'No one is sharing right now'}${d.sos.length ? ` · <b class="sos-txt">${d.sos.length} SOS</b>` : ''}</span>
         ${trk.filter ? '<button class="linkish small" data-act="trk-all">Show everyone</button>' : ''}`;

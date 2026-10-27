@@ -1218,3 +1218,5 @@ body[data-fam] .tabbar a{max-width:150px}
 @media (prefers-reduced-motion:reduce){.quick .fam-q span,.quick .fam-q span::before,.quick .fam-q span::after{animation:none}}
 .fam-badge{background:color-mix(in srgb,var(--orange) 14%,var(--card));color:var(--orange);border-color:color-mix(in srgb,var(--orange) 40%,var(--line))}
 .ms-fam{margin-bottom:14px}
+
+.trk-health{margin:6px 2px 0;color:var(--muted);line-height:1.4}
