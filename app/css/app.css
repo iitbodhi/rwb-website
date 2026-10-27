@@ -1213,7 +1213,6 @@ body[data-fam] .tabbar a{max-width:150px}
 .quick .fam-q span::before,.quick .fam-q span::after{content:"";position:absolute;inset:-2px;border-radius:inherit;border:2px solid var(--orange);opacity:0;animation:famRing 2.6s ease-out infinite;pointer-events:none}
 .quick .fam-q span::after{animation-delay:.5s}
 .quick .fam-q{color:var(--orange);font-weight:700}
-.fam-new{position:absolute;top:-7px;right:-9px;font:800 .54rem/1 var(--body);letter-spacing:.06em;font-style:normal;padding:3px 5px;border-radius:99px;background:#fff;color:var(--orange);border:1.5px solid var(--orange)}
 @keyframes famBeat{0%,70%,100%{transform:scale(1)}78%{transform:scale(1.09)}86%{transform:scale(.98)}92%{transform:scale(1.05)}}
 @keyframes famRing{0%{opacity:.75;transform:scale(1)}70%,100%{opacity:0;transform:scale(1.45)}}
 @media (prefers-reduced-motion:reduce){.quick .fam-q span,.quick .fam-q span::before,.quick .fam-q span::after{animation:none}}

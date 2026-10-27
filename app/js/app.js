@@ -791,7 +791,7 @@ async function viewHome() {
         <nav class="quick" aria-label="Quick actions">
             <button data-act="add-fuel"><span>${ICON.fuel}</span>Add fuel</button>
             <button data-act="add-service"><span>${ICON.wrench}</span>Log service</button>
-            <button data-act="fam" class="fam-q" aria-label="RWB FAM: invite your family"><span>${FAM_ICON}<i class="fam-new">NEW</i></span>FAM</button>
+            <button data-act="fam" class="fam-q" aria-label="RWB FAM: invite your family"><span>${FAM_ICON}</span>FAM</button>
             <button data-act="sell"><span>${ICON.tag}</span>Sell gear</button>
             <a href="#docs" aria-label="Documents${docsAlert() ? ' (something needs renewing)' : ''}"><span>${DOC_ICON}${docsAlert() ? '<i class="dot dot-red"></i>' : ''}</span>Documents</a>
         </nav>

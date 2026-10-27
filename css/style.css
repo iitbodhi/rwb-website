@@ -317,7 +317,6 @@ mark{background:rgba(232,102,46,.22);color:inherit;border-radius:3px;padding:0 1
 .ax-grid b{font:800 1.35rem var(--display);text-transform:uppercase;letter-spacing:.02em}
 .ax-grid p{font-size:.93rem;color:#bdb4aa;line-height:1.45;margin-top:.3rem}
 .ax-grid .ax-new{border-color:rgba(236,106,44,.55);background:linear-gradient(160deg,rgba(236,106,44,.16),rgba(255,255,255,.03))}
-.ax-new b::after{content:"New";margin-left:.5rem;font:700 .7rem var(--body);letter-spacing:.08em;text-transform:uppercase;padding:.15rem .45rem;border-radius:99px;background:#ec6a2c;color:#fff;vertical-align:middle}
 .ax-cta{display:flex;justify-content:center;flex-wrap:wrap;gap:1rem}
 .ax-btn{display:flex;align-items:center;gap:.8rem;padding:.85rem 1.5rem .85rem 1.1rem;border-radius:18px;text-decoration:none;color:#fff;border:1.5px solid rgba(255,255,255,.22);background:rgba(255,255,255,.04);transition:transform .25s,box-shadow .25s,background .25s;min-width:230px}
 .ax-btn:hover{transform:translateY(-3px)}
