@@ -360,7 +360,7 @@ function doPost(e) {
     Object.keys(extra).forEach(i => { row[+i] = extra[i]; });
     if (col.joined_at !== undefined) row[col.joined_at] = m.joined_at ? new Date(m.joined_at) : new Date();
     row[col.added] = 'RWB App';
-    sheet.appendRow(row);
+    appendInside_(sheet, [row]);
     return json_({ ok: true, result: 'added', row: sheet.getLastRow() });
   } finally { lock.releaseLock(); }
 }
@@ -738,7 +738,7 @@ function reconcile_(app) {
     else rowsSet.forEach(i => { if (!f[i][0]) sheet.getRange(i + 2, c + 1).setValue(data[i][c]); });
   });
   out.rows = [...touched].filter(i => !gone.has(i)).length;
-  if (appends.length) { sheet.getRange(sheet.getLastRow() + 1, 1, appends.length, width).setValues(appends); out.added = appends.length; }
+  if (appends.length) { appendInside_(sheet, appends.map(r => r.slice(0, width))); out.added = appends.length; }
   /* moves last (rows below shift up): older and removed rows are copied to their tabs, rejected ones just deleted */
   const all = [].concat(move.older.map(x => Object.assign({ tab: 'Older entries', title: 'Moved on' }, x)), move.removed.map(x => Object.assign({ tab: 'Removed members', title: 'Removed on' }, x)), move.rejected.map(x => Object.assign({ tab: '' }, x)));
   ['Older entries', 'Removed members'].forEach(t => { const list = all.filter(x => x.tab === t); if (list.length) copyRows_(sheet, data, list, t, list[0].title); });
@@ -760,6 +760,19 @@ function answerCells_(heads, col, answers) {
   return out;
 }
 
+/* new rows go INSIDE the sheet's table (Data → Table), so it grows with them instead of leaving rows below it.
+   Rows are inserted above the last row, the last row is moved back to the end, and the new rows fill the space under it:
+   every existing row keeps its row number. */
+function appendInside_(sheet, rows) {
+  if (!rows.length) return;
+  const w = Math.max.apply(null, rows.map(r => r.length)), data = rows.map(r => { const x = r.slice(); while (x.length < w) x.push(''); return x; });
+  const last = sheet.getLastRow();
+  if (last < 2) { sheet.getRange(last + 1, 1, data.length, w).setValues(data); return; }
+  const n = data.length, cols = Math.max(w, sheet.getLastColumn());
+  sheet.insertRowsBefore(last, n);                                           // inside the table: it grows by n rows
+  sheet.getRange(last + n, 1, 1, cols).moveTo(sheet.getRange(last, 1));       // the old last row goes back to its own row number
+  sheet.getRange(last + 1, 1, n, w).setValues(data);                         // the new rows fill the space below it
+}
 function writeColumn_(sheet, c, cells) { if (cells.length) sheet.getRange(2, c + 1, cells.length, 1).setValues(cells); }
 
 /* copy rows (by index in data) to a tab with a date and a note, in one write */
@@ -865,7 +878,7 @@ function addMissingFromApp() {
       row[col.added] = 'RWB App';
       rows.push(row); added.push(m.full_name + ' (' + p + ')');
     });
-    if (rows.length) sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+    if (rows.length) appendInside_(sheet, rows);
     console.log('Members: ' + members.length + '. Already in the sheet: ' + already + '. Added now: ' + added.length + '. Status labels updated: ' + labelled + '. Waiting for approval: ' + waiting.length + '.');
     if (added.length) console.log('Added:\n' + added.join('\n'));
     if (noNumber.length) console.log('Not added (no WhatsApp number saved in the app, fix it in the app first):\n' + noNumber.join('\n'));
