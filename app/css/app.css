@@ -1207,3 +1207,15 @@ body[data-fam] .tabbar a{max-width:150px}
 @keyframes sigIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
 @keyframes sigPulse{50%{opacity:.35}}
 @media (prefers-reduced-motion:reduce){.trk-signal,.trk-signal .sig-ico{animation:none}}
+
+/* Home: the FAM tile stands out */
+.quick .fam-q span{position:relative;color:#fff;border:0;background:linear-gradient(140deg,#f08a3e,var(--orange) 55%,#b8380f);box-shadow:0 6px 16px -6px rgba(212,80,26,.7);animation:famBeat 2.6s ease-in-out infinite}
+.quick .fam-q span::before,.quick .fam-q span::after{content:"";position:absolute;inset:-2px;border-radius:inherit;border:2px solid var(--orange);opacity:0;animation:famRing 2.6s ease-out infinite;pointer-events:none}
+.quick .fam-q span::after{animation-delay:.5s}
+.quick .fam-q{color:var(--orange);font-weight:700}
+.fam-new{position:absolute;top:-7px;right:-9px;font:800 .54rem/1 var(--body);letter-spacing:.06em;font-style:normal;padding:3px 5px;border-radius:99px;background:#fff;color:var(--orange);border:1.5px solid var(--orange)}
+@keyframes famBeat{0%,70%,100%{transform:scale(1)}78%{transform:scale(1.09)}86%{transform:scale(.98)}92%{transform:scale(1.05)}}
+@keyframes famRing{0%{opacity:.75;transform:scale(1)}70%,100%{opacity:0;transform:scale(1.45)}}
+@media (prefers-reduced-motion:reduce){.quick .fam-q span,.quick .fam-q span::before,.quick .fam-q span::after{animation:none}}
+.fam-badge{background:color-mix(in srgb,var(--orange) 14%,var(--card));color:var(--orange);border-color:color-mix(in srgb,var(--orange) 40%,var(--line))}
+.ms-fam{margin-bottom:14px}

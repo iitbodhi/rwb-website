@@ -71,3 +71,36 @@ function driveImg(u) {
     const m = String(u).match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=view&)?id=)([\w-]+)/);
     return m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w800` : u;
 }
+
+/* ===== Motion: scroll reveals, split headings, nav and scroll progress ===== */
+(function motion() {
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document.documentElement.classList.add('js');
+    const prog = document.createElement('div'); prog.className = 'scroll-prog'; document.body.append(prog);
+    const nav = document.getElementById('nav');
+    let ticking = false;
+    const onScroll = () => { ticking = false; const h = document.documentElement.scrollHeight - innerHeight;
+        prog.style.transform = `scaleX(${h > 0 ? Math.min(1, scrollY / h) : 0})`; nav?.classList.toggle('scrolled', scrollY > 10); };
+    addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true }); onScroll();
+    /* split a heading into words that rise in */
+    const split = el => { if (el.dataset.done) return; el.dataset.done = 1; let k = 0;
+        const walk = node => [...node.childNodes].forEach(n => {
+            if (n.nodeType === 3) { const frag = document.createDocumentFragment();
+                n.textContent.split(/(\s+)/).forEach(w => { if (!w) return; if (/^\s+$/.test(w)) { frag.append(w); return; }
+                    const o = document.createElement('span'); o.className = 'w'; const i = document.createElement('span'); i.textContent = w; i.style.setProperty('--d', (k++ * .07) + 's'); o.append(i); frag.append(o); });
+                n.replaceWith(frag); }
+            else if (n.nodeType === 1 && n.tagName !== 'BR') walk(n); });
+        walk(el); };
+    const hero = document.querySelector('.hero h1'); if (hero && !reduce) { split(hero); hero.querySelectorAll('.w > span').forEach((x, i) => x.style.setProperty('--d', (.15 + i * .1) + 's')); }
+    document.querySelectorAll('[data-split]').forEach(el => { split(el); el.classList.add('split'); });
+    const auto = '.section h2, .section .lead, .section > .wrap > p, .section .rail, .section .tabs, .stats, .page-head > *, .teaser, .join .btn, .social, .footer';
+    document.querySelectorAll(auto).forEach(el => { if (!el.closest('[data-reveal]') && !el.hasAttribute('data-split')) el.setAttribute('data-reveal', el.getAttribute('data-reveal') || ''); });
+    /* siblings come in one after another */
+    document.querySelectorAll('[data-reveal]').forEach(el => { const sib = [...el.parentElement.children].filter(x => x.hasAttribute('data-reveal')); const i = sib.indexOf(el); if (i > 0 && !el.style.getPropertyValue('--d')) el.style.setProperty('--d', Math.min(i * .08, .6) + 's'); });
+    const targets = document.querySelectorAll('[data-reveal], [data-split], .section h2');
+    if (reduce || !('IntersectionObserver' in window)) { targets.forEach(el => el.classList.add('in')); return; }
+    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { rootMargin: '0px 0px -8% 0px', threshold: .08 });
+    targets.forEach(el => io.observe(el));
+    /* never leave anything hidden (e.g. a printed page or a very tall element) */
+    setTimeout(() => document.querySelectorAll('[data-reveal]:not(.in)').forEach(el => { const r = el.getBoundingClientRect(); if (r.top < innerHeight && r.bottom > 0) el.classList.add('in'); }), 2500);
+})();

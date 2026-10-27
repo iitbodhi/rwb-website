@@ -791,7 +791,7 @@ async function viewHome() {
         <nav class="quick" aria-label="Quick actions">
             <button data-act="add-fuel"><span>${ICON.fuel}</span>Add fuel</button>
             <button data-act="add-service"><span>${ICON.wrench}</span>Log service</button>
-            <button data-act="fam"><span>${FAM_ICON}</span>FAM</button>
+            <button data-act="fam" class="fam-q" aria-label="RWB FAM: invite your family"><span>${FAM_ICON}<i class="fam-new">NEW</i></span>FAM</button>
             <button data-act="sell"><span>${ICON.tag}</span>Sell gear</button>
             <a href="#docs" aria-label="Documents${docsAlert() ? ' (something needs renewing)' : ''}"><span>${DOC_ICON}${docsAlert() ? '<i class="dot dot-red"></i>' : ''}</span>Documents</a>
         </nav>
@@ -1516,7 +1516,9 @@ const VIDEOS = [
     ['events', 'Events', 'Rides, meet-ups and shared costs', 40],
     ['me', 'Me', 'Your profile and settings', 33],
     ['rwb-members', 'RWB', 'Members and leaderboards', 34],
-    ['coordinators-and-admins', 'Team tools', 'For coordinators and admins', 45, 'team']
+    ['coordinators-and-admins', 'Team tools', 'For coordinators and admins', 45, 'team'],
+    ['fam-track', 'Track', 'See where your rider is', 64, 'fam'],
+    ['fam-app', 'Your RWB App', 'Home, events, updates, Me and your FAM switch', 95, 'fam']
 ];
 function viewVideos() {
     const list = isFam() ? VIDEOS.filter(v => v[4] === 'fam') : VIDEOS.filter(v => v[4] !== 'fam' && (v[4] !== 'team' || isMod()));
@@ -1526,7 +1528,7 @@ function viewVideos() {
         <div class="vid-grid">${list.map(([id, title, sub, sec, who]) => `
             <button class="vid-tile" data-act="play" data-id="${id}" aria-label="Play: ${esc(title)}, ${sec} seconds">
                 <span class="vid-cover"><img src="videos/${id}.jpg" alt="" loading="lazy"><i class="vid-play">▶</i><em>${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}</em></span>
-                <b>${esc(title)}${who ? ' <span class="badge coord">Team</span>' : ''}</b><span class="small muted">${esc(sub)}</span>
+                <b>${esc(title)}${who === 'team' ? ' <span class="badge coord">Team</span>' : ''}</b><span class="small muted">${esc(sub)}</span>
             </button>`).join('')}</div>
         <p class="small muted" style="text-align:center;margin:18px 0 8px">Also on the RWB Instagram highlights.</p>`;
     actions = {
@@ -2410,12 +2412,14 @@ function rejectSheet(r) {
 async function adminMembers() {
     state.adminMembers ??= await api.admin.members();
     const all = state.adminMembers;
+    state.famAll ??= await api.adminFamList().catch(() => []);
+    const famOf = id => state.famAll.filter(f => f.member?.id === id);
     const nNew = all.filter(isNewMember).length, nGone = all.filter(isGone).length;
     const live = all.filter(m => !isGone(m)), nApp = live.filter(m => m.user_id).length;
     const F = { all: 'Everyone', new: `New${nNew ? ` (${nNew})` : ''}`, app: `On app (${nApp})`, noapp: `Not on app (${live.length - nApp})`, admins: 'RWB team', gone: `Left / removed${nGone ? ` (${nGone})` : ''}` };
     state.memberFilter ||= 'all'; state.memberSort ||= 'team';
     const SORTS = { team: 'Team, A–Z', new: 'Newest first', old: 'Oldest first' };
-    $('#admin-body').innerHTML = `<div class="chips" style="margin-bottom:10px">${Object.entries(F).map(([k, v]) => `<button class="chip" data-act="mf" data-f="${k}" aria-pressed="${state.memberFilter === k}">${v}</button>`).join('')}<button class="chip fam-chip" data-act="fam-all">👨‍👩‍👧 RWB FAM</button></div>
+    $('#admin-body').innerHTML = `<div class="chips" style="margin-bottom:10px">${Object.entries(F).map(([k, v]) => `<button class="chip" data-act="mf" data-f="${k}" aria-pressed="${state.memberFilter === k}">${v}</button>`).join('')}<button class="chip fam-chip" data-act="fam-all">👨‍👩‍👧 RWB FAM${state.famAll?.length ? ` (${state.famAll.length})` : ''}</button></div>
     ${state.memberFilter === 'admins' ? `<p class="small muted" style="margin-bottom:10px">Tap a person to ${state.me.role === 'superadmin' ? 'make them an admin or a coordinator' : 'make them a coordinator'} or change their role. Coordinators can approve Motomart posts.</p>` : ''}${state.memberFilter === 'gone' ? '<p class="small muted" style="margin-bottom:10px">Members who left or were removed, newest first. Their app account and data are deleted; this record stays so you know who left and when. Tap someone to <b>restore</b> them.</p>' : ''}${state.memberFilter === 'new' ? '<p class="small muted" style="margin-bottom:10px">Joined in the last 7 days, through the join form or the app. Add them to the RWB WhatsApp group; the <b>New Member</b> tag goes away after 7 days.</p>' : ''}
     <div class="row" style="gap:8px;margin-bottom:12px"><input class="search" type="search" id="mq" placeholder="Search name, number, bike no. or place" value="${esc(state.adminSearch)}" aria-label="Search members" style="margin:0;flex:1">
         <select id="msort" aria-label="Sort" style="width:auto;flex:none;max-width:44%">${Object.entries(SORTS).map(([k, v]) => `<option value="${k}"${state.memberSort === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>
@@ -2437,7 +2441,7 @@ async function adminMembers() {
             : `<button class="card tap row member-row" data-act="member" data-id="${m.id}">${face(m, 'avatar sm')}
             <div class="grow"><div class="who">${esc(m.full_name)} ${roleBadge(m)}${isNewMember(m) ? ' <span class="badge new-tag">New Member</span>' : ''}</div>
             <div class="meta">${sort !== 'team' || isNewMember(m) ? `<span class="joined">Joined ${fmtDate(String(m.joined_at || m.created_at).slice(0, 10))}</span> · ` : ''}${m.avg_kmpl ? `<b class="kmpl-tag">${kmplTxt(m.avg_kmpl)}</b> · ` : ''}${esc([m.phone, m.vrn, m.locality].filter(Boolean).join(' · '))}</div></div>
-            ${m.user_id ? '<span class="badge ok">On app</span>' : ''}</button>`).join('') || '<div class="card empty">No one matches.</div>';
+            ${famOf(m.id).length ? `<span class="badge fam-badge" title="RWB FAM">👨‍👩‍👧 ${famOf(m.id).length}</span>` : ''}${m.user_id ? '<span class="badge ok">On app</span>' : ''}</button>`).join('') || '<div class="card empty">No one matches.</div>';
         $('#more').hidden = hits.length <= limit;
     };
     $('#mq').oninput = e => { state.adminSearch = e.target.value; limit = 50; draw(); };
@@ -2460,6 +2464,7 @@ function memberSheet(m) {
             <dt>Hometown</dt><dd>${esc(m.hideout || '–')}</dd><dt>Emergency</dt><dd>${esc(m.emergency_phone || '–')}</dd>
             <dt>Joined</dt><dd>${m.joined_at ? fmtDate(String(m.joined_at).slice(0, 10)) : '–'}</dd>
         </dl>
+        ${(() => { const fl = (state.famAll || []).filter(f => f.member?.id === m.id); return fl.length ? `<h3 class="group-title">RWB FAM <span class="small muted" style="text-transform:none;letter-spacing:0">${fl.length} of ${FAM_MAX}</span></h3><div class="list ms-fam">${fl.map(famAdminCard).join('')}</div>` : ''; })()}
         ${extraAnswers(m).length ? `<details class="answers" style="margin:-6px 0 12px"><summary>Other join-form answers (${extraAnswers(m).length})</summary><div class="group" style="margin-top:8px">${answerRows(m, false)}</div></details>` : ''}
         <p class="small muted" style="margin:2px 0 6px">Bikes · check each VRN, then mark it verified</p>
         <div class="group bikes" style="margin-bottom:12px">${bikeRows(m, (m.member_bikes || []).slice().sort((a, b) => a.slot - b.slot), true)}</div>
@@ -2469,6 +2474,7 @@ function memberSheet(m) {
             ${superA ? `<button class="btn ghost" data-x="role" data-to="${m.role === 'admin' ? 'member' : 'admin'}">${m.role === 'admin' ? 'Remove admin rights' : 'Make admin'}</button>` : ''}</div>
             <p class="small muted" style="margin:-4px 0 12px">Coordinators can approve, reject and delete Motomart posts. They can't manage members.</p>` : ''}
         ${canRemove ? `<button class="btn danger block" data-x="remove">Remove from RWB</button><p class="small muted" style="margin-top:6px">Use when someone leaves the RWB WhatsApp community. Deletes their profile${m.user_id ? ', app account, service records, fuel log and bills' : ''}, and their row in the RWB contact sheet (a copy goes to its “Removed members” tab). This can't be undone in the app.</p>` : ''}`, body => {
+        bindFamRemove(body, () => { closeSheet(); state.adminMembers && adminMembers(); });
         body.querySelector('[data-x=edit]').onclick = () => memberEdit(m);
         body.querySelectorAll('[data-x=vv]').forEach(btn => btn.onclick = () => {
             const slot = Number(btn.dataset.slot), b = (m.member_bikes || []).find(x => x.slot === slot), now = slot === 1 ? !m.vrn_verified : !b?.verified;
@@ -3653,8 +3659,20 @@ async function famSheet() {
 
 /* ---------- admins and coordinators: every RWB FAM member ---------- */
 async function famAdminSheet() {
-    let list; try { list = await api.adminFamList(); } catch (e) { return toast(e.message, true); }
-    const card = x => `<div class="card fam-adm${x.approved === false ? ' off' : ''}" data-q="${esc([x.full_name, x.phone, x.email, x.member?.full_name, x.member?.nickname].join(' ').toLowerCase())}">
+    let list; try { list = state.famAll = await api.adminFamList(); } catch (e) { return toast(e.message, true); }
+    const card = famAdminCard;
+    openSheet(`RWB FAM (${list.length})`, `<p class="small muted" style="margin-bottom:10px">Family members invited by RWB members (up to 3 each). ${isAdmin() ? 'You can remove anyone.' : 'Only admins can remove someone.'}</p>
+        ${list.length > 4 ? '<input class="search" type="search" id="fam-q" placeholder="Search name, number or member" aria-label="Search RWB FAM">' : ''}
+        <div class="list" id="fam-all">${list.length ? list.map(card).join('') : '<div class="card empty"><b>No RWB FAM members yet</b>Members invite family from Home → FAM.</div>'}</div>`, body => {
+        const q = body.querySelector('#fam-q'); if (q) q.oninput = () => { const t = q.value.trim().toLowerCase(); body.querySelectorAll('.fam-adm').forEach(c => c.hidden = !!t && !c.dataset.q.includes(t)); };
+        bindFamRemove(body, famAdminSheet);
+    });
+}
+function bindFamRemove(body, after) {
+    body.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { if (confirmBox(`Remove ${b.dataset.n} from RWB FAM? They lose access straight away.`)) busy(b, async () => { await api.removeFam(Number(b.dataset.rm)); state.famAll = null; toast('Removed'); after(); }); });
+}
+function famAdminCard(x) {
+    return `<div class="card fam-adm${x.approved === false ? ' off' : ''}" data-q="${esc([x.full_name, x.phone, x.email, x.member?.full_name, x.member?.nickname].join(' ').toLowerCase())}">
         <div class="row">${face(x, 'avatar sm')}<span class="grow"><b>${esc(x.full_name)}</b><span class="small muted">FAM of <b>${esc(x.member?.full_name || '–')}</b>${x.member?.nickname ? ` “${esc(x.member.nickname)}”` : ''}</span></span>
             ${x.approved === false ? '<span class="badge">Turned off</span>' : '<span class="badge ok">On</span>'}</div>
         ${x.alerted_at ? `<p class="small warn" style="margin-top:8px">⚠️ Says they were added without consent (${timeAgo(x.alerted_at)})</p>` : ''}
@@ -3662,12 +3680,6 @@ async function famAdminSheet() {
             <dt>Google</dt><dd>${esc(x.email || '–')}</dd>${x.address ? `<dt>Address</dt><dd>${esc(x.address)}</dd>` : ''}<dt>Joined</dt><dd>${fmtDate(String(x.created_at).slice(0, 10))}</dd>
             ${x.member?.phone ? `<dt>Member</dt><dd><a href="tel:+91${esc(x.member.phone)}">${esc(x.member.phone)}</a></dd>` : ''}</dl>
         ${isAdmin() ? `<button class="btn sm danger" data-rm="${x.id}" data-n="${esc(x.full_name)}" style="margin-top:10px">Remove from RWB FAM</button>` : ''}</div>`;
-    openSheet(`RWB FAM (${list.length})`, `<p class="small muted" style="margin-bottom:10px">Family members invited by RWB members (up to 3 each). ${isAdmin() ? 'You can remove anyone.' : 'Only admins can remove someone.'}</p>
-        ${list.length > 4 ? '<input class="search" type="search" id="fam-q" placeholder="Search name, number or member" aria-label="Search RWB FAM">' : ''}
-        <div class="list" id="fam-all">${list.length ? list.map(card).join('') : '<div class="card empty"><b>No RWB FAM members yet</b>Members invite family from Home → FAM.</div>'}</div>`, body => {
-        const q = body.querySelector('#fam-q'); if (q) q.oninput = () => { const t = q.value.trim().toLowerCase(); body.querySelectorAll('.fam-adm').forEach(c => c.hidden = !!t && !c.dataset.q.includes(t)); };
-        body.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { if (confirmBox(`Remove ${b.dataset.n} from RWB FAM? They lose access straight away.`)) busy(b, async () => { await api.removeFam(Number(b.dataset.rm)); toast('Removed'); famAdminSheet(); }); });
-    });
 }
 
 /* ---------- Track: "don't panic" while a rider's location isn't updating ---------- */
@@ -3692,6 +3704,13 @@ function trackSignal() {
 }
 
 /* =================== Inside the RWB Android app (Capacitor) =================== */
+/* a roninwb.in/app link opened the app: an RWB FAM invite (?fam=CODE) and/or a screen (#events/12) */
+function appLink(url) {
+    try { const u = new URL(url), c = u.searchParams.get('fam');
+        if (c) { localStorage.setItem(FAM_CODE_KEY, famCodeNorm(c)); if (!state.me) boot(); else if (!isFam()) toast('You\'re already signed in as an RWB member. Sign out to join RWB FAM with another Google account.'); }
+        if (u.hash.length > 1) location.hash = u.hash;
+    } catch { /* ignore */ }
+}
 /* The Android app opens this same web app; these bits use the phone's own features there:
    notifications through Firebase (with the SOS siren channel), Google sign-in through the browser,
    the Back button, links to WhatsApp / phone / Maps, and background location for Track. */
@@ -3724,8 +3743,9 @@ if (NATIVE) try {
         const url = e.url || '';
         if (url.startsWith('in.roninwb.twa://auth')) {
             try { await api.finishNativeSignIn(url); Native('Browser').close().catch(() => {}); } catch (err) { toast(err.message || 'Sign-in failed', true); }
-        } else if (url.startsWith('https://roninwb.in/app')) { const h = url.split('#')[1]; if (h) location.hash = '#' + h; }
+        } else if (url.startsWith('https://roninwb.in/app')) appLink(url);
     });
+    App.getLaunchUrl?.().then(r => { if (r?.url?.startsWith('https://roninwb.in/app')) appLink(r.url); }).catch(() => {});
     App.addListener('backButton', ({ canGoBack }) => {
         if (document.querySelector('dialog#sheet[open]')) return closeSheet();
         if (document.querySelector('.sos-alarm')) return document.querySelector('.sos-alarm').remove();
