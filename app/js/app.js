@@ -3125,6 +3125,7 @@ function hideBoot() {
 async function boot() {
     try {
         if (await nativeOutdated()) return nativeBlocker();   /* an old RWB Android app: must install the new build first */
+        if (!NATIVE && /android/i.test(navigator.userAgent)) return nativeBlocker(true);   /* Android browser: use the RWB Android app (iPhone stays on the web app) */
         const sess = await api.session();
         if (!sess) return viewSignIn();
         const status = await api.linkAccount();
@@ -3312,23 +3313,30 @@ async function nativeOutdated() {
     try { const i = await Native('App').getInfo(); const b = Number(i.build); if (b) return b < MIN_NATIVE_BUILD; } catch { /* ignore */ }
     return !(await hasSvc());
 }
-function nativeBlocker() {
+function nativeBlocker(web = false) {
     tabbar.hidden = true; document.body.dataset.route = 'gate'; document.body.classList.add('blocked');
     const html = `<div class="blocker" role="alertdialog" aria-modal="true" aria-labelledby="blk-h"><div class="blk-card">
         <img src="icons/logo-128.png" alt="" class="blk-logo">
         <p class="blk-kicker">New RWB App</p>
         <h1 id="blk-h">Get the new RWB app</h1>
-        <p>This version of the RWB app is out of date. <b>Track</b> (live location with the screen off) and <b>RWB FAM</b> only work on the new app.</p>
+        ${web ? `<p>On Android, RWB now works through the <b>RWB Android app</b>. <b>Track</b> (live location with the screen off) and <b>RWB FAM</b> only work there.</p>
+        <ol class="blk-steps">
+            <li>Tap <b>Download the new app</b> below.</li>
+            <li>Open the downloaded file and tap <b>Install</b> (allow installs from Chrome if Android asks). Have an older RWB app? Uninstall it first.</li>
+            <li>Open <b>RWB</b> from your apps and sign in with Google.</li>
+            <li>Added RWB to your home screen from Chrome before? Remove that old shortcut.</li>
+        </ol>` : `<p>This version of the RWB app is out of date. <b>Track</b> (live location with the screen off) and <b>RWB FAM</b> only work on the new app.</p>
         <ol class="blk-steps">
             <li>Tap <b>Download the new app</b> below (it opens the RWB website).</li>
             <li><b>Uninstall this RWB app</b>: press and hold the RWB icon → <b>Uninstall</b> (or Settings → Apps → RWB → Uninstall).</li>
             <li>Open the downloaded file, tap <b>Install</b>, then open RWB and sign in with Google.</li>
-        </ol>
+        </ol>`}
         <button class="btn block" data-x="get">⬇ Download the new app</button>
-        <p class="small muted" style="margin-top:12px">Or open <b>roninwb.in/get</b> in Chrome. Your RWB account, records and settings stay safe.</p>
+        <p class="small muted" style="margin-top:12px">${web ? 'On iPhone? Open roninwb.in/app in Safari.' : 'Or open <b>roninwb.in/get</b> in Chrome.'} Your RWB account, records and settings stay safe.</p>
     </div></div>`;
     app.innerHTML = html;
     const bind = () => app.querySelector('[data-x=get]')?.addEventListener('click', () => {
+        if (web) { const a = document.createElement('a'); a.href = APK_URL; a.download = 'RWB-App.apk'; document.body.append(a); a.click(); a.remove(); return; }
         const url = 'https://roninwb.in/get/';
         (Native('Browser')?.open({ url }) || Promise.reject()).catch(() => { location.href = url; });
     });
