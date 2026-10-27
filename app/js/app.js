@@ -80,7 +80,11 @@ function waIntent(url) {
     const q = [phone && 'phone=' + phone, text && 'text=' + encodeURIComponent(text)].filter(Boolean).join('&');
     return `intent://send/?${q}#Intent;scheme=whatsapp;package=${pkg};S.browser_fallback_url=${encodeURIComponent(url)};end`;
 }
-function openWA(url) { const i = waIntent(url); if (i !== url) location.href = i; else window.open(url, '_blank', 'noopener'); }
+function openWA(url) {
+    /* the RWB Android app can't open intent:// links: hand the normal WhatsApp link to Android, which opens WhatsApp */
+    if (window.Capacitor?.isNativePlatform?.()) { location.href = url; return; }
+    const i = waIntent(url); if (i !== url) location.href = i; else window.open(url, '_blank', 'noopener');
+}
 /* every WhatsApp link in the app goes through the chosen app */
 document.addEventListener('click', e => {
     const a = e.target.closest('a[href^="https://wa.me/"]');
