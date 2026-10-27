@@ -1,5 +1,6 @@
 # Builds the RWB Android app (android-app/) and publishes it as roninwb.in/download/RWB-App.apk.
 # Runs when the Android app's files change, or by hand (Actions → Android app → Run workflow).
+# Each published build also writes download/latest.json; apps older than it show "New Update Available".
 # Needs these repository secrets (Settings → Secrets and variables → Actions):
 #   RWB_KEYSTORE_B64, RWB_STORE_PASSWORD, RWB_KEY_PASSWORD   (the app's signing key: updates install over the old app)
 #   GOOGLE_SERVICES_JSON                                     (Firebase, for notifications)
@@ -8,7 +9,7 @@ name: Android app
 on:
   push:
     branches: [main]
-    paths: ['android-app/**', '.github/workflows/android.yml']
+    paths: ['android-app/**']
   workflow_dispatch:
 permissions:
   contents: write
@@ -68,9 +69,11 @@ jobs:
         if: env.HAS_KEY == 'true'
         run: |
           cp android/app/build/outputs/apk/release/app-release.apk ../download/RWB-App.apk
+          # the app checks this file: older builds show "New Update Available" until they update
+          echo "{\"build\": $((100 + ${{ github.run_number }})), \"version\": \"2.0.${{ github.run_number }}\"}" > ../download/latest.json
           cd ..
           git config user.name "RWB build bot"; git config user.email "actions@github.com"
-          git add download/RWB-App.apk
+          git add download/RWB-App.apk download/latest.json
           git commit -m "RWB Android app build ${{ github.run_number }}" || exit 0
           git pull --rebase origin main && git push origin HEAD:main
       - name: Save the build log (for fixing problems)

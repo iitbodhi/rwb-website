@@ -3320,36 +3320,45 @@ async function batteryAsk(force = false) {
 /* ---------- old RWB Android apps: a blocker that can't be skipped ---------- */
 /* Builds before 106 (2.0.6) don't have the new background Track service or the new icon. versionCode = 100 + build number. */
 const MIN_NATIVE_BUILD = 106;
+/* the newest published build: download/latest.json is written by the build robot together with the new app file */
+let latestBuild = null, latestAt = 0;
+async function newestBuild() {
+    if (latestBuild && Date.now() - latestAt < 30 * 6e4) return latestBuild;
+    try { const r = await fetch(`https://roninwb.in/download/latest.json?v=${Date.now()}`, { cache: 'no-store' }); const j = await r.json(); if (j.build) { latestBuild = Number(j.build); latestAt = Date.now(); } } catch { /* offline: use what we know */ }
+    return Math.max(latestBuild || 0, MIN_NATIVE_BUILD);
+}
 async function nativeOutdated() {
     if (!NATIVE) return false;
-    try { const i = await Native('App').getInfo(); const b = Number(i.build); if (b) return b < MIN_NATIVE_BUILD; } catch { /* ignore */ }
+    try { const i = await Native('App').getInfo(); const b = Number(i.build); if (b) return b < await newestBuild(); } catch { /* ignore */ }
     return !(await hasSvc());
 }
+/* back in the app after a while: a new build may have come out meanwhile */
+async function updateCheck() { if (NATIVE && !document.body.classList.contains('blocked') && await nativeOutdated()) nativeBlocker(); }
 function nativeBlocker(web = false) {
     tabbar.hidden = true; document.body.dataset.route = 'gate'; document.body.classList.add('blocked');
     const html = `<div class="blocker" role="alertdialog" aria-modal="true" aria-labelledby="blk-h"><div class="blk-card">
         <img src="icons/logo-128.png" alt="" class="blk-logo">
-        <p class="blk-kicker">New RWB App</p>
-        <h1 id="blk-h">Get the new RWB app</h1>
-        ${web ? `<p>On Android, RWB now works through the <b>RWB Android app</b>. <b>Track</b> (live location with the screen off) and <b>RWB FAM</b> only work there.</p>
+        <p class="blk-kicker">${web ? 'RWB Android app' : 'RWB App'}</p>
+        <h1 id="blk-h">${web ? 'Get the RWB app' : 'New Update Available'}</h1>
+        ${web ? `<p>On Android, RWB works through the <b>RWB Android app</b>. <b>Track</b> (live location with the screen off) and <b>RWB FAM</b> only work there.</p>
         <ol class="blk-steps">
-            <li>Tap <b>Download the new app</b> below.</li>
-            <li>Open the downloaded file and tap <b>Install</b> (allow installs from Chrome if Android asks). Have an older RWB app? Uninstall it first.</li>
-            <li>Open <b>RWB</b> from your apps and sign in with Google.</li>
-            <li>Added RWB to your home screen from Chrome before? Remove that old shortcut.</li>
-        </ol>` : `<p>This version of the RWB app is out of date. <b>Track</b> (live location with the screen off) and <b>RWB FAM</b> only work on the new app.</p>
+            <li>Remove the RWB web app: press and hold its icon on your home screen → <b>Uninstall</b> / <b>Remove</b>.</li>
+            <li>Tap <b>Download the RWB app</b> below.</li>
+            <li>Open the downloaded file and tap <b>Install</b> (allow installs from Chrome if Android asks).</li>
+            <li>Open <b>RWB</b> and sign in with Google.</li>
+        </ol>` : `<p>Click to update. The new version downloads; open it and tap <b>Update</b>.</p>
         <ol class="blk-steps">
-            <li>Tap <b>Download the new app</b> below (it opens the RWB website).</li>
-            <li><b>Uninstall this RWB app</b>: press and hold the RWB icon → <b>Uninstall</b> (or Settings → Apps → RWB → Uninstall).</li>
-            <li>Open the downloaded file, tap <b>Install</b>, then open RWB and sign in with Google.</li>
+            <li>Tap <b>Update now</b> below.</li>
+            <li>When the download finishes, open it and tap <b>Update</b> (allow installs if Android asks).</li>
+            <li>Open RWB again. You stay signed in.</li>
         </ol>`}
-        <button class="btn block" data-x="get">⬇ Download the new app</button>
-        <p class="small muted" style="margin-top:12px">${web ? 'On iPhone? Open roninwb.in/app in Safari.' : 'Or open <b>roninwb.in/get</b> in Chrome.'} Your RWB account, records and settings stay safe.</p>
+        <button class="btn block" data-x="get">${web ? '⬇ Download the RWB app' : '⬇ Update now'}</button>
+        <p class="small muted" style="margin-top:12px">${web ? 'On iPhone? Open roninwb.in/app in Safari.' : 'Download didn\'t start? Open <b>roninwb.in/get</b> in Chrome.'} Your RWB account, records and settings stay safe.</p>
     </div></div>`;
     app.innerHTML = html;
     const bind = () => app.querySelector('[data-x=get]')?.addEventListener('click', () => {
         if (web) { const a = document.createElement('a'); a.href = apkUrl(); a.download = 'RWB-App.apk'; document.body.append(a); a.click(); a.remove(); return; }
-        const url = 'https://roninwb.in/get/';
+        const url = apkUrl();   /* straight to the newest app file: Android shows it as an update */
         (Native('Browser')?.open({ url }) || Promise.reject()).catch(() => { location.href = url; });
     });
     bind();
@@ -3910,6 +3919,7 @@ if (NATIVE) try {
         const h = location.hash.slice(1).split('/')[0];
         if (h && h !== 'home') { if (canGoBack) history.back(); else location.hash = '#home'; } else App.minimizeApp();
     });
+    App.addListener('resume', () => { updateCheck(); });
     App.addListener('resume', () => { if (sharing() && trk.svc) svcCheck(); else if (sharing()) gpsFix(30000).then(sendFix).catch(() => {}); });
     /* links that leave the app (WhatsApp, phone, Google Maps, Instagram…) open in their own apps */
     document.addEventListener('click', e => {
