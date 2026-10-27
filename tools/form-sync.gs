@@ -489,6 +489,24 @@ function syncTnc() {
 }
 
 /**
+ * "Understood & agreed" on the sheet = agreed to the current RWB Terms in the app (needs setup file 47).
+ * Run it from the editor any time (choose "syncTncAgreed" → Run); syncWithApp also runs it after every sync.
+ * Rows that say "I don't agree", or have no answer, are left as they are.
+ */
+function syncTncAgreed() {
+  const sheet = responsesSheet_(), data = sheet.getDataRange().getValues(), heads = data.shift();
+  const phones = data.map(r => toMember_(heads, r)).filter(m => m.phone && m.tnc === 'yes').map(m => m.phone);
+  let n = 0;
+  for (let i = 0; i < phones.length; i += 500) {
+    const r = UrlFetchApp.fetchAll([rpc_('sheet_agree_tnc', { p_secret: SYNC_SECRET, p_phones: phones.slice(i, i + 500) })])[0];
+    if (r.getResponseCode() !== 200) { console.log('Could not update the app (run setup file 47 in Supabase first): ' + r.getContentText().slice(0, 200)); return 0; }
+    n += Number(r.getContentText()) || 0;
+  }
+  console.log('"' + AGREED + '" on ' + phones.length + ' rows; ' + n + ' members now marked as agreed in the app.');
+  return n;
+}
+
+/**
  * Copies every row's join-form answers (sticker, social media and the rest) into the app, so members see
  * them in Me and admins in each profile. Runs from setup and then every night by itself. Safe to run again.
  */
@@ -558,6 +576,7 @@ function syncWithApp() {
     if (exp.getResponseCode() !== 200) { console.log('Could not read the app (run setup file 34 in Supabase first): ' + exp.getContentText().slice(0, 200)); return; }
     const app = JSON.parse(exp.getContentText());
     const rc = reconcile_(app);
+    try { syncTncAgreed(); } catch (err) { console.log('T&C answers not sent: ' + err); }
     console.log('Sync done. VRNs cleaned: ' + vr.cleaned + '. Duplicate VRN rows moved: ' + vr.moved + (vr.archived ? ' (archived in the app: ' + vr.archived + ')' : '') +
       (vr.tnc ? '. T&C answers set to "' + AGREED + '": ' + vr.tnc : '') + '. Cells updated from the app: ' + rc.cells + ' on ' + rc.rows + ' rows. Added: ' + rc.added + '. Moved to Removed members: ' + rc.removed +
       '. Rejected entries deleted: ' + rc.rejected + '. Older duplicate rows moved: ' + rc.older + '. App details filled from the sheet: ' + rc.filled + '. Join dates updated from the sheet: ' + (rc.joined || 0) + '.');
