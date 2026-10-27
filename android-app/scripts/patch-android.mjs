@@ -16,7 +16,7 @@ const must = (s, what) => { if (!s) throw new Error('patch-android: ' + what + '
 const mf = path.join(app, 'src/main/AndroidManifest.xml');
 let m = read(mf);
 const perms = ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_LOCATION',
-  'POST_NOTIFICATIONS', 'WAKE_LOCK', 'VIBRATE', 'RECEIVE_BOOT_COMPLETED', 'REQUEST_IGNORE_BATTERY_OPTIMIZATIONS'];
+  'POST_NOTIFICATIONS', 'WAKE_LOCK', 'VIBRATE', 'RECEIVE_BOOT_COMPLETED', 'REQUEST_IGNORE_BATTERY_OPTIMIZATIONS', 'ACCESS_BACKGROUND_LOCATION'];
 const add = perms.filter(p => !m.includes(`android.permission.${p}"`)).map(p => `    <uses-permission android:name="android.permission.${p}" />`).join('\n');
 m = m.replace('</manifest>', `${add}\n    <uses-feature android:name="android.hardware.location.gps" android:required="false" />\n</manifest>`);
 // the main activity: sign-in comes back through in.roninwb.twa://auth, and roninwb.in/app links open in the app
@@ -42,7 +42,7 @@ m = m.replace(/(<application[^>]*>)/, `$1
         <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_rwb" />
         <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/rwb_orange" />
         <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="rwb" />
-        <service android:name=".TrackService" android:exported="false" android:foregroundServiceType="location" />`);
+        <service android:name=".TrackService" android:exported="false" android:stopWithTask="false" android:foregroundServiceType="location" />`);
 write(mf, m);
 
 /* ---------- RWB Track: our own background service (keeps sharing with the screen off) ---------- */

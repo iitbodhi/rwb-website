@@ -3209,8 +3209,7 @@ async function sendFix(p) {
 function startWatch() {
     stopWatch();
     const nat = trk.svc ? null : NativeGeo();
-    if (trk.svc) {   /* the RWB Track service shares in the background; here we only follow your position for the map */
-        if ('geolocation' in navigator) trk.watch = navigator.geolocation.watchPosition(p => onFix(posOf(p)), () => {}, { enableHighAccuracy: true, maximumAge: 10000, timeout: 60000 });
+    if (trk.svc) {   /* the RWB Track service does all the GPS work (one GPS user = less battery); its last fix is read when needed */
     } else if (nat) {   /* the RWB Android app: keeps going with the screen locked (a notification shows while it runs) */
         nat.addWatcher({ backgroundTitle: 'RWB is sharing your location', backgroundMessage: 'Tap to open the RWB App. Stop sharing in Track.', requestPermissions: true, stale: false, distanceFilter: 25 },
             (loc, err) => { if (err) { if (err.code === 'NOT_AUTHORIZED') locationHelp(); return; } if (loc) onFix({ lat: loc.latitude, lng: loc.longitude, acc: Math.round(loc.accuracy || 0), spd: loc.speed ?? null, hdg: loc.bearing ?? null, t: loc.time || Date.now() }); })
@@ -3242,7 +3241,7 @@ async function startShare(hours, eventId = null, note = '') {
     if (await hasSvc()) svc = await svcStart().catch(e => { toast(`Background sharing couldn't start: ${e.message || e}. Sharing works while the app is open.`, true); return null; });
     trackSave({ until: trk.until, event: eventId, note, svc: trk.svc });
     startWatch();
-    if (svc && svc.battery === false) setTimeout(() => batteryAsk(), 900);
+    if (svc && (svc.battery === false || svc.bgLocation === false)) setTimeout(() => batteryAsk(), 900);
     toast(`You're sharing your live location 📍 ${hours >= 12 ? 'until you stop' : 'for ' + TRACK_HOURS.find(h => h[0] === hours)[1]}`);
 }
 async function stopShare(quiet = false) {
@@ -3282,26 +3281,39 @@ async function svcStart() {
 let svcBusy = false;
 async function svcCheck() {
     if (!trk.svc || svcBusy || !sharing()) return; svcBusy = true;
-    try { const st = await RwbTrack().status(); if (!st.running) await svcStart(); } catch { /* ignore */ } finally { svcBusy = false; }
+    try {
+        const st = await RwbTrack().status();
+        if (st.lat && st.fix) trk.last = { lat: +st.lat, lng: +st.lng, acc: st.acc || null, t: st.fix };
+        if (!st.running) {
+            if (st.stopped && st.stopped >= (st.started || 0)) { await stopShare(true); toast(/notification/.test(st.why || '') ? 'You stopped sharing from the notification' : 'Sharing stopped'); }
+            else await svcStart();   /* Android stopped it: start again */
+        }
+    } catch { /* ignore */ } finally { svcBusy = false; }
 }
 /* on the Track screen: is the background sharing healthy? (last GPS fix, last position sent, last problem) */
 async function svcHealth() {
     let st; try { st = await RwbTrack().status(); } catch { return; }
+    if (st.lat && st.fix) trk.last = { lat: +st.lat, lng: +st.lng, acc: st.acc || null, t: st.fix };
     const el = $('#trk-health') || (() => { const e = document.createElement('p'); e.id = 'trk-health'; e.className = 'small trk-health'; $('#trk-status')?.after(e); return e; })();
     const ago = ms => !ms ? 'never' : Date.now() - ms < 90e3 ? `${Math.max(1, Math.round((Date.now() - ms) / 1000))} s ago` : `${Math.round((Date.now() - ms) / 6e4)} min ago`;
     const ok = st.running && st.sent && Date.now() - st.sent < 150e3;
-    el.innerHTML = `${ok ? '🟢' : '🟠'} Background sharing ${st.running ? 'on' : '<b>stopped</b>'} · sent ${ago(st.sent)} · GPS ${ago(st.fix)}${st.acc ? ` (±${st.acc} m)` : ''}${st.error ? `<br><span class="warn">${esc(st.error)}</span>` : ''}${st.battery ? '' : ' · <button class="linkish" data-act="trk-batt">Allow in background</button>'}`;
+    el.innerHTML = `${ok ? '🟢' : '🟠'} Background sharing ${st.running ? 'on' : '<b>stopped</b>'} · sent ${ago(st.sent)} · GPS ${ago(st.fix)}${st.acc ? ` (±${st.acc} m)` : ''}${st.error ? `<br><span class="warn">${esc(st.error)}</span>` : ''}${st.battery && st.bgLocation ? '' : ' · <button class="linkish" data-act="trk-batt">Make Track unstoppable</button>'}`;
     actions['trk-batt'] = () => batteryAsk(true);
     if (!st.running) svcCheck();
 }
-/* phones stop apps in the background to save battery: ask once in a while to let RWB run */
-function batteryAsk(force = false) {
+/* two phone settings make Track unstoppable: no battery restrictions, and location "Allow all the time" */
+async function batteryAsk(force = false) {
     try { if (!force && Date.now() - Number(localStorage.getItem('rwb-batt-asked') || 0) < 3 * 864e5) return; localStorage.setItem('rwb-batt-asked', String(Date.now())); } catch { /* ignore */ }
-    openSheet('Keep Track running', `<p class="small" style="margin-bottom:10px">Your phone may stop Track to save battery when the screen is off. Allow RWB to run in the background so your live location never pauses.</p>
-        <button class="btn block" data-x="allow">Allow RWB in the background</button>
-        <ol class="small help-steps" style="margin-top:14px"><li>Tap <b>Allow</b> when Android asks.</li><li>On Xiaomi, Redmi, Poco, Realme, Oppo, Vivo or OnePlus, also open <b>Settings → Apps → RWB → Battery</b> and choose <b>No restrictions</b> (or turn on <b>Autostart</b>).</li><li>Don't swipe RWB away from recent apps while you ride.</li></ol>
-        <button class="btn ghost block" data-x="later" style="margin-top:10px">Later</button>`, body => {
-        body.querySelector('[data-x=allow]').onclick = () => { RwbTrack()?.battery().catch(() => {}); closeSheet(); };
+    let st = {}; try { st = await RwbTrack().status(); } catch { /* ignore */ }
+    if (!force && st.battery && st.bgLocation) return;
+    const item = (ok, title, how, x, btn) => `<div class="trk-set${ok ? ' ok' : ''}"><span class="ts-ico">${ok ? '✅' : '⚠️'}</span><span class="grow"><b>${title}</b><span class="small muted">${how}</span></span>${ok ? '' : `<button class="btn sm" data-x="${x}">${btn}</button>`}</div>`;
+    openSheet('Make Track unstoppable', `<p class="small" style="margin-bottom:12px">Two phone settings keep your live location going with the screen off, the app minimised or swiped away, for the whole ride.</p>
+        ${item(st.battery, 'Battery: no restrictions', 'So the phone never pauses RWB to save battery.', 'allow', 'Allow')}
+        ${item(st.bgLocation, 'Location: Allow all the time', 'Settings → Permissions → Location → <b>Allow all the time</b>. Only used while you share.', 'always', 'Open settings')}
+        <ol class="small help-steps" style="margin-top:14px"><li>Samsung: also Settings → Battery → Background usage limits → add RWB to <b>Never sleeping apps</b>.</li><li>Xiaomi, Redmi, Poco, Realme, Oppo, Vivo, OnePlus: Settings → Apps → RWB → Battery → <b>No restrictions</b>, and turn on <b>Autostart</b>.</li></ol>
+        <button class="btn ghost block" data-x="later" style="margin-top:10px">Done</button>`, body => {
+        body.querySelector('[data-x=allow]')?.addEventListener('click', () => { RwbTrack()?.battery().catch(() => {}); closeSheet(); });
+        body.querySelector('[data-x=always]')?.addEventListener('click', () => { RwbTrack()?.settings().catch(() => {}); closeSheet(); });
         body.querySelector('[data-x=later]').onclick = () => closeSheet();
     });
 }
@@ -3370,7 +3382,7 @@ function trackMenu() {
     openSheet('Track', `<div class="trk-menu">
         <button type="button" class="trk-opt share${on ? ' on' : ''}" data-x="share"><span class="trk-ico">${on ? '🟢' : '📍'}</span><b>${on ? 'Sharing live' : 'Share'}</b><small>${on ? esc(leftTxt(trk.until)) + ' · tap to stop or change' : 'Share your live location'}</small></button>
         <button type="button" class="trk-opt view" data-x="view"><span class="trk-ico">🗺️</span><b>View</b><small>See riders live on the map</small></button>
-        <button type="button" class="trk-opt sos" data-x="sos"><span class="trk-ico">🆘</span><b>SOS</b><small>Alert the RWB team with your location</small></button></div>`, body => {
+        <button type="button" class="trk-opt sos${mySos() ? ' on' : ''}" data-x="sos"><span class="trk-ico">🆘</span><b>${mySos() ? 'SOS sent' : 'SOS'}</b><small>${mySos() ? 'Tap to cancel or see it' : 'Alert the RWB team with your location'}</small></button></div>`, body => {
         body.querySelector('[data-x=share]').onclick = () => shareSheet();
         body.querySelector('[data-x=view]').onclick = () => { closeSheet(); location.hash = '#track'; };
         body.querySelector('[data-x=sos]').onclick = () => sosSheet();
@@ -3394,7 +3406,29 @@ function shareSheet(eventId = null, eventTitle = '') {
 }
 
 /* ---------- SOS: press and hold, so it can't go by accident ---------- */
+/* my open SOS (so the SOS button shows "Cancel SOS" instead of sending another) */
+const SOS_KEY = 'rwb-my-sos';
+const mySos = () => { try { const v = JSON.parse(localStorage.getItem(SOS_KEY) || 'null'); return v && Date.now() - v.at < 24 * 36e5 ? v : null; } catch { return null; } };
+const setMySos = v => { try { v ? localStorage.setItem(SOS_KEY, JSON.stringify(v)) : localStorage.removeItem(SOS_KEY); } catch { /* ignore */ } };
+function sosSentSheet(s) {
+    openSheet('SOS', `<div class="sos-sent"><span class="sos-pulse">🆘</span><b>SOS sent</b><span class="small">${esc(timeAgo(new Date(s.at).toISOString()))}. Every RWB admin and coordinator got an urgent alert with your location.</span></div>
+        <button class="btn block" data-x="map" style="margin-top:14px">🗺️ See it on the map</button>
+        <button class="btn ghost block sos-cancel" data-x="cancel" style="margin-top:10px">✅ Cancel SOS · I'm safe</button>
+        <p class="small muted" style="margin:14px 0 8px">In danger right now? Call <a href="tel:112"><b>112</b></a> (emergency).</p>
+        <div id="sos-admins" class="small muted"></div>`, body => {
+        body.querySelector('[data-x=map]').onclick = () => { closeSheet(); location.hash = '#track/sos'; };
+        body.querySelector('[data-x=cancel]').onclick = e => busy(e.currentTarget, async () => {
+            await api.trackSosResolve(s.id); setMySos(null); closeSheet(); toast("SOS cancelled. The RWB team is told you're safe.");
+            if (location.hash.startsWith('#track')) refreshTrack();
+        });
+        sosAdmins(body);
+    });
+}
+function sosAdmins(body) {
+    api.rwbAdmins().then(list => { const el = body.querySelector('#sos-admins'); if (el) el.innerHTML = list.length ? `<div class="group">${list.slice(0, 6).map(a => `<div class="bike-row"><span class="grow"><b>${esc(a.full_name)}</b></span><a class="btn sm ghost" href="tel:+91${esc(a.phone)}">📞 Call</a></div>`).join('')}</div>` : ''; }).catch(() => {});
+}
 function sosSheet() {
+    const open = mySos(); if (open) return sosSentSheet(open);
     openSheet('SOS', `<p class="small" style="margin-bottom:14px">Sends an <b>urgent alert with your location</b> to every RWB admin and coordinator. Use it only in a real emergency.</p>
         <button type="button" class="sos-hold" id="sos-hold"><span class="sos-fill"></span><b>Hold for 2 seconds</b><small>to send SOS</small></button>
         <p class="small muted" style="margin:14px 0 8px">In danger right now? Call <a href="tel:112"><b>112</b></a> (emergency).</p>
@@ -3405,17 +3439,28 @@ function sosSheet() {
         const up = () => { clearTimeout(t); b.classList.remove('holding'); };
         b.addEventListener('pointerdown', down); ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, up));
         b.addEventListener('contextmenu', e => e.preventDefault());
-        api.rwbAdmins().then(list => { const el = body.querySelector('#sos-admins'); if (el) el.innerHTML = list.length ? `<div class="group">${list.slice(0, 6).map(a => `<div class="bike-row"><span class="grow"><b>${esc(a.full_name)}</b></span><a class="btn sm ghost" href="tel:+91${esc(a.phone)}">📞 Call</a></div>`).join('')}</div>` : ''; }).catch(() => {});
+        sosAdmins(body);
+    });
+}
+/* the fastest good position: the background service's last fix, the app's, the phone's cached one, then a quick network fix */
+async function quickFix() {
+    if (trk.svc) { try { const st = await RwbTrack().status(); if (st.lat && st.fix && Date.now() - st.fix < 180000) return { lat: +st.lat, lng: +st.lng, acc: st.acc || null, t: st.fix }; } catch { /* ignore */ } }
+    if (trk.last && Date.now() - trk.last.t < 120000) return trk.last;
+    return new Promise((ok, no) => {
+        if (!('geolocation' in navigator)) return no(new Error('This phone can\'t share its location.'));
+        navigator.geolocation.getCurrentPosition(p => ok(posOf(p)), () => gpsFix(30000).then(ok, no), { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 });
     });
 }
 async function sendSos() {
-    let p = trk.last && Date.now() - trk.last.t < 120000 ? trk.last : null;
-    try { p = await gpsFix(30000); } catch (e) { if (!p) { toast(e.message, true); return false; } }
-    try { await api.trackSos(p.lat, p.lng, p.acc); }
+    let p; try { p = await quickFix(); } catch (e) { toast(e.message, true); return false; }
+    let id; try { id = await api.trackSos(p.lat, p.lng, p.acc); }
     catch (e) { toast(e.message || 'SOS not sent. Call an admin.', true); return false; }
+    setMySos({ id, at: Date.now() });
     navigator.vibrate?.([200, 100, 200]);
-    closeSheet(); toast('🆘 SOS sent to the RWB team with your location');
-    location.hash = '#track/sos';
+    toast('🆘 SOS sent to the RWB team with your location');
+    sosSentSheet(mySos());
+    /* a sharper position follows (updates the same SOS, no second alert) */
+    if (!p.acc || p.acc > 40) gpsFix(0).then(q => api.trackSos(q.lat, q.lng, q.acc)).catch(() => {});
     return true;
 }
 
@@ -3471,6 +3516,8 @@ async function refreshTrack() {
     const ev = trk.filter ? (state.evd?.events || []).find(e => e.id === trk.filter) : null;
     const rider = d.fam ? riders.find(r => r.mine) : null, rName = esc(firstName(state.fam?.member));
     if (trk.svc && sharing()) svcHealth();
+    if (!d.fam) { const mine = d.sos.find(x => x.me); if (mine) setMySos({ id: mine.id, at: Date.parse(mine.at) || Date.now() }); else setMySos(null); }
+    const sosB = app.querySelector('[data-act=trk-sos]'); if (sosB) sosB.textContent = mySos() ? '🆘 SOS sent · Cancel' : '🆘 SOS';
     $('#trk-status').innerHTML = d.fam ? `<span class="small muted">${rider ? `<b>${rName}</b> is sharing live${riders.length > 1 ? ` · ${riders.length - 1} more on the same ride` : ''}` : `${rName} isn't sharing a live location right now. You'll see them here when they share on Track.`}${d.sos.length ? ' · <b class="sos-txt">SOS</b>' : ''}</span>` : `${sharing() ? `<span class="trk-live-pill"><span class="dot"></span>You're live · ${esc(leftTxt(trk.until))}</span>` : ''}
         <span class="small muted">${riders.length ? `${riders.length} rider${riders.length === 1 ? '' : 's'} live${ev ? ` on ${esc(ev.title)}` : ''}` : 'No one is sharing right now'}${d.sos.length ? ` · <b class="sos-txt">${d.sos.length} SOS</b>` : ''}</span>
         ${trk.filter ? '<button class="linkish small" data-act="trk-all">Show everyone</button>' : ''}`;
@@ -3863,7 +3910,7 @@ if (NATIVE) try {
         const h = location.hash.slice(1).split('/')[0];
         if (h && h !== 'home') { if (canGoBack) history.back(); else location.hash = '#home'; } else App.minimizeApp();
     });
-    App.addListener('resume', () => { if (sharing()) gpsFix(30000).then(sendFix).catch(() => {}); });
+    App.addListener('resume', () => { if (sharing() && trk.svc) svcCheck(); else if (sharing()) gpsFix(30000).then(sendFix).catch(() => {}); });
     /* links that leave the app (WhatsApp, phone, Google Maps, Instagram…) open in their own apps */
     document.addEventListener('click', e => {
         const a = e.target.closest('a[href]'); if (!a) return;

@@ -57,6 +57,17 @@ public class TrackPlugin extends Plugin {
         call.resolve(state());
     }
 
+    /** The app's settings page (Location → "Allow all the time", Battery → "Unrestricted"). */
+    @PluginMethod
+    public void settings(PluginCall call) {
+        try {
+            Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getContext().getPackageName()));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+        } catch (Exception ignored) { }
+        call.resolve(state());
+    }
+
     private boolean ignoring() {
         if (Build.VERSION.SDK_INT < 23) return true;
         PowerManager pm = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
@@ -67,12 +78,12 @@ public class TrackPlugin extends Plugin {
         JSObject r = new JSObject();
         r.put("running", TrackService.running);
         r.put("battery", ignoring());
-        r.put("version", 2);
+        r.put("version", 3);
         try {
             android.content.SharedPreferences st = getContext().getSharedPreferences(TrackService.STATS, 0);
-            for (String k : new String[] { "started", "fix", "sent", "acc", "code" }) r.put(k, (Object) Long.valueOf(st.getLong(k, 0)));
-            r.put("error", st.getString("error", ""));
-            r.put("provider", st.getString("provider", ""));
+            for (String k : new String[] { "started", "fix", "sent", "acc", "code", "stopped" }) r.put(k, (Object) Long.valueOf(st.getLong(k, 0)));
+            for (String k : new String[] { "error", "provider", "lat", "lng", "why" }) r.put(k, st.getString(k, ""));
+            r.put("bgLocation", Build.VERSION.SDK_INT < 29 || getContext().checkSelfPermission("android.permission.ACCESS_BACKGROUND_LOCATION") == android.content.pm.PackageManager.PERMISSION_GRANTED);
         } catch (Exception ignored) { }
         return r;
     }

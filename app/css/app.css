@@ -1229,3 +1229,12 @@ body.blocked .pookie-fab,body.blocked #tabbar,body.blocked .promo,body.blocked d
 .blk-kicker{text-align:center;font:800 .8rem var(--display,sans-serif);letter-spacing:.18em;text-transform:uppercase;color:var(--orange)}
 .blk-card h1{text-align:center;font:800 1.9rem/1.05 var(--display,sans-serif);text-transform:uppercase;margin:6px 0 12px}
 .blk-steps{margin:14px 0 18px 1.1rem;display:grid;gap:8px;font-size:.95rem}
+
+.sos-sent{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding:18px;border-radius:18px;background:rgba(220,38,38,.12);border:1.5px solid rgba(220,38,38,.5)}
+.sos-sent b{font:800 1.4rem var(--display,sans-serif);text-transform:uppercase;color:#ef4444}
+.sos-pulse{font-size:2.4rem;animation:sosPulse 1.2s ease-in-out infinite}
+@keyframes sosPulse{50%{transform:scale(1.15)}}
+.sos-cancel{border-color:var(--ok,#22c55e)!important;color:var(--ok,#22c55e)!important}
+.trk-opt.sos.on{border-color:#ef4444;background:rgba(220,38,38,.14)}
+.trk-set{display:flex;gap:12px;align-items:center;padding:12px;border-radius:14px;border:1px solid var(--line);margin-bottom:8px}
+.trk-set .grow{display:flex;flex-direction:column;gap:2px}.trk-set.ok{opacity:.75}.ts-ico{font-size:1.3rem}
