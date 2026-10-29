@@ -139,7 +139,8 @@ async function supabaseApi(url, key) {
             must(await sb.storage.from('talk').upload(path, blob, { contentType: type, upsert: false }));
             try {
                 const url = must(await sb.storage.from('talk').createSignedUrl(path, 7 * 24 * 3600)).signedUrl;
-                return must(await sb.rpc('talk_send', { p_kind: kind, p_target: target ?? null, p_path: path, p_url: url, p_secs: Math.max(1, Math.round(secs)) }));
+                return must(kind === 'famreply' ? await sb.rpc('talk_send_fam', { p_path: path, p_url: url, p_secs: Math.max(1, Math.round(secs)) })
+                    : await sb.rpc('talk_send', { p_kind: kind, p_target: target ?? null, p_path: path, p_url: url, p_secs: Math.max(1, Math.round(secs)) }));
             } catch (e) { await sb.storage.from('talk').remove([path]).catch(() => {}); throw e; }
         },
         talkHeard: async id => must(await sb.rpc('talk_heard', { p_id: id })),

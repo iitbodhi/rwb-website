@@ -3834,11 +3834,16 @@ function talkStopAudio() { if (talk.audio) { try { talk.audio.pause(); } catch {
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.me && !talk.off && talk.seeded) talkPoll(); });
 
 /* one message in a list */
+const talkFamKind = x => x.kind === 'fam' || x.kind === 'fam_reply';
+/* reply by voice to a family message: the member answers that FAM, the FAM user answers their rider */
+const talkReplyBtn = x => x.mine || x.log || !talkFamKind(x) ? '' : isFam()
+    ? '<button class="btn sm talk-ptt-sm" data-ptt-reply="famreply" aria-label="Hold to reply">🎙️ Reply</button>'
+    : x.from?.fam_id ? `<button class="btn sm talk-ptt-sm" data-ptt-reply="fam" data-fam="${x.from.fam_id}" data-n="${esc(x.from.name || '')}" aria-label="Hold to reply">🎙️ Reply</button>` : '';
 const talkRow = x => `<div class="talk-row${x.heard || x.mine ? '' : ' new'}${x.mine ? ' mine' : ''}">
     <button class="talk-play${talk.playingId === x.id ? ' on' : ''}" data-talk="play" data-id="${x.id}" aria-label="${talk.playingId === x.id ? 'Stop' : 'Play'}">${talk.playingId === x.id ? '■' : '▶'}</button>
     ${x.mine ? '<span class="talk-me">🎙️</span>' : face({ full_name: x.from?.name, avatar_url: x.from?.avatar }, 'avatar sm')}
-    <span class="grow"><b>${esc(talkWho(x))}</b><span class="small muted">${talkLen(x.secs)} · ${x.kind === 'event' ? esc(x.event || 'Ride') : x.mine ? 'FAM' : 'Voice message'} · ${timeAgo(x.at)}</span></span>
-    ${x.log ? '' : `<button class="icon-btn talk-more" data-talk="more" data-id="${x.id}" aria-label="More">⋯</button>`}</div>`;
+    <span class="grow"><b>${esc(talkWho(x))}</b><span class="small muted">${talkLen(x.secs)} · ${x.kind === 'event' ? esc(x.event || 'Ride') : '🔒 Family'} · ${timeAgo(x.at)}</span></span>
+    ${talkReplyBtn(x)}${x.log || (talkFamKind(x) && !x.mine) ? '' : `<button class="icon-btn talk-more" data-talk="more" data-id="${x.id}" aria-label="More">⋯</button>`}</div>`;
 const talkFind = id => talk.items.find(x => x.id === id) || (talk.log || []).find(x => x.id === id);
 
 /* everything Talk on screen follows the latest state */
@@ -3852,10 +3857,17 @@ function talkPaint() {
         if (lab) { lab.hidden = fab.hidden; if (ev) lab.innerHTML = `🏍️ ${esc(ev.title)} · ${ev.riders} rider${ev.riders === 1 ? '' : 's'}${t.events.length > 1 ? ' <b>⇄</b>' : ''}`; }
     }
     const sec = $('#talk-sec');
-    if (sec) { sec.hidden = talk.off || !talk.me || !talk.items.length; const l = $('#talk-list'); if (l) l.innerHTML = talk.items.slice(0, 4).map(talkRow).join(''); }
+    /* Track (members): ride messages; FAM Home: everything (it's all family) */
+    const shown = isFam() ? talk.items : talk.items.filter(x => !talkFamKind(x));
+    if (sec) { sec.hidden = talk.off || !talk.me || !shown.length; const l = $('#talk-list'); if (l) l.innerHTML = shown.slice(0, 4).map(talkRow).join(''); }
+    /* Home → FAM (members): private family messages */
+    const ft = $('#fam-talk'); if (ft) { const fam = talk.items.filter(talkFamKind); ft.hidden = !fam.length;
+        ft.innerHTML = fam.length ? `<h3 class="group-title">Voice messages <span class="small muted" style="text-transform:none;letter-spacing:0">🔒 only you and your FAM</span></h3><div class="talk-list">${fam.slice(0, 6).map(talkRow).join('')}</div>` : ''; }
     const nb = $('#talk-new');
     if (nb) { const p = talk.pending; nb.hidden = !p; if (p) nb.innerHTML = `<span>🎙️</span><span class="grow"><b>${esc(talkWho(p))}</b> sent a voice message</span><b>▶ Play</b>`; }
     const box = $('#talk-inbox'); if (box) box.innerHTML = talk.items.length ? talk.items.map(talkRow).join('') : '<p class="muted small" style="padding:8px 2px">No voice messages in the last 7 days.</p>';
+    document.querySelectorAll('[data-ptt-reply]:not([data-bound])').forEach(b => { b.dataset.bound = '1';
+        bindPtt(b, () => b.dataset.pttReply === 'famreply' ? { kind: 'famreply', target: null, label: firstName(state.fam?.member) || 'your rider' } : { kind: 'fam', target: Number(b.dataset.fam), label: b.dataset.n }); });
     const alog = $('#talk-log'); if (alog && talk.log) alog.querySelectorAll('.talk-play').forEach(b => { const on = Number(b.dataset.id) === talk.playingId; b.classList.toggle('on', on); b.textContent = on ? '■' : '▶'; });
 }
 
@@ -3980,7 +3992,7 @@ async function adminTalk() {
     let d; try { d = await api.talkLog(); } catch (e) { box.innerHTML = `<div class="card empty"><b>Talk isn't set up yet</b>${esc(/function|schema/i.test(e.message) ? 'Run setup file 50 in Supabase.' : e.message)}</div>`; return; }
     talk.log = d.items.map(x => ({ ...x, log: true })); state.talkMuted = new Set(d.muted.map(m => m.id));
     box.innerHTML = `<div id="talk-admin">
-        <p class="small muted" style="margin-bottom:12px">Every Talk voice message of the last 7 days (ride groups and FAM). Messages for rides you're going on play out loud for you too.</p>
+        <p class="small muted" style="margin-bottom:12px">Every ride Talk message of the last 7 days. Family (FAM) messages are private and never shown here.</p>
         ${d.muted.length ? `<h3 class="talk-h">Muted (${d.muted.length})</h3><div class="group">${d.muted.map(m => `<div class="talk-row"><span class="talk-me">🔇</span><span class="grow"><b>${esc(m.name)}</b><span class="small muted">by ${esc(m.by || 'an admin')} · ${timeAgo(m.at)}</span></span><button class="btn sm ghost" data-talk="mute" data-mid="${m.id}" data-on="1">Unmute</button></div>`).join('')}</div>` : ''}
         <h3 class="talk-h">Messages (${d.items.length})</h3>
         <div id="talk-log" class="talk-list">${talk.log.length ? talk.log.map(x => `<div class="talk-arow${x.reported ? ' reported' : ''}">
@@ -4077,6 +4089,7 @@ async function viewFamHome() {
             <div class="row">${face(m, 'avatar lg')}<span class="grow"><span class="small muted">Your RWB rider</span><b>${esc(m.full_name || 'RWB member')}</b>${m.nickname ? `<span class="small muted">“${esc(m.nickname)}”</span>` : ''}</span></div>
             <div class="fam-odo"><span class="fam-odo-l">${esc(m.bike || 'Motorcycle')} · odometer</span><b>${m.odo ? Number(m.odo).toLocaleString('en-IN') : '–'}</b><em>km</em></div>
             <a class="btn block" href="#track">📍 Where is ${esc(first)}?</a>
+            ${m.on_app === false ? '' : `<button class="btn ghost block talk-ptt-sm fam-talk-btn" id="fam-ptt" aria-label="Hold to talk to ${esc(first)}">🎙️ Hold to talk to ${esc(first)}</button><p class="small muted fam-talk-tip">🔒 Private: only you and ${esc(first)} hear your voice messages.</p>`}
         </section>
         ${pushAsk ? `<div class="banner"><span class="b-ico">🔔</span><span class="grow">Get important RWB announcements as notifications</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
         <section class="section talk-sec" id="talk-sec" hidden><h2>Voice messages <button class="linkish small" data-talk="inbox">See all</button></h2><div id="talk-list" class="talk-list"></div></section>
@@ -4089,6 +4102,7 @@ async function viewFamHome() {
     swipeToDismiss(app, () => { if (!app.querySelector('.news-mini [data-swipe]')) render(); });
     bindVrnCheck();
     talkPaint(); talkPoll();
+    if ($('#fam-ptt')) bindPtt($('#fam-ptt'), () => ({ kind: 'famreply', target: null, label: first }));
     actions = {
         evt: el => location.hash = '#events/' + el.dataset.id,
         'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); render(); }),
@@ -4186,7 +4200,7 @@ async function famSheet() {
     openSheet('RWB FAM', `<div class="fam-intro"><span class="fam-intro-ico">${FAM_ICON}</span><p><b>Keep your family in the loop.</b> Invite up to ${max} family members. On the RWB App they see your live location when you share it on Track (and riders on the same event ride), your odometer, RWB events and important announcements.</p></div>
         <p class="small muted" style="margin:10px 0">They can't see expenses, RSVPs, Motomart, Service, Mileage or anyone's phone numbers, and they can't share or send SOS.</p>
         <h3 class="group-title" style="margin-top:6px">Your FAM <span class="small muted" style="text-transform:none;letter-spacing:0">${list.length} of ${max}</span></h3>
-        ${list.some(x => x.approved !== false) ? '<p class="small muted" style="margin:-4px 0 8px">Hold <b>🎙️ Talk</b>, speak, and let go to send them a voice message.</p>' : ''}
+        ${list.some(x => x.approved !== false) ? '<p class="small muted" style="margin:-4px 0 8px">Hold <b>🎙️ Talk</b>, speak, and let go to send them a voice message. 🔒 Private: admins never see or hear family messages.</p>' : ''}
         <div class="group" id="fam-list">${list.length ? list.map(x => `<div class="bike-row">${face(x, 'avatar sm')}<span class="grow"><b>${esc(x.full_name)}</b><span class="small muted">${x.phone ? esc(x.phone.replace(/(\d{5})(\d{5})/, '$1 $2')) + ' · ' : ''}joined ${fmtDate(String(x.created_at).slice(0, 10))}${x.approved === false ? ' · <b class="warn">turned off by them</b>' : ''}</span></span>
             ${x.approved === false ? '' : `<button class="btn sm talk-ptt-sm" data-ptt-fam="${x.id}" data-n="${esc(x.full_name)}" aria-label="Hold to talk to ${esc(x.full_name)}">🎙️ Talk</button>`}<button class="btn sm ghost" data-rm="${x.id}" data-n="${esc(x.full_name)}">Remove</button></div>`).join('') : '<p class="small muted" style="padding:14px">No one yet. Share your invite below.</p>'}</div>
         ${full ? `<p class="small muted" style="margin-top:12px">Your RWB FAM is full (${max} of ${max}). Remove someone to invite another person; the invite link and code stop working while it's full.</p>` : `
@@ -4199,7 +4213,8 @@ async function famSheet() {
         body.querySelector('[data-x=wa]')?.addEventListener('click', () => openWA(waShare(msg)));
         body.querySelector('[data-x=copy]')?.addEventListener('click', () => { navigator.clipboard?.writeText(msg.replace(/\*/g, '')).then(() => toast('Invite copied'), () => toast(famLink(d.code))); });
         body.querySelector('[data-x=all]')?.addEventListener('click', () => famAdminSheet());
-        if (!talk.off) talkTargets();
+        if (!talk.off) { talkTargets(); talkPoll(true); }
+        body.querySelector('#fam-list')?.insertAdjacentHTML('afterend', '<div id="fam-talk" hidden></div>'); talkPaint();
         body.querySelectorAll('[data-ptt-fam]').forEach(b => bindPtt(b, () => ({ kind: 'fam', target: Number(b.dataset.pttFam), label: b.dataset.n })));
         body.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { if (confirmBox(`Remove ${b.dataset.n} from your RWB FAM? They lose access straight away.`)) busy(b, async () => { await api.removeFam(Number(b.dataset.rm)); toast('Removed'); famSheet(); }); });
     });

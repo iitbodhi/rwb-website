@@ -4,7 +4,8 @@
 --   on release it goes to everyone going on that ride. Talk is on for the ride from 6 hours before it starts until
 --   6 hours after it ends. Everyone going receives every message (no switch), and it plays out loud straight away
 --   (the RWB Android app plays it even with the screen off; iPhone / browser while the app is open).
--- * A member can also send a voice message to one of their RWB FAM, from their FAM list.
+-- * FAM voice messages are private: a member and each of their FAM talk to each other (Home → FAM / FAM Home).
+--   Admins never see or hear them.
 -- * Admins: every message in Admin → Talk (replay, delete, reported ones), mute / unmute any member.
 -- * Messages are deleted after 7 days (files too). At most 30 messages an hour per member.
 
@@ -45,6 +46,11 @@ create table if not exists public.talk_muted (
   member_id bigint primary key references public.members(id) on delete cascade,
   by_name text, at timestamptz not null default now()
 );
+-- FAM messages: a FAM user can reply to their rider (sender_fam); private, never in the admin log
+alter table public.talk_messages add column if not exists sender_fam bigint references public.fam_members(id) on delete cascade;
+alter table public.talk_messages alter column sender_id drop not null;
+alter table public.talk_messages drop constraint if exists talk_messages_kind_check;
+alter table public.talk_messages add constraint talk_messages_kind_check check (kind in ('event','rider','fam','fam_reply'));
 alter table public.talk_messages enable row level security;
 alter table public.talk_recipients enable row level security;
 alter table public.talk_settings enable row level security;
@@ -149,31 +155,72 @@ end $$;
 -- my messages (newer than p_after), how many I haven't played, and my Talk settings
 create or replace function public.talk_inbox(p_after bigint default 0) returns jsonb
 language plpgsql security definer set search_path = public, private as $$
-declare m members; isfam boolean;
+declare m members; f fam_members; isfam boolean;
 begin
   select * into m from members where user_id = auth.uid() and status = 'active';
   isfam := m.id is null;
-  if isfam and not private.fam_ok() then raise exception 'Members only'; end if;
+  if isfam then
+    if not private.fam_ok() then raise exception 'Members only'; end if;
+    select * into f from fam_members where user_id = auth.uid();
+  end if;
   return jsonb_build_object(
     'muted', not isfam and exists (select 1 from talk_muted where member_id = m.id),
-    'receive', private.talk_on(auth.uid()), 'forced', private.talk_forced(auth.uid()), 'fam', isfam,
+    'receive', true, 'forced', false, 'fam', isfam,
     'unheard', (select count(*) from talk_recipients r join talk_messages t on t.id = r.msg_id
                 where r.user_id = auth.uid() and r.heard_at is null and t.deleted_at is null and t.created_at > now() - interval '7 days'),
     'items', coalesce((select jsonb_agg(x order by i desc) from (
+        -- received
         select t.id as i, jsonb_build_object('id', t.id, 'kind', t.kind, 'secs', t.secs, 'url', t.url, 'at', t.created_at,
           'heard', r.heard_at is not null, 'aloud', r.aloud, 'mine', false,
-          'from', jsonb_build_object('id', s.id, 'name', s.full_name, 'nick', s.nickname, 'avatar', s.avatar_url),
+          'from', case when t.sender_fam is not null then (select jsonb_build_object('fam_id', ff.id, 'name', ff.full_name, 'fam', true) from fam_members ff where ff.id = t.sender_fam)
+                  else (select jsonb_build_object('id', s.id, 'name', s.full_name, 'nick', s.nickname, 'avatar', s.avatar_url) from members s where s.id = t.sender_id) end,
           'event', (select title from events where id = t.event_id)) x
-        from talk_recipients r join talk_messages t on t.id = r.msg_id join members s on s.id = t.sender_id
+        from talk_recipients r join talk_messages t on t.id = r.msg_id
         where r.user_id = auth.uid() and t.id > coalesce(p_after, 0) and t.deleted_at is null and t.created_at > now() - interval '7 days'
         union all
+        -- sent
         select t.id, jsonb_build_object('id', t.id, 'kind', t.kind, 'secs', t.secs, 'url', t.url, 'at', t.created_at,
           'heard', true, 'mine', true, 'to', (select count(*) from talk_recipients where msg_id = t.id),
-          'to_name', case t.kind when 'fam' then coalesce((select f.full_name from talk_recipients r join fam_members f on f.user_id = r.user_id where r.msg_id = t.id limit 1), 'your FAM') when 'event' then (select title from events where id = t.event_id)
+          'to_fam', (select ff.id from talk_recipients r join fam_members ff on ff.user_id = r.user_id where r.msg_id = t.id limit 1),
+          'to_name', case t.kind when 'fam' then coalesce((select ff.full_name from talk_recipients r join fam_members ff on ff.user_id = r.user_id where r.msg_id = t.id limit 1), 'your FAM')
+                       when 'fam_reply' then (select coalesce(x.nickname, x.full_name) from members x where x.id = f.member_id)
+                       when 'event' then (select title from events where id = t.event_id)
                        else (select coalesce(nickname, full_name) from members where id = t.to_member) end,
           'event', (select title from events where id = t.event_id))
-        from talk_messages t where t.sender_id = m.id and t.id > coalesce(p_after, 0) and t.deleted_at is null and t.created_at > now() - interval '7 days'
+        from talk_messages t
+        where ((not isfam and t.sender_id = m.id) or (isfam and t.sender_fam = f.id))
+          and t.id > coalesce(p_after, 0) and t.deleted_at is null and t.created_at > now() - interval '7 days'
         order by 1 desc limit 60) q), '[]'::jsonb));
+end $$;
+
+-- a FAM user talks to their rider (private: only the two of them)
+create or replace function public.talk_send_fam(p_path text, p_url text, p_secs integer) returns jsonb
+language plpgsql security definer set search_path = public, private as $$
+declare f fam_members; rider members; mid bigint; u text; s text; k text;
+begin
+  select * into f from fam_members where user_id = auth.uid();
+  if f.id is null or not private.fam_ok() then raise exception 'RWB FAM only'; end if;
+  select * into rider from members where id = f.member_id and status = 'active';
+  if rider.user_id is null then raise exception '% isn''t using the RWB App yet', coalesce(rider.nickname, rider.full_name, 'Your rider'); end if;
+  if (select count(*) from talk_messages where sender_fam = f.id and created_at > now() - interval '1 hour') >= 30 then
+    raise exception 'That''s a lot of messages. Please wait a little before sending more';
+  end if;
+  if p_secs is null or p_secs < 1 or p_secs > 185 then raise exception 'A voice message can be up to 3 minutes'; end if;
+  if p_path !~ ('^' || auth.uid()::text || '/[A-Za-z0-9_-]{8,64}\.(webm|m4a|mp4|ogg|aac)$') then raise exception 'Bad recording'; end if;
+  if position('/storage/v1/object/sign/talk/' || p_path in coalesce(p_url, '')) = 0 then raise exception 'Bad recording link'; end if;
+  insert into talk_messages (sender_id, sender_fam, kind, path, url, secs) values (null, f.id, 'fam_reply', p_path, p_url, p_secs) returning id into mid;
+  insert into talk_recipients (msg_id, user_id, aloud) values (mid, rider.user_id, true);
+  begin
+    select value into u from private.config where key = 'push_url';
+    select value into s from private.config where key = 'push_secret';
+    select value into k from private.config where key = 'anon_key';
+    if u is not null and s is not null then
+      perform net.http_post(url := u, body := jsonb_build_object('talk', mid),
+        headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || coalesce(k, ''), 'x-push-secret', s));
+    end if;
+  exception when others then null;
+  end;
+  return jsonb_build_object('id', mid, 'to', 1, 'live', 1);
 end $$;
 
 create or replace function public.talk_heard(p_id bigint) returns void
@@ -197,6 +244,7 @@ declare t talk_messages; who text := private.talk_who(); sname text;
 begin
   select * into t from talk_messages where id = p_id and deleted_at is null;
   if t.id is null or not exists (select 1 from talk_recipients where msg_id = p_id and user_id = auth.uid()) then raise exception 'Message not found'; end if;
+  if t.kind in ('fam', 'fam_reply') then raise exception 'Family messages are private and can''t be reported'; end if;
   if t.reported_at is null then
     update talk_messages set reported_at = now(), reported_by = who, report_note = left(nullif(trim(coalesce(p_note, '')), ''), 200) where id = p_id;
     select full_name into sname from members where id = t.sender_id;
@@ -212,7 +260,9 @@ language plpgsql security definer set search_path = public, private as $$
 begin
   update talk_messages set deleted_at = now(), deleted_by = private.talk_who()
   where id = p_id and deleted_at is null
-    and (is_admin() or sender_id = (select id from members where user_id = auth.uid()));
+    and ((is_admin() and kind not in ('fam', 'fam_reply'))                       -- family messages are private
+         or sender_id = (select id from members where user_id = auth.uid())
+         or sender_fam = (select id from fam_members where user_id = auth.uid()));
   if not found then raise exception 'Message not found'; end if;
   return 'deleted';
 end $$;
@@ -230,7 +280,7 @@ begin
                      else (select full_name from members where id = t.to_member) end,
         'to', (select count(*) from talk_recipients where msg_id = t.id), 'heard', (select count(*) from talk_recipients where msg_id = t.id and heard_at is not null),
         'reported', t.reported_at is not null, 'reported_by', t.reported_by, 'report_note', t.report_note) order by t.id desc)
-      from (select * from talk_messages where deleted_at is null and created_at > now() - interval '7 days' order by id desc limit 200) t
+      from (select * from talk_messages where deleted_at is null and kind not in ('fam', 'fam_reply') and created_at > now() - interval '7 days' order by id desc limit 200) t
       join members s on s.id = t.sender_id), '[]'::jsonb),
     'muted', coalesce((select jsonb_agg(jsonb_build_object('id', x.id, 'name', x.full_name, 'by', tm.by_name, 'at', tm.at) order by tm.at desc)
       from talk_muted tm join members x on x.id = tm.member_id), '[]'::jsonb));
@@ -256,15 +306,16 @@ end $$;
 -- ---------- for the push sender (send-push Edge Function) ----------
 create or replace function public.talk_push_job(p_id bigint, p_secret text) returns jsonb
 language plpgsql security definer set search_path = public, private as $$
-declare t talk_messages; s members;
+declare t talk_messages; s members; fname text;
 begin
   if p_secret is null or p_secret <> coalesce((select value from private.config where key = 'push_secret'), '') then raise exception 'Not allowed'; end if;
   select * into t from talk_messages where id = p_id and deleted_at is null and created_at > now() - interval '15 minutes';
   if t.id is null then return null; end if;
   select * into s from members where id = t.sender_id;
+  if t.sender_fam is not null then select full_name || ' (FAM)' into fname from fam_members where id = t.sender_fam; end if;
   return jsonb_build_object('id', t.id, 'url', t.url, 'secs', t.secs, 'at', t.created_at,
-    'from', coalesce(s.nickname, s.full_name), 'avatar', s.avatar_url,
-    'to', case t.kind when 'fam' then 'you' when 'event' then (select title from events where id = t.event_id) else 'you' end,
+    'from', coalesce(fname, s.nickname, s.full_name), 'avatar', s.avatar_url,
+    'to', case t.kind when 'fam' then 'you' when 'fam_reply' then 'you' when 'event' then (select title from events where id = t.event_id) else 'you' end,
     'recipients', coalesce((select jsonb_agg(jsonb_build_object('aloud', r.aloud,
         'fcm', coalesce((select jsonb_agg(f.token) from fcm_tokens f where f.user_id = r.user_id), '[]'::jsonb),
         'subs', coalesce((select jsonb_agg(jsonb_build_object('endpoint', p.endpoint, 'keys', jsonb_build_object('p256dh', p.p256dh, 'auth', p.auth)))
@@ -317,7 +368,8 @@ drop policy if exists talk_add on storage.objects;
 drop policy if exists talk_own_read on storage.objects;
 drop policy if exists talk_own_delete on storage.objects;
 create policy talk_add on storage.objects for insert to authenticated
-  with check (bucket_id = 'talk' and (storage.foldername(name))[1] = auth.uid()::text and public.is_member() and not private.talk_is_muted(auth.uid()));
+  with check (bucket_id = 'talk' and (storage.foldername(name))[1] = auth.uid()::text
+              and ((public.is_member() and not private.talk_is_muted(auth.uid())) or private.fam_ok()));
 create policy talk_own_read on storage.objects for select to authenticated
   using (bucket_id = 'talk' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy talk_own_delete on storage.objects for delete to authenticated
@@ -327,7 +379,7 @@ grant execute on function private.talk_is_muted(uuid) to authenticated;
 -- ---------- who may call what ----------
 do $$ declare fn text; begin
   foreach fn in array array['talk_targets()', 'talk_send(text, bigint, text, text, integer)', 'talk_inbox(bigint)', 'talk_heard(bigint)',
-    'talk_set_receive(boolean)', 'talk_report(bigint, text)', 'talk_delete(bigint)', 'admin_talk_log()', 'admin_talk_mute(bigint, boolean)'] loop
+    'talk_set_receive(boolean)', 'talk_send_fam(text, text, integer)', 'talk_report(bigint, text)', 'talk_delete(bigint)', 'admin_talk_log()', 'admin_talk_mute(bigint, boolean)'] loop
     execute format('revoke execute on function public.%s from public, anon', fn);
     execute format('grant execute on function public.%s to authenticated', fn);
   end loop;

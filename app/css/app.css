@@ -1333,3 +1333,7 @@ body.blocked .pookie-fab,body.blocked #tabbar,body.blocked .promo,body.blocked d
 .ptt-time{font-size:1.8rem;font-variant-numeric:tabular-nums}
 .ptt-ov.cancel .ptt-dot{background:var(--muted,#888);animation:none}
 .ptt-ov.cancel .ptt-card{outline:3px solid #888}
+.fam-talk-btn{margin-top:10px;padding:14px;font-size:1rem}
+.fam-talk-btn.on{background:#dc2626;color:#fff;border-color:#dc2626}
+.fam-talk-tip{margin:6px 2px 0;text-align:center}
+#fam-talk .talk-list{margin-bottom:6px}
