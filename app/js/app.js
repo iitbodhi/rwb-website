@@ -1575,6 +1575,7 @@ function docStatus(d) {
 /* =================== How-to videos (short guides, also posted as RWB Instagram stories) =================== */
 const VIDEOS = [
     ['track', 'Track + FAM ✨', 'Live location, SOS and your family in the loop', 111],
+    ['talk', 'Talk 🎙️', 'Push to talk on group rides, and with your FAM', 38],
     ['service', 'Service', 'Log services, bills and reminders', 43],
     ['mileage', 'Mileage', 'Your real km per litre', 44],
     ['motomart', 'Motomart', 'Buy and sell used riding gear', 43],
@@ -3929,7 +3930,9 @@ function recStop(keep) {
 function pttOverlay(p) {
     let ov = $('#ptt-ov');
     if (!p) { ov?.remove(); return; }
-    if (!ov) { ov = document.createElement('div'); ov.id = 'ptt-ov'; ov.className = 'ptt-ov'; document.body.appendChild(ov); }
+    const host = sheet.open ? sheet : document.body;        /* above an open sheet too (it sits in the top layer) */
+    if (ov && ov.parentNode !== host) { ov.remove(); ov = null; }
+    if (!ov) { ov = document.createElement('div'); ov.id = 'ptt-ov'; ov.className = 'ptt-ov'; host.appendChild(ov); }
     const s = p.t0 ? (Date.now() - p.t0) / 1000 : 0;
     ov.classList.toggle('cancel', !!p.cancel);
     ov.innerHTML = `<div class="ptt-card"><span class="ptt-dot"></span><b class="ptt-time">${p.t0 ? talkLen(s) : 'Starting…'}</b>
