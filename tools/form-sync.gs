@@ -369,7 +369,7 @@ function doPost(e) {
       return json_({ ok: true, result: 'updated', row: rowNo });
     }
     /* a member restored in the app: their old row comes back from "Removed members" with every answer */
-    const bin = removedTab_();
+    const bin = rowsBack_();
     const back = bin.take(m.phone, heads) || (body.old_phone ? bin.take(body.old_phone, heads) : null);
     const row = back || new Array(sheet.getLastColumn()).fill('');
     while (row.length < sheet.getLastColumn()) row.push('');
@@ -577,28 +577,37 @@ function registerWebhook_() {
  */
 function syncWithApp() {
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) { console.log('Another sync is running; skipped.'); return; }
+  if (!lock.tryLock(30000)) { console.log('Another sync is running; skipped.'); return 'Another sync is running. Try again in a minute.'; }
+  const errors = [], step = (name, fn, dflt) => { try { return fn(); } catch (err) { errors.push(name + ': ' + (err && err.message || err)); console.log('⚠️ ' + name + ' failed: ' + (err && err.stack || err)); return dflt; } };
   try {
-    ensureTriggers_();
-    const retried = retryQueued_();   // sheet edits that couldn't reach the app earlier go first
-    if (retried) console.log('Sheet edits sent again: ' + retried);
-    let blanks = 0; try { blanks = compactBlankRows_(); } catch (err) { console.log('Empty rows not checked: ' + err); }
-    let dupeDone = ''; try { dupeDone = applyDupeActions_(); } catch (err) { dupeDone = 'not checked: ' + err; }
-    const vr = tidyVrns_();
-    const exp = UrlFetchApp.fetchAll([rpc_('sheet_export_all', { p_secret: SYNC_SECRET })])[0];
-    if (exp.getResponseCode() !== 200) { console.log('Could not read the app (run setup file 34 in Supabase first): ' + exp.getContentText().slice(0, 200)); return; }
+    step('Triggers', ensureTriggers_);
+    const retried = step('Sending earlier sheet edits', retryQueued_, 0);
+    const blanks = step('Removing empty rows', compactBlankRows_, 0);
+    const dupeDone = step('Duplicates removed by admins', applyDupeActions_, '');
+    const vr = step('Tidying VRNs', tidyVrns_, { cleaned: 0, tnc: 0 });
+    const exp = step('Reading the app', () => UrlFetchApp.fetchAll([rpc_('sheet_export_all', { p_secret: SYNC_SECRET })])[0]);
+    if (!exp || exp.getResponseCode() !== 200) { const m = 'Could not read the app: ' + (exp ? exp.getContentText().slice(0, 200) : errors.join('; ')); console.log(m); return m; }
     const app = JSON.parse(exp.getContentText());
-    const rc = reconcile_(app);
-    let dupes = ''; try { dupes = reportDupes_(); } catch (err) { dupes = 'not checked: ' + err; }
-    try { syncTncAgreed(); } catch (err) { console.log('T&C answers not sent: ' + err); }
-    console.log('Sync done. Empty rows removed: ' + blanks + '. VRNs cleaned: ' + vr.cleaned + (vr.tnc ? '. T&C answers set to "' + AGREED + '": ' + vr.tnc : '') +
-      '. Sheet edits sent to the app: ' + rc.toApp + (rc.toAppFailed ? ' (' + rc.toAppFailed + ' will be tried again)' : '') +
-      '. Cells updated from the app: ' + rc.cells + ' on ' + rc.rows + ' rows. Added: ' + rc.added + (rc.restored ? ' (' + rc.restored + ' brought back from Removed members)' : '') +
+    const rc = step('Checking every row against the app', () => reconcile_(app), null);
+    const dupes = step('Finding duplicates', reportDupes_, '');
+    step('T&C answers', syncTncAgreed);
+    const sum = rc ? 'Sync done. Empty rows removed: ' + blanks + '. VRNs cleaned: ' + vr.cleaned + (vr.tnc ? '. T&C answers set to "' + AGREED + '": ' + vr.tnc : '') +
+      (retried ? '. Earlier sheet edits sent: ' + retried : '') + '. Sheet edits sent to the app: ' + rc.toApp + (rc.toAppFailed ? ' (' + rc.toAppFailed + ' will be tried again)' : '') +
+      '. Cells updated from the app: ' + rc.cells + ' on ' + rc.rows + ' rows. Added: ' + rc.added + (rc.restored ? ' (' + rc.restored + ' brought back)' : '') +
       '. Moved to Removed members: ' + rc.removed + '. Rejected entries deleted: ' + rc.rejected + '. App details filled from the sheet: ' + rc.filled +
-      '. Join dates updated from the sheet: ' + (rc.joined || 0) + '. Duplicates removed by admins: ' + dupeDone + '. Duplicates: ' + dupes + '.');
-    if (rc.addedNames.length) console.log('Added to the sheet:\n' + rc.addedNames.join('\n'));
-    if (rc.skipped.length) console.log('App members not in the sheet (fix their number in the app):\n' + rc.skipped.join('\n'));
+      '. Join dates updated from the sheet: ' + (rc.joined || 0) + '. Duplicates removed by admins: ' + (dupeDone || 'none') + '. Duplicates: ' + (dupes || '–') + '.' : 'Sync stopped.';
+    const extra = (rc && rc.addedNames.length ? '\nAdded to the sheet:\n' + rc.addedNames.join('\n') : '') +
+      (rc && rc.skipped.length ? '\nApp members not in the sheet (fix their number in the app):\n' + rc.skipped.join('\n') : '') +
+      (errors.length ? '\nProblems:\n' + errors.join('\n') : '');
+    console.log(sum + extra);
+    PropertiesService.getScriptProperties().setProperty('lastSync', new Date().toISOString() + (errors.length ? ' (with problems)' : ''));
+    return sum + extra;
   } finally { lock.releaseLock(); }
+}
+/** RWB → Sync with the app now: runs the check and shows what it did (and any problem). */
+function syncNow() {
+  const r = syncWithApp();
+  try { SpreadsheetApp.getUi().alert('Sync with the app', String(r || 'Done'), SpreadsheetApp.getUi().ButtonSet.OK); } catch (e) { console.log(r); }
 }
 
 /* VRNs without spaces, and one way of writing the T&C answer (duplicates are no longer touched here: admins decide in the app) */
@@ -666,7 +675,7 @@ function reconcile_(app) {
   const move = { removed: [], rejected: [] };
   const coreKeys = ['full_name', 'dob', 'phone', 'email', 'vrn', 'bike', 'blood_group', 'locality', 'hideout', 'emergency_phone', 'alt_phone'];
   const filledCount = r => r.filter(x => x !== '' && x != null).length;
-  const bin = removedTab_();
+  const bin = rowsBack_();
 
   out.addedNames = []; out.skipped = [];
   active.forEach(m => {
@@ -689,7 +698,7 @@ function reconcile_(app) {
       if (!back) row[col.added] = 'RWB App';
       if (col.updated !== undefined) row[col.updated] = new Date();
       if (back) out.restored++;
-      out.addedNames.push(m.full_name + (back ? ' (row brought back from Removed members)' : ''));
+      out.addedNames.push(m.full_name + (back ? ' (their old row brought back)' : ''));
       appends.push(row); return;
     }
     /* their row: the member's row, else the fullest one (other rows with the same number are left for the admins: duplicates) */
@@ -779,9 +788,15 @@ function appendInside_(sheet, rows) {
   const last = sheet.getLastRow();
   if (last < 2) { sheet.getRange(last + 1, 1, data.length, w).setValues(data); return; }
   const n = data.length, cols = Math.max(w, sheet.getLastColumn());
-  sheet.insertRowsBefore(last, n);                                           // inside the table: it grows by n rows
-  sheet.getRange(last + n, 1, 1, cols).moveTo(sheet.getRange(last, 1));       // the old last row goes back to its own row number
-  sheet.getRange(last + 1, 1, n, w).setValues(data);                         // the new rows fill the space below it
+  try {
+    sheet.insertRowsBefore(last, n);                                           // inside the table: it grows by n rows
+    sheet.getRange(last + n, 1, 1, cols).moveTo(sheet.getRange(last, 1));       // the old last row goes back to its own row number
+    sheet.getRange(last + 1, 1, n, w).setValues(data);                         // the new rows fill the space below it
+  } catch (err) {
+    console.log('Adding inside the table failed (' + err + '); adding below the last row instead.');
+    const end = sheet.getLastRow();
+    sheet.getRange(end + 1, 1, n, w).setValues(data);
+  }
 }
 function writeColumn_(sheet, c, cells) { if (cells.length) sheet.getRange(2, c + 1, cells.length, 1).setValues(cells); }
 
@@ -817,8 +832,14 @@ function deleteRowsAt_(sheet, rowNos) {
   const r = [...new Set(rowNos)].sort((a, b) => b - a);
   for (let k = 0; k < r.length; ) {
     let j = k; while (j + 1 < r.length && r[j + 1] === r[j] - 1) j++;
-    try { sheet.deleteRows(r[j], r[k] - r[j] + 1); }
-    catch (err) { sheet.getRange(r[j], 1, r[k] - r[j] + 1, sheet.getMaxColumns()).clearContent(); }   // the last rows of a tab can't be deleted
+    const n = r[k] - r[j] + 1;
+    try { sheet.deleteRows(r[j], n); }
+    catch (err) {
+      /* couldn't delete (e.g. a table or the last rows of a tab): move the rows below up instead */
+      const last = sheet.getLastRow(), cols = sheet.getMaxColumns();
+      if (r[k] < last) sheet.getRange(r[k] + 1, 1, last - r[k], cols).moveTo(sheet.getRange(r[j], 1));
+      sheet.getRange(Math.max(r[j], last - n + 1), 1, n, cols).clearContent();
+    }
     k = j + 1;
   }
 }
@@ -845,13 +866,14 @@ function compactBlankRows_(sheet) {
 function removeEmptyRows() { const lock = LockService.getScriptLock(); lock.waitLock(30000); try { console.log('Empty rows removed: ' + compactBlankRows_()); } finally { lock.releaseLock(); } }
 
 /* ======================= Restoring a member: their row comes back from "Removed members" ======================= */
-function removedTab_() {
+function removedTab_(name, prefix) {
+  name = name || 'Removed members'; prefix = prefix || 1;    // the tab's own first columns: "Removed on" (+ "Note" in Older entries)
   const none = { take: () => null, flush: () => 0 };
-  const tab = SpreadsheetApp.getActive().getSheetByName('Removed members');
+  const tab = SpreadsheetApp.getActive().getSheetByName(name);
   if (!tab || tab.getLastRow() < 2) return none;
   const tw = tab.getLastColumn(), th = tab.getRange(1, 1, 1, tw).getValues()[0].map(h => String(h).trim());
   const vals = tab.getRange(2, 1, tab.getLastRow() - 1, tw).getValues();
-  const pc = th.findIndex((h, i) => i > 0 && h.toLowerCase().indexOf(COLUMNS.phone) === 0);
+  const pc = th.findIndex((h, i) => i >= prefix && h.toLowerCase().indexOf(COLUMNS.phone) === 0);
   if (pc < 0) return none;
   const used = new Set();
   return {
@@ -863,11 +885,16 @@ function removedTab_() {
       hits.forEach(i => used.add(i));
       const src = vals[hits[hits.length - 1]];
       let matched = 0;
-      const row = heads.map(h => { const t = String(h).trim(), j = t ? th.indexOf(t, 1) : -1; if (j > 0) { matched++; return src[j]; } return ''; });
-      return matched >= 3 ? row : src.slice(1, heads.length + 1);
+      const row = heads.map(h => { const t = String(h).trim(), j = t ? th.indexOf(t, prefix) : -1; if (j >= prefix) { matched++; return src[j]; } return ''; });
+      return matched >= 3 ? row : src.slice(prefix, prefix + heads.length);
     },
     flush() { if (used.size) deleteRowsAt_(tab, [...used].map(i => i + 2)); return used.size; }
   };
+}
+/* a member without a row: their row comes back from "Removed members", else from "Older entries" */
+function rowsBack_() {
+  const a = removedTab_('Removed members', 1), b = removedTab_('Older entries', 2);
+  return { take: (p, heads) => a.take(p, heads) || b.take(p, heads), flush: () => a.flush() + b.flush() };
 }
 
 /* ======================= Sheet edits always reach the app ======================= */
@@ -977,7 +1004,7 @@ function previewDuplicates() {
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('RWB')
     .addItem('🔎 Find a member (sheet + app)', 'findMember')
-    .addItem('🔄 Sync with the app now', 'syncWithApp')
+    .addItem('🔄 Sync with the app now', 'syncNow')
     .addItem('🧹 Remove empty rows', 'removeEmptyRows')
     .addToUi();
 }
@@ -1005,7 +1032,7 @@ function findMember() {
   const missing = app.some(x => / member$/.test(x)) && !lines.some(x => x.indexOf('• ' + responsesSheet_().getName() + ',') === 0);
   const msg = (lines.length ? lines.join('\n') : 'Not found in any tab.') + '\n\n' + (app.length ? app.join('\n') : 'Not found in the app.') +
     (missing ? '\n\nThey are a member in the app but have no row in "' + responsesSheet_().getName() + '". Add the row now (from "Removed members" if it is there)?' : '');
-  if (missing) { if (ui.alert('Find a member', msg, ui.ButtonSet.YES_NO) === ui.Button.YES) { syncWithApp(); ui.alert('Done. Their row is in "' + responsesSheet_().getName() + '" now (search again to check).'); } }
+  if (missing) { if (ui.alert('Find a member', msg, ui.ButtonSet.YES_NO) === ui.Button.YES) { ui.alert('Sync with the app', String(syncWithApp() || 'Done'), ui.ButtonSet.OK); } }
   else ui.alert('Find a member', msg, ui.ButtonSet.OK);
 }
 
