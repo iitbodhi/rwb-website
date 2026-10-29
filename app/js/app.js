@@ -165,8 +165,25 @@ function viewTerms() {
     viewMe(); actions.rules?.();
 }
 /* screens render one after another, so the screen the rider tapped last always wins */
-let renderChain = Promise.resolve();
-function render() { renderChain = renderChain.then(doRender, doRender); return renderChain; }
+let renderChain = Promise.resolve(), renderQueued = false;
+function render() {
+    if (renderQueued) return renderChain;          /* one queued render is enough: it shows the latest screen */
+    renderQueued = true;
+    const run = () => { renderQueued = false; return doRender(); };
+    renderChain = renderChain.then(run, run);
+    return renderChain;
+}
+/* A screen that is still loading when the rider moves on never paints over the new one:
+   its next write to the page stops it (navN changes on every navigation). */
+let navN = 0, paintN = -1, lastRoute = '';
+const STALE = new Error('stale screen');
+(() => {
+    const d = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+    Object.defineProperty(app, 'innerHTML', { configurable: true, get() { return d.get.call(this); },
+        set(v) { if (paintN >= 0 && paintN !== navN) throw STALE; d.set.call(this, v); } });
+})();
+/* still on the screen that started loading? (for parts filled in after the first paint) */
+const stillHere = n => n === navN;
 async function doRender() {
     if (!state.me) return;          /* signed out / not loaded yet: boot() shows the right screen */
     const gate = isFam() ? null : await gateFor(state.me);
@@ -182,9 +199,27 @@ async function doRender() {
     document.body.dataset.route = name;
     tabbar.querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.tab === name));
     tabbar.querySelectorAll('a[aria-current]').forEach(a => a.setAttribute('aria-current', 'page'));
-    try { await view(); } catch (e) { app.innerHTML = top('Oops') + `<div class="card empty"><b>Could not load</b>${esc(e.message)}<p style="margin-top:12px"><button class="btn sm" onclick="location.reload()">Try again</button></p></div>`; }
+    /* the entrance animation plays when the screen changes, not when the same screen refreshes */
+    const route = name + '/' + (param || '');
+    app.classList.toggle('same', route === lastRoute); lastRoute = route;
+    paintN = navN;
+    try { await view(); } catch (e) { if (e === STALE) return; paintN = -1; app.innerHTML = top('Oops') + `<div class="card empty"><b>Could not load</b>${esc(e.message)}<p style="margin-top:12px"><button class="btn sm" onclick="location.reload()">Try again</button></p></div>`; }
+    finally { paintN = -1; }
+    const y = navScroll; navScroll = null;
+    if (y != null) requestAnimationFrame(() => window.scrollTo(0, y));
 }
-window.addEventListener('hashchange', () => { closeSheet(); render(); window.scrollTo(0, 0); });
+/* Scroll: a new screen starts at the top; going back returns to where the rider was on that screen */
+let navIdx = 0, navMax = 0, navScroll = null;
+const navPos = {};
+try { history.replaceState({ ...(history.state || {}), rwbNav: 0 }, ''); } catch { /* ignore */ }
+window.addEventListener('hashchange', () => {
+    navPos[navIdx] = window.scrollY;
+    navN++;
+    const idx = history.state?.rwbNav;
+    if (idx != null) { navIdx = idx; navScroll = navPos[idx] || 0; }       /* back / forward to a screen seen before */
+    else { navIdx = ++navMax; try { history.replaceState({ ...(history.state || {}), rwbNav: navIdx }, ''); } catch { /* ignore */ } navScroll = 0; }
+    closeSheet(); render();
+});
 
 const demoBar = () => api?.demo ? `<div class="demo-bar">Demo mode: sample data, saved only on this device. <button data-act="reset-demo">Reset</button></div>` : '';
 const BELL = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>';
@@ -806,7 +841,7 @@ async function viewHome() {
                 <a href="#admin" data-adtab="members"><span class="ad-ico">👥</span>Members</a>
                 <a href="#admin" data-adtab="motomart"><span class="ad-ico">🛒</span>Motomart<i class="ad-n" id="ad-mm" hidden></i></a>
                 <a href="#admin" data-adtab="bdays"><span class="ad-ico">🎂</span>Birthdays</a>
-            </div></section>` : isMod() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
+            </div><a class="ad-dupes" href="#admin" data-adtab="dupes" id="ad-dupes" hidden></a></section>` : isMod() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
         ${profileTodo(state.me)}
         ${docWarn ? `<a class="banner doc-warn ${docWarn.st.level}" href="#docs"><span class="b-ico">📄</span><span class="grow"><b>${esc(docName(docWarn.d))}</b> ${docWarn.st.days < 0 ? `expired on ${fmtDate(docWarn.d.expiry_date)}` : docWarn.st.days === 0 ? 'expires today' : `expires in ${docWarn.st.days} day${docWarn.st.days === 1 ? '' : 's'}`}. Renew it and update My documents.</span>${ICON.chev}</a>` : ''}
         ${nextEvt ? `<div class="home-evt">${eventCard(nextEvt, evd)}</div>` : ''}
@@ -838,11 +873,14 @@ async function viewHome() {
     }
     if (isAdmin()) {
         app.querySelectorAll('[data-adtab]').forEach(a => a.addEventListener('click', () => { state.adminTab = a.dataset.adtab; }));
+        api.admin.dupes().then(g => { state.dupes = g; const a = $('#ad-dupes'); if (!a || !g.length) return;
+            a.innerHTML = `<span>⚠️</span><span class="grow"><b>${g.length} possible duplicate${g.length > 1 ? 's' : ''}</b> in the sheet · you choose which entry stays</span>${ICON.chev}`; a.hidden = false;
+            app.querySelector('.admin-dock')?.classList.add('busy'); }).catch(() => {});
         api.admin.stats().then(s => {
             const mm = listings.filter(l => l.status === 'pending').length, set = (id, n) => { const el = $('#' + id); if (el) { el.textContent = n; el.hidden = !n; } };
             set('ad-req', s.pending); set('ad-mm', mm);
             const sum = $('#ad-sum'); if (sum) sum.textContent = s.pending || mm ? `${s.pending + mm} waiting for you` : `${s.members} members · all clear`;
-            const dock = app.querySelector('.admin-dock'); if (dock) dock.classList.toggle('busy', !!(s.pending || mm));
+            const dock = app.querySelector('.admin-dock'); if (dock) dock.classList.toggle('busy', !!(s.pending || mm || state.dupes?.length));
         }).catch(() => {});
     }
 }
@@ -1216,13 +1254,28 @@ const evtSlots = (e, n) => { if (!e.capacity) return ''; const left = Math.max(e
 const evtTile = e => `<span class="evt-tile${e.status === 'cancelled' ? ' off' : ''}${evtMulti(e) ? ' multi' : ''}">${evtDay(e.starts_at)}${evtMulti(e) ? `<span class="evt-arr" aria-label="to">↓</span>${evtDay(e.ends_at)}` : ''}</span>`;
 const mapsUrl = e => e.map_url || (e.location ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(e.location) : '');
 const toLocalInput = iso => { if (!iso) return ''; const d = new Date(iso); return new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16); };
+let evLoading = null;
 async function loadEvents(force) {
     if (!force && state.evd && Date.now() - state.evd.at < 60e3) return state.evd;
-    const [events, counts, mine] = await Promise.all([api.events(), api.eventCounts().catch(() => []), api.myRsvps().catch(() => [])]);
-    return state.evd = { at: Date.now(), events, counts: Object.fromEntries(counts.map(c => [c.event_id, c])), mine: Object.fromEntries(mine.map(r => [r.event_id, r])) };
+    if (evLoading) return evLoading;                     /* one request at a time, shared by every screen */
+    evLoading = Promise.all([api.events(), api.eventCounts().catch(() => []), api.myRsvps().catch(() => [])]).then(([events, counts, mine]) =>
+        state.evd = { at: Date.now(), events, counts: Object.fromEntries(counts.map(c => [c.event_id, c])), mine: Object.fromEntries(mine.map(r => [r.event_id, r])) });
+    try { return await evLoading; } finally { evLoading = null; }
+}
+/* Events open straight away from what's already loaded; fresh data is fetched in the background and the
+   screen only redraws (without the entrance animation) if something actually changed and the rider is still on it. */
+const evSig = d => JSON.stringify([d.events, d.counts, d.mine]);
+function eventsRefresh(n) {
+    if (state.evd && Date.now() - state.evd.at < 15e3) return;
+    const before = state.evd ? evSig(state.evd) : '';
+    loadEvents(true).then(d => { if (stillHere(n) && evSig(d) !== before) render(); }).catch(() => {});
 }
 async function viewEvents() {
-    const d = await loadEvents(true);
+    const n = navN;
+    let d = state.evd || await loadEvents(true);
+    /* a link to an event that isn't loaded yet (just posted): fetch before saying it's gone */
+    if (state.param && !d.events.some(x => String(x.id) === state.param) && Date.now() - d.at > 3e3) d = await loadEvents(true);
+    eventsRefresh(n);
     if (state.param) { const e = d.events.find(x => String(x.id) === state.param); if (e) return eventPage(e); toast('That event is no longer available', true); }
     const tab = state.evtTab || 'up';
     const up = d.events.filter(e => !evtPast(e)), past = d.events.filter(evtPast).reverse();
@@ -1248,11 +1301,19 @@ function eventCard(e, d) {
             <span class="evt-meta">${e.status === 'cancelled' ? '<span class="badge">Cancelled</span>' : isFam() ? '' : `${n ? faceStack(c.faces, c.going - c.faces.length) : ''}<span class="small muted">${n ? `${n} ${evtPast(e) ? 'went' : 'going'}` : evtPast(e) ? 'Past event' : isFam() ? 'RWB event' : 'Be the first to join'}${c.maybe ? ` · ${c.maybe} maybe` : ''}</span>`}</span></span>
         ${me ? `<span class="evt-me ${me.status}">${RSVP_TXT[me.status]}</span>` : e.status === 'live' && !evtPast(e) && !isFam() ? '<span class="evt-me ask">RSVP</span>' : ''}</button>`;
 }
+state.evPeople = {};
 async function eventPage(e) {
-    const d = state.evd, me = d.mine[e.id], mod = isMod(), myUid = state.myId ??= await api.myId(), fam = isFam();
-    const people = fam ? [] : await api.eventPeople(e.id).catch(() => []);
+    const n = navN, d = state.evd, me = d.mine[e.id], mod = isMod(), myUid = state.myId ??= await api.myId(), fam = isFam();
+    /* who's coming: shown from the last visit straight away, then refreshed */
+    const cached = state.evPeople[e.id], people = fam ? [] : cached || [];
+    if (!fam) api.eventPeople(e.id).then(p => {
+        state.evPeople[e.id] = p;
+        if (!stillHere(n)) return;
+        if (!cached || JSON.stringify(p) !== JSON.stringify(cached)) render(); else if ((me && me.status !== 'no') || mod) drawExpenses(e, p, myUid);
+    }).catch(() => { if (!cached) { state.evPeople[e.id] = []; if (stillHere(n)) render(); } });
     const going = people.filter(p => p.status === 'going'), maybe = people.filter(p => p.status === 'maybe'), no = people.filter(p => p.status === 'no');
-    const guests = going.reduce((a, p) => a + p.guests, 0);
+    const guests = going.reduce((a, p) => a + p.guests, 0), cnt = d.counts[e.id];
+    const headcount = cached ? going.length + guests : cnt ? cnt.going + cnt.guests : 0;
     const inGroup = me && me.status !== 'no';
     const live = e.status === 'live', past = evtPast(e);
     const ppl = (list, label) => list.length ? `<details class="evt-people"${label === 'Going' ? ' open' : ''}><summary><b>${label}</b> <span class="muted">${list.length}${label === 'Going' && guests ? ` + ${guests} guest${guests > 1 ? 's' : ''}` : ''}</span></summary>
@@ -1267,7 +1328,7 @@ async function eventPage(e) {
                 ${e.location ? `<div class="evt-place">${EVT_ICON.pin}<span><b>${esc(e.location)}</b>${mapsUrl(e) ? `<a href="${esc(mapsUrl(e))}" target="_blank" rel="noopener">Open in Maps ↗</a>` : ''}</span></div>` : ''}
             </div></div>
             <div class="evt-facts">
-                ${live && !past && e.capacity ? `<p><span>🎟</span>${evtSlots(e, going.length + guests)}</p>` : ''}
+                ${live && !past && e.capacity ? `<p><span>🎟</span>${evtSlots(e, headcount)}</p>` : ''}
                 ${e.call_link ? `<p><span>📞</span><a href="${esc(e.call_link)}" target="_blank" rel="noopener">Join the call</a></p>` : ''}
                 ${e.reminder_minutes != null ? `<p><span>⏰</span>Reminder ${esc(REMINDERS.find(r => r[0] === e.reminder_minutes)?.[1].toLowerCase() || '')} for people going</p>` : ''}
             </div>
@@ -1277,7 +1338,7 @@ async function eventPage(e) {
             <div class="btns evt-actions">${fam ? '' : '<button class="btn sm ghost" data-act="evt-share">Share</button>'}${live && !past ? `<a class="btn sm ghost" href="${esc(gcalUrl(e))}" target="_blank" rel="noopener">Add to calendar</a>` : ''}</div>
         </section>
         ${rideLive(e)}
-        ${fam ? '' : `<section class="section"><h2>Who's coming</h2><div class="card">${people.length ? ppl(going, 'Going') + ppl(maybe, 'Maybe') + ppl(no, "Can't go") : '<p class="muted small">No responses yet.</p>'}</div></section>
+        ${fam ? '' : `<section class="section"><h2>Who's coming</h2><div class="card">${!cached ? '<p class="muted small">Loading…</p>' : people.length ? ppl(going, 'Going') + ppl(maybe, 'Maybe') + ppl(no, "Can't go") : '<p class="muted small">No responses yet.</p>'}</div></section>
         <section class="section" id="exp-sec"><h2>Expenses</h2><div id="exp-body">${inGroup || mod ? '<p class="muted small">Loading…</p>' : `<div class="card empty"><b>Split costs with the group</b>Respond Going or Maybe to see and add shared expenses for this event.</div>`}</div></section>`}
         ${mod ? `<section class="section"><h2>Organiser</h2><div class="btns">${live ? '<button class="btn ghost" data-act="evt-edit">Edit</button><button class="btn ghost" data-act="evt-cancel">Cancel event</button>' : ''}<button class="btn danger" data-act="evt-del">Delete</button></div></section>` : ''}`;
     actions = {
@@ -1289,7 +1350,7 @@ async function eventPage(e) {
         'evt-del': b => { if (confirmBox(`Delete “${e.title}” with its RSVPs and expenses? This can't be undone.`)) busy(b, async () => { await api.deleteEvent(e.id); await loadEvents(true); location.hash = '#events'; toast('Deleted'); }); }
     };
     const g = $('#evt-guest'); if (g) g.onchange = () => busy(null, async () => { await api.rsvp(e.id, 'going', g.checked ? 1 : 0); await loadEvents(true); toast(g.checked ? 'Guest added' : 'Guest removed'); render(); });
-    if (!fam && (inGroup || mod)) drawExpenses(e, people, myUid);
+    if (!fam && cached && (inGroup || mod)) drawExpenses(e, people, myUid);
 }
 function gcalUrl(e) {
     const z = iso => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -1415,7 +1476,8 @@ function settleUp(bal) {
 }
 async function drawExpenses(e, people, myUid) {
     const box = $('#exp-body'); if (!box) return;
-    let exps; try { exps = await api.expenses(e.id); } catch (err) { box.innerHTML = `<p class="muted small">${esc(err.message)}</p>`; return; }
+    let exps; try { exps = await api.expenses(e.id); } catch (err) { if (box.isConnected) box.innerHTML = `<p class="muted small">${esc(err.message)}</p>`; return; }
+    if (!box.isConnected) return;
     const names = Object.fromEntries(people.map(p => [p.user_id, p.user_id === myUid ? 'You' : (p.nickname || p.full_name.split(' ')[0])]));
     const nm = u => names[u] || 'Someone';
     const crowd = people.filter(p => p.status !== 'no');
@@ -2105,13 +2167,15 @@ async function viewAdmin() {
         <div class="seg section scroll" role="tablist">
             <button role="tab" aria-selected="${tab === 'requests'}" data-act="tab" data-tab="requests">Approvals${s.pending ? ` (${s.pending})` : ''}</button>
             <button role="tab" aria-selected="${tab === 'motomart'}" data-act="tab" data-tab="motomart">Motomart<span id="mm-count"></span></button>
+            <button role="tab" aria-selected="${tab === 'dupes'}" data-act="tab" data-tab="dupes">Duplicates<span id="dupe-count"></span></button>
             <button role="tab" aria-selected="${tab === 'members'}" data-act="tab" data-tab="members">Members</button>
             <button role="tab" aria-selected="${tab === 'bdays'}" data-act="tab" data-tab="bdays">Birthdays</button>
             <button role="tab" aria-selected="${tab === 'ai'}" data-act="tab" data-tab="ai">Pookie</button></div>
         <div id="admin-body"><p class="muted">Loading…</p></div>`;
     actions = { tab: el => { state.adminTab = el.dataset.tab; viewAdmin(); }, mfilter: el => { state.adminTab = 'members'; state.memberFilter = el.dataset.f; state.adminSearch = ''; viewAdmin(); } };
     load.listings(true).then(ls => { const n = ls.filter(l => l.status === 'pending').length; const c = $('#mm-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
-    try { await ({ requests: adminRequests, motomart: adminMotomart, members: adminMembers, bdays: adminBdays, ai: adminAI })[tab](); }
+    api.admin.dupes().then(g => { state.dupes = g; const c = $('#dupe-count'); if (c && g.length) c.textContent = ` (${g.length})`; }).catch(() => {});
+    try { await ({ requests: adminRequests, motomart: adminMotomart, dupes: adminDupes, members: adminMembers, bdays: adminBdays, ai: adminAI })[tab](); }
     catch (e) { $('#admin-body').innerHTML = `<div class="card empty"><b>Could not load</b>${esc(e.message)}</div>`; }
 }
 /* Every new entry (join form or app) waits here. Admins see 4 checks before approving. */
@@ -2248,6 +2312,47 @@ function changeCard(c) {
             <span class="vrn-tools"><button class="link-btn" data-act="copy-vrn" data-v="${esc(c.new_value)}">Copy</button><button class="link-btn" data-act="vrn-sites" data-v="${esc(c.new_value)}">Check VRN ↗</button></span>
             ${c.vrn_other ? `<small class="dup">⚠ Same VRN as ${esc(c.vrn_other)}</small>` : ''}</li></ul>` : ''}
         <div class="btns req-btns" style="margin-top:12px"><button class="btn ghost" data-act="chg-msg" data-cid="${c.id}">💬 Message</button><button class="btn ghost" data-act="chg-no" data-cid="${c.id}">${c.kind === 'tnc' ? 'Dismiss' : 'Reject'}</button><button class="btn" data-act="chg-ok" data-cid="${c.id}">${c.kind === 'tnc' ? 'Record it' : 'Approve'}</button></div></div>`;
+}
+/* ---------- Duplicates in the RWB contact sheet: found every 10 minutes, never removed without an admin ---------- */
+const phoneTxt = p => String(p || '').replace(/^(\d{5})(\d{5})$/, '$1 $2');
+function dupeCard(g) {
+    const phones = new Set(g.entries.map(e => e.phone));
+    const head = g.kind === 'vrn' ? `Same VRN <b class="vrn">${esc(g.value)}</b> on ${phones.size} numbers` : `Same WhatsApp number <b>${esc(phoneTxt(g.value))}</b>`;
+    return `<section class="card dupe" data-key="${esc(g.key)}">
+        <p class="dupe-h"><span class="dupe-ico">${g.kind === 'vrn' ? '🏍️' : '📱'}</span><span class="grow">${head}</span></p>
+        <div class="dupe-list">${g.entries.map(e => `<div class="dupe-e${e.best ? '' : ' rm'}" data-id="${esc(e.id)}">
+            <div class="dupe-who"><b>${esc(e.name || 'No name')}</b>${e.best ? '<span class="badge ok">Suggested to keep</span>' : ''}
+                <span class="small muted">Row ${e.row} · ${esc(phoneTxt(e.phone))}${e.vrn ? ` · <span class="vrn">${esc(e.vrn)}</span>` : ''}</span>
+                <span class="small muted">${e.joined ? 'Sent ' + esc(e.joined) : ''}${e.email ? ` · ${esc(e.email)}` : ''}</span>
+                <span class="dupe-tags">${e.status ? `<span class="badge">${esc(e.status)}</span>` : ''}${e.on_app ? '<span class="badge ok">On the app</span>' : ''}${e.tnc ? '<span class="badge">T&amp;C ✓</span>' : ''}<span class="badge">${e.filled} answers</span>${e.added === 'RWB App' ? '<span class="badge">Added by the app</span>' : ''}</span></div>
+            <div class="seg dupe-pick" role="group" aria-label="Keep or remove"><button data-act="dupe-pick" data-v="keep" aria-pressed="${!!e.best}">Keep</button><button data-act="dupe-pick" data-v="rm" aria-pressed="${!e.best}">Remove</button></div>
+        </div>`).join('')}</div>
+        <div class="btns"><button class="btn" data-act="dupe-go">Apply</button><button class="btn ghost" data-act="dupe-skip">Not a duplicate</button></div>
+    </section>`;
+}
+async function adminDupes() {
+    const list = state.dupes = await api.admin.dupes();
+    const c = $('#dupe-count'); if (c) c.textContent = list.length ? ` (${list.length})` : '';
+    $('#admin-body').innerHTML = list.length ? `<p class="small muted" style="margin-bottom:10px">The same rider twice in the RWB contact sheet: the same WhatsApp number, or the same VRN on different numbers. Nothing is removed until you choose. Pick <b>Keep</b> or <b>Remove</b> for each entry, then Apply.</p>
+        <div class="list">${list.map(dupeCard).join('')}</div>`
+        : '<div class="card empty"><b>No duplicates</b>The sheet is checked every 10 minutes. If the same rider shows up twice (same WhatsApp number, or the same VRN on different numbers), you decide here which entry stays.</div>';
+    const groupOf = el => list.find(g => g.key === el.closest('.dupe').dataset.key);
+    Object.assign(actions, {
+        'dupe-pick': b => { const row = b.closest('.dupe-e'); row.classList.toggle('rm', b.dataset.v === 'rm'); row.querySelectorAll('[data-act=dupe-pick]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); },
+        'dupe-go': b => {
+            const g = groupOf(b), card = b.closest('.dupe');
+            const rm = [...card.querySelectorAll('.dupe-e.rm')].map(x => g.entries.find(e => e.id === x.dataset.id));
+            if (!rm.length) return toast('Mark at least one entry Remove, or tap Not a duplicate', true);
+            if (rm.length === g.entries.length) return toast('Keep at least one entry', true);
+            const keepPhones = new Set(g.entries.filter(e => !rm.includes(e)).map(e => e.phone));
+            const lines = rm.map(e => keepPhones.has(e.phone) || e.member !== 'active'
+                ? `• ${e.name} (row ${e.row}): the row moves to the "Older entries" tab`
+                : `• ${e.name} (${phoneTxt(e.phone)}): removed from RWB${e.on_app ? ', and their app account is deleted' : ''}. You can restore them from Members → Left / removed`);
+            if (!confirmBox(`Remove ${rm.length === 1 ? 'this entry' : 'these entries'}?\n\n${lines.join('\n')}`)) return;
+            busy(b, async () => { await api.admin.resolveDupe(g.key, rm.map(e => e.id)); state.adminMembers = null; state.dir = null; toast('Done. The sheet updates in a few seconds'); await adminDupes(); });
+        },
+        'dupe-skip': b => { const g = groupOf(b); if (confirmBox('Keep all of these entries? This group won\'t be shown again.')) busy(b, async () => { await api.admin.resolveDupe(g.key, [], true); toast('Marked as not a duplicate'); await adminDupes(); }); }
+    });
 }
 async function adminRequests() {
     const [reqs, chg, inc, all] = await Promise.all([api.admin.requests(), api.admin.changes().catch(() => []), api.admin.incomplete().catch(() => null), state.adminMembers ? Promise.resolve(state.adminMembers) : api.admin.members().then(m => (state.adminMembers = m)).catch(() => [])]);

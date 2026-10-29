@@ -13,9 +13,13 @@
  * 3. App → sheet: members approved in the app get a row here; changes in the app (Me → Edit, bikes, VRN verified)
  *    update their row. Rows added by the app say "RWB App" in the "Added via" column.
  * 4. A member removed in the app is removed from this sheet; the row is first copied to the "Removed members" tab.
- * 5. Safety net, every 10 minutes (syncWithApp): VRNs lose their spaces, duplicate VRNs are tidied (the row with the most
- *    details and the T&C agreed stays), and every row is checked against the app and repaired: app changes are written
- *    here, anyone missing is added, removed / rejected entries move to their tabs, and gaps in the app are filled from here.
+ * 5. Safety net, every 10 minutes (syncWithApp): VRNs lose their spaces, and every row is checked against the app and repaired.
+ *    Whichever side changed since the last check wins: a sheet edit that didn't reach the app is sent again, an app change
+ *    is written here. Anyone missing is added, removed / rejected entries move to their tabs, gaps in the app are filled.
+ * 6. Duplicates (same WhatsApp number or same VRN) are never removed by themselves: admins get an alert in the app and
+ *    choose which entry to keep. Their choice is carried out here (rows move to "Older entries"). Needs setup file 49.
+ * 7. A member restored in the app gets their old row back from "Removed members" (with all their answers).
+ * 8. Empty rows between entries are removed (after every form entry and every 10 minutes).
  *
  * SET-UP / UPDATE (keeps the same web address):
  *   a) Extensions → Apps Script → replace everything with this file → put your SYNC_SECRET back → Save.
@@ -92,12 +96,15 @@ function onFormSubmitSync(e) {
     UrlFetchApp.fetchAll([rpc_('sheet_upsert_member_answers', { p_secret: SYNC_SECRET, p_phone: m.phone, p_answers: answers_(heads, row) })]);
   } else if (String(res[0]) === 'updated') {
     /* an existing member filled the form again with the same name, VRN and email: their details are updated (no approval);
-       this newest row becomes their row and older copies move to "Older entries" */
+       their older row stays until an admin picks which one to keep (the app shows it as a duplicate) */
     sheet.getRange(rowNo, col.status + 1).setValue(ST.member);
     UrlFetchApp.fetchAll([rpc_('sheet_set_answers', { p_secret: SYNC_SECRET, p_rows: [{ phone: m.phone, answers: answers_(heads, row) }] })]);
     setStatus_({ status: 'approved', phone: m.phone });
   }
   console.log('New form entry: ' + res.join(', '));
+  /* the form sometimes writes a new entry far below the last one: close the gap */
+  const lock = LockService.getScriptLock();
+  if (lock.tryLock(20000)) { try { const n = compactBlankRows_(sheet); if (n) console.log('Empty rows removed: ' + n); } finally { lock.releaseLock(); } }
 }
 
 /** Runs by itself when someone edits this sheet: the changed details go to the app. */
@@ -113,14 +120,14 @@ function onSheetEdit(e) {
   for (let c = c0; c < c0 + nc; c++) { const k = byIdx[c - 1]; if (k && EDITABLE.includes(k)) edited.push(k); }
   /* the Timestamp (when they joined) was changed by hand: the app's "Member since" follows */
   if (col.joined_at !== undefined && col.joined_at + 1 >= c0 && col.joined_at + 1 < c0 + nc) {
-    const f = Math.max(2, r0), l = Math.min(r0 + nr - 1, f + 99);
+    const f = Math.max(2, r0), l = r0 + nr - 1;
     const vals = sheet.getRange(f, 1, l - f + 1, sheet.getLastColumn()).getValues();
     const rows = vals.map(r => ({ phone: p10_(r[col.phone]), joined_at: tsIso_(r[col.joined_at]) })).filter(x => x.phone.length === 10 && x.joined_at);
     if (rows.length) sendOrQueue_([{ fn: 'sheet_set_joined', body: { p_secret: SYNC_SECRET, p_rows: rows } }]);
     else console.log('Timestamp edited, but it is not a date the app understands (use dd/mm/yyyy hh:mm:ss): ' + JSON.stringify(vals.map(r => String(r[col.joined_at]))));
   }
   if (!edited.length) return;
-  const first = Math.max(2, r0), last = Math.min(r0 + nr - 1, first + 99);
+  const first = Math.max(2, r0), last = r0 + nr - 1;
   const heads = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const rows = sheet.getRange(first, 1, last - first + 1, sheet.getLastColumn()).getValues();
   const reqs = [];
@@ -132,8 +139,7 @@ function onSheetEdit(e) {
     if (!old && !m.phone) return;
     reqs.push({ fn: 'sheet_edit_member', body: { p_secret: SYNC_SECRET, p: p, p_old_phone: old } });
   });
-  if (!reqs.length) return;
-  sendOrQueue_(reqs);
+  for (let i = 0; i < reqs.length; i += 50) sendOrQueue_(reqs.slice(i, i + 50));   // big pastes go in batches
 }
 
 /* Sheet → app calls: sent now; any that fail (network, Supabase busy) wait and are sent again by syncWithApp */
@@ -327,6 +333,7 @@ function doPost(e) {
   if (!body || body.secret !== SYNC_SECRET) return json_({ ok: false, error: 'not allowed' });
   if (body.action === 'delete') return removeRows_(body.phone, body.full_name);
   if (body.action === 'status') return setStatus_(body);
+  if (body.action === 'dupes') { const lk = LockService.getScriptLock(); lk.waitLock(20000); try { return json_({ ok: true, result: applyDupeActions_() }); } finally { lk.releaseLock(); } }
   const m = body.member || {};
   if (!m.phone || !m.full_name) return json_({ ok: false, error: 'missing name or number' });
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
@@ -352,16 +359,24 @@ function doPost(e) {
         sheet.getRange(rowNo, col[k] + 1).setValue(app[k]);
       });
       sheet.getRange(rowNo, col.updated + 1).setValue(new Date());
+      snapRows_(heads, col, [sheet.getRange(rowNo, 1, 1, sheet.getLastColumn()).getValues()[0]]);
       return json_({ ok: true, result: 'updated', row: rowNo });
     }
-    const row = new Array(sheet.getLastColumn()).fill('');
-    Object.keys(vals).forEach(k => { if (col[k] !== undefined) row[col[k]] = vals[k]; });
+    /* a member restored in the app: their old row comes back from "Removed members" with every answer */
+    const bin = removedTab_();
+    const back = bin.take(m.phone, heads) || (body.old_phone ? bin.take(body.old_phone, heads) : null);
+    const row = back || new Array(sheet.getLastColumn()).fill('');
+    while (row.length < sheet.getLastColumn()) row.push('');
+    Object.keys(vals).forEach(k => { if (col[k] !== undefined && (vals[k] !== '' || !back)) row[col[k]] = vals[k]; });
     Object.keys(app).forEach(k => { if (col[k] !== undefined) row[col[k]] = app[k] == null ? ST.member : app[k]; });
-    Object.keys(extra).forEach(i => { row[+i] = extra[i]; });
-    if (col.joined_at !== undefined) row[col.joined_at] = m.joined_at ? new Date(m.joined_at) : new Date();
-    row[col.added] = 'RWB App';
+    Object.keys(extra).forEach(i => { if (extra[i] !== '' && extra[i] != null) row[+i] = extra[i]; });
+    if (col.joined_at !== undefined && !(back && row[col.joined_at])) row[col.joined_at] = m.joined_at ? new Date(m.joined_at) : new Date();
+    if (!back) row[col.added] = 'RWB App';
+    if (col.updated !== undefined) row[col.updated] = new Date();
     appendInside_(sheet, [row]);
-    return json_({ ok: true, result: 'added', row: sheet.getLastRow() });
+    bin.flush();
+    snapRows_(heads, col, [row]);
+    return json_({ ok: true, result: back ? 'restored' : 'added', row: sheet.getLastRow() });
   } finally { lock.releaseLock(); }
 }
 
@@ -379,12 +394,10 @@ function setStatus_(b) {
     const at = x => x.row[col.joined_at] instanceof Date ? x.row[col.joined_at].getTime() : 0;
     const ts = b.form_ts ? new Date(b.form_ts).getTime() : 0;
     if (b.status === 'approved') {
-      /* keep their newest row as the member's row; older duplicate entries move to a tab of their own */
+      /* their newest row is the member's row; any older entry stays until an admin picks one (shown as a duplicate in the app) */
       mine.sort((a, c) => at(c) - at(a));
       if (!isMemberSt_(String(mine[0].row[col.status]))) sheet.getRange(mine[0].r, col.status + 1).setValue(ST.member);
-      const older = mine.slice(1);
-      if (older.length) moveRows_(sheet, older.map(x => x.r), 'Older entries', 'Moved on', '');
-      return json_({ ok: true, result: 'member', moved: older.length });
+      return json_({ ok: true, result: 'member', others: mine.length - 1 });
     }
     /* rejected: only the entry that was rejected is deleted (an existing member's older row stays) */
     let hit = mine.filter(x => ts && Math.abs(at(x) - ts) < 2000);
@@ -393,15 +406,6 @@ function setStatus_(b) {
     hit.map(x => x.r).sort((a, c) => c - a).forEach(r => sheet.deleteRow(r));
     return json_({ ok: true, result: 'rejected', deleted: hit.length });
   } finally { lock.releaseLock(); }
-}
-
-/** Copies rows to another tab (with the date, and a note), then deletes them here, bottom-up. */
-function moveRows_(sheet, rowNos, tabName, dateTitle, note) {
-  const ss = SpreadsheetApp.getActive(), width = sheet.getLastColumn();
-  let tab = ss.getSheetByName(tabName);
-  if (!tab) { tab = ss.insertSheet(tabName); tab.appendRow([dateTitle, 'Note'].concat(sheet.getRange(1, 1, 1, width).getValues()[0])); }
-  rowNos.forEach(r => tab.appendRow([new Date(), note].concat(sheet.getRange(r, 1, 1, width).getValues()[0])));
-  rowNos.sort((a, b) => b - a).forEach(r => sheet.deleteRow(r));
 }
 
 /** Removes every row with this WhatsApp number (people sometimes filled the form twice), keeping a copy. */
@@ -557,87 +561,57 @@ function registerWebhook_() {
 
 /**
  * Runs every 10 minutes by itself (and from setup). Safe to run any time from the editor too.
- *   1. VRNs: spaces and dashes removed.
- *   2. Duplicate VRNs: the row with the most details and the T&C agreed stays; the others move to "Older entries"
- *      (their duplicate member in the app is archived under Left / removed, never someone using the app).
- *   3. Every member's row is checked against the app: app details are written here, missing members are added,
- *      removed members move to their tab, rejected entries are deleted, and empty details in the app are filled from here.
- *   4. T&C answers: every "agree" answer is written the same way, "Understood & agreed".
+ *   1. Sheet edits that couldn't reach the app earlier are sent again; empty rows between entries are removed.
+ *   2. Duplicates admins sorted out in the app: the rows they removed move to "Older entries".
+ *   3. VRNs lose their spaces; every "agree" answer is written the same way, "Understood & agreed".
+ *   4. Every member's row is checked against the app. A field changed here since the last check goes to the app,
+ *      a field changed in the app is written here. Missing members are added (a restored member gets their row back
+ *      from "Removed members"), removed members move to their tab, rejected entries are deleted.
+ *   5. Duplicates (same number, or same VRN on different numbers) are sent to the app for admins to decide.
  */
 function syncWithApp() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) { console.log('Another sync is running; skipped.'); return; }
   try {
     ensureTriggers_();
-    const retried = retryQueued_();   // sheet edits that couldn't reach the app earlier go first, so they aren't overwritten
+    const retried = retryQueued_();   // sheet edits that couldn't reach the app earlier go first
     if (retried) console.log('Sheet edits sent again: ' + retried);
-    const vr = tidyVrns_();          // first, so members archived as duplicates aren't added back below
+    let blanks = 0; try { blanks = compactBlankRows_(); } catch (err) { console.log('Empty rows not checked: ' + err); }
+    let dupeDone = ''; try { dupeDone = applyDupeActions_(); } catch (err) { dupeDone = 'not checked: ' + err; }
+    const vr = tidyVrns_();
     const exp = UrlFetchApp.fetchAll([rpc_('sheet_export_all', { p_secret: SYNC_SECRET })])[0];
     if (exp.getResponseCode() !== 200) { console.log('Could not read the app (run setup file 34 in Supabase first): ' + exp.getContentText().slice(0, 200)); return; }
     const app = JSON.parse(exp.getContentText());
     const rc = reconcile_(app);
+    let dupes = ''; try { dupes = reportDupes_(); } catch (err) { dupes = 'not checked: ' + err; }
     try { syncTncAgreed(); } catch (err) { console.log('T&C answers not sent: ' + err); }
-    console.log('Sync done. VRNs cleaned: ' + vr.cleaned + '. Duplicate VRN rows moved: ' + vr.moved + (vr.archived ? ' (archived in the app: ' + vr.archived + ')' : '') +
-      (vr.tnc ? '. T&C answers set to "' + AGREED + '": ' + vr.tnc : '') + '. Cells updated from the app: ' + rc.cells + ' on ' + rc.rows + ' rows. Added: ' + rc.added + '. Moved to Removed members: ' + rc.removed +
-      '. Rejected entries deleted: ' + rc.rejected + '. Older duplicate rows moved: ' + rc.older + '. App details filled from the sheet: ' + rc.filled + '. Join dates updated from the sheet: ' + (rc.joined || 0) + '.');
-    if (vr.review.length) console.log('Please check by hand (both are on the app, nothing was changed):\n' + vr.review.join('\n'));
+    console.log('Sync done. Empty rows removed: ' + blanks + '. VRNs cleaned: ' + vr.cleaned + (vr.tnc ? '. T&C answers set to "' + AGREED + '": ' + vr.tnc : '') +
+      '. Sheet edits sent to the app: ' + rc.toApp + (rc.toAppFailed ? ' (' + rc.toAppFailed + ' will be tried again)' : '') +
+      '. Cells updated from the app: ' + rc.cells + ' on ' + rc.rows + ' rows. Added: ' + rc.added + (rc.restored ? ' (' + rc.restored + ' brought back from Removed members)' : '') +
+      '. Moved to Removed members: ' + rc.removed + '. Rejected entries deleted: ' + rc.rejected + '. App details filled from the sheet: ' + rc.filled +
+      '. Join dates updated from the sheet: ' + (rc.joined || 0) + '. Duplicates removed by admins: ' + dupeDone + '. Duplicates: ' + dupes + '.');
   } finally { lock.releaseLock(); }
 }
 
-/** See what the duplicate-VRN tidy-up would do, without changing anything. */
-function previewDuplicates() { const r = tidyVrns_(true); console.log((r.plan.join('\n') || 'No duplicate VRNs.') + (r.review.length ? '\nCheck by hand:\n' + r.review.join('\n') : '')); }
-
+/* VRNs without spaces, and one way of writing the T&C answer (duplicates are no longer touched here: admins decide in the app) */
 function tidyVrns_(dry) {
-  const sheet = responsesSheet_(), col = columns_(sheet), last = sheet.getLastRow(), width = sheet.getLastColumn(), out = { cleaned: 0, moved: 0, archived: 0, review: [], plan: [] };
+  const sheet = responsesSheet_(), col = columns_(sheet), last = sheet.getLastRow(), width = sheet.getLastColumn(), out = { cleaned: 0, tnc: 0 };
   if (last < 2 || col.vrn === undefined) return out;
-  const data = sheet.getRange(2, 1, last - 1, width).getValues(), heads = sheet.getRange(1, 1, 1, width).getValues()[0];
-  /* 1. no spaces in VRNs (main bike, bikes 2 and 3) */
+  const data = sheet.getRange(2, 1, last - 1, width).getValues();
+  /* 1. no spaces in VRNs (main bike, bikes 2 and 3); only the cells that change are written */
   ['vrn', 'bike2_vrn', 'bike3_vrn'].forEach(k => {
     if (col[k] === undefined) return;
-    const cells = []; let n = 0;
-    data.forEach(r => { const c = cleanVrn_(r[col[k]]); if (c !== String(r[col[k]])) { r[col[k]] = c; n++; } cells.push([r[col[k]]]); });
-    if (n && !dry) { writeColumn_(sheet, col[k], cells); out.cleaned += n; }
+    const idx = [];
+    data.forEach((r, i) => { const c = cleanVrn_(r[col[k]]); if (c !== String(r[col[k]])) { r[col[k]] = c; idx.push(i); } });
+    if (idx.length && !dry) { writeCells_(sheet, col[k], data, idx); out.cleaned += idx.length; }
   });
   /* 1b. every "agree" answer to the T&C question is written the same way */
   if (col.tnc !== undefined) {
-    const cells = []; let n = 0;
-    data.forEach(r => { const v = String(r[col.tnc] == null ? '' : r[col.tnc]).trim();
-      if (v && v !== AGREED && /(agree|understood|accept|^yes)/i.test(v) && !/(don'?t|do not|not agree|disagree)/i.test(v)) { r[col.tnc] = AGREED; n++; }
-      cells.push([r[col.tnc]]); });
-    if (n && !dry) { const f = sheet.getRange(2, col.tnc + 1, data.length, 1).getFormulas(); if (f.every(x => !x[0])) { writeColumn_(sheet, col.tnc, cells); out.tnc = n; } }
+    const idx = [];
+    data.forEach((r, i) => { const v = String(r[col.tnc] == null ? '' : r[col.tnc]).trim();
+      if (v && v !== AGREED && /(agree|understood|accept|^yes)/i.test(v) && !/(don'?t|do not|not agree|disagree)/i.test(v)) { r[col.tnc] = AGREED; idx.push(i); } });
+    if (idx.length && !dry) { writeCells_(sheet, col.tnc, data, idx); out.tnc = idx.length; }
   }
-  /* 2. duplicate VRNs */
-  const groups = {};
-  data.forEach((r, i) => {
-    const v = cleanVrn_(r[col.vrn]); if (v.length < 6 || String(r[col.status]) === ST.waiting) return;
-    (groups[v] = groups[v] || []).push(i);
-  });
-  const dups = Object.keys(groups).filter(v => groups[v].length > 1);
-  if (!dups.length) return out;
-  const phones = [...new Set([].concat(...dups.map(v => groups[v].map(i => p10_(data[i][col.phone])))))].filter(p => p.length === 10);
-  const ow = UrlFetchApp.fetchAll([rpc_('sheet_vrn_owners', { p_secret: SYNC_SECRET, p_phones: phones })])[0];
-  if (ow.getResponseCode() !== 200) { out.review.push('Duplicate VRNs not tidied: run setup file 34 in Supabase first.'); return out; }
-  const own = JSON.parse(ow.getContentText() || '{}') || {};
-  const agreed = r => col.tnc !== undefined && /(agree|understood|accept|yes)/i.test(String(r[col.tnc])) && !/(don'?t|not agree|disagree)/i.test(String(r[col.tnc]));
-  const filled = r => r.filter((x, c) => x !== '' && x != null && !isHelperHead_(heads[c])).length;
-  const when = r => col.joined_at !== undefined && r[col.joined_at] instanceof Date ? r[col.joined_at].getTime() : 0;
-  const score = i => { const r = data[i], o = own[p10_(r[col.phone])] || {};
-    return (o.on_app ? 1e9 : 0) + (o.status === 'active' ? 1e8 : 0) + (agreed(r) || o.tnc ? 1e7 : 0) + filled(r) * 1e4 + when(r) / 1e10; };
-  const move = [], archive = [];
-  dups.forEach(v => {
-    const rows = groups[v].slice().sort((a, b) => score(b) - score(a)), keep = rows[0], keepPhone = p10_(data[keep][col.phone]), keepName = String(data[keep][col.full_name] || '');
-    rows.slice(1).forEach(i => {
-      const p = p10_(data[i][col.phone]), o = own[p] || {}, name = String(data[i][col.full_name] || '');
-      if (p !== keepPhone && o.on_app) { out.review.push(v + ': ' + keepName + ' and ' + name + ' (' + p + ') both use the app'); return; }
-      move.push({ i: i, note: 'Duplicate VRN ' + v + ' (kept ' + keepName + ')' });
-      if (p !== keepPhone && o.status === 'active') archive.push({ phone: p, vrn: v, kept: keepName });
-      out.plan.push(v + ': keep ' + keepName + ' (' + keepPhone + '), move ' + name + ' (' + p + ')' + (p !== keepPhone && o.status === 'active' ? ' and archive them in the app' : ''));
-    });
-  });
-  if (dry || !move.length) return out;
-  if (archive.length) out.archived = Number(UrlFetchApp.fetchAll([rpc_('sheet_archive_duplicates', { p_secret: SYNC_SECRET, p_rows: archive })])[0].getContentText()) || 0;
-  moveRowsFast_(sheet, data, move, 'Older entries', 'Moved on');
-  out.moved = move.length;
   return out;
 }
 
@@ -667,51 +641,66 @@ function reconcile_(app) {
   const sheet = responsesSheet_(), col = columns_(sheet), width = sheet.getLastColumn(), last = sheet.getLastRow();
   const heads = sheet.getRange(1, 1, 1, width).getValues()[0].map(h => String(h).trim());
   const data = last > 1 ? sheet.getRange(2, 1, last - 1, width).getValues() : [];
-  const out = { cells: 0, rows: 0, added: 0, removed: 0, rejected: 0, older: 0, filled: 0 };
-  const byPhone = {}, byEmail = {};
+  const out = { cells: 0, rows: 0, added: 0, restored: 0, removed: 0, rejected: 0, filled: 0, toApp: 0, toAppFailed: 0 };
+  /* what each row looked like at the last check: a field that changed here since then is a sheet edit (the sheet wins) */
+  const snap = snapLoad_(), keys = rowKeys_(col, data);
+  const sheetEdited = (i, k) => { if (!snap || col[k] === undefined) return false; const was = snap[keys[i]]; return !!was && sigField_(was, k) !== h4_(cellStr_(data[i][col[k]])); };
+  const byPhone = {}, byEmail = {}, bySnapPhone = {};
   data.forEach((r, i) => {
     const p = p10_(r[col.phone]); if (p.length === 10) (byPhone[p] = byPhone[p] || []).push(i);
     const e = col.email === undefined ? '' : String(r[col.email] || '').trim().toLowerCase(); if (e) (byEmail[e] = byEmail[e] || []).push(i);
+    const was = snap && snap[keys[i]]; if (was) { const op = was.split('|')[0]; if (op.length === 10 && op !== p) bySnapPhone[op] = i; }   // number changed here
   });
   const waiting = new Set((app.waiting || []).map(w => p10_(w.phone)));
   const active = (app.members || []).filter(m => m.status === 'active'), activeSet = new Set(active.map(m => p10_(m.phone)));
-  const changed = {}, touched = new Set(), gone = new Set(), fills = [], appends = [], joins = [];
+  const changed = {}, touched = new Set(), gone = new Set(), fills = [], appends = [], joins = [], edits = [];
   const put = (i, c, v) => { if (c === undefined || c < 0) return; data[i][c] = v; (changed[c] = changed[c] || new Set()).add(i); touched.add(i); out.cells++; };
-  const move = { older: [], removed: [], rejected: [] };
+  const move = { removed: [], rejected: [] };
   const coreKeys = ['full_name', 'dob', 'phone', 'email', 'vrn', 'bike', 'blood_group', 'locality', 'hideout', 'emergency_phone', 'alt_phone'];
   const filledCount = r => r.filter(x => x !== '' && x != null).length;
+  const bin = removedTab_();
 
   active.forEach(m => {
     const p = p10_(m.phone), em = String(m.email || '').trim().toLowerCase();
     if (p.length !== 10) return;
     let rows = (byPhone[p] || []).filter(i => !gone.has(i));
+    if (!rows.length && bySnapPhone[p] !== undefined && !gone.has(bySnapPhone[p])) rows = [bySnapPhone[p]];
     if (!rows.length && em) rows = (byEmail[em] || []).filter(i => !gone.has(i) && !activeSet.has(p10_(data[i][col.phone])));
     if (waiting.has(p)) rows = rows.filter(i => String(data[i][col.status]) !== ST.waiting);   // their new entry waits for an admin
     if (!rows.length) {
       if (waiting.has(p) && (byPhone[p] || []).length) return;
-      const vals = sheetValues_(m), a = appValues_(m), row = new Array(width).fill('');
-      Object.keys(vals).forEach(k => { if (col[k] !== undefined) row[col[k]] = vals[k]; });
+      /* not here: a restored member gets their old row back from "Removed members", anyone else a new row */
+      const back = bin.take(p, heads);
+      const vals = sheetValues_(m), a = appValues_(m), row = back || new Array(width).fill('');
+      while (row.length < width) row.push('');
+      Object.keys(vals).forEach(k => { if (col[k] !== undefined && (vals[k] !== '' || !back)) row[col[k]] = vals[k]; });
       Object.keys(a).forEach(k => { if (col[k] !== undefined) row[col[k]] = a[k] == null ? ST.member : a[k]; });
       answerCells_(heads, col, m.answers).forEach(([c, v]) => { row[c] = v; });
-      if (col.joined_at !== undefined) row[col.joined_at] = m.joined_at ? new Date(m.joined_at) : new Date();
-      row[col.added] = 'RWB App'; if (col.updated !== undefined) row[col.updated] = new Date();
+      if (col.joined_at !== undefined && !(back && row[col.joined_at])) row[col.joined_at] = m.joined_at ? new Date(m.joined_at) : new Date();
+      if (!back) row[col.added] = 'RWB App';
+      if (col.updated !== undefined) row[col.updated] = new Date();
+      if (back) out.restored++;
       appends.push(row); return;
     }
-    /* their row: the member's row, else the fullest one; older copies with the same number move away */
+    /* their row: the member's row, else the fullest one (other rows with the same number are left for the admins: duplicates) */
     rows.sort((a, b) => isMemberSt_(String(data[b][col.status])) - isMemberSt_(String(data[a][col.status])) || filledCount(data[b]) - filledCount(data[a]));
     const i = rows[0];
-    rows.slice(1).forEach(j => { if (p10_(data[j][col.phone]) === p) { move.older.push({ i: j, note: 'Older entry of ' + m.full_name }); gone.add(j); } });
-    const row = data[i], sm = toMember_(heads, row), vals = sheetValues_(m), fill = {};
+    const row = data[i], sm = Object.assign(toMember_(heads, row), extras_(col, row)), vals = sheetValues_(m), fill = {}, edit = {};
     coreKeys.forEach(k => {
       if (col[k] === undefined) return;
       const appHas = m[k] != null && String(m[k]).trim() !== '', sheetHas = String(row[col[k]] == null ? '' : row[col[k]]).trim() !== '';
       if (!appHas) { if (sheetHas && sm[k]) fill[k] = sm[k]; return; }
-      if (!same_(k, row[col[k]], k === 'bike' ? vals.bike : m[k])) put(i, col[k], vals[k]);
+      if (same_(k, row[col[k]], k === 'bike' ? vals.bike : m[k])) return;
+      if (sheetHas && sm[k] && sheetEdited(i, k)) edit[k] = sm[k];      // changed here since the last check: the app follows the sheet
+      else put(i, col[k], vals[k]);                                    // changed in the app: the sheet follows the app
     });
     if (Object.keys(fill).length) fills.push(Object.assign({ phone: p }, fill));
     const a = appValues_(m);
     Object.keys(a).forEach(k => { if (col[k] === undefined || (k === 'status' && a[k] == null && isMemberSt_(String(row[col[k]])))) return;
-      const v = k === 'status' && a[k] == null ? ST.member : a[k]; if (!same_(k, row[col[k]], v)) put(i, col[k], v); });
+      const v = k === 'status' && a[k] == null ? ST.member : a[k]; if (same_(k, row[col[k]], v)) return;
+      if (EDITABLE.includes(k) && sheetEdited(i, k) && !(k === 'tnc' && !sm.tnc)) edit[k] = sm[k];
+      else put(i, col[k], v); });
+    if (Object.keys(edit).length) edits.push({ i: i, body: { p_secret: SYNC_SECRET, p: edit, p_old_phone: p } });
     answerCells_(heads, col, m.answers).forEach(([c, v]) => { if (!same_('answer', row[c], v)) put(i, c, v); });
     /* join date: the sheet's Timestamp when it's earlier than the app's (an edit, or an older entry) */
     if (col.joined_at !== undefined) { const t = tsIso_(row[col.joined_at]); if (t && (!m.joined_at || new Date(t).getTime() < new Date(m.joined_at).getTime() - 60000)) joins.push({ phone: p, joined_at: t }); }
@@ -730,20 +719,31 @@ function reconcile_(app) {
   /* entries waiting for an admin are labelled */
   waiting.forEach(p => { if (activeSet.has(p)) return; (byPhone[p] || []).forEach(i => { if (!gone.has(i) && !String(data[i][col.status])) put(i, col.status, ST.waiting); }); });
 
-  /* write: whole columns at once where the column has no formulas, else cell by cell */
+  /* sheet edits the app missed: sent now (rows whose edits don't arrive keep counting as edited until they do) */
+  const failed = new Set();
+  for (let k = 0; k < edits.length; k += 50) {
+    const part = edits.slice(k, k + 50);
+    let res = []; try { res = UrlFetchApp.fetchAll(part.map(x => rpc_('sheet_edit_member', x.body))); } catch (err) { res = []; }
+    part.forEach((x, j) => { if (!res[j] || res[j].getResponseCode() >= 300) failed.add(x.i); });
+  }
+  out.toApp = edits.length - failed.size; out.toAppFailed = failed.size;
+
+  /* write only the cells that changed (an admin typing elsewhere in the sheet right now isn't overwritten) */
   touched.forEach(i => { if (col.updated !== undefined && !gone.has(i)) { data[i][col.updated] = new Date(); (changed[col.updated] = changed[col.updated] || new Set()).add(i); } });
-  Object.keys(changed).forEach(c => {
-    c = +c; const rowsSet = changed[c], f = sheet.getRange(2, c + 1, data.length, 1).getFormulas();
-    if (f.every(x => !x[0])) writeColumn_(sheet, c, data.map(r => [r[c]]));
-    else rowsSet.forEach(i => { if (!f[i][0]) sheet.getRange(i + 2, c + 1).setValue(data[i][c]); });
-  });
+  Object.keys(changed).forEach(c => { c = +c; writeCells_(sheet, c, data, [...changed[c]]); });
   out.rows = [...touched].filter(i => !gone.has(i)).length;
-  if (appends.length) { appendInside_(sheet, appends.map(r => r.slice(0, width))); out.added = appends.length; }
-  /* moves last (rows below shift up): older and removed rows are copied to their tabs, rejected ones just deleted */
-  const all = [].concat(move.older.map(x => Object.assign({ tab: 'Older entries', title: 'Moved on' }, x)), move.removed.map(x => Object.assign({ tab: 'Removed members', title: 'Removed on' }, x)), move.rejected.map(x => Object.assign({ tab: '' }, x)));
-  ['Older entries', 'Removed members'].forEach(t => { const list = all.filter(x => x.tab === t); if (list.length) copyRows_(sheet, data, list, t, list[0].title); });
-  [...new Set(all.map(x => x.i))].sort((a, b) => b - a).forEach(i => sheet.deleteRow(i + 2));
-  out.older = move.older.length; out.removed = move.removed.length; out.rejected = move.rejected.length;
+
+  /* what every row looks like now, for the next check */
+  const next = {};
+  data.forEach((r, i) => { if (gone.has(i)) return; next[keys[i]] = failed.has(i) && snap && snap[keys[i]] ? snap[keys[i]] : rowSig_(col, r); });
+  appends.forEach(r => { next[rowKeys_(col, [r])[0]] = rowSig_(col, r); });
+
+  if (appends.length) { appendInside_(sheet, appends.map(r => r.slice(0, width))); out.added = appends.length; bin.flush(); }
+  /* moves last (rows below shift up): removed rows are copied to their tab, rejected ones just deleted */
+  if (move.removed.length) copyRows_(sheet, data, move.removed, 'Removed members', 'Removed on');
+  deleteRowsAt_(sheet, [...gone].map(i => i + 2));
+  out.removed = move.removed.length; out.rejected = move.rejected.length;
+  snapSave_(next);
   for (let k = 0; k < fills.length; k += 100) out.filled += Number(UrlFetchApp.fetchAll([rpc_('sheet_fill_members', { p_secret: SYNC_SECRET, p_rows: fills.slice(k, k + 100) })])[0].getContentText()) || 0;
   for (let k = 0; k < joins.length; k += 100) { const r = UrlFetchApp.fetchAll([rpc_('sheet_set_joined', { p_secret: SYNC_SECRET, p_rows: joins.slice(k, k + 100) })])[0]; out.joined = (out.joined || 0) + (r.getResponseCode() === 200 ? Number(r.getContentText()) || 0 : 0); }
   return out;
@@ -788,6 +788,177 @@ function copyRows_(sheet, data, list, tabName, dateTitle) {
 function moveRowsFast_(sheet, data, list, tabName, dateTitle) {
   copyRows_(sheet, data, list, tabName, dateTitle);
   [...new Set(list.map(x => x.i))].sort((a, b) => b - a).forEach(i => sheet.deleteRow(i + 2));
+}
+
+/* write one column's changed cells (in runs of neighbouring rows); cells with formulas are never written */
+function writeCells_(sheet, c, data, idxs) {
+  if (!idxs.length) return;
+  const f = sheet.getRange(2, c + 1, data.length, 1).getFormulas();
+  const list = [...new Set(idxs)].filter(i => i < data.length && !f[i][0]).sort((a, b) => a - b);
+  if (list.length > 80 && f.every(x => !x[0])) { writeColumn_(sheet, c, data.map(r => [r[c]])); return; }
+  for (let k = 0; k < list.length; ) {
+    let j = k; while (j + 1 < list.length && list[j + 1] === list[j] + 1) j++;
+    sheet.getRange(list[k] + 2, c + 1, j - k + 1, 1).setValues(list.slice(k, j + 1).map(i => [data[i][c]]));
+    k = j + 1;
+  }
+}
+/* delete rows (sheet row numbers), bottom-up, neighbouring rows together */
+function deleteRowsAt_(sheet, rowNos) {
+  const r = [...new Set(rowNos)].sort((a, b) => b - a);
+  for (let k = 0; k < r.length; ) {
+    let j = k; while (j + 1 < r.length && r[j + 1] === r[j] - 1) j++;
+    try { sheet.deleteRows(r[j], r[k] - r[j] + 1); }
+    catch (err) { sheet.getRange(r[j], 1, r[k] - r[j] + 1, sheet.getMaxColumns()).clearContent(); }   // the last rows of a tab can't be deleted
+    k = j + 1;
+  }
+}
+
+/* ======================= Empty rows ======================= */
+/**
+ * Removes empty rows between entries (the join form sometimes writes a new entry far below the last one after rows
+ * were moved away). Runs after every form entry and every 10 minutes; run it from the editor any time.
+ * A row counts as empty when it has no value at all (helper columns titled with just a number are ignored).
+ */
+function compactBlankRows_(sheet) {
+  sheet = sheet || responsesSheet_();
+  const last = sheet.getLastRow(), width = sheet.getLastColumn();
+  if (last < 3) return 0;
+  const rng = sheet.getRange(2, 1, last - 1, width), vals = rng.getValues(), fx = rng.getFormulas();
+  const real = sheet.getRange(1, 1, 1, width).getValues()[0].map(h => !isHelperHead_(h));
+  const empty = vals.map((r, i) => r.every((v, c) => fx[i][c] ? !real[c] : (v === '' || v == null)));
+  const rows = []; empty.forEach((e, i) => { if (e) rows.push(i + 2); });
+  if (!rows.length || rows.length === vals.length) return 0;
+  deleteRowsAt_(sheet, rows);
+  return rows.length;
+}
+function removeEmptyRows() { const lock = LockService.getScriptLock(); lock.waitLock(30000); try { console.log('Empty rows removed: ' + compactBlankRows_()); } finally { lock.releaseLock(); } }
+
+/* ======================= Restoring a member: their row comes back from "Removed members" ======================= */
+function removedTab_() {
+  const none = { take: () => null, flush: () => 0 };
+  const tab = SpreadsheetApp.getActive().getSheetByName('Removed members');
+  if (!tab || tab.getLastRow() < 2) return none;
+  const tw = tab.getLastColumn(), th = tab.getRange(1, 1, 1, tw).getValues()[0].map(h => String(h).trim());
+  const vals = tab.getRange(2, 1, tab.getLastRow() - 1, tw).getValues();
+  const pc = th.findIndex((h, i) => i > 0 && h.toLowerCase().indexOf(COLUMNS.phone) === 0);
+  if (pc < 0) return none;
+  const used = new Set();
+  return {
+    /* the newest copy of this number's row, laid out like the responses tab (matched by column title); every copy leaves the tab */
+    take(phone, heads) {
+      const p = p10_(phone); if (p.length !== 10) return null;
+      const hits = []; vals.forEach((r, i) => { if (!used.has(i) && p10_(r[pc]) === p) hits.push(i); });
+      if (!hits.length) return null;
+      hits.forEach(i => used.add(i));
+      const src = vals[hits[hits.length - 1]];
+      let matched = 0;
+      const row = heads.map(h => { const t = String(h).trim(), j = t ? th.indexOf(t, 1) : -1; if (j > 0) { matched++; return src[j]; } return ''; });
+      return matched >= 3 ? row : src.slice(1, heads.length + 1);
+    },
+    flush() { if (used.size) deleteRowsAt_(tab, [...used].map(i => i + 2)); return used.size; }
+  };
+}
+
+/* ======================= Sheet edits always reach the app ======================= */
+/* Each row's fields (as a short fingerprint) at the last check. When a field differs between the sheet and the app,
+   the side that changed since then wins, so an edit here is never overwritten by the app's older value. */
+const SNAP_V = 's1';
+function cellStr_(v) { return v instanceof Date ? Utilities.formatDate(v, 'Asia/Kolkata', 'yyyy-MM-dd HH:mm') : String(v == null ? '' : v).trim(); }
+function h4_(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return ('0000' + (h >>> 0).toString(36)).slice(-4); }
+function rowSig_(col, r) { return p10_(r[col.phone]) + '|' + EDITABLE.map(k => col[k] === undefined ? '----' : h4_(cellStr_(r[col[k]]))).join(''); }
+function sigField_(sig, k) { const j = EDITABLE.indexOf(k), b = sig.indexOf('|') + 1; return sig.substr(b + j * 4, 4); }
+/* a row's lasting name: its Timestamp (else its number); the same Timestamp twice gets #2, #3 */
+function rowKeys_(col, data) {
+  const seen = {};
+  return data.map(r => { const k = (col.joined_at !== undefined && tsIso_(r[col.joined_at])) || 'p' + p10_(r[col.phone]); seen[k] = (seen[k] || 0) + 1; return seen[k] > 1 ? k + '#' + seen[k] : k; });
+}
+function snapLoad_() {
+  const p = PropertiesService.getScriptProperties(), n = Number(p.getProperty('snapN') || 0);
+  if (!n || p.getProperty('snapV') !== SNAP_V) return null;
+  let s = ''; for (let i = 0; i < n; i++) s += p.getProperty('snap' + i) || '';
+  try { return JSON.parse(s); } catch (e) { return null; }
+}
+function snapSave_(o) {
+  const p = PropertiesService.getScriptProperties(), s = JSON.stringify(o), parts = [], old = Number(p.getProperty('snapN') || 0);
+  for (let i = 0; i < s.length; i += 8000) parts.push(s.slice(i, i + 8000));
+  const props = { snapV: SNAP_V, snapN: String(parts.length) }; parts.forEach((x, i) => { props['snap' + i] = x; });
+  p.setProperties(props, false);
+  for (let i = parts.length; i < old; i++) p.deleteProperty('snap' + i);
+}
+/* rows the app just wrote here are up to date: remembered so they don't look like sheet edits */
+function snapRows_(heads, col, rows) {
+  const s = snapLoad_(); if (!s) return;
+  rows.forEach(r => { s[rowKeys_(col, [r])[0]] = rowSig_(col, r); });
+  snapSave_(s);
+}
+/**
+ * Optional, from the editor: sends every member row's details from this sheet to the app (the sheet wins everywhere).
+ * Use it if the app ever shows something different from the sheet. Empty cells never blank the app.
+ */
+function sendSheetToApp() {
+  const sheet = responsesSheet_(), col = columns_(sheet), data = sheet.getDataRange().getValues(), heads = data.shift();
+  const reqs = data.filter(r => isMemberSt_(String(r[col.status]))).map(r => { const m = Object.assign(toMember_(heads, r), extras_(col, r)), p = {};
+    EDITABLE.forEach(k => { if (m[k] !== '' && m[k] != null && col[k] !== undefined) p[k] = m[k]; }); return { fn: 'sheet_edit_member', body: { p_secret: SYNC_SECRET, p: p, p_old_phone: m.phone } }; }).filter(x => x.body.p.phone);
+  let ok = 0;
+  for (let i = 0; i < reqs.length; i += 50) { const res = UrlFetchApp.fetchAll(reqs.slice(i, i + 50).map(c => rpc_(c.fn, c.body))); ok += res.filter(r => r.getResponseCode() < 300).length; }
+  console.log('Sent ' + ok + ' of ' + reqs.length + ' member rows to the app.');
+}
+
+/* ======================= Duplicates: admins decide in the app ======================= */
+/* rows sharing a WhatsApp number, or a VRN (different numbers); entries waiting for approval are left to the approval list */
+function findDupes_(col, data) {
+  const keys = rowKeys_(col, data), byP = {}, byV = {};
+  data.forEach((r, i) => {
+    if (String(r[col.status]) === ST.waiting) return;
+    const p = p10_(r[col.phone]); if (p.length === 10) (byP[p] = byP[p] || []).push(i);
+    if (col.vrn !== undefined) { const v = cleanVrn_(r[col.vrn]); if (v.length >= 6) (byV[v] = byV[v] || []).push(i); }
+  });
+  const agreed = r => col.tnc !== undefined && /(agree|understood|accept|yes)/i.test(String(r[col.tnc])) && !/(don'?t|not agree|disagree)/i.test(String(r[col.tnc]));
+  const filled = r => r.filter(x => x !== '' && x != null).length;
+  const when = r => col.joined_at !== undefined && r[col.joined_at] instanceof Date ? r[col.joined_at].getTime() : 0;
+  const rank = s => s === ST.inApp ? 2 : s === ST.member ? 1 : 0;
+  const score = i => { const r = data[i]; return rank(String(r[col.status])) * 1e9 + (agreed(r) ? 1e8 : 0) + filled(r) * 1e5 + when(r) / 1e8; };
+  const t = (r, k) => col[k] === undefined ? '' : String(r[col[k]] == null ? '' : r[col[k]]).trim();
+  const entry = (i, best) => { const r = data[i]; return { id: keys[i], row: i + 2, name: t(r, 'full_name'), phone: p10_(r[col.phone]), vrn: cleanVrn_(t(r, 'vrn')), email: t(r, 'email'),
+    joined: col.joined_at !== undefined && r[col.joined_at] instanceof Date ? Utilities.formatDate(r[col.joined_at], 'Asia/Kolkata', 'dd/MM/yyyy HH:mm') : t(r, 'joined_at'),
+    status: t(r, 'status'), added: col.added === undefined ? '' : String(r[col.added] || ''), filled: filled(r), tnc: agreed(r), best: best }; };
+  const groups = [];
+  const add = (kind, value, list) => { if (list.length < 2) return; const top = list.slice().sort((a, b) => score(b) - score(a))[0];
+    groups.push({ key: kind + ':' + value, kind: kind, value: value, entries: list.map(i => entry(i, i === top)) }); };
+  Object.keys(byP).forEach(p => add('phone', p, byP[p]));
+  Object.keys(byV).forEach(v => { if (new Set(byV[v].map(i => p10_(data[i][col.phone]))).size > 1) add('vrn', v, byV[v]); });   // same number twice is already a group
+  return groups;
+}
+function reportDupes_() {
+  const sheet = responsesSheet_(), col = columns_(sheet), last = sheet.getLastRow();
+  const data = last > 1 ? sheet.getRange(2, 1, last - 1, sheet.getLastColumn()).getValues() : [];
+  const groups = findDupes_(col, data);
+  const r = UrlFetchApp.fetchAll([rpc_('sheet_set_dupes', { p_secret: SYNC_SECRET, p_groups: groups })])[0];
+  if (r.getResponseCode() !== 200) return 'not reported (run setup file 49 in Supabase first)';
+  return groups.length + ' found, ' + r.getContentText() + ' shown to admins';
+}
+/* rows admins chose to remove in the app → "Older entries" (with who decided) */
+function applyDupeActions_() {
+  const r = UrlFetchApp.fetchAll([rpc_('sheet_dupe_actions', { p_secret: SYNC_SECRET })])[0];
+  if (r.getResponseCode() !== 200) return 'not set up (setup file 49)';
+  const acts = JSON.parse(r.getContentText() || '[]') || [];
+  if (!acts.length) return 'none';
+  const sheet = responsesSheet_(), col = columns_(sheet), last = sheet.getLastRow();
+  const data = last > 1 ? sheet.getRange(2, 1, last - 1, sheet.getLastColumn()).getValues() : [];
+  const at = {}; rowKeys_(col, data).forEach((k, i) => { at[k] = i; });
+  const move = [], done = [];
+  acts.forEach(a => { const i = at[a.entry];
+    if (i === undefined || move.some(x => x.i === i)) { done.push({ id: a.id, result: 'not found' }); return; }
+    move.push({ i: i, note: a.note || 'Duplicate' }); done.push({ id: a.id, result: 'moved' }); });
+  if (move.length) moveRowsFast_(sheet, data, move, 'Older entries', 'Moved on');
+  UrlFetchApp.fetchAll([rpc_('sheet_dupe_done', { p_secret: SYNC_SECRET, p_done: done })]);
+  return move.length + ' moved to Older entries';
+}
+/** See the duplicates admins are asked about (nothing is changed). */
+function previewDuplicates() {
+  const sheet = responsesSheet_(), col = columns_(sheet), last = sheet.getLastRow();
+  const g = findDupes_(col, last > 1 ? sheet.getRange(2, 1, last - 1, sheet.getLastColumn()).getValues() : []);
+  console.log(g.length ? g.map(x => (x.kind === 'vrn' ? 'VRN ' : 'Number ') + x.value + ':\n' + x.entries.map(e => '  row ' + e.row + ': ' + e.name + ' (' + e.phone + ', ' + e.vrn + ')' + (e.best ? '  ← suggested to keep' : '')).join('\n')).join('\n') : 'No duplicates.');
 }
 
 /* ======================= Coloured rows: red = removed (broke the T&C), grey = left ======================= */

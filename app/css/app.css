@@ -542,6 +542,7 @@ dialog#sheet::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(2px)}
 
 /* screens fade in */
 #app > *:not(.top):not(.demo-bar){animation:rise .38s cubic-bezier(.2,.7,.2,1) both}
+#app.same > *{animation:none!important}
 #app > *:nth-child(3){animation-delay:.03s}#app > *:nth-child(4){animation-delay:.06s}#app > *:nth-child(5){animation-delay:.09s}#app > *:nth-child(n+6){animation-delay:.12s}
 @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .askbar{animation:none!important}
@@ -1238,3 +1239,23 @@ body.blocked .pookie-fab,body.blocked #tabbar,body.blocked .promo,body.blocked d
 .trk-opt.sos.on{border-color:#ef4444;background:rgba(220,38,38,.14)}
 .trk-set{display:flex;gap:12px;align-items:center;padding:12px;border-radius:14px;border:1px solid var(--line);margin-bottom:8px}
 .trk-set .grow{display:flex;flex-direction:column;gap:2px}.trk-set.ok{opacity:.75}.ts-ico{font-size:1.3rem}
+/* duplicates in the sheet: admins choose Keep / Remove */
+.ad-dupes{display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px 12px;border-radius:14px;background:color-mix(in srgb,var(--orange) 14%,var(--paper-2));color:var(--ink);text-decoration:none;font-size:.86rem}
+.ad-dupes[hidden]{display:none}
+.ad-dupes svg{width:18px;height:18px;flex:none;opacity:.6}
+.dupe{display:flex;flex-direction:column;gap:12px}
+.dupe-h{display:flex;align-items:center;gap:10px;margin:0}
+.dupe-ico{font-size:1.3rem}
+.dupe-list{display:flex;flex-direction:column;gap:8px}
+.dupe-e{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:14px;border:1.5px solid color-mix(in srgb,#16a34a 55%,transparent);background:color-mix(in srgb,#16a34a 7%,transparent);transition:border-color .2s,background .2s,opacity .2s}
+.dupe-e.rm{border-color:color-mix(in srgb,#dc2626 55%,transparent);background:color-mix(in srgb,#dc2626 6%,transparent)}
+.dupe-e.rm .dupe-who b{text-decoration:line-through;text-decoration-color:color-mix(in srgb,#dc2626 70%,transparent)}
+.dupe-who{display:flex;flex-direction:column;gap:3px;min-width:0}
+.dupe-who > b{font-size:1rem}
+.dupe-who .badge.ok{align-self:flex-start}
+.dupe-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.dupe-pick{margin:0}
+.dupe-pick button[aria-pressed=true]{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
+.dupe-e:not(.rm) .dupe-pick button[data-v=keep][aria-pressed=true]{color:#15803d}
+.dupe-e.rm .dupe-pick button[data-v=rm][aria-pressed=true]{color:#b91c1c}
+.dupe .btns{margin:0}

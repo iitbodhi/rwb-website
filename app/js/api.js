@@ -316,6 +316,9 @@ async function supabaseApi(url, key) {
 
         admin: {
             stats: async () => must(await sb.rpc('admin_stats')),
+            /* duplicates found in the RWB contact sheet (setup file 49); [] until that file is run */
+            async dupes() { const r = await sb.rpc('admin_dupes'); if (r.error) { if (/could not find|function/i.test(r.error.message || '')) return []; throw new Error(r.error.message); } return r.data || []; },
+            resolveDupe: async (key, remove, ignore = false) => must(await sb.rpc('admin_resolve_dupe', { p_key: key, p_remove: remove || [], p_ignore: !!ignore })),
             async requests() {
                 const list = must(await sb.rpc('admin_list_requests'));
                 /* when each entry was last changed by the person (setup file 31) */
@@ -625,6 +628,14 @@ function demoApi() {
         async testPush() { db.news.push({ id: nid(), kind: 'admin', title: 'Test notification ✅', body: 'Push notifications are working on this phone.', url: '#news', audience: 'admins', created_at: new Date().toISOString() }); save(); },
 
         admin: {
+            dupes: () => wait(db.dupes ??= [
+                { key: 'phone:9000000002', kind: 'phone', value: '9000000002', entries: [
+                    { id: 'a1', row: 214, name: 'Rahul Sen', phone: '9000000002', vrn: 'WB06C7788', email: 'rahul@example.com', joined: '12/03/2024 18:20', status: 'In App', filled: 16, tnc: true, best: true, on_app: true, member: 'active' },
+                    { id: 'a2', row: 597, name: 'Rahul Sen', phone: '9000000002', vrn: 'WB06C7788', email: 'rahul.sen@example.com', joined: '27/10/2026 09:12', status: 'Member', filled: 12, tnc: true, best: false, on_app: true, member: 'active' }] },
+                { key: 'vrn:WB02AB1234', kind: 'vrn', value: 'WB02AB1234', entries: [
+                    { id: 'b1', row: 88, name: 'Demo Rider', phone: '9000000001', vrn: 'WB02AB1234', email: 'demo@example.com', joined: '10/01/2024 11:00', status: 'In App', filled: 17, tnc: true, best: true, on_app: true, member: 'active' },
+                    { id: 'b2', row: 640, name: 'Sourav Pal', phone: '9000000077', vrn: 'WB02AB1234', email: 'sourav@example.com', joined: '20/10/2026 21:40', status: 'Member', filled: 11, tnc: false, best: false, on_app: false, member: 'active' }] }]),
+            async resolveDupe(key, remove, ignore) { db.dupes = (db.dupes || []).filter(g => g.key !== key); save(); return { result: ignore ? 'ignored' : 'done', rows: (remove || []).length }; },
             stats: () => wait({ members: db.members.length, on_app: db.members.filter(m => m.user_id).length, pending: db.requests.length, admins: db.members.filter(m => m.role !== 'member').length }),
             requests: () => wait(db.requests),
             async approve(id) {
