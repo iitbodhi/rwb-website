@@ -543,16 +543,14 @@ function demoApi() {
         trackSos: (lat, lng, acc) => { db.sos = [{ id: Date.now(), lat, lng, acc, at: new Date().toISOString() }]; save(); return wait(db.sos[0].id); },
         trackSosResolve: id => { (db.sos || []).forEach(s => { if (s.id === id) s.resolved = true; }); save(); return wait('done'); },
         /* Talk demo: recordings stay in this tab (object URLs); one sample message from Arjun */
-        talkTargets: () => wait({ muted: !!db.talkMuted, receive: db.talkOn !== false, forced: false, fam: 1, fam_on: 1,
-            events: [{ id: 501, title: 'Sunday Breakfast Ride', riders: [{ id: 2, name: 'Arjun Sen', nick: 'Sultan', on: true, live: true }, { id: 3, name: 'Priya Das', on: true, live: false }, { id: 4, name: 'Rohit Ghosh', on: false, live: false }] }],
-            map: [{ id: 2, name: 'Arjun Sen', nick: 'Sultan', on: true, live: true }, { id: 5, name: 'Sneha Roy', on: true, live: true }] }),
+        talkTargets: () => wait({ muted: !!db.talkMuted, events: [{ id: 501, title: 'Sunday Breakfast Ride', riders: 4 }], fam: [{ id: 91, name: 'Rina Mallick' }] }),
         talkInbox: (after = 0) => { const t = db.talk ||= [{ id: 1, kind: 'event', secs: 4, url: 'data:audio/wav;base64,' + demoBeep(), at: new Date(Date.now() - 18 * 6e4).toISOString(), heard: false, aloud: true, mine: false,
                 from: { id: 2, name: 'Arjun Sen', nick: 'Sultan' }, event: 'Sunday Breakfast Ride' }];
             return wait({ muted: !!db.talkMuted, receive: db.talkOn !== false, forced: false, fam: demoFam(), unheard: t.filter(x => !x.mine && !x.heard).length, items: t.filter(x => x.id > after).sort((a, b) => b.id - a.id) }); },
         talkSend: ({ kind, target, blob, secs }) => { if (db.talkMuted) return Promise.reject(new Error('You have been muted by the admins'));
-            const t = db.talk ||= [], to = kind === 'fam' ? 'Your FAM' : kind === 'event' ? 'Sunday Breakfast Ride' : ({ 2: 'Sultan', 3: 'Priya Das', 5: 'Sneha Roy' })[target] || 'a rider';
+            const t = db.talk ||= [], to = kind === 'fam' ? 'Rina Mallick' : 'Sunday Breakfast Ride';
             t.push({ id: Date.now(), kind, secs: Math.round(secs), url: URL.createObjectURL(blob), at: new Date().toISOString(), heard: true, mine: true, to: kind === 'event' ? 2 : 1, to_name: to, event: kind === 'event' ? 'Sunday Breakfast Ride' : null });
-            return wait({ id: Date.now(), to: kind === 'event' ? 2 : 1, live: 1 }); },
+            return wait({ id: Date.now(), to: kind === 'event' ? 4 : 1, live: 1 }); },
         talkHeard: id => { (db.talk || []).forEach(x => { if (x.id === id) x.heard = true; }); save(); return wait(null); },
         talkSetReceive: on => { db.talkOn = !!on; save(); return wait({ receive: !!on, forced: false }); },
         talkReport: () => wait('reported'),

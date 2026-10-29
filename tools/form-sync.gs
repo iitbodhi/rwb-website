@@ -84,7 +84,16 @@ function setup() {
 
 /** Runs by itself for every new form submission: the entry waits for an admin in the app. */
 function onFormSubmitSync(e) {
-  const sheet = e.range.getSheet(), rowNo = e.range.getRow();
+  const sheet = e.range.getSheet();
+  try { formEntry_(e, sheet); }
+  finally {
+    /* the form sometimes writes a new entry far below the last one: close the gap (even if sending to the app failed) */
+    const lock = LockService.getScriptLock();
+    if (lock.tryLock(20000)) { try { const n = compactBlankRows_(sheet); if (n) console.log('Empty rows removed: ' + n); } finally { lock.releaseLock(); } }
+  }
+}
+function formEntry_(e, sheet) {
+  const rowNo = e.range.getRow();
   const col = columns_(sheet);
   const heads = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const row = sheet.getRange(rowNo, 1, 1, sheet.getLastColumn()).getValues()[0];
@@ -102,9 +111,6 @@ function onFormSubmitSync(e) {
     setStatus_({ status: 'approved', phone: m.phone });
   }
   console.log('New form entry: ' + res.join(', '));
-  /* the form sometimes writes a new entry far below the last one: close the gap */
-  const lock = LockService.getScriptLock();
-  if (lock.tryLock(20000)) { try { const n = compactBlankRows_(sheet); if (n) console.log('Empty rows removed: ' + n); } finally { lock.releaseLock(); } }
 }
 
 /** Runs by itself when someone edits this sheet: the changed details go to the app. */
@@ -590,6 +596,8 @@ function syncWithApp() {
       '. Cells updated from the app: ' + rc.cells + ' on ' + rc.rows + ' rows. Added: ' + rc.added + (rc.restored ? ' (' + rc.restored + ' brought back from Removed members)' : '') +
       '. Moved to Removed members: ' + rc.removed + '. Rejected entries deleted: ' + rc.rejected + '. App details filled from the sheet: ' + rc.filled +
       '. Join dates updated from the sheet: ' + (rc.joined || 0) + '. Duplicates removed by admins: ' + dupeDone + '. Duplicates: ' + dupes + '.');
+    if (rc.addedNames.length) console.log('Added to the sheet:\n' + rc.addedNames.join('\n'));
+    if (rc.skipped.length) console.log('App members not in the sheet (fix their number in the app):\n' + rc.skipped.join('\n'));
   } finally { lock.releaseLock(); }
 }
 
@@ -660,9 +668,10 @@ function reconcile_(app) {
   const filledCount = r => r.filter(x => x !== '' && x != null).length;
   const bin = removedTab_();
 
+  out.addedNames = []; out.skipped = [];
   active.forEach(m => {
     const p = p10_(m.phone), em = String(m.email || '').trim().toLowerCase();
-    if (p.length !== 10) return;
+    if (p.length !== 10) { out.skipped.push(m.full_name + ' (no 10-digit WhatsApp number in the app)'); return; }
     let rows = (byPhone[p] || []).filter(i => !gone.has(i));
     if (!rows.length && bySnapPhone[p] !== undefined && !gone.has(bySnapPhone[p])) rows = [bySnapPhone[p]];
     if (!rows.length && em) rows = (byEmail[em] || []).filter(i => !gone.has(i) && !activeSet.has(p10_(data[i][col.phone])));
@@ -680,6 +689,7 @@ function reconcile_(app) {
       if (!back) row[col.added] = 'RWB App';
       if (col.updated !== undefined) row[col.updated] = new Date();
       if (back) out.restored++;
+      out.addedNames.push(m.full_name + (back ? ' (row brought back from Removed members)' : ''));
       appends.push(row); return;
     }
     /* their row: the member's row, else the fullest one (other rows with the same number are left for the admins: duplicates) */
@@ -825,7 +835,8 @@ function compactBlankRows_(sheet) {
   if (last < 3) return 0;
   const rng = sheet.getRange(2, 1, last - 1, width), vals = rng.getValues(), fx = rng.getFormulas();
   const real = sheet.getRange(1, 1, 1, width).getValues()[0].map(h => !isHelperHead_(h));
-  const empty = vals.map((r, i) => r.every((v, c) => fx[i][c] ? !real[c] : (v === '' || v == null)));
+  const blank = v => v === '' || v == null || v === false || (typeof v === 'string' && !v.trim());   // unticked checkboxes and spaces count as empty
+  const empty = vals.map((r, i) => r.every((v, c) => fx[i][c] ? !real[c] : blank(v)));
   const rows = []; empty.forEach((e, i) => { if (e) rows.push(i + 2); });
   if (!rows.length || rows.length === vals.length) return 0;
   deleteRowsAt_(sheet, rows);
@@ -959,6 +970,43 @@ function previewDuplicates() {
   const sheet = responsesSheet_(), col = columns_(sheet), last = sheet.getLastRow();
   const g = findDupes_(col, last > 1 ? sheet.getRange(2, 1, last - 1, sheet.getLastColumn()).getValues() : []);
   console.log(g.length ? g.map(x => (x.kind === 'vrn' ? 'VRN ' : 'Number ') + x.value + ':\n' + x.entries.map(e => '  row ' + e.row + ': ' + e.name + ' (' + e.phone + ', ' + e.vrn + ')' + (e.best ? '  ← suggested to keep' : '')).join('\n')).join('\n') : 'No duplicates.');
+}
+
+/* ======================= The "RWB" menu in the sheet ======================= */
+/** Adds the RWB menu when the sheet opens: find a member, sync now, remove empty rows. */
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('RWB')
+    .addItem('🔎 Find a member (sheet + app)', 'findMember')
+    .addItem('🔄 Sync with the app now', 'syncWithApp')
+    .addItem('🧹 Remove empty rows', 'removeEmptyRows')
+    .addToUi();
+}
+/** RWB → Find a member: where a name or number is in every tab, and what the app says. Offers to fix a missing row. */
+function findMember() {
+  const ui = SpreadsheetApp.getUi();
+  const a = ui.prompt('Find a member', 'Name (or part of it) or WhatsApp number:', ui.ButtonSet.OK_CANCEL);
+  if (a.getSelectedButton() !== ui.Button.OK) return;
+  const q = String(a.getResponseText() || '').trim(), qp = p10_(q), ql = q.toLowerCase();
+  if (q.length < 3) { ui.alert('Type at least 3 letters or the number.'); return; }
+  const hit = (name, phone) => (qp.length === 10 && p10_(phone) === qp) || (ql.length >= 3 && String(name || '').toLowerCase().indexOf(ql) >= 0);
+  const lines = [];
+  SpreadsheetApp.getActive().getSheets().forEach(sh => {
+    if (sh.getLastRow() < 2) return;
+    const v = sh.getDataRange().getValues(), h = v[0].map(x => String(x).trim().toLowerCase());
+    const nc = h.findIndex(x => x.indexOf(COLUMNS.full_name) === 0), pc = h.findIndex(x => x.indexOf(COLUMNS.phone) === 0);
+    if (nc < 0 && pc < 0) return;
+    v.slice(1).forEach((r, i) => { if (hit(r[nc], r[pc])) lines.push('• ' + sh.getName() + ', row ' + (i + 2) + ': ' + r[nc] + ' (' + p10_(r[pc]) + ')'); });
+  });
+  let app = [];
+  try { const r = UrlFetchApp.fetchAll([rpc_('sheet_export_all', { p_secret: SYNC_SECRET })])[0]; const d = JSON.parse(r.getContentText());
+    app = (d.members || []).filter(m => hit(m.full_name, m.phone)).map(m => '• App: ' + m.full_name + ' (' + (p10_(m.phone) || 'no number') + '), ' + (m.status === 'active' ? 'member' : m.status));
+    (d.waiting || []).filter(m => hit(m.full_name, m.phone)).forEach(m => app.push('• App: ' + m.full_name + ' (' + p10_(m.phone) + '), waiting for approval'));
+  } catch (e) { app = ['• App: could not check (' + e + ')']; }
+  const missing = app.some(x => / member$/.test(x)) && !lines.some(x => x.indexOf('• ' + responsesSheet_().getName() + ',') === 0);
+  const msg = (lines.length ? lines.join('\n') : 'Not found in any tab.') + '\n\n' + (app.length ? app.join('\n') : 'Not found in the app.') +
+    (missing ? '\n\nThey are a member in the app but have no row in "' + responsesSheet_().getName() + '". Add the row now (from "Removed members" if it is there)?' : '');
+  if (missing) { if (ui.alert('Find a member', msg, ui.ButtonSet.YES_NO) === ui.Button.YES) { syncWithApp(); ui.alert('Done. Their row is in "' + responsesSheet_().getName() + '" now (search again to check).'); } }
+  else ui.alert('Find a member', msg, ui.ButtonSet.OK);
 }
 
 /* ======================= Coloured rows: red = removed (broke the T&C), grey = left ======================= */

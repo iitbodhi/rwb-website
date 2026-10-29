@@ -1,9 +1,10 @@
--- RWB App setup file 50: Talk (voice messages on Track). Run after file 49. Safe to run more than once.
--- * A member records up to 3 minutes and sends it to: their event ride group (they must be "Going"), one rider on that
---   ride, any rider sharing on the map, or their RWB FAM.
--- * Receivers who share their live location hear it straight away (the RWB Android app plays it even with the screen
---   off). FAM users always hear it (they can switch Talk off). Everyone else gets a notification and replays it in Track.
--- * Everyone can switch receiving off, except while sharing their location on an event ride (then Talk is always on).
+-- RWB App setup file 50: Talk, a walkie-talkie for event rides. Run after file 49. Safe to run more than once
+-- (also over an earlier version of this file).
+-- * Members who RSVP "Going" for an event ride hold the Talk button on the Track map and speak (up to 3 minutes);
+--   on release it goes to everyone going on that ride. Talk is on for the ride from 6 hours before it starts until
+--   6 hours after it ends. Everyone going receives every message (no switch), and it plays out loud straight away
+--   (the RWB Android app plays it even with the screen off; iPhone / browser while the app is open).
+-- * A member can also send a voice message to one of their RWB FAM, from their FAM list.
 -- * Admins: every message in Admin → Talk (replay, delete, reported ones), mute / unmute any member.
 -- * Messages are deleted after 7 days (files too). At most 30 messages an hour per member.
 
@@ -67,40 +68,34 @@ create or replace function private.talk_forced(p_uid uuid) returns boolean langu
       and (l.event_id is not null or exists (select 1 from event_rsvps r join events e on e.id = r.event_id
             where r.user_id = p_uid and r.status = 'going' and private.talk_event_live(e))))
 $$;
-create or replace function private.talk_on(p_uid uuid) returns boolean language sql stable security definer set search_path = public, private as $$
-  select coalesce((select receive from talk_settings where user_id = p_uid), true) or private.talk_forced(p_uid)
-$$;
+-- everyone going on a ride receives Talk (there is no off switch)
+create or replace function private.talk_on(p_uid uuid) returns boolean language sql stable as $$ select true $$;
 create or replace function private.talk_who() returns text language sql stable security definer set search_path = public as $$
   select coalesce((select coalesce(nickname, full_name) from members where user_id = auth.uid()), (select full_name from fam_members where user_id = auth.uid()), 'Someone')
 $$;
 
--- ---------- for the sender: who can I talk to right now ----------
+-- ---------- for the sender: the rides I can talk on right now, and my FAM ----------
+drop function if exists public.talk_targets();
 create or replace function public.talk_targets() returns jsonb
 language plpgsql security definer set search_path = public, private as $$
 declare m members := private.track_me();
 begin
   return jsonb_build_object(
     'muted', exists (select 1 from talk_muted where member_id = m.id),
-    'receive', private.talk_on(auth.uid()), 'forced', private.talk_forced(auth.uid()),
-    'events', coalesce((select jsonb_agg(jsonb_build_object('id', e.id, 'title', e.title, 'riders', coalesce((
-        select jsonb_agg(jsonb_build_object('id', x.id, 'name', x.full_name, 'nick', x.nickname, 'avatar', x.avatar_url,
-          'on', private.talk_on(x.user_id), 'live', private.talk_sharing(x.id)) order by x.full_name)
-        from event_rsvps r2 join members x on x.user_id = r2.user_id
-        where r2.event_id = e.id and r2.status = 'going' and x.status = 'active' and x.id <> m.id), '[]'::jsonb)) order by e.starts_at)
+    'events', coalesce((select jsonb_agg(jsonb_build_object('id', e.id, 'title', e.title, 'starts_at', e.starts_at,
+        'riders', (select count(*) from event_rsvps r2 join members x on x.user_id = r2.user_id
+                   where r2.event_id = e.id and r2.status = 'going' and x.status = 'active' and x.id <> m.id)) order by e.starts_at)
       from event_rsvps r join events e on e.id = r.event_id
       where r.user_id = auth.uid() and r.status = 'going' and private.talk_event_live(e)), '[]'::jsonb),
-    'map', coalesce((select jsonb_agg(jsonb_build_object('id', x.id, 'name', x.full_name, 'nick', x.nickname, 'avatar', x.avatar_url,
-        'on', private.talk_on(x.user_id), 'live', true) order by x.full_name)
-      from track_live l join members x on x.id = l.member_id
-      where l.until > now() and x.status = 'active' and x.user_id is not null and x.id <> m.id), '[]'::jsonb),
-    'fam', (select count(*) from fam_members f where f.member_id = m.id and f.approved),
-    'fam_on', (select count(*) from fam_members f where f.member_id = m.id and f.approved and private.talk_on(f.user_id)));
+    'fam', coalesce((select jsonb_agg(jsonb_build_object('id', f.id, 'name', f.full_name) order by f.created_at)
+      from fam_members f where f.member_id = m.id and f.approved), '[]'::jsonb));
 end $$;
 
 -- ---------- send (after the app uploaded the recording to the talk bucket) ----------
+-- p_kind 'event' (p_target = the event: everyone going on it) or 'fam' (p_target = one of my FAM)
 create or replace function public.talk_send(p_kind text, p_target bigint, p_path text, p_url text, p_secs integer) returns jsonb
 language plpgsql security definer set search_path = public, private as $$
-declare m members := private.track_me(); e events; t members; mid bigint; n integer; loud integer; u text; s text; k text;
+declare m members := private.track_me(); e events; f fam_members; mid bigint; n integer; u text; s text; k text;
 begin
   if exists (select 1 from talk_muted where member_id = m.id) then raise exception 'You have been muted by the admins'; end if;
   if (select count(*) from talk_messages where sender_id = m.id and created_at > now() - interval '1 hour') >= 30 then
@@ -110,41 +105,33 @@ begin
   if p_path !~ ('^' || auth.uid()::text || '/[A-Za-z0-9_-]{8,64}\.(webm|m4a|mp4|ogg|aac)$') then raise exception 'Bad recording'; end if;
   if position('/storage/v1/object/sign/talk/' || p_path in coalesce(p_url, '')) = 0 then raise exception 'Bad recording link'; end if;
 
-  create temp table if not exists _talk_to (user_id uuid primary key, aloud boolean) on commit drop;
+  create temp table if not exists _talk_to (user_id uuid primary key) on commit drop;
   truncate _talk_to;
   if p_kind = 'event' then
     select * into e from events where id = p_target;
-    if e.id is null or not private.talk_event_live(e) then raise exception 'This ride is not on right now'; end if;
+    if e.id is null or not private.talk_event_live(e) then raise exception 'Talk is on for a ride from 6 hours before it starts until 6 hours after it ends'; end if;
     if not exists (select 1 from event_rsvps where event_id = e.id and user_id = auth.uid() and status = 'going') then
-      raise exception 'RSVP Going for this ride to talk to the group';
+      raise exception 'RSVP Going for this ride to use Talk';
     end if;
-    insert into _talk_to select x.user_id, private.talk_sharing(x.id)
-      from event_rsvps r join members x on x.user_id = r.user_id
-      where r.event_id = e.id and r.status = 'going' and x.status = 'active' and x.id <> m.id and private.talk_on(x.user_id);
-  elsif p_kind = 'rider' then
-    select * into t from members where id = p_target and status = 'active' and user_id is not null;
-    if t.id is null or t.id = m.id then raise exception 'Rider not found'; end if;
-    if not (private.talk_sharing(t.id) or exists (select 1 from event_rsvps a join event_rsvps b on b.event_id = a.event_id join events ev on ev.id = a.event_id
-              where a.user_id = auth.uid() and b.user_id = t.user_id and a.status = 'going' and b.status = 'going' and private.talk_event_live(ev))) then
-      raise exception '% is not on the map or on your ride right now', coalesce(t.nickname, t.full_name);
-    end if;
-    if not private.talk_on(t.user_id) then raise exception '% has Talk switched off', coalesce(t.nickname, t.full_name); end if;
-    insert into _talk_to values (t.user_id, private.talk_sharing(t.id));
+    insert into _talk_to select x.user_id from event_rsvps r join members x on x.user_id = r.user_id
+      where r.event_id = e.id and r.status = 'going' and x.status = 'active' and x.id <> m.id;
+    if not found then raise exception 'Nobody else is going on this ride yet'; end if;
   elsif p_kind = 'fam' then
-    insert into _talk_to select f.user_id, true from fam_members f
-      where f.member_id = m.id and f.approved and private.talk_on(f.user_id);
+    select * into f from fam_members where id = p_target and member_id = m.id;
+    if f.id is null then raise exception 'Family member not found'; end if;
+    if not f.approved then raise exception '% has RWB FAM switched off', f.full_name; end if;
+    insert into _talk_to values (f.user_id);
   else
-    raise exception 'Choose who to send it to';
+    raise exception 'Talk is for event rides and your FAM';
   end if;
-  select count(*), count(*) filter (where aloud) into n, loud from _talk_to;
-  if n = 0 then raise exception 'Nobody can receive it right now (their Talk is switched off)'; end if;
+  select count(*) into n from _talk_to;
 
   insert into talk_messages (sender_id, kind, event_id, to_member, path, url, secs)
-  values (m.id, p_kind, case when p_kind = 'event' then e.id end, case when p_kind = 'rider' then t.id end, p_path, p_url, p_secs)
+  values (m.id, p_kind, case when p_kind = 'event' then e.id end, null, p_path, p_url, p_secs)
   returning id into mid;
-  insert into talk_recipients (msg_id, user_id, aloud) select mid, user_id, aloud from _talk_to;
+  insert into talk_recipients (msg_id, user_id, aloud) select mid, user_id, true from _talk_to;
 
-  -- phones get it straight away (the push sender plays it on the Android app)
+  -- phones get it straight away (the push sender has the Android app play it)
   begin
     select value into u from private.config where key = 'push_url';
     select value into s from private.config where key = 'push_secret';
@@ -155,7 +142,7 @@ begin
     end if;
   exception when others then null;
   end;
-  return jsonb_build_object('id', mid, 'to', n, 'live', loud);
+  return jsonb_build_object('id', mid, 'to', n, 'live', n);
 end $$;
 
 -- ---------- receiving ----------
@@ -182,7 +169,7 @@ begin
         union all
         select t.id, jsonb_build_object('id', t.id, 'kind', t.kind, 'secs', t.secs, 'url', t.url, 'at', t.created_at,
           'heard', true, 'mine', true, 'to', (select count(*) from talk_recipients where msg_id = t.id),
-          'to_name', case t.kind when 'fam' then 'Your FAM' when 'event' then (select title from events where id = t.event_id)
+          'to_name', case t.kind when 'fam' then coalesce((select f.full_name from talk_recipients r join fam_members f on f.user_id = r.user_id where r.msg_id = t.id limit 1), 'your FAM') when 'event' then (select title from events where id = t.event_id)
                        else (select coalesce(nickname, full_name) from members where id = t.to_member) end,
           'event', (select title from events where id = t.event_id))
         from talk_messages t where t.sender_id = m.id and t.id > coalesce(p_after, 0) and t.deleted_at is null and t.created_at > now() - interval '7 days'
@@ -239,7 +226,7 @@ begin
     'items', coalesce((select jsonb_agg(jsonb_build_object('id', t.id, 'kind', t.kind, 'secs', t.secs, 'url', t.url, 'at', t.created_at,
         'from', jsonb_build_object('id', s.id, 'name', s.full_name, 'nick', s.nickname, 'avatar', s.avatar_url),
         'muted', exists (select 1 from talk_muted where member_id = s.id),
-        'to_name', case t.kind when 'fam' then 'FAM of ' || coalesce(s.nickname, s.full_name) when 'event' then (select title from events where id = t.event_id)
+        'to_name', case t.kind when 'fam' then coalesce((select f.full_name || ' (FAM)' from talk_recipients r join fam_members f on f.user_id = r.user_id where r.msg_id = t.id limit 1), 'FAM') when 'event' then (select title from events where id = t.event_id)
                      else (select full_name from members where id = t.to_member) end,
         'to', (select count(*) from talk_recipients where msg_id = t.id), 'heard', (select count(*) from talk_recipients where msg_id = t.id and heard_at is not null),
         'reported', t.reported_at is not null, 'reported_by', t.reported_by, 'report_note', t.report_note) order by t.id desc)
@@ -277,7 +264,7 @@ begin
   select * into s from members where id = t.sender_id;
   return jsonb_build_object('id', t.id, 'url', t.url, 'secs', t.secs, 'at', t.created_at,
     'from', coalesce(s.nickname, s.full_name), 'avatar', s.avatar_url,
-    'to', case t.kind when 'fam' then 'FAM' when 'event' then (select title from events where id = t.event_id) else 'you' end,
+    'to', case t.kind when 'fam' then 'you' when 'event' then (select title from events where id = t.event_id) else 'you' end,
     'recipients', coalesce((select jsonb_agg(jsonb_build_object('aloud', r.aloud,
         'fcm', coalesce((select jsonb_agg(f.token) from fcm_tokens f where f.user_id = r.user_id), '[]'::jsonb),
         'subs', coalesce((select jsonb_agg(jsonb_build_object('endpoint', p.endpoint, 'keys', jsonb_build_object('p256dh', p.p256dh, 'auth', p.auth)))
