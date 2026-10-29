@@ -3801,11 +3801,30 @@ async function talkPoll(full = false) {
     talkPaint();
     return d;
 }
+/* Going on two rides the same day: Talk points at the ride you share your location for, else the one happening now,
+   else the next one, else the one that ended last. A ride you picked yourself stays picked until it ends. */
+function talkPickRide() {
+    const evs = talk.targets?.events; if (!evs?.length) { talk.evIdx = 0; return; }
+    const now = Date.now();
+    const span = e => { const f = (state.evd?.events || []).find(x => x.id === e.id), st = Date.parse(e.starts_at || f?.starts_at) || now;
+        return [st, Date.parse(f?.ends_at) || st + 6 * 36e5]; };
+    const rank = e => { const [st, en] = span(e);
+        if (sharing() && trk.event === e.id) return [0, 0];
+        if (now >= st && now <= en) return [1, st];
+        if (now < st) return [2, st];
+        return [3, -en]; };
+    evs.sort((a, b) => { const x = rank(a), y = rank(b); return x[0] - y[0] || x[1] - y[1]; });
+    const mine = talk.evPick && evs.find(e => e.id === talk.evPick);
+    if (mine && rank(mine)[0] === 3 && rank(evs[0])[0] < 3) talk.evPick = null;      /* your pick has ended: back to the live ride */
+    const i = talk.evPick ? evs.findIndex(e => e.id === talk.evPick) : 0;
+    talk.evIdx = i < 0 ? 0 : i;
+}
 /* the rides I can talk on right now (members) */
 async function talkTargets() {
     if (talk.off || isFam() || !state.me) return null;
     try { talk.targets = await api.talkTargets(); } catch { talk.targets = null; }
-    if (talk.targets && talk.evIdx >= talk.targets.events.length) talk.evIdx = 0;
+    if (talk.targets?.events?.length > 1 && !state.evd) await loadEvents().catch(() => null);   /* end times, to pick the right ride */
+    talkPickRide();
     talkPaint();
     return talk.targets;
 }
@@ -3877,7 +3896,7 @@ document.addEventListener('click', e => {
     const b = e.target.closest('[data-talk]'); if (!b) return;
     const k = b.dataset.talk, id = Number(b.dataset.id);
     if (k === 'inbox') return talkInboxSheet();
-    if (k === 'ev') { const n = talk.targets?.events?.length || 0; if (n > 1) { talk.evIdx = (talk.evIdx + 1) % n; talkPaint(); } return; }
+    if (k === 'ev') { const evs = talk.targets?.events || []; if (evs.length > 1) { talk.evIdx = (talk.evIdx + 1) % evs.length; talk.evPick = evs[talk.evIdx].id; talkPaint(); toast(`🎙️ Talk: ${evs[talk.evIdx].title}`); } return; }
     if (k === 'play') { const x = talkFind(id); if (x) talkPlay(x); return; }
     if (k === 'pending') { if (talk.pending) talkPlay(talk.pending); return; }
     if (k === 'more') {
