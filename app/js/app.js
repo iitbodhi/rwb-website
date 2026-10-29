@@ -2168,6 +2168,7 @@ async function viewAdmin() {
             <button role="tab" aria-selected="${tab === 'requests'}" data-act="tab" data-tab="requests">Approvals${s.pending ? ` (${s.pending})` : ''}</button>
             <button role="tab" aria-selected="${tab === 'motomart'}" data-act="tab" data-tab="motomart">Motomart<span id="mm-count"></span></button>
             <button role="tab" aria-selected="${tab === 'dupes'}" data-act="tab" data-tab="dupes">Duplicates<span id="dupe-count"></span></button>
+            <button role="tab" aria-selected="${tab === 'talk'}" data-act="tab" data-tab="talk">Talk</button>
             <button role="tab" aria-selected="${tab === 'members'}" data-act="tab" data-tab="members">Members</button>
             <button role="tab" aria-selected="${tab === 'bdays'}" data-act="tab" data-tab="bdays">Birthdays</button>
             <button role="tab" aria-selected="${tab === 'ai'}" data-act="tab" data-tab="ai">Pookie</button></div>
@@ -2175,7 +2176,7 @@ async function viewAdmin() {
     actions = { tab: el => { state.adminTab = el.dataset.tab; viewAdmin(); }, mfilter: el => { state.adminTab = 'members'; state.memberFilter = el.dataset.f; state.adminSearch = ''; viewAdmin(); } };
     load.listings(true).then(ls => { const n = ls.filter(l => l.status === 'pending').length; const c = $('#mm-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
     api.admin.dupes().then(g => { state.dupes = g; const c = $('#dupe-count'); if (c && g.length) c.textContent = ` (${g.length})`; }).catch(() => {});
-    try { await ({ requests: adminRequests, motomart: adminMotomart, dupes: adminDupes, members: adminMembers, bdays: adminBdays, ai: adminAI })[tab](); }
+    try { await ({ requests: adminRequests, motomart: adminMotomart, dupes: adminDupes, talk: adminTalk, members: adminMembers, bdays: adminBdays, ai: adminAI })[tab](); }
     catch (e) { $('#admin-body').innerHTML = `<div class="card empty"><b>Could not load</b>${esc(e.message)}</div>`; }
 }
 /* Every new entry (join form or app) waits here. Admins see 4 checks before approving. */
@@ -2582,7 +2583,9 @@ function memberSheet(m) {
             ${m.role === 'admin' ? '' : `<button class="btn ghost" data-x="role" data-to="${m.role === 'coordinator' ? 'member' : 'coordinator'}">${m.role === 'coordinator' ? 'Remove coordinator' : 'Make coordinator'}</button>`}
             ${superA ? `<button class="btn ghost" data-x="role" data-to="${m.role === 'admin' ? 'member' : 'admin'}">${m.role === 'admin' ? 'Remove admin rights' : 'Make admin'}</button>` : ''}</div>
             <p class="small muted" style="margin:-4px 0 12px">Coordinators can approve, reject and delete Motomart posts. They can't manage members.</p>` : ''}
+        ${!self && m.user_id && m.role !== 'superadmin' ? `<div id="talk-mute-slot" data-mid="${m.id}"></div>` : ''}
         ${canRemove ? `<button class="btn danger block" data-x="remove">Remove from RWB</button><p class="small muted" style="margin-top:6px">Use when someone leaves the RWB WhatsApp community. Deletes their profile${m.user_id ? ', app account, service records, fuel log and bills' : ''}, and their row in the RWB contact sheet (a copy goes to its “Removed members” tab). This can't be undone in the app.</p>` : ''}`, body => {
+        talkMuteSlot();
         bindFamRemove(body, () => { closeSheet(); state.adminMembers && adminMembers(); });
         body.querySelector('[data-x=edit]').onclick = () => memberEdit(m);
         body.querySelectorAll('[data-x=vv]').forEach(btn => btn.onclick = () => {
@@ -3598,12 +3601,15 @@ async function viewTrack() {
     const param = state.param || '';
     trk.filter = /^e\d+$/.test(param) ? Number(param.slice(1)) : null;
     app.innerHTML = top('Track') + `<section class="trk-wrap">
-        <div class="trk-map-box"><div id="trk-map" class="trk-map"><p class="muted" style="padding:20px">Loading the map…</p></div><div class="trk-signal" id="trk-signal" role="status" hidden></div></div>
+        <div class="trk-map-box"><div id="trk-map" class="trk-map"><p class="muted" style="padding:20px">Loading the map…</p></div><div class="trk-signal" id="trk-signal" role="status" hidden></div>
+            <button class="talk-fab" id="talk-fab" data-talk="open" hidden aria-label="Talk: voice messages"><span class="talk-fab-ico">🎙️</span>Talk<i class="talk-n" hidden></i></button>
+            <button class="talk-new" id="talk-new" data-talk="pending" hidden></button></div>
         <div class="trk-bar">
             <div class="trk-status" id="trk-status"></div>
             <div class="trk-actions"${isFam() ? ' hidden' : ''}><button class="btn" data-act="trk-share" id="trk-share"></button><button class="btn sos-btn" data-act="trk-sos">🆘 SOS</button></div>
         </div>
-        <div id="trk-list" class="trk-list"></div></section>`;
+        <div id="trk-list" class="trk-list"></div>
+        <section class="section talk-sec" id="talk-sec" hidden><h2>Talk <button class="linkish small" data-talk="inbox">See all</button></h2><div id="talk-list" class="talk-list"></div></section></section>`;
     actions = { 'trk-share': () => shareSheet(trk.filter, trk.filter ? (state.evd?.events || []).find(e => e.id === trk.filter)?.title : ''), 'trk-sos': () => sosSheet(),
         'trk-all': () => { location.hash = '#track'; }, 'trk-rider': el => openRider(el.dataset.k), 'trk-fit': () => fitAll(true) };
     if (isFam()) trk.filter = null;
@@ -3617,6 +3623,8 @@ async function viewTrack() {
         L.control.zoom({ position: 'topright' }).addTo(map);
         const fit = L.control({ position: 'topright' }); fit.onAdd = () => { const d = L.DomUtil.create('button', 'trk-fit'); d.type = 'button'; d.title = 'Show everyone'; d.innerHTML = '⤢'; d.onclick = () => fitAll(true); return d; }; fit.addTo(map);
     }
+    talkPaint();
+    talkPoll().then(() => { if (param === 'talk' && location.hash.startsWith('#track')) talkInboxSheet(); });
     await refreshTrack();
     clearInterval(trk.poll);
     trk.poll = setInterval(() => { if (!location.hash.startsWith('#track')) return clearInterval(trk.poll); if (document.visibilityState === 'visible') refreshTrack(); }, 15000);
@@ -3711,7 +3719,9 @@ function sosAlarm(name, id) {
     if (id) try { localStorage.setItem('rwb-sos-seen', JSON.stringify([...seenSos(), id].slice(-50))); } catch { /* ignore */ }
 }
 /* an SOS push arrived while the app is open (the service worker passes it on) */
-navigator.serviceWorker?.addEventListener('message', e => { if (e.data?.type === 'sos' && state.me && isMod()) sosAlarm(String(e.data.title || '').replace(/^🆘 SOS: /, '')); });
+navigator.serviceWorker?.addEventListener('message', e => { if (e.data?.type === 'sos' && state.me && isMod()) sosAlarm(String(e.data.title || '').replace(/^🆘 SOS: /, '')); if (e.data?.type === 'talk' && state.me) talkPoll(); });
+/* Talk: new voice messages are checked every 15 seconds on Track, while sharing live, and for FAM */
+setInterval(() => { if (state.me && !talk.off && document.visibilityState === 'visible' && (location.hash.startsWith('#track') || sharing() || isFam())) talkPoll(); }, 15000);
 
 /* ---------- Events: ride live ---------- */
 function rideLive(e) {
@@ -3725,6 +3735,255 @@ function rideLive(e) {
         <div class="btns"><button class="btn" data-act="evt-track-share">${mine ? '🟢 Sharing · Stop / change' : '📍 Share for this ride'}</button><a class="btn ghost" href="#track/e${e.id}">🗺️ See riders on map</a></div></div></section>`;
 }
 
+
+/* =================== Talk: voice messages on Track (setup file 50) ===================
+   A member records up to 3 minutes and sends it to their event ride group (RSVP Going), one rider on that ride, any rider
+   sharing on the map (after agreeing to the Talk rules) or their RWB FAM. Receivers who share their live location hear it
+   straight away: the RWB Android app plays it itself, even with the screen off; on iPhone / browser it plays while the app
+   is open. Everyone else gets a notification and replays it here. Admins see every message, and can mute members. */
+const TALK_MAX = 180, TALK_FRESH = 10 * 6e4;
+const talk = { items: [], last: 0, me: null, unheard: 0, audio: null, playingId: null, queue: [], off: false, seeded: false, nativeOn: null, pending: null };
+const talkLen = s => `${Math.floor(s / 60)}:${String(Math.round(s) % 60).padStart(2, '0')}`;
+const talkWho = x => x.mine ? `You → ${x.to_name || ''}` : (x.from?.nick || x.from?.name || 'A rider');
+
+async function talkPoll(full = false) {
+    if (!state.me || talk.off) return null;
+    let d; try { d = await api.talkInbox(full ? 0 : talk.last); } catch { return null; }
+    if (!d) { talk.off = true; talkPaint(); return null; }          /* Talk isn't set up yet (setup file 50) */
+    talk.me = d; talk.unheard = d.unheard || 0;
+    const fresh = d.items.filter(x => !talk.items.some(y => y.id === x.id));
+    talk.items = (full ? d.items : [...fresh, ...talk.items]).sort((a, b) => b.id - a.id).slice(0, 60);
+    talk.last = Math.max(0, ...talk.items.map(x => x.id));
+    if (NATIVE) {
+        /* the Android app plays messages out loud itself; the ones it played count as heard */
+        try { const r = await RwbTrack()?.talkPlayed(); for (const id of String(r?.ids || '').split(',').map(Number).filter(Boolean)) {
+            const x = talk.items.find(i => i.id === id); if (x && !x.heard && !x.mine) { x.heard = true; talk.unheard = Math.max(0, talk.unheard - 1); api.talkHeard(id).catch(() => {}); } } } catch { /* older app */ }
+        if (talk.nativeOn !== !!d.receive) { talk.nativeOn = !!d.receive; RwbTrack()?.talkSetReceive({ on: !!d.receive }).catch(() => {}); }
+    } else if (talk.seeded) {
+        /* iPhone / browser: new messages for riders sharing live (and FAM) play while the app is open */
+        fresh.filter(x => !x.mine && !x.heard && x.aloud && Date.now() - Date.parse(x.at) < TALK_FRESH).reverse().forEach(talkAuto);
+    }
+    talk.seeded = true;
+    talkPaint();
+    return d;
+}
+function talkAuto(x) {
+    if (document.visibilityState !== 'visible') { talk.pending = x; return; }
+    if (!location.hash.startsWith('#track') && !talk.playingId) toast(`🎙️ ${talkWho(x)} sent a voice message`);
+    if (talk.playingId) { if (!talk.queue.some(q => q.id === x.id)) talk.queue.push(x); return; }
+    talkPlay(x, true);
+}
+function talkPlay(x, auto = false) {
+    if (talk.playingId === x.id && talk.audio) { talkStopAudio(); talkPaint(); return; }      /* tap again: stop */
+    talkStopAudio();
+    if (NATIVE) RwbTrack()?.talkStop?.().catch(() => {});
+    const a = talk.audio = new Audio(x.url);
+    talk.playingId = x.id; talk.pending = null;
+    const next = () => { if (talk.audio !== a) return; talk.audio = null; talk.playingId = null; const q = talk.queue.shift(); if (q) talkPlay(q, true); else talkPaint(); };
+    a.onended = next;
+    a.onerror = () => { if (talk.audio !== a) return; toast('Could not play this message. It may have expired (messages are kept 7 days).', true); next(); };
+    a.play().then(() => {
+        if (!x.mine && !x.heard && !x.log) { x.heard = true; talk.unheard = Math.max(0, talk.unheard - 1); api.talkHeard(x.id).catch(() => {}); }
+        talkPaint();
+    }).catch(() => { if (talk.audio !== a) return; talk.audio = null; talk.playingId = null; if (auto) talk.pending = x; else toast('Could not play this message', true); talkPaint(); });
+    talkPaint();
+}
+function talkStopAudio() { if (talk.audio) { try { talk.audio.pause(); } catch { /* ignore */ } talk.audio = null; } talk.playingId = null; }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.me && !talk.off && talk.seeded) talkPoll().then(() => { if (talk.pending && !NATIVE && location.hash.startsWith('#track')) talkPaint(); }); });
+
+/* one message in a list */
+const talkRow = x => `<div class="talk-row${x.heard || x.mine ? '' : ' new'}${x.mine ? ' mine' : ''}">
+    <button class="talk-play${talk.playingId === x.id ? ' on' : ''}" data-talk="play" data-id="${x.id}" aria-label="${talk.playingId === x.id ? 'Stop' : 'Play'}">${talk.playingId === x.id ? '■' : '▶'}</button>
+    ${x.mine ? '<span class="talk-me">🎙️</span>' : face({ full_name: x.from?.name, avatar_url: x.from?.avatar }, 'avatar sm')}
+    <span class="grow"><b>${esc(talkWho(x))}</b><span class="small muted">${talkLen(x.secs)} · ${x.mine ? `${x.to} receiver${x.to === 1 ? '' : 's'}` : x.kind === 'event' ? esc(x.event || 'Ride group') : x.kind === 'fam' ? 'Family message' : 'To you'} · ${timeAgo(x.at)}</span></span>
+    ${x.log ? '' : `<button class="icon-btn talk-more" data-talk="more" data-id="${x.id}" aria-label="More">⋯</button>`}</div>`;
+const talkFind = id => talk.items.find(x => x.id === id) || (talk.log || []).find(x => x.id === id);
+
+/* the Talk button on the map, the list under the map and the open Talk window follow the latest state */
+function talkPaint() {
+    const fab = $('#talk-fab');
+    if (fab) { fab.hidden = talk.off || !talk.me; const n = fab.querySelector('.talk-n'); if (n) { n.textContent = talk.unheard > 9 ? '9+' : talk.unheard; n.hidden = !talk.unheard; } }
+    const sec = $('#talk-sec');
+    if (sec) { sec.hidden = talk.off || !talk.me || !talk.items.length; const l = $('#talk-list'); if (l) l.innerHTML = talk.items.slice(0, 4).map(talkRow).join(''); }
+    const nb = $('#talk-new');
+    if (nb) { const p = talk.pending; nb.hidden = !p; if (p) nb.innerHTML = `<span>🎙️</span><span class="grow"><b>${esc(talkWho(p))}</b> sent a voice message</span><b>▶ Play</b>`; }
+    const box = $('#talk-inbox'); if (box) box.innerHTML = talk.items.length ? talk.items.map(talkRow).join('') : '<p class="muted small" style="padding:8px 2px">No voice messages in the last 7 days.</p>';
+    const alog = $('#talk-log'); if (alog && talk.log) alog.querySelectorAll('.talk-play').forEach(b => { const on = Number(b.dataset.id) === talk.playingId; b.classList.toggle('on', on); b.textContent = on ? '■' : '▶'; });
+    const mb = $('#talk-msgs-n'); if (mb) mb.textContent = talk.unheard ? `${talk.unheard} new` : '';
+}
+
+/* taps on Talk things anywhere (map, Track list, Talk window, Admin) */
+document.addEventListener('click', e => {
+    const b = e.target.closest('[data-talk]'); if (!b) return;
+    const k = b.dataset.talk, id = Number(b.dataset.id);
+    if (k === 'open') return isFam() ? talkInboxSheet() : talkSheet();
+    if (k === 'inbox') return talkInboxSheet();
+    if (k === 'play') { const x = talkFind(id); if (x) talkPlay(x); return; }
+    if (k === 'pending') { if (talk.pending) talkPlay(talk.pending); return; }
+    if (k === 'more') {
+        const x = talkFind(id); if (!x) return;
+        if (x.mine) { if (confirmBox('Delete this voice message for everyone?')) busy(b, async () => { await api.talkDelete(x.id); talk.items = talk.items.filter(i => i.id !== x.id); toast('Deleted'); talkPaint(); }); }
+        else if (confirmBox(`Report this voice message from ${talkWho(x)} to the RWB admins?\n\nUse this for misuse, profanity or abusive language.`)) busy(b, async () => { await api.talkReport(x.id); toast('Reported to the admins. Thank you.'); });
+        return;
+    }
+    if (k === 'mute') { const mid = Number(b.dataset.mid), on = b.dataset.on !== '1';
+        if (on && !confirmBox('Mute this member on Talk? They will see “You have been muted by the admins” and can\'t send voice messages until an admin unmutes them.')) return;
+        busy(b, async () => { await api.talkMute(mid, on); toast(on ? 'Muted on Talk' : 'Unmuted'); state.talkMuted = null; if ($('#talk-admin')) adminTalk(); else talkMuteSlot(); }); return; }
+    if (k === 'adel') { const x = talkFind(id); if (x && confirmBox('Delete this voice message for everyone?')) busy(b, async () => { await api.talkDelete(x.id); toast('Deleted'); adminTalk(); }); }
+});
+
+/* the "Receive voice messages" switch */
+function talkSwitch(d) {
+    return `<label class="switch talk-sw">Receive voice messages<input type="checkbox" id="talk-recv"${d?.receive ? ' checked' : ''}${d?.forced ? ' disabled' : ''}></label>
+        <p class="small muted talk-sw-note">${d?.forced ? 'Always on while you share your live location for an event ride.' : d?.fam === true ? 'Voice messages from your rider play out loud as they arrive.' : 'Messages play out loud when you share your live location. Otherwise you get a notification and can play them here.'}</p>`;
+}
+function bindTalkSwitch(root) {
+    const sw = root.querySelector('#talk-recv'); if (!sw) return;
+    sw.onchange = async () => {
+        const want = sw.checked; sw.disabled = true;
+        try {
+            const r = await api.talkSetReceive(want); talk.me = { ...(talk.me || {}), ...r }; sw.checked = !!r.receive;
+            if (NATIVE) { talk.nativeOn = !!r.receive; RwbTrack()?.talkSetReceive({ on: !!r.receive }).catch(() => {}); }
+            toast(r.receive ? (r.forced && !want ? 'Talk stays on while you share live on an event ride' : 'Talk is on: you receive voice messages') : 'Talk is off: you won\'t receive voice messages');
+        } catch (e) { sw.checked = !want; toast(e.message, true); }
+        finally { sw.disabled = !!talk.me?.forced; }
+    };
+}
+
+/* everyone: messages from the last 7 days, to replay */
+async function talkInboxSheet() {
+    openSheet('Talk', `${talkSwitch(talk.me)}<h3 class="talk-h">Voice messages <span class="muted small">kept for 7 days</span></h3><div id="talk-inbox" class="talk-list"><p class="muted small">Loading…</p></div>`, body => bindTalkSwitch(body));
+    await talkPoll(true);
+    const sw = $('#talk-recv'); if (sw && talk.me) { sw.checked = !!talk.me.receive; sw.disabled = !!talk.me.forced; }
+    talkPaint();
+}
+
+/* members: choose who, record, send */
+async function talkSheet() {
+    let t; try { t = await api.talkTargets(); } catch (e) { return toast(e.message, true); }
+    const msgs = `<button class="talk-msgs" data-talk="inbox"><span>📨</span><span class="grow"><b>Messages</b><span class="small muted">Replay voice messages from the last 7 days</span></span><b id="talk-msgs-n" class="talk-msgs-n">${talk.unheard ? talk.unheard + ' new' : ''}</b></button>`;
+    if (t.muted) return openSheet('Talk', `<div class="card talk-muted"><span>🔇</span><span class="grow"><b>You have been muted by the admins</b><span class="small muted">You can't send voice messages right now. You can still listen to messages sent to you.</span></span></div>${msgs}${talkSwitch(t)}`, b => bindTalkSwitch(b));
+    const opts = [];
+    t.events.forEach(e => {
+        const on = e.riders.filter(r => r.on).length;
+        opts.push({ kind: 'event', target: e.id, ico: '🏍️', title: e.title, sub: `Whole ride group · ${on} of ${e.riders.length} rider${e.riders.length === 1 ? '' : 's'} going can receive`, off: !on, to: `${e.title} (group)` });
+        opts.push({ kind: 'rider', list: e.riders, ico: '👤', title: `One rider on ${e.title}`, sub: 'Someone going on this ride', off: !e.riders.some(r => r.on) });
+    });
+    opts.push({ kind: 'rider', list: t.map, rules: true, ico: '🗺️', title: 'A rider on the map', sub: t.map.length ? `${t.map.length} sharing live now` : 'Nobody else is sharing live right now', off: !t.map.some(r => r.on) });
+    if (t.fam) opts.push({ kind: 'fam', ico: '👨‍👩‍👧', title: 'My FAM', sub: `${t.fam_on} of ${t.fam} family member${t.fam === 1 ? '' : 's'} can receive`, off: !t.fam_on, to: 'your FAM' });
+    let pick = null;
+    const body = () => $('#sheet-body');
+    const choose = () => {
+        talkRecStop(true);
+        body().innerHTML = `<p class="small muted talk-lead">Send a voice message (up to 3 minutes). Admins can hear every Talk message.</p>
+            <div class="talk-opts">${opts.map((o, i) => `<button class="talk-opt" data-i="${i}"${o.off ? ' disabled' : ''}><span class="talk-ico">${o.ico}</span><span class="grow"><b>${esc(o.title)}</b><span class="small muted">${esc(o.sub)}</span></span>${ICON.chev}</button>`).join('')}</div>
+            ${t.events.length ? '' : '<p class="small muted talk-tip">💡 RSVP <b>Going</b> for an event ride to talk to its whole group (from 6 hours before it starts until 6 hours after it ends).</p>'}
+            ${msgs}${talkSwitch(t)}`;
+        bindTalkSwitch(body());
+        body().querySelectorAll('.talk-opt').forEach(b => b.onclick = () => { const o = opts[Number(b.dataset.i)]; if (o.list) riders(o); else { pick = o; recorder(); } });
+    };
+    const riders = o => {
+        body().innerHTML = `<button class="linkish small talk-back" data-k="back">‹ Back</button><h3 class="talk-h">${esc(o.title)}</h3>
+            <div class="talk-riders">${o.list.map(r => `<button class="talk-rider" data-id="${r.id}"${r.on ? '' : ' disabled'}>${face({ full_name: r.name, avatar_url: r.avatar }, 'avatar sm')}<span class="grow"><b>${esc(r.nick || r.name)}</b><span class="small muted">${r.on ? r.live ? '🟢 Sharing live · hears it now' : 'Gets a notification' : 'Talk is switched off'}</span></span></button>`).join('') || '<p class="muted small">Nobody here right now.</p>'}</div>`;
+        body().querySelector('[data-k=back]').onclick = choose;
+        body().querySelectorAll('.talk-rider').forEach(b => b.onclick = () => { const r = o.list.find(x => x.id === Number(b.dataset.id)); pick = { kind: 'rider', target: r.id, to: r.nick || r.name }; o.rules ? rules() : recorder(); });
+    };
+    const rules = () => {
+        body().innerHTML = `<div class="talk-rules"><span class="talk-rules-ico">⚠️</span><h3>Before you talk to another rider</h3>
+            <ul><li>Talk is for riding: directions, regroups, safety.</li><li><b>No profanity, abuse or harassment</b>, and nothing you wouldn't say in person.</li>
+            <li>Every message can be heard by the RWB admins and reported by the receiver.</li><li>Misuse gets you muted, and can lead to removal from RWB.</li></ul>
+            <div class="btns"><button class="btn" data-k="ok">I agree</button><button class="btn ghost" data-k="no">Cancel</button></div></div>`;
+        body().querySelector('[data-k=ok]').onclick = recorder;
+        body().querySelector('[data-k=no]').onclick = choose;
+    };
+    const recorder = () => {
+        body().innerHTML = `<button class="linkish small talk-back" data-k="back">‹ Change</button><p class="talk-to">To <b>${esc(pick.to)}</b></p>
+            <div class="talk-rec"><button class="talk-mic" id="talk-mic" aria-label="Start recording"><span>🎙️</span></button>
+            <div class="talk-time" id="talk-time">Tap to record</div><div class="talk-bar"><i id="talk-bar"></i></div>
+            <div class="btns talk-done" id="talk-done" hidden><button class="btn ghost" data-k="hear">▶ Listen</button><button class="btn ghost" data-k="again">Re-record</button><button class="btn" data-k="send">Send</button></div></div>
+            <p class="small muted talk-tip">Up to 3 minutes. Tap the mic again to stop.</p>`;
+        body().querySelector('[data-k=back]').onclick = choose;
+        $('#talk-mic').onclick = () => rec.mr ? talkRecStop(false) : talkRecStart().catch(e => toast(e.message, true));
+        body().querySelector('[data-k=again]').onclick = () => { talkRecStop(true); recorder(); };
+        body().querySelector('[data-k=hear]').onclick = b => { if (!rec.blob) return; talkStopAudio(); const a = talk.audio = new Audio(URL.createObjectURL(rec.blob)); a.play().catch(() => {}); };
+        body().querySelector('[data-k=send]').onclick = ev => { if (!rec.blob) return; busy(ev.currentTarget, async () => {
+            const r = await api.talkSend({ kind: pick.kind, target: pick.target ?? null, blob: rec.blob, secs: rec.secs, ext: rec.ext, type: rec.type });
+            talkRecStop(true); closeSheet();
+            toast(`🎙️ Sent to ${r.to} ${r.to === 1 ? 'person' : 'people'}${r.live ? ` · ${r.live} hear${r.live === 1 ? 's' : ''} it now` : ''}`);
+            talkPoll();
+        }); };
+    };
+    openSheet('Talk', '', () => choose());
+}
+/* ---------- recording ---------- */
+const rec = { mr: null, stream: null, chunks: [], t0: 0, tick: null, blob: null, secs: 0, type: '', ext: '' };
+async function talkRecStart() {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw new Error('Voice recording isn\'t available here. Please update your RWB app or browser.');
+    talkStopAudio();
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+    catch (e) { throw new Error(/NotAllowed|Permission/i.test(e.name + e.message) ? 'Allow the microphone for RWB to send voice messages (phone Settings → Apps → RWB → Permissions).' : 'The microphone isn\'t available right now.'); }
+    if (!$('#talk-mic')) { stream.getTracks().forEach(t => t.stop()); return; }
+    const mime = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find(t => MediaRecorder.isTypeSupported?.(t)) || '';
+    const mr = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), audioBitsPerSecond: 32000 });
+    Object.assign(rec, { mr, stream, chunks: [], t0: Date.now(), blob: null, secs: 0 });
+    const real = (mr.mimeType || mime || 'audio/webm').split(';')[0];
+    rec.type = /mp4|m4a|aac/.test(real) ? 'audio/mp4' : /ogg/.test(real) ? 'audio/ogg' : 'audio/webm';
+    rec.ext = rec.type === 'audio/mp4' ? 'm4a' : rec.type === 'audio/ogg' ? 'ogg' : 'webm';
+    mr.ondataavailable = e => { if (e.data?.size) rec.chunks.push(e.data); };
+    mr.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        if (rec.discard) { rec.discard = false; return; }
+        rec.secs = Math.min(TALK_MAX, (Date.now() - rec.t0) / 1000);
+        rec.blob = rec.secs >= 1 && rec.chunks.length ? new Blob(rec.chunks, { type: rec.type }) : null;
+        const tm = $('#talk-time'), done = $('#talk-done'), mic = $('#talk-mic');
+        if (tm) tm.textContent = rec.blob ? `${talkLen(rec.secs)} recorded` : 'Too short. Tap to record again';
+        if (done) done.hidden = !rec.blob;
+        if (mic) { mic.classList.remove('on'); mic.hidden = !!rec.blob; }
+    };
+    mr.start(1000);
+    $('#talk-mic').classList.add('on'); $('#talk-done').hidden = true;
+    clearInterval(rec.tick);
+    rec.tick = setInterval(() => {
+        const s = (Date.now() - rec.t0) / 1000, tm = $('#talk-time'), bar = $('#talk-bar');
+        if (!tm) return talkRecStop(true);
+        tm.textContent = `● ${talkLen(s)} / 3:00${s > TALK_MAX - 10 ? ` · ${Math.ceil(TALK_MAX - s)}s left` : ''}`;
+        if (bar) bar.style.width = Math.min(100, s / TALK_MAX * 100) + '%';
+        if (s >= TALK_MAX) talkRecStop(false);
+    }, 250);
+}
+function talkRecStop(discard) {
+    clearInterval(rec.tick); rec.tick = null;
+    if (rec.mr) { rec.discard = !!discard; try { if (rec.mr.state !== 'inactive') rec.mr.stop(); else rec.stream?.getTracks().forEach(t => t.stop()); } catch { /* ignore */ } rec.mr = null; }
+    if (discard) { rec.blob = null; rec.secs = 0; }
+}
+sheet.addEventListener('close', () => talkRecStop(true));
+
+/* ---------- Admin → Talk ---------- */
+async function adminTalk() {
+    const box = $('#admin-body'); if (!box) return;
+    let d; try { d = await api.talkLog(); } catch (e) { box.innerHTML = `<div class="card empty"><b>Talk isn't set up yet</b>${esc(/function|schema/i.test(e.message) ? 'Run setup file 50 in Supabase.' : e.message)}</div>`; return; }
+    talk.log = d.items.map(x => ({ ...x, log: true })); state.talkMuted = new Set(d.muted.map(m => m.id));
+    box.innerHTML = `<div id="talk-admin">${talkSwitch(talk.me || { receive: true })}
+        <p class="small muted" style="margin:12px 0">Every voice message of the last 7 days. Messages sent to you play out loud; the rest wait here.</p>
+        ${d.muted.length ? `<h3 class="talk-h">Muted (${d.muted.length})</h3><div class="group">${d.muted.map(m => `<div class="talk-row"><span class="talk-me">🔇</span><span class="grow"><b>${esc(m.name)}</b><span class="small muted">by ${esc(m.by || 'an admin')} · ${timeAgo(m.at)}</span></span><button class="btn sm ghost" data-talk="mute" data-mid="${m.id}" data-on="1">Unmute</button></div>`).join('')}</div>` : ''}
+        <h3 class="talk-h">Messages (${d.items.length})</h3>
+        <div id="talk-log" class="talk-list">${talk.log.length ? talk.log.map(x => `<div class="talk-arow${x.reported ? ' reported' : ''}">
+            <div class="talk-row"><button class="talk-play${talk.playingId === x.id ? ' on' : ''}" data-talk="play" data-id="${x.id}" aria-label="Play">${talk.playingId === x.id ? '■' : '▶'}</button>
+            ${face({ full_name: x.from.name, avatar_url: x.from.avatar }, 'avatar sm')}<span class="grow"><b>${esc(x.from.name)}${x.muted ? ' <span class="badge">Muted</span>' : ''}</b><span class="small muted">→ ${esc(x.to_name || '')} · ${talkLen(x.secs)} · ${timeAgo(x.at)} · heard by ${x.heard}/${x.to}</span></span></div>
+            ${x.reported ? `<p class="small talk-rep">🚩 Reported by ${esc(x.reported_by || 'a rider')}${x.report_note ? `: “${esc(x.report_note)}”` : ''}</p>` : ''}
+            <div class="btns">${x.from.id === state.me?.id ? '' : `<button class="btn sm ghost" data-talk="mute" data-mid="${x.from.id}" data-on="${x.muted ? 1 : 0}">${x.muted ? 'Unmute' : '🔇 Mute ' + esc(firstName({ full_name: x.from.name }))}</button>`}<button class="btn sm ghost" data-talk="adel" data-id="${x.id}">Delete</button></div></div>`).join('') : '<p class="muted small">No voice messages in the last 7 days.</p>'}</div></div>`;
+    bindTalkSwitch(box);
+    if (!talk.me) talkPoll().then(() => { const sw = $('#talk-recv'); if (sw && talk.me) { sw.checked = !!talk.me.receive; sw.disabled = !!talk.me.forced; } });
+}
+/* the member sheet (admins): mute / unmute on Talk */
+async function talkMuteSlot() {
+    const slot = $('#talk-mute-slot'); if (!slot || talk.off) return;
+    try { if (!state.talkMuted) state.talkMuted = new Set((await api.talkLog()).muted.map(m => m.id)); } catch { return; }
+    const s = $('#talk-mute-slot'); if (!s) return;
+    const mid = Number(s.dataset.mid), on = state.talkMuted.has(mid);
+    s.innerHTML = `<button class="btn ghost block" data-talk="mute" data-mid="${mid}" data-on="${on ? 1 : 0}" style="margin-bottom:10px">${on ? '🔈 Unmute on Talk' : '🔇 Mute on Talk'}</button>`;
+}
 
 /* =================== RWB FAM: up to 3 family members per RWB member =================== */
 /* A member shares an invite (link + code). Family members sign in with any Google account and get a simple, read-only RWB App:

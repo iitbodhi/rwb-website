@@ -127,6 +127,27 @@ async function supabaseApi(url, key) {
         adminFamList: async () => must(await sb.rpc('admin_fam_list')),
         trackPing: async (lat, lng, acc, spd, hdg) => must(await sb.rpc('track_ping', { p_lat: lat, p_lng: lng, p_acc: acc, p_spd: spd, p_hdg: hdg })),
         trackStop: async () => must(await sb.rpc('track_stop')),
+        /* ---------- Talk: voice messages on Track (setup file 50) ---------- */
+        talkTargets: async () => must(await sb.rpc('talk_targets')),
+        async talkInbox(after = 0) {   /* null until setup file 50 is run */
+            const r = await sb.rpc('talk_inbox', { p_after: after });
+            if (r.error) { if (/could not find|function|schema cache/i.test(r.error.message || '')) return null; throw friendly(r.error); }
+            return r.data;
+        },
+        async talkSend({ kind, target, blob, secs, ext, type }) {
+            const me = await uid(), path = `${me}/${(crypto.randomUUID?.() || String(Date.now()) + Math.random().toString(36).slice(2)).replace(/[^A-Za-z0-9]/g, '').slice(0, 32)}.${ext}`;
+            must(await sb.storage.from('talk').upload(path, blob, { contentType: type, upsert: false }));
+            try {
+                const url = must(await sb.storage.from('talk').createSignedUrl(path, 7 * 24 * 3600)).signedUrl;
+                return must(await sb.rpc('talk_send', { p_kind: kind, p_target: target ?? null, p_path: path, p_url: url, p_secs: Math.max(1, Math.round(secs)) }));
+            } catch (e) { await sb.storage.from('talk').remove([path]).catch(() => {}); throw e; }
+        },
+        talkHeard: async id => must(await sb.rpc('talk_heard', { p_id: id })),
+        talkSetReceive: async on => must(await sb.rpc('talk_set_receive', { p_on: !!on })),
+        talkReport: async (id, note) => must(await sb.rpc('talk_report', { p_id: id, p_note: note || null })),
+        talkDelete: async id => must(await sb.rpc('talk_delete', { p_id: id })),
+        talkLog: async () => must(await sb.rpc('admin_talk_log')),
+        talkMute: async (memberId, mute) => must(await sb.rpc('admin_talk_mute', { p_member: memberId, p_mute: !!mute })),
         trackView: async () => must(await sb.rpc('track_view')),
         trackToken: async () => must(await sb.rpc('track_token')),
         trackSos: async (lat, lng, acc) => must(await sb.rpc('track_sos', { p_lat: lat, p_lng: lng, p_acc: acc })),
@@ -373,6 +394,14 @@ async function supabaseApi(url, key) {
 }
 
 /* ======================= Demo (sample data in this browser) ======================= */
+/* a short tone as a demo voice message (WAV, base64) */
+function demoBeep() {
+    const rate = 8000, n = rate * 2, buf = new Uint8Array(44 + n), v = new DataView(buf.buffer), str = (o, t) => [...t].forEach((c, i) => buf[o + i] = c.charCodeAt(0));
+    str(0, 'RIFF'); v.setUint32(4, 36 + n, true); str(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); str(36, 'data'); v.setUint32(40, n, true);
+    for (let i = 0; i < n; i++) buf[44 + i] = 128 + Math.round(40 * Math.sin(i / rate * 2 * Math.PI * (i < n / 2 ? 440 : 660)) * Math.min(1, (n - i) / 800));
+    let b = ''; for (let i = 0; i < buf.length; i += 8192) b += String.fromCharCode(...buf.subarray(i, i + 8192)); return btoa(b);
+}
 function demoApi() {
     const KEY = 'rwb-app-demo-v2';
     const iso = d => d.toISOString().slice(0, 10);
@@ -513,6 +542,24 @@ function demoApi() {
             return wait({ riders, sos, staff: ['superadmin', 'admin', 'coordinator'].includes(m.role), now: new Date().toISOString() }); },
         trackSos: (lat, lng, acc) => { db.sos = [{ id: Date.now(), lat, lng, acc, at: new Date().toISOString() }]; save(); return wait(db.sos[0].id); },
         trackSosResolve: id => { (db.sos || []).forEach(s => { if (s.id === id) s.resolved = true; }); save(); return wait('done'); },
+        /* Talk demo: recordings stay in this tab (object URLs); one sample message from Arjun */
+        talkTargets: () => wait({ muted: !!db.talkMuted, receive: db.talkOn !== false, forced: false, fam: 1, fam_on: 1,
+            events: [{ id: 501, title: 'Sunday Breakfast Ride', riders: [{ id: 2, name: 'Arjun Sen', nick: 'Sultan', on: true, live: true }, { id: 3, name: 'Priya Das', on: true, live: false }, { id: 4, name: 'Rohit Ghosh', on: false, live: false }] }],
+            map: [{ id: 2, name: 'Arjun Sen', nick: 'Sultan', on: true, live: true }, { id: 5, name: 'Sneha Roy', on: true, live: true }] }),
+        talkInbox: (after = 0) => { const t = db.talk ||= [{ id: 1, kind: 'event', secs: 4, url: 'data:audio/wav;base64,' + demoBeep(), at: new Date(Date.now() - 18 * 6e4).toISOString(), heard: false, aloud: true, mine: false,
+                from: { id: 2, name: 'Arjun Sen', nick: 'Sultan' }, event: 'Sunday Breakfast Ride' }];
+            return wait({ muted: !!db.talkMuted, receive: db.talkOn !== false, forced: false, fam: demoFam(), unheard: t.filter(x => !x.mine && !x.heard).length, items: t.filter(x => x.id > after).sort((a, b) => b.id - a.id) }); },
+        talkSend: ({ kind, target, blob, secs }) => { if (db.talkMuted) return Promise.reject(new Error('You have been muted by the admins'));
+            const t = db.talk ||= [], to = kind === 'fam' ? 'Your FAM' : kind === 'event' ? 'Sunday Breakfast Ride' : ({ 2: 'Sultan', 3: 'Priya Das', 5: 'Sneha Roy' })[target] || 'a rider';
+            t.push({ id: Date.now(), kind, secs: Math.round(secs), url: URL.createObjectURL(blob), at: new Date().toISOString(), heard: true, mine: true, to: kind === 'event' ? 2 : 1, to_name: to, event: kind === 'event' ? 'Sunday Breakfast Ride' : null });
+            return wait({ id: Date.now(), to: kind === 'event' ? 2 : 1, live: 1 }); },
+        talkHeard: id => { (db.talk || []).forEach(x => { if (x.id === id) x.heard = true; }); save(); return wait(null); },
+        talkSetReceive: on => { db.talkOn = !!on; save(); return wait({ receive: !!on, forced: false }); },
+        talkReport: () => wait('reported'),
+        talkDelete: id => { db.talk = (db.talk || []).filter(x => x.id !== id); save(); return wait('deleted'); },
+        talkLog: () => wait({ items: (db.talk || []).map(x => ({ ...x, from: x.mine ? { id: 1, name: me().full_name } : x.from, to_name: x.to_name || x.event || 'you', to: 3, heard: 1, reported: x.id === 1, reported_by: x.id === 1 ? 'Priya Das' : null, muted: x.mine ? false : !!db.talkMutedArjun })),
+            muted: db.talkMutedArjun ? [{ id: 2, name: 'Arjun Sen', by: me().full_name, at: new Date().toISOString() }] : [] }),
+        talkMute: (id, mute) => { if (id === 2) db.talkMutedArjun = !!mute; save(); return wait(mute ? 'muted' : 'unmuted'); },
         gpsBoard: () => wait([{ member_id: 2, full_name: 'Arjun Sen', nickname: 'Sultan', km: 412.6, rides: 9 }, { member_id: 3, full_name: 'Priya Dutta', km: 233.1, rides: 5 }, { member_id: 4, full_name: 'Rahul Ghosh', nickname: 'Rocket', km: 188.4, rides: 4 }, { member_id: 1, full_name: me().full_name, km: 96.2, rides: 2, is_me: true }, { member_id: 5, full_name: 'Sourav Paul', km: 41.0, rides: 1 }]),
         joinHelpAdmins: () => wait(db.members.filter(m => ['superadmin', 'admin'].includes(m.role) && (!m.status || m.status === 'active')).map(m => ({ first_name: (m.nickname || m.full_name).split(' ')[0], phone: m.phone }))),
         rwbAdmins: () => wait(db.members.filter(m => ['superadmin', 'admin'].includes(m.role) && (!m.status || m.status === 'active')).map(m => ({ full_name: m.full_name, nickname: m.nickname, phone: m.phone, role: m.role }))),

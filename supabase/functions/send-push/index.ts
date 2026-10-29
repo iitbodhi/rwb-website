@@ -4,6 +4,9 @@
 //   • web push to browsers / iPhones (keys live in the database, private.config)
 //   • Firebase (FCM) to phones using the RWB Android app (needs the FCM_SERVICE_ACCOUNT secret, see the setup guide)
 // SOS alerts are sent as urgent; on the Android app they use the "SOS alerts" channel with the siren.
+// Talk (voice messages on Track, setup file 50): { talk: id } sends the message to each receiver's phones; the RWB Android
+// app plays it out loud by itself (even with the screen off) when the receiver shares their live location, or is FAM.
+// { talk_cleanup: true } (every hour) deletes Talk recordings older than 7 days.
 import webpush from "npm:web-push@3.6.7";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { importPKCS8, SignJWT } from "npm:jose@5.9.6";
@@ -68,10 +71,62 @@ async function sendFcm(tokens: string[], p: Payload, urgent: boolean) {
   return { sent, gone };
 }
 
+/* ---------- Talk: one voice message to its receivers ---------- */
+type TalkJob = { id: number; url: string; secs: number; at: string; from: string; to: string; subject: string; vapid_public: string; vapid_private: string;
+  recipients: { aloud: boolean; fcm: string[]; subs: { endpoint: string; keys: { p256dh: string; auth: string } }[] }[] };
+async function sendTalk(secret: string, id: number) {
+  const { data: job, error } = await sb.rpc("talk_push_job", { p_id: id, p_secret: secret });
+  if (error) return new Response(error.message, { status: 403 });
+  if (!job) return Response.json({ sent: 0 });
+  const t = job as TalkJob;
+  const len = t.secs >= 60 ? `${Math.floor(t.secs / 60)}:${String(t.secs % 60).padStart(2, "0")}` : `0:${String(t.secs).padStart(2, "0")}`;
+  const title = `🎙️ ${t.from}`, body = `Voice message (${len})${t.to && t.to !== "you" ? " · " + t.to : ""}`;
+  const auth = await fcmToken().catch(() => null);
+  const goneFcm: string[] = [], goneWeb: string[] = [];
+  let android = 0, web = 0;
+  const subsAll = t.recipients.flatMap((r) => r.subs);
+  if (subsAll.length && t.vapid_public) webpush.setVapidDetails(t.subject, t.vapid_public, t.vapid_private);
+  await Promise.all(t.recipients.map(async (r) => {
+    /* Android app: a data message, so the app itself decides to play it out loud or show "tap to play" */
+    if (auth) await Promise.all(r.fcm.map(async (token) => {
+      const message = { token, android: { priority: "HIGH", ttl: "900s" },
+        data: { type: "talk", id: String(t.id), audio: t.url, from: t.from, to: t.to || "", secs: String(t.secs), at: t.at,
+                aloud: r.aloud ? "1" : "0", title, body, url: "#track/talk" } };
+      const res = await fetch(`https://fcm.googleapis.com/v1/projects/${auth.project}/messages:send`, {
+        method: "POST", headers: { Authorization: `Bearer ${auth.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ message }) });
+      if (res.ok) { android++; return; }
+      const e = await res.text();
+      if (res.status === 404 || /UNREGISTERED|INVALID_ARGUMENT.*token/i.test(e)) goneFcm.push(token);
+    }));
+    /* browsers and iPhones: a notification that opens Track → Talk */
+    await Promise.all(r.subs.map(async (s) => {
+      try { await webpush.sendNotification(s, JSON.stringify({ title, body, url: "#track/talk", tag: "talk-" + t.id }), { TTL: 900, urgency: "high" }); web++; }
+      catch (e) { const c = (e as { statusCode?: number }).statusCode; if (c === 404 || c === 410) goneWeb.push(s.endpoint); }
+    }));
+  }));
+  if (goneFcm.length) await sb.rpc("fcm_gone", { p_secret: secret, p_tokens: goneFcm });
+  if (goneWeb.length) await sb.rpc("push_gone", { p_secret: secret, p_endpoints: goneWeb });
+  return Response.json({ talk: t.id, android, web });
+}
+/* ---------- Talk: recordings older than 7 days (and deleted ones) are removed ---------- */
+async function talkCleanup(secret: string) {
+  const { data, error } = await sb.rpc("talk_expired", { p_secret: secret });
+  if (error) return new Response(error.message, { status: 403 });
+  const list = (data ?? []) as { id: number; path: string }[];
+  if (!list.length) return Response.json({ removed: 0 });
+  const { error: e2 } = await sb.storage.from("talk").remove(list.map((x) => x.path));
+  if (e2) return new Response(e2.message, { status: 500 });
+  const { data: n } = await sb.rpc("talk_purge", { p_secret: secret, p_ids: list.map((x) => x.id) });
+  return Response.json({ removed: n ?? 0 });
+}
+
 Deno.serve(async (req) => {
   try {
     const secret = req.headers.get("x-push-secret") ?? "";
-    const { id } = await req.json();
+    const reqBody = await req.json();
+    if (reqBody.talk) return await sendTalk(secret, Number(reqBody.talk));
+    if (reqBody.talk_cleanup) return await talkCleanup(secret);
+    const { id } = reqBody;
     const { data: job, error } = await sb.rpc("push_job", { p_id: id, p_secret: secret });
     if (error) return new Response(error.message, { status: 403 });
     if (!job) return Response.json({ sent: 0 });
