@@ -788,15 +788,13 @@ function appendInside_(sheet, rows) {
   const last = sheet.getLastRow();
   if (last < 2) { sheet.getRange(last + 1, 1, data.length, w).setValues(data); return; }
   const n = data.length, cols = Math.max(w, sheet.getLastColumn());
-  try {
-    sheet.insertRowsBefore(last, n);                                           // inside the table: it grows by n rows
-    sheet.getRange(last + n, 1, 1, cols).moveTo(sheet.getRange(last, 1));       // the old last row goes back to its own row number
-    sheet.getRange(last + 1, 1, n, w).setValues(data);                         // the new rows fill the space below it
-  } catch (err) {
-    console.log('Adding inside the table failed (' + err + '); adding below the last row instead.');
-    const end = sheet.getLastRow();
-    sheet.getRange(end + 1, 1, n, w).setValues(data);
-  }
+  /* rows are inserted above the last row (inside the table), the last row is COPIED back up (a form entry can't be cut),
+     then the new rows are written over the old copy below it */
+  sheet.insertRowsBefore(last, n);
+  sheet.getRange(last + n, 1, 1, cols).copyTo(sheet.getRange(last, 1, 1, cols));
+  SpreadsheetApp.flush();
+  sheet.getRange(last + 1, 1, n, w).setValues(data);
+  if (cols > w) sheet.getRange(last + 1, w + 1, n, cols - w).clearContent();
 }
 function writeColumn_(sheet, c, cells) { if (cells.length) sheet.getRange(2, c + 1, cells.length, 1).setValues(cells); }
 
@@ -837,7 +835,7 @@ function deleteRowsAt_(sheet, rowNos) {
     catch (err) {
       /* couldn't delete (e.g. a table or the last rows of a tab): move the rows below up instead */
       const last = sheet.getLastRow(), cols = sheet.getMaxColumns();
-      if (r[k] < last) sheet.getRange(r[k] + 1, 1, last - r[k], cols).moveTo(sheet.getRange(r[j], 1));
+      if (r[k] < last) { sheet.getRange(r[k] + 1, 1, last - r[k], cols).copyTo(sheet.getRange(r[j], 1)); SpreadsheetApp.flush(); }
       sheet.getRange(Math.max(r[j], last - n + 1), 1, n, cols).clearContent();
     }
     k = j + 1;
