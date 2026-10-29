@@ -1,6 +1,6 @@
 // Turns the standard Capacitor Android project into the RWB App:
 // permissions (location in the background, notifications), the sign-in return link, links to roninwb.in,
-// the notification icon and channels, our icons and SOS sound, the version number and release signing.
+// the notification icon and channels, our icons and SOS sound, Talk (voice messages), the version number and release signing.
 // Runs on GitHub after `npx cap add android`.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,9 +16,11 @@ const must = (s, what) => { if (!s) throw new Error('patch-android: ' + what + '
 const mf = path.join(app, 'src/main/AndroidManifest.xml');
 let m = read(mf);
 const perms = ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_LOCATION',
-  'POST_NOTIFICATIONS', 'WAKE_LOCK', 'VIBRATE', 'RECEIVE_BOOT_COMPLETED', 'REQUEST_IGNORE_BATTERY_OPTIMIZATIONS', 'ACCESS_BACKGROUND_LOCATION'];
+  'POST_NOTIFICATIONS', 'WAKE_LOCK', 'VIBRATE', 'RECEIVE_BOOT_COMPLETED', 'REQUEST_IGNORE_BATTERY_OPTIMIZATIONS', 'ACCESS_BACKGROUND_LOCATION',
+  'RECORD_AUDIO', 'MODIFY_AUDIO_SETTINGS', 'FOREGROUND_SERVICE_MEDIA_PLAYBACK'];   // Talk: record voice messages, play them out loud
 const add = perms.filter(p => !m.includes(`android.permission.${p}"`)).map(p => `    <uses-permission android:name="android.permission.${p}" />`).join('\n');
-m = m.replace('</manifest>', `${add}\n    <uses-feature android:name="android.hardware.location.gps" android:required="false" />\n</manifest>`);
+m = m.replace('</manifest>', `${add}\n    <uses-feature android:name="android.hardware.location.gps" android:required="false" />\n    <uses-feature android:name="android.hardware.microphone" android:required="false" />\n</manifest>`);
+if (!m.includes('xmlns:tools=')) m = m.replace('<manifest ', '<manifest xmlns:tools="http://schemas.android.com/tools" ');
 // the main activity: sign-in comes back through in.roninwb.twa://auth, and roninwb.in/app links open in the app
 const filters = `
             <intent-filter>
@@ -42,7 +44,12 @@ m = m.replace(/(<application[^>]*>)/, `$1
         <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_rwb" />
         <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/rwb_orange" />
         <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="rwb" />
-        <service android:name=".TrackService" android:exported="false" android:stopWithTask="false" android:foregroundServiceType="location" />`);
+        <service android:name=".TrackService" android:exported="false" android:stopWithTask="false" android:foregroundServiceType="location" />
+        <service android:name=".TalkService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
+        <service android:name="com.capacitorjs.plugins.pushnotifications.MessagingService" tools:node="remove" />
+        <service android:name=".RwbMessagingService" android:exported="false">
+            <intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter>
+        </service>`);
 write(mf, m);
 
 /* ---------- RWB Track: our own background service (keeps sharing with the screen off) ---------- */
@@ -98,5 +105,7 @@ if (process.env.RWB_KEYSTORE) {
 }
 /* Google's fused location provider for RWB Track (the same location engine WhatsApp live location uses) */
 if (!g.includes('play-services-location')) g = must(g.replace(/dependencies\s*\{/, "dependencies {\n    implementation 'com.google.android.gms:play-services-location:21.3.0'"), 'dependencies block');
+/* Talk: our Firebase message handler (plays voice messages with the app closed) builds on Capacitor's */
+if (!g.includes('firebase-messaging')) g = g.replace(/dependencies\s*\{/, "dependencies {\n    implementation 'com.google.firebase:firebase-messaging:24.1.0'");
 write(bg, g);
 console.log('patch-android: done (versionCode ' + (100 + run) + (process.env.RWB_KEYSTORE ? ', signed' : ', unsigned check build') + ')');

@@ -87,4 +87,20 @@ public class TrackPlugin extends Plugin {
         } catch (Exception ignored) { }
         return r;
     }
+
+    /* ---------- Talk ---------- */
+    /** Play voice messages out loud on this phone (follows the Talk switch in the app). */
+    @PluginMethod
+    public void talkSetReceive(PluginCall call) {
+        TalkService.setReceive(getContext(), Boolean.TRUE.equals(call.getBoolean("on", true)));
+        JSObject r = new JSObject(); r.put("on", TalkService.receiveOn(getContext())); call.resolve(r);
+    }
+    /** Ids of messages played out loud since the last call (the app marks them as heard). */
+    @PluginMethod
+    public void talkPlayed(PluginCall call) {
+        JSObject r = new JSObject(); r.put("ids", TalkService.takePlayed(getContext())); call.resolve(r);
+    }
+    /** Stop a voice message playing now (e.g. the rider plays it again in the app). */
+    @PluginMethod
+    public void talkStop(PluginCall call) { TalkService.stop(getContext()); call.resolve(); }
 }
