@@ -1,0 +1,418 @@
+
+added 96 packages in 4s
+7.6.10
+✔ Adding native android project in android in 42.28ms
+✔ add in 42.74ms
+✔ Copying web assets from www to android/app/src/main/assets/public in 2.44ms
+✔ Creating capacitor.config.json in android/app/src/main/assets in 344.30μs
+✔ copy android in 9.73ms
+✔ Updating Android plugins in 920.43μs
+[info] Found 4 Capacitor plugins for android:
+       @capacitor/app@7.1.2
+       @capacitor/browser@7.0.5
+       @capacitor/push-notifications@7.0.7
+       @capacitor-community/background-geolocation@1.3.1
+✔ update android in 21.34ms
+✔ Syncing Gradle in 140.89μs
+[success] android platform added!
+Follow the Developer Workflow guide to get building:
+https://capacitorjs.com/docs/basics/workflow
+patch-android: RWB Track service added in src/main/java/in/roninwb/twa
+patch-android: done (versionCode 108, signed)
+✔ Copying web assets from www to android/app/src/main/assets/public in 4.17ms
+✔ Creating capacitor.config.json in android/app/src/main/assets in 632.56μs
+✔ copy android in 12.40ms
+✔ Updating Android plugins in 925.80μs
+[info] Found 4 Capacitor plugins for android:
+       @capacitor/app@7.1.2
+       @capacitor/browser@7.0.5
+       @capacitor/push-notifications@7.0.7
+       @capacitor-community/background-geolocation@1.3.1
+✔ update android in 29.20ms
+[info] Sync finished in 0.057s
+Downloading https://services.gradle.org/distributions/gradle-8.11.1-all.zip
+.....................10%......................20%......................30%......................40%......................50%......................60%......................70%......................80%......................90%......................100%
+
+Welcome to Gradle 8.11.1!
+
+Here are the highlights of this release:
+ - Parallel load and store for Configuration Cache
+ - Java compilation errors at the end of the build output
+ - Consolidated report for warnings and deprecations
+
+For more details see https://docs.gradle.org/8.11.1/release-notes.html
+
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.11.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+
+> Configure project :app
+WARNING: Using flatDir should be avoided because it doesn't support any meta-data formats.
+
+> Configure project :capacitor-cordova-android-plugins
+WARNING: Using flatDir should be avoided because it doesn't support any meta-data formats.
+
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :capacitor-android:preBuild UP-TO-DATE
+> Task :app:javaPreCompileRelease
+> Task :capacitor-android:preReleaseBuild UP-TO-DATE
+> Task :capacitor-app:preBuild UP-TO-DATE
+> Task :capacitor-app:preReleaseBuild UP-TO-DATE
+> Task :capacitor-app:writeReleaseAarMetadata
+> Task :capacitor-browser:preBuild UP-TO-DATE
+> Task :capacitor-browser:preReleaseBuild UP-TO-DATE
+> Task :capacitor-android:writeReleaseAarMetadata
+> Task :capacitor-community-background-geolocation:preBuild UP-TO-DATE
+> Task :capacitor-community-background-geolocation:preReleaseBuild UP-TO-DATE
+> Task :capacitor-browser:writeReleaseAarMetadata
+> Task :capacitor-cordova-android-plugins:preBuild UP-TO-DATE
+> Task :capacitor-cordova-android-plugins:preReleaseBuild UP-TO-DATE
+> Task :capacitor-community-background-geolocation:writeReleaseAarMetadata
+> Task :capacitor-push-notifications:preBuild UP-TO-DATE
+> Task :capacitor-cordova-android-plugins:writeReleaseAarMetadata
+> Task :capacitor-push-notifications:preReleaseBuild UP-TO-DATE
+> Task :capacitor-push-notifications:writeReleaseAarMetadata
+> Task :app:generateReleaseResValues
+> Task :app:checkReleaseAarMetadata
+> Task :app:processReleaseGoogleServices
+> Task :capacitor-android:generateReleaseResValues
+> Task :capacitor-android:generateReleaseResources
+> Task :capacitor-android:packageReleaseResources
+> Task :capacitor-app:generateReleaseResValues
+> Task :capacitor-app:generateReleaseResources
+> Task :capacitor-app:packageReleaseResources
+> Task :capacitor-browser:generateReleaseResValues
+> Task :capacitor-browser:generateReleaseResources
+> Task :capacitor-browser:packageReleaseResources
+> Task :capacitor-community-background-geolocation:generateReleaseResValues
+> Task :capacitor-community-background-geolocation:generateReleaseResources
+> Task :capacitor-community-background-geolocation:packageReleaseResources
+> Task :capacitor-cordova-android-plugins:generateReleaseResValues
+> Task :capacitor-cordova-android-plugins:generateReleaseResources
+> Task :capacitor-cordova-android-plugins:packageReleaseResources
+> Task :capacitor-push-notifications:generateReleaseResValues
+> Task :capacitor-push-notifications:generateReleaseResources
+> Task :capacitor-push-notifications:packageReleaseResources
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:generateReleaseResources
+> Task :app:packageReleaseResources
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:extractDeepLinksRelease
+> Task :capacitor-android:extractDeepLinksRelease
+> Task :capacitor-app:extractDeepLinksRelease
+> Task :app:parseReleaseLocalResources
+> Task :capacitor-browser:extractDeepLinksRelease
+> Task :capacitor-android:processReleaseManifest
+> Task :capacitor-community-background-geolocation:extractDeepLinksRelease
+> Task :capacitor-app:processReleaseManifest
+> Task :capacitor-cordova-android-plugins:extractDeepLinksRelease
+> Task :capacitor-browser:processReleaseManifest
+> Task :capacitor-push-notifications:extractDeepLinksRelease
+> Task :capacitor-cordova-android-plugins:processReleaseManifest
+> Task :capacitor-community-background-geolocation:processReleaseManifest
+> Task :capacitor-push-notifications:processReleaseManifest
+> Task :capacitor-android:parseReleaseLocalResources
+> Task :capacitor-android:compileReleaseLibraryResources
+> Task :app:processReleaseMainManifest
+> Task :app:mergeReleaseResources
+> Task :app:processReleaseManifest
+> Task :app:processReleaseManifestForPackage
+> Task :capacitor-app:compileReleaseLibraryResources
+> Task :capacitor-browser:compileReleaseLibraryResources
+> Task :capacitor-app:parseReleaseLocalResources
+> Task :capacitor-community-background-geolocation:compileReleaseLibraryResources
+> Task :capacitor-browser:parseReleaseLocalResources
+> Task :capacitor-android:generateReleaseRFile
+> Task :capacitor-app:generateReleaseRFile
+> Task :capacitor-browser:generateReleaseRFile
+> Task :capacitor-community-background-geolocation:parseReleaseLocalResources
+> Task :capacitor-cordova-android-plugins:compileReleaseLibraryResources
+> Task :capacitor-push-notifications:compileReleaseLibraryResources
+> Task :capacitor-cordova-android-plugins:parseReleaseLocalResources
+> Task :capacitor-community-background-geolocation:generateReleaseRFile
+> Task :capacitor-push-notifications:parseReleaseLocalResources
+> Task :capacitor-android:javaPreCompileRelease
+> Task :capacitor-cordova-android-plugins:generateReleaseRFile
+> Task :capacitor-app:javaPreCompileRelease
+> Task :capacitor-push-notifications:generateReleaseRFile
+
+> Task :capacitor-android:compileReleaseJavaWithJavac
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+
+> Task :capacitor-browser:javaPreCompileRelease
+> Task :capacitor-community-background-geolocation:javaPreCompileRelease
+> Task :capacitor-cordova-android-plugins:javaPreCompileRelease
+> Task :capacitor-push-notifications:javaPreCompileRelease
+> Task :capacitor-cordova-android-plugins:compileReleaseJavaWithJavac NO-SOURCE
+> Task :capacitor-cordova-android-plugins:bundleLibCompileToJarRelease
+> Task :app:extractProguardFiles
+> Task :capacitor-android:processReleaseJavaRes NO-SOURCE
+> Task :capacitor-android:bundleLibCompileToJarRelease
+> Task :capacitor-android:extractProguardFiles
+> Task :capacitor-android:bundleLibRuntimeToJarRelease
+> Task :app:processReleaseResources
+> Task :capacitor-app:compileReleaseJavaWithJavac
+> Task :capacitor-app:bundleLibCompileToJarRelease
+> Task :capacitor-browser:compileReleaseJavaWithJavac
+> Task :capacitor-browser:bundleLibCompileToJarRelease
+
+> Task :capacitor-community-background-geolocation:compileReleaseJavaWithJavac
+Java compiler version 21 has deprecated support for compiling with source/target version 8.
+Try one of the following options:
+    1. [Recommended] Use Java toolchain with a lower language version
+    2. Set a higher source/target version
+    3. Use a lower version of the JDK running the build (if you're not using Java toolchain)
+For more details on how to configure these settings, see https://developer.android.com/build/jdks.
+To suppress this warning, set android.javaCompile.suppressSourceTargetDeprecationWarning=true in gradle.properties.
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+3 warnings
+
+> Task :capacitor-community-background-geolocation:bundleLibCompileToJarRelease
+
+> Task :capacitor-push-notifications:compileReleaseJavaWithJavac
+Note: /home/runner/work/rwb-website/rwb-website/android-app/node_modules/@capacitor/push-notifications/android/src/main/java/com/capacitorjs/plugins/pushnotifications/PushNotificationsPlugin.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :capacitor-push-notifications:bundleLibCompileToJarRelease
+> Task :capacitor-android:createFullJarRelease
+
+> Task :app:compileReleaseJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :capacitor-android:generateReleaseLintModel
+> Task :capacitor-android:prepareLintJarForPublish
+> Task :capacitor-app:processReleaseJavaRes NO-SOURCE
+> Task :capacitor-app:bundleLibRuntimeToJarRelease
+> Task :capacitor-app:extractProguardFiles
+> Task :capacitor-app:createFullJarRelease
+> Task :capacitor-app:generateReleaseLintModel
+> Task :capacitor-app:prepareLintJarForPublish
+> Task :capacitor-browser:processReleaseJavaRes NO-SOURCE
+> Task :capacitor-browser:bundleLibRuntimeToJarRelease
+> Task :capacitor-browser:extractProguardFiles
+> Task :capacitor-browser:createFullJarRelease
+> Task :capacitor-browser:generateReleaseLintModel
+> Task :capacitor-browser:prepareLintJarForPublish
+> Task :capacitor-community-background-geolocation:processReleaseJavaRes NO-SOURCE
+> Task :capacitor-community-background-geolocation:extractProguardFiles
+> Task :capacitor-community-background-geolocation:bundleLibRuntimeToJarRelease
+> Task :capacitor-community-background-geolocation:generateReleaseLintModel
+> Task :capacitor-community-background-geolocation:createFullJarRelease
+> Task :capacitor-community-background-geolocation:prepareLintJarForPublish
+> Task :capacitor-cordova-android-plugins:processReleaseJavaRes NO-SOURCE
+> Task :capacitor-cordova-android-plugins:bundleLibRuntimeToJarRelease
+> Task :capacitor-cordova-android-plugins:extractProguardFiles
+> Task :capacitor-cordova-android-plugins:createFullJarRelease
+> Task :capacitor-cordova-android-plugins:generateReleaseLintModel
+> Task :capacitor-cordova-android-plugins:prepareLintJarForPublish
+> Task :capacitor-push-notifications:bundleLibRuntimeToJarRelease
+> Task :capacitor-push-notifications:processReleaseJavaRes NO-SOURCE
+> Task :capacitor-push-notifications:createFullJarRelease
+> Task :capacitor-push-notifications:extractProguardFiles
+> Task :capacitor-push-notifications:generateReleaseLintModel
+> Task :capacitor-push-notifications:prepareLintJarForPublish
+> Task :app:generateReleaseLintVitalReportModel
+> Task :capacitor-app:mergeReleaseJniLibFolders
+> Task :capacitor-app:mergeReleaseNativeLibs NO-SOURCE
+> Task :capacitor-app:stripReleaseDebugSymbols NO-SOURCE
+> Task :capacitor-app:extractDeepLinksForAarRelease
+> Task :capacitor-app:copyReleaseJniLibsProjectAndLocalJars
+> Task :capacitor-app:extractReleaseAnnotations
+> Task :capacitor-app:mergeReleaseGeneratedProguardFiles
+> Task :capacitor-app:mergeReleaseConsumerProguardFiles
+> Task :capacitor-app:mergeReleaseShaders
+> Task :capacitor-app:compileReleaseShaders NO-SOURCE
+> Task :capacitor-app:generateReleaseAssets UP-TO-DATE
+> Task :capacitor-app:packageReleaseAssets
+> Task :capacitor-app:prepareReleaseArtProfile
+> Task :capacitor-browser:mergeReleaseJniLibFolders
+> Task :capacitor-browser:mergeReleaseNativeLibs NO-SOURCE
+> Task :capacitor-browser:stripReleaseDebugSymbols NO-SOURCE
+> Task :capacitor-browser:extractDeepLinksForAarRelease
+> Task :capacitor-browser:copyReleaseJniLibsProjectAndLocalJars
+> Task :capacitor-browser:extractReleaseAnnotations
+> Task :capacitor-browser:mergeReleaseGeneratedProguardFiles
+> Task :capacitor-browser:mergeReleaseConsumerProguardFiles
+> Task :capacitor-browser:mergeReleaseShaders
+> Task :capacitor-browser:compileReleaseShaders NO-SOURCE
+> Task :capacitor-browser:generateReleaseAssets UP-TO-DATE
+> Task :capacitor-browser:packageReleaseAssets
+> Task :capacitor-browser:prepareReleaseArtProfile
+> Task :capacitor-push-notifications:mergeReleaseJniLibFolders
+> Task :capacitor-push-notifications:mergeReleaseNativeLibs NO-SOURCE
+> Task :capacitor-push-notifications:stripReleaseDebugSymbols NO-SOURCE
+> Task :capacitor-push-notifications:extractDeepLinksForAarRelease
+> Task :capacitor-push-notifications:copyReleaseJniLibsProjectAndLocalJars
+> Task :capacitor-browser:mergeReleaseJavaResource
+> Task :capacitor-push-notifications:extractReleaseAnnotations
+> Task :capacitor-app:mergeReleaseJavaResource
+> Task :capacitor-app:syncReleaseLibJars
+> Task :capacitor-app:bundleReleaseLocalLintAar
+> Task :capacitor-browser:syncReleaseLibJars
+> Task :capacitor-browser:bundleReleaseLocalLintAar
+> Task :capacitor-push-notifications:mergeReleaseGeneratedProguardFiles
+> Task :capacitor-push-notifications:mergeReleaseConsumerProguardFiles
+> Task :capacitor-push-notifications:mergeReleaseShaders
+> Task :capacitor-push-notifications:compileReleaseShaders NO-SOURCE
+> Task :capacitor-push-notifications:generateReleaseAssets UP-TO-DATE
+> Task :capacitor-push-notifications:packageReleaseAssets
+> Task :capacitor-push-notifications:prepareReleaseArtProfile
+> Task :capacitor-push-notifications:mergeReleaseJavaResource
+> Task :capacitor-community-background-geolocation:mergeReleaseJniLibFolders
+> Task :capacitor-push-notifications:syncReleaseLibJars
+> Task :capacitor-push-notifications:bundleReleaseLocalLintAar
+> Task :capacitor-community-background-geolocation:mergeReleaseNativeLibs NO-SOURCE
+> Task :capacitor-community-background-geolocation:stripReleaseDebugSymbols NO-SOURCE
+> Task :capacitor-community-background-geolocation:copyReleaseJniLibsProjectAndLocalJars
+> Task :capacitor-community-background-geolocation:extractDeepLinksForAarRelease
+> Task :capacitor-community-background-geolocation:extractReleaseAnnotations
+> Task :capacitor-community-background-geolocation:mergeReleaseGeneratedProguardFiles
+> Task :capacitor-community-background-geolocation:mergeReleaseConsumerProguardFiles
+> Task :capacitor-community-background-geolocation:mergeReleaseShaders
+> Task :capacitor-community-background-geolocation:compileReleaseShaders NO-SOURCE
+> Task :capacitor-community-background-geolocation:generateReleaseAssets UP-TO-DATE
+> Task :capacitor-community-background-geolocation:packageReleaseAssets
+> Task :capacitor-community-background-geolocation:prepareReleaseArtProfile
+> Task :capacitor-community-background-geolocation:mergeReleaseJavaResource
+> Task :capacitor-android:mergeReleaseJniLibFolders
+> Task :capacitor-community-background-geolocation:syncReleaseLibJars
+> Task :capacitor-community-background-geolocation:bundleReleaseLocalLintAar
+> Task :capacitor-android:mergeReleaseNativeLibs NO-SOURCE
+> Task :capacitor-android:stripReleaseDebugSymbols NO-SOURCE
+> Task :capacitor-android:copyReleaseJniLibsProjectAndLocalJars
+> Task :capacitor-android:extractDeepLinksForAarRelease
+> Task :capacitor-android:extractReleaseAnnotations
+> Task :capacitor-android:mergeReleaseGeneratedProguardFiles
+> Task :capacitor-android:mergeReleaseConsumerProguardFiles
+> Task :capacitor-android:mergeReleaseShaders
+> Task :capacitor-android:compileReleaseShaders NO-SOURCE
+> Task :capacitor-android:generateReleaseAssets UP-TO-DATE
+> Task :capacitor-android:packageReleaseAssets
+> Task :capacitor-android:prepareReleaseArtProfile
+> Task :capacitor-android:mergeReleaseJavaResource
+> Task :capacitor-cordova-android-plugins:mergeReleaseJniLibFolders
+> Task :capacitor-android:syncReleaseLibJars
+> Task :capacitor-android:bundleReleaseLocalLintAar
+> Task :capacitor-cordova-android-plugins:mergeReleaseNativeLibs NO-SOURCE
+> Task :capacitor-cordova-android-plugins:stripReleaseDebugSymbols NO-SOURCE
+> Task :capacitor-cordova-android-plugins:copyReleaseJniLibsProjectAndLocalJars
+> Task :capacitor-cordova-android-plugins:extractDeepLinksForAarRelease
+> Task :capacitor-cordova-android-plugins:extractReleaseAnnotations
+> Task :capacitor-cordova-android-plugins:mergeReleaseGeneratedProguardFiles
+> Task :capacitor-cordova-android-plugins:mergeReleaseConsumerProguardFiles
+> Task :capacitor-cordova-android-plugins:mergeReleaseShaders
+> Task :capacitor-cordova-android-plugins:compileReleaseShaders NO-SOURCE
+> Task :capacitor-cordova-android-plugins:generateReleaseAssets UP-TO-DATE
+> Task :capacitor-cordova-android-plugins:packageReleaseAssets
+> Task :capacitor-cordova-android-plugins:prepareReleaseArtProfile
+> Task :capacitor-cordova-android-plugins:mergeReleaseJavaResource
+> Task :capacitor-cordova-android-plugins:syncReleaseLibJars
+> Task :capacitor-cordova-android-plugins:bundleReleaseLocalLintAar
+> Task :capacitor-android:writeReleaseLintModelMetadata
+> Task :capacitor-app:writeReleaseLintModelMetadata
+> Task :capacitor-browser:writeReleaseLintModelMetadata
+> Task :capacitor-community-background-geolocation:writeReleaseLintModelMetadata
+> Task :capacitor-cordova-android-plugins:writeReleaseLintModelMetadata
+> Task :capacitor-push-notifications:writeReleaseLintModelMetadata
+> Task :capacitor-android:generateReleaseLintVitalModel
+> Task :capacitor-app:generateReleaseLintVitalModel
+> Task :capacitor-browser:generateReleaseLintVitalModel
+> Task :capacitor-community-background-geolocation:generateReleaseLintVitalModel
+> Task :capacitor-cordova-android-plugins:generateReleaseLintVitalModel
+> Task :capacitor-push-notifications:generateReleaseLintVitalModel
+> Task :app:mergeReleaseJniLibFolders
+> Task :capacitor-android:copyReleaseJniLibsProjectOnly
+> Task :capacitor-browser:copyReleaseJniLibsProjectOnly
+> Task :capacitor-app:copyReleaseJniLibsProjectOnly
+> Task :capacitor-community-background-geolocation:copyReleaseJniLibsProjectOnly
+> Task :capacitor-push-notifications:copyReleaseJniLibsProjectOnly
+> Task :capacitor-cordova-android-plugins:copyReleaseJniLibsProjectOnly
+> Task :app:checkReleaseDuplicateClasses
+> Task :app:mergeReleaseNativeLibs NO-SOURCE
+> Task :app:stripReleaseDebugSymbols NO-SOURCE
+> Task :app:extractReleaseNativeSymbolTables NO-SOURCE
+> Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:dexBuilderRelease
+> Task :app:desugarReleaseFileDependencies
+> Task :app:mergeReleaseStartupProfile
+> Task :capacitor-app:lintVitalAnalyzeRelease
+> Task :capacitor-android:lintVitalAnalyzeRelease
+
+> Task :app:mergeExtDexRelease
+WARNING: /home/runner/.gradle/caches/8.11.1/transforms/d253a2d6e9532956024d3ef1050820cc/transformed/play-services-location-21.3.0-runtime.jar: D8: The companion object Companion could not be found in class com.google.android.gms.internal.location.zze
+
+> Task :capacitor-browser:lintVitalAnalyzeRelease
+> Task :capacitor-community-background-geolocation:lintVitalAnalyzeRelease
+> Task :app:mergeReleaseArtProfile
+> Task :capacitor-cordova-android-plugins:lintVitalAnalyzeRelease
+> Task :app:mergeReleaseShaders
+> Task :app:compileReleaseShaders NO-SOURCE
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:mergeReleaseGlobalSynthetics
+> Task :app:mergeReleaseAssets
+> Task :app:compressReleaseAssets
+> Task :app:extractReleaseVersionControlInfo
+> Task :app:processReleaseJavaRes NO-SOURCE
+> Task :capacitor-push-notifications:lintVitalAnalyzeRelease
+> Task :app:mergeReleaseJavaResource
+> Task :app:collectReleaseDependencies
+> Task :app:sdkReleaseDependencyData
+> Task :app:validateSigningRelease
+> Task :app:optimizeReleaseResources
+> Task :app:writeReleaseAppMetadata
+> Task :app:writeReleaseSigningConfigVersions
+> Task :capacitor-android:bundleReleaseAar
+> Task :capacitor-android:mapReleaseSourceSetPaths
+> Task :app:lintVitalAnalyzeRelease
+> Task :capacitor-android:mergeReleaseResources
+> Task :capacitor-app:bundleReleaseAar
+> Task :capacitor-app:mapReleaseSourceSetPaths
+> Task :app:lintVitalReportRelease
+> Task :app:mergeDexRelease
+> Task :capacitor-app:mergeReleaseResources
+> Task :app:lintVitalRelease
+> Task :capacitor-browser:bundleReleaseAar
+> Task :capacitor-browser:mapReleaseSourceSetPaths
+> Task :capacitor-android:verifyReleaseResources
+> Task :app:compileReleaseArtProfile
+> Task :capacitor-browser:mergeReleaseResources
+> Task :capacitor-android:assembleRelease
+> Task :capacitor-community-background-geolocation:bundleReleaseAar
+> Task :capacitor-community-background-geolocation:mapReleaseSourceSetPaths
+> Task :capacitor-app:verifyReleaseResources
+> Task :capacitor-browser:verifyReleaseResources
+> Task :capacitor-community-background-geolocation:mergeReleaseResources
+> Task :capacitor-app:assembleRelease
+> Task :capacitor-browser:assembleRelease
+> Task :capacitor-cordova-android-plugins:bundleReleaseAar
+> Task :capacitor-cordova-android-plugins:mapReleaseSourceSetPaths
+> Task :capacitor-cordova-android-plugins:mergeReleaseResources
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect
+> Task :app:assembleRelease
+> Task :capacitor-push-notifications:bundleReleaseAar
+> Task :capacitor-community-background-geolocation:verifyReleaseResources
+> Task :capacitor-push-notifications:mapReleaseSourceSetPaths
+> Task :capacitor-community-background-geolocation:assembleRelease
+> Task :capacitor-cordova-android-plugins:verifyReleaseResources
+> Task :capacitor-push-notifications:mergeReleaseResources
+> Task :capacitor-cordova-android-plugins:assembleRelease
+> Task :capacitor-push-notifications:verifyReleaseResources
+> Task :capacitor-push-notifications:assembleRelease
+[Incubating] Problems report is available at: file:///home/runner/work/rwb-website/rwb-website/android-app/android/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 2m 3s
+265 actionable tasks: 265 executed
+total 6424
+drwxr-xr-x 3 runner runner    4096 Oct 29 10:43 .
+drwxr-xr-x 3 runner runner    4096 Oct 29 10:43 ..
+-rw-r--r-- 1 runner runner 6561356 Oct 29 10:43 app-release.apk
+drwxr-xr-x 4 runner runner    4096 Oct 29 10:43 baselineProfiles
+-rw-r--r-- 1 runner runner     706 Oct 29 10:43 output-metadata.json
+result: success run 8 key=true firebase=true
