@@ -94,6 +94,10 @@ s = s.replace(/<string name="app_name">[^<]*<\/string>/, '<string name="app_name
      .replace(/<string name="title_activity_main">[^<]*<\/string>/, '<string name="title_activity_main">RWB</string>');
 write(strings, s);
 
+/* ---------- Gradle download: a slow server shouldn't fail the build (default wait is 10 s) ---------- */
+const gw = path.join(android, 'gradle/wrapper/gradle-wrapper.properties');
+if (fs.existsSync(gw)) { let w = read(gw); w = /networkTimeout=/.test(w) ? w.replace(/networkTimeout=\d+/, 'networkTimeout=120000') : w + '\nnetworkTimeout=120000\n'; write(gw, w); }
+
 /* ---------- app/build.gradle: version and release signing ---------- */
 const bg = path.join(app, 'build.gradle');
 let g = read(bg);

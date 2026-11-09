@@ -69,7 +69,7 @@ jobs:
           set -o pipefail
           cd android
           chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace assembleRelease 2>&1 | tail -n 400 | tee -a ../../build.log
+          ./gradlew --no-daemon --stacktrace assembleRelease 2>&1 | tail -n 400 | tee -a ../../build.log || { echo "retrying once" | tee -a ../../build.log; sleep 20; ./gradlew --no-daemon --stacktrace assembleRelease 2>&1 | tail -n 400 | tee -a ../../build.log; }
           ls -la app/build/outputs/apk/release/ | tee -a ../../build.log
       - name: Publish to roninwb.in/download
         if: env.HAS_KEY == 'true'
