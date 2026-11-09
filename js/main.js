@@ -20,6 +20,14 @@ const countObs = new IntersectionObserver(entries => entries.forEach(e => {
 }), { threshold: .6 });
 $$('[data-count]').forEach(el => countObs.observe(el));
 
+/* Members: the live count from the RWB App (rounded down to the nearest 10, e.g. 643 → 640+) */
+fetch(CONFIG.APP_SUPABASE_URL + '/rest/v1/rpc/public_member_count', { method: 'POST', headers: { apikey: CONFIG.APP_SUPABASE_KEY, Authorization: 'Bearer ' + CONFIG.APP_SUPABASE_KEY, 'Content-Type': 'application/json' }, body: '{}' })
+    .then(r => r.ok ? r.json() : Promise.reject()).then(n => {
+        n = Math.floor(+n / 10) * 10; if (!(n > 0)) return;
+        const el = $('#stat-members'); if (el) { if (el.dataset.count !== el.textContent.replace(/\D/g, '')) el.dataset.count = n; else el.textContent = n.toLocaleString('en-IN'); el.dataset.count = n; }
+        $$('[data-members]').forEach(e => e.textContent = n.toLocaleString('en-IN'));
+    }).catch(() => {});
+
 /* Warriors: the card in the centre of the screen turns to colour */
 const warTrack = $('#warriors-track');
 function markCenter() {
