@@ -1,9 +1,14 @@
-# Builds the RWB Android app (android-app/) and publishes it as roninwb.in/download/RWB-App.apk.
+# Builds the RWB Android app (android-app/) in two versions:
+#   - the APK published as roninwb.in/download/RWB-App.apk (website installs), and
+#   - the Google Play Store version (an .aab), sent to the Play Store by itself once PLAY_SERVICE_ACCOUNT_JSON is set.
 # Runs when the Android app's files change, or by hand (Actions → Android app → Run workflow).
 # Each published build also writes download/latest.json; apps older than it show "New Update Available".
 # Needs these repository secrets (Settings → Secrets and variables → Actions):
 #   RWB_KEYSTORE_B64, RWB_STORE_PASSWORD, RWB_KEY_PASSWORD   (the app's signing key: updates install over the old app)
 #   GOOGLE_SERVICES_JSON                                     (Firebase, for notifications)
+#   PLAY_SERVICE_ACCOUNT_JSON (optional)                     (Google Play: uploads each build to the Play Store)
+# Repository variable PLAY_TRACK (optional): the Play Store track to upload to: internal, alpha (closed testing, the
+# default), beta (open testing) or production.
 # Without the signing key it only checks that the app builds (nothing is published).
 name: Android app
 on:
@@ -22,6 +27,7 @@ jobs:
     env:
       HAS_KEY: ${{ secrets.RWB_KEYSTORE_B64 != '' }}
       HAS_FIREBASE: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
+      HAS_PLAY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -76,6 +82,37 @@ jobs:
           git add download/RWB-App.apk download/latest.json
           git commit -m "RWB Android app build ${{ github.run_number }}" || exit 0
           git pull --rebase origin main && git push origin HEAD:main
+      - name: Build the Google Play Store version (.aab)
+        if: env.HAS_KEY == 'true'
+        env:
+          RWB_STORE_PASSWORD: ${{ secrets.RWB_STORE_PASSWORD }}
+          RWB_KEY_PASSWORD: ${{ secrets.RWB_KEY_PASSWORD }}
+          RWB_KEY_ALIAS: my-key-alias
+        run: |
+          set -o pipefail
+          node scripts/play-variant.mjs 2>&1 | tee -a ../build.log
+          cd android
+          ./gradlew --no-daemon --stacktrace bundleRelease 2>&1 | tail -n 200 | tee -a ../../build.log
+          cp app/build/outputs/bundle/release/app-release.aab "$RUNNER_TEMP/RWB-Play-${{ github.run_number }}.aab"
+          ls -la "$RUNNER_TEMP"/*.aab | tee -a ../../build.log
+      - name: Keep the Play Store file (Actions → this run → Artifacts)
+        if: env.HAS_KEY == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: RWB-Play-${{ github.run_number }}
+          path: ${{ runner.temp }}/RWB-Play-${{ github.run_number }}.aab
+          retention-days: 30
+      - name: Send to the Google Play Store
+        if: env.HAS_KEY == 'true' && env.HAS_PLAY == 'true'
+        continue-on-error: true
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: in.roninwb.twa
+          releaseFiles: ${{ runner.temp }}/RWB-Play-${{ github.run_number }}.aab
+          releaseName: "2.0.${{ github.run_number }}"
+          track: ${{ vars.PLAY_TRACK || 'alpha' }}
+          status: ${{ vars.PLAY_STATUS || 'completed' }}
       - name: Save the build log (for fixing problems)
         if: always()
         working-directory: .

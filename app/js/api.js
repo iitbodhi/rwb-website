@@ -107,6 +107,7 @@ async function supabaseApi(url, key) {
         agreeTnc: async () => { const r = await sb.rpc('agree_tnc'); if (r.error && /could not find|function/i.test(r.error.message || '')) return must(await sb.rpc('request_change', { p_kind: 'tnc', p_value: 'agree' })); return must(r); },
         withdrawTnc: async () => { const r = await sb.rpc('withdraw_tnc'); if (r.error && /could not find|function/i.test(r.error.message || '')) return must(await sb.rpc('request_change', { p_kind: 'tnc', p_value: 'disagree' })); return must(r); },
         leaveRwb: async note => must(await sb.rpc('leave_rwb', { p_note: note || null })),
+        deleteMyAccount: async reason => must(await sb.rpc('delete_my_account', { p_reason: reason || null })),
         rwbAdmins: async () => must(await sb.rpc('rwb_admins')),
         joinHelpAdmins: async () => must(await sb.rpc('join_help_admins')),
         async trackStart(lat, lng, acc, hours, eventId, note) {
@@ -509,6 +510,7 @@ function demoApi() {
         agreeTnc: () => { Object.assign(me(), { tnc_agreed: true, tnc_version: window.RWB_TNC?.version || null, tnc_agreed_at: new Date().toISOString() }); save(); return wait('ok'); },
         withdrawTnc: () => { Object.assign(me(), { tnc_agreed: false, tnc_version: null }); save(); return wait('withdrawn'); },
         leaveRwb: () => { me().status = 'left'; save(); return wait('left'); },
+        deleteMyAccount: () => { me().status = 'left'; save(); return wait('deleted'); },
         findMyEmail: (phone, vrn) => { const k = v => (v || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), p = String(phone).replace(/\D/g, '').slice(-10);
             const m = db.members.find(x => x.phone === p && (!x.status || x.status === 'active') && (k(x.vrn) === k(vrn) || (x.member_bikes || []).some(b => k(b.vrn) === k(vrn))));
             return wait(m ? { found: true, hint: m.email ? m.email.split('@')[0].slice(0, m.email.split('@')[0].length > 4 ? 3 : 1) + '•••@' + m.email.split('@')[1] : null, on_app: !!m.user_id } : { found: false }); },

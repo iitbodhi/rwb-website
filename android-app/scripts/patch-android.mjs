@@ -12,6 +12,10 @@ const read = f => fs.readFileSync(f, 'utf8');
 const write = (f, s) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, s); };
 const must = (s, what) => { if (!s) throw new Error('patch-android: ' + what + ' not found'); return s; };
 
+/* Two versions are built from this project: "web" (the APK on roninwb.in) and "play" (the Google Play Store app,
+   made by scripts/play-variant.mjs after the APK is built). */
+const CHANNEL = process.env.RWB_CHANNEL === 'play' ? 'play' : 'web';
+
 /* ---------- AndroidManifest.xml ---------- */
 const mf = path.join(app, 'src/main/AndroidManifest.xml');
 let m = read(mf);
@@ -72,6 +76,11 @@ copyDir(path.join(root, 'res'), res);
 (function splash(dir) { for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
   const f = path.join(dir, e.name);
   if (e.isDirectory()) splash(f); else if (e.name === 'splash.png') fs.copyFileSync(path.join(root, dir.includes('land') ? 'splash-land.png' : 'splash.png'), f); } })(res);
+write(path.join(res, 'values/rwb_channel.xml'), `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rwb_channel" translatable="false">${CHANNEL}</string>
+</resources>
+`);
 write(path.join(res, 'values/rwb_colors.xml'), `<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="rwb_orange">#D4501A</color>
@@ -107,5 +116,7 @@ if (process.env.RWB_KEYSTORE) {
 if (!g.includes('play-services-location')) g = must(g.replace(/dependencies\s*\{/, "dependencies {\n    implementation 'com.google.android.gms:play-services-location:21.3.0'"), 'dependencies block');
 /* Talk: our Firebase message handler (plays voice messages with the app closed) builds on Capacitor's */
 if (!g.includes('firebase-messaging')) g = g.replace(/dependencies\s*\{/, "dependencies {\n    implementation 'com.google.firebase:firebase-messaging:24.1.0'");
+/* Play Store app: Google's in-app update screen ("New Update Available" → update without leaving the app) */
+if (!g.includes('com.google.android.play:app-update')) g = g.replace(/dependencies\s*\{/, "dependencies {\n    implementation 'com.google.android.play:app-update:2.1.0'");
 write(bg, g);
 console.log('patch-android: done (versionCode ' + (100 + run) + (process.env.RWB_KEYSTORE ? ', signed' : ', unsigned check build') + ')');

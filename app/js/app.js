@@ -2095,6 +2095,7 @@ function viewMe() {
         <div class="group">
             <a href="../privacy.html" target="_blank" rel="noopener"><span class="g-ico">${ICON.shield}</span><span class="grow"><b>Privacy</b></span>${ICON.out}</a>
             <button data-act="out" class="danger-row"><span class="grow"><b>Sign out</b></span></button>
+            <button data-del-acct class="danger-row"><span class="grow"><b>Delete my account</b><span class="small muted">Deletes your RWB App account and what you added in the app</span></span></button>
         </div>
         <p class="small muted" style="text-align:center;margin-top:24px">RWB App, free for every warrior</p>`;
     let myBikes = [], myChanges = [];
@@ -3442,6 +3443,15 @@ async function svcHealth() {
     actions['trk-report'] = () => trackReport();
     if (!st.running) svcCheck();
 }
+/* Me → Delete my account (Google Play asks every app with accounts to offer this) */
+document.addEventListener('click', e => {
+    const b = e.target.closest('[data-del-acct]'); if (!b) return;
+    const fam = isFam();
+    if (!confirmBox(fam ? 'Delete your RWB FAM account?\n\nYou will no longer see your rider on Track or RWB updates. Your rider can invite you again later.'
+        : 'Delete your RWB App account?\n\nYou leave RWB, and your app account, service records, bills, fuel log, documents and Talk messages are deleted. This can\'t be undone (an admin can add you back as a member).')) return;
+    const typed = prompt('Type DELETE to confirm'); if (String(typed || '').trim().toUpperCase() !== 'DELETE') return toast('Not deleted');
+    busy(b, async () => { stopShare(true); await api.deleteMyAccount(); toast('Your account is deleted. Ride safe!'); setTimeout(() => api.signOut(), 1200); });
+});
 /* the last 150 Track events from the phone, to send to the RWB team if sharing stops with the screen off */
 async function trackReport() {
     let st = {}, lg = ''; try { st = await RwbTrack().status(); lg = (await RwbTrack().log()).log || ''; } catch { return toast('Update the RWB app to get a Track report', true); }
@@ -3455,7 +3465,8 @@ async function batteryAsk(force = false) {
     let st = {}; try { st = await RwbTrack().status(); } catch { /* ignore */ }
     if (!force && st.battery && st.bgLocation) return;
     const item = (ok, title, how, x, btn) => `<div class="trk-set${ok ? ' ok' : ''}"><span class="ts-ico">${ok ? '✅' : '⚠️'}</span><span class="grow"><b>${title}</b><span class="small muted">${how}</span></span>${ok ? '' : `<button class="btn sm" data-x="${x}">${btn}</button>`}</div>`;
-    openSheet('Make Track unstoppable', `<p class="small" style="margin-bottom:12px">Two phone settings keep your live location going with the screen off, the app minimised or swiped away, for the whole ride.</p>
+    openSheet('Make Track unstoppable', `<div class="loc-disclosure"><b>📍 How RWB uses your location</b><p class="small">RWB collects your <b>location</b> to share your live position with the RWB members on the Track map, with your RWB FAM and with the RWB team for <b>SOS</b>, <b>even when the app is closed or not in use</b>. This happens <b>only while you share</b> (you pick 1, 4 or 8 hours, or until you stop) and stops when you tap Stop. Your location is never sold or used for ads.</p></div>
+        <p class="small" style="margin-bottom:12px">Two phone settings keep your live location going with the screen off, the app minimised or swiped away, for the whole ride.</p>
         ${item(st.battery, 'Battery: no restrictions', 'So the phone never pauses RWB to save battery.', 'allow', 'Allow')}
         ${item(st.bgLocation, 'Location: Allow all the time', 'Settings → Permissions → Location → <b>Allow all the time</b>. Only used while you share.', 'always', 'Open settings')}
         <ol class="small help-steps" style="margin-top:14px"><li>Samsung: also Settings → Battery → Background usage limits → add RWB to <b>Never sleeping apps</b>.</li><li>Xiaomi, Redmi, Poco, Realme, Oppo, Vivo, OnePlus: Settings → Apps → RWB → Battery → <b>No restrictions</b>, and turn on <b>Autostart</b>.</li></ol>
@@ -3475,14 +3486,26 @@ async function newestBuild() {
     try { const r = await fetch(`https://roninwb.in/download/latest.json?v=${Date.now()}`, { cache: 'no-store' }); const j = await r.json(); if (j.build) { latestBuild = Number(j.build); latestAt = Date.now(); } } catch { /* offline: use what we know */ }
     return Math.max(latestBuild || 0, MIN_NATIVE_BUILD);
 }
+/* the Google Play Store listing (set PLAY_LIVE once the app is public on the Play Store) */
+const PLAY_LIVE = false, PLAY_URL = 'https://play.google.com/store/apps/details?id=in.roninwb.twa';
+/* which RWB Android app this is: "play" (from the Play Store) or "web" (the APK from roninwb.in) */
+let nativeInfoP = null;
+const nativeInfo = () => nativeInfoP ??= (async () => { try { return await RwbTrack().info(); } catch { return { channel: 'web' }; } })();
 async function nativeOutdated() {
     if (!NATIVE) return false;
+    if ((await nativeInfo()).channel === 'play') {
+        /* Play Store app: only when the Play Store actually has the newer version (it can take a day to be approved) */
+        try { const r = await RwbTrack().playUpdate({ start: false }); return !!r?.available; } catch { return false; }
+    }
     try { const i = await Native('App').getInfo(); const b = Number(i.build); if (b) return b < await newestBuild(); } catch { /* ignore */ }
     return !(await hasSvc());
 }
 /* back in the app after a while: a new build may have come out meanwhile */
 async function updateCheck() { if (NATIVE && !document.body.classList.contains('blocked') && await nativeOutdated()) nativeBlocker(); }
-function nativeBlocker(web = false) {
+async function nativeBlocker(web = false) {
+    const play = !web && NATIVE && (await nativeInfo()).channel === 'play';
+    if (play) return playBlocker();
+    if (web && PLAY_LIVE) return playGetBlocker();
     tabbar.hidden = true; document.body.dataset.route = 'gate'; document.body.classList.add('blocked');
     const html = `<div class="blocker" role="alertdialog" aria-modal="true" aria-labelledby="blk-h"><div class="blk-card">
         <img src="icons/logo-128.png" alt="" class="blk-logo">
@@ -3513,6 +3536,36 @@ function nativeBlocker(web = false) {
     /* keep it on screen whatever happens */
     new MutationObserver(() => { if (!app.querySelector('.blocker')) { app.innerHTML = html; bind(); } tabbar.hidden = true; }).observe(app, { childList: true, subtree: false });
     addEventListener('hashchange', () => { if (!app.querySelector('.blocker')) { app.innerHTML = html; bind(); } }, true);
+}
+/* Play Store app: Google's own update screen; the Play Store page if that can't open */
+function playBlocker() {
+    keepBlocker(`<div class="blocker" role="alertdialog" aria-modal="true" aria-labelledby="blk-h"><div class="blk-card">
+        <img src="icons/logo-128.png" alt="" class="blk-logo"><p class="blk-kicker">RWB App</p>
+        <h1 id="blk-h">New Update Available</h1>
+        <p>A new version of RWB is on the Google Play Store. Tap <b>Update now</b>: it takes a moment and you stay signed in.</p>
+        <button class="btn block" data-x="get">⬆ Update now</button>
+        <p class="small muted" style="margin-top:12px">Your RWB account, records and settings stay safe.</p></div></div>`, async () => {
+        try { const r = await RwbTrack().playUpdate({ start: true }); if (r?.started) return; } catch { /* fall back */ }
+        RwbTrack()?.openStore().catch(() => { location.href = PLAY_URL; });
+    });
+}
+/* Android browser, once RWB is on the Play Store: install it from there */
+function playGetBlocker() {
+    keepBlocker(`<div class="blocker" role="alertdialog" aria-modal="true" aria-labelledby="blk-h"><div class="blk-card">
+        <img src="icons/logo-128.png" alt="" class="blk-logo"><p class="blk-kicker">RWB Android app</p>
+        <h1 id="blk-h">Get RWB on Google Play</h1>
+        <p>On Android, RWB works through the <b>RWB app from the Google Play Store</b>. <b>Track</b>, <b>Talk</b> and <b>RWB FAM</b> only work there.</p>
+        <ol class="blk-steps"><li>Remove the RWB web app if it's on your home screen (press and hold its icon → <b>Remove</b>).</li>
+            <li>Tap <b>Get it on Google Play</b> below and tap <b>Install</b>.</li><li>Open <b>RWB</b> and sign in with Google.</li></ol>
+        <button class="btn block" data-x="get">▶ Get it on Google Play</button>
+        <p class="small muted" style="margin-top:12px">On iPhone? Open roninwb.in/app in Safari. Your RWB account, records and settings stay safe.</p></div></div>`, () => { location.href = PLAY_URL; });
+}
+function keepBlocker(html, go) {
+    tabbar.hidden = true; document.body.dataset.route = 'gate'; document.body.classList.add('blocked');
+    const show = () => { app.innerHTML = html; app.querySelector('[data-x=get]')?.addEventListener('click', go); };
+    show();
+    new MutationObserver(() => { if (!app.querySelector('.blocker')) show(); tabbar.hidden = true; }).observe(app, { childList: true, subtree: false });
+    addEventListener('hashchange', () => { if (!app.querySelector('.blocker')) show(); }, true);
     document.querySelectorAll('dialog[open]').forEach(d => d.close());
 }
 /* an older RWB Android app (without the Track service): ask to update once per visit */
@@ -4179,6 +4232,7 @@ function viewFamMe() {
         <div class="group">
             <a href="../privacy.html" target="_blank" rel="noopener"><span class="g-ico">${ICON.shield}</span><span class="grow"><b>Privacy</b></span>${ICON.out}</a>
             <button data-act="out" class="danger-row"><span class="grow"><b>Sign out</b></span></button>
+            <button data-del-acct class="danger-row"><span class="grow"><b>Delete my account</b><span class="small muted">Deletes your RWB App account and what you added in the app</span></span></button>
         </div>
         <p class="small muted" style="text-align:center;margin-top:24px">RWB App · RWB FAM</p>`;
     actions = {

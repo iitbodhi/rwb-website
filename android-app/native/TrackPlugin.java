@@ -9,6 +9,11 @@ import androidx.activity.result.IntentSenderRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 
 import com.google.android.gms.common.api.ResolvableApiException;
+import com.google.android.play.core.appupdate.AppUpdateManager;
+import com.google.android.play.core.appupdate.AppUpdateManagerFactory;
+import com.google.android.play.core.appupdate.AppUpdateOptions;
+import com.google.android.play.core.install.model.AppUpdateType;
+import com.google.android.play.core.install.model.UpdateAvailability;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationSettingsRequest;
@@ -29,7 +34,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 @CapacitorPlugin(name = "RwbTrack")
 public class TrackPlugin extends Plugin {
     /* ---------- "Turn on location?" (the standard Android pop-up, like Google Maps) ---------- */
-    private ActivityResultLauncher<IntentSenderRequest> locLauncher;
+    private ActivityResultLauncher<IntentSenderRequest> locLauncher, updLauncher;
     private PluginCall locCall;
 
     @Override
@@ -41,6 +46,63 @@ public class TrackPlugin extends Plugin {
                 JSObject r = new JSObject(); r.put("on", res.getResultCode() == Activity.RESULT_OK || locationOn()); c.resolve(r);
             });
         } catch (Exception e) { locLauncher = null; }
+        try { updLauncher = getActivity().registerForActivityResult(new ActivityResultContracts.StartIntentSenderForResult(), res -> { }); }
+        catch (Exception e) { updLauncher = null; }
+    }
+
+    /* ---------- where this app came from: "play" (Google Play Store) or "web" (roninwb.in) ---------- */
+    private String channel() {
+        int id = getContext().getResources().getIdentifier("rwb_channel", "string", getContext().getPackageName());
+        return id == 0 ? "web" : getContext().getString(id);
+    }
+
+    /** { channel, build, version, installer } */
+    @PluginMethod
+    public void info(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("channel", channel());
+        try {
+            android.content.pm.PackageInfo pi = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0);
+            r.put("build", Build.VERSION.SDK_INT >= 28 ? pi.getLongVersionCode() : (long) pi.versionCode);
+            r.put("version", pi.versionName);
+        } catch (Exception ignored) { }
+        try {
+            String inst = Build.VERSION.SDK_INT >= 30 ? getContext().getPackageManager().getInstallSourceInfo(getContext().getPackageName()).getInstallingPackageName()
+                : getContext().getPackageManager().getInstallerPackageName(getContext().getPackageName());
+            r.put("installer", inst == null ? "" : inst);
+        } catch (Exception ignored) { }
+        call.resolve(r);
+    }
+
+    /** Play Store app: is a newer version on the Play Store? With { start: true }, Google's update screen opens. */
+    @PluginMethod
+    public void playUpdate(PluginCall call) {
+        final boolean start = Boolean.TRUE.equals(call.getBoolean("start", false));
+        try {
+            AppUpdateManager m = AppUpdateManagerFactory.create(getContext());
+            m.getAppUpdateInfo().addOnSuccessListener(info -> {
+                JSObject r = new JSObject();
+                int a = info.updateAvailability();
+                boolean avail = a == UpdateAvailability.UPDATE_AVAILABLE || a == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS;
+                r.put("available", avail); r.put("build", info.availableVersionCode());
+                if (avail && start && updLauncher != null && info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)) {
+                    try { m.startUpdateFlowForResult(info, updLauncher, AppUpdateOptions.newBuilder(AppUpdateType.IMMEDIATE).build()); r.put("started", true); }
+                    catch (Exception e) { r.put("error", e.getMessage()); }
+                }
+                call.resolve(r);
+            }).addOnFailureListener(e -> { JSObject r = new JSObject(); r.put("available", false); r.put("error", e.getMessage()); call.resolve(r); });
+        } catch (Throwable t) { JSObject r = new JSObject(); r.put("available", false); r.put("error", t.getMessage()); call.resolve(r); }
+    }
+
+    /** The RWB App's page on the Play Store (to update or rate). */
+    @PluginMethod
+    public void openStore(PluginCall call) {
+        String pkg = getContext().getPackageName();
+        try { getContext().startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + pkg)).setPackage("com.android.vending").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }
+        catch (Exception e) {
+            try { getContext().startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=" + pkg)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); } catch (Exception ignored) { }
+        }
+        call.resolve();
     }
 
     private boolean locationOn() {
@@ -105,7 +167,12 @@ public class TrackPlugin extends Plugin {
     @PluginMethod
     public void battery(PluginCall call) {
         try {
-            if (Build.VERSION.SDK_INT >= 23 && !ignoring()) {
+            if (Build.VERSION.SDK_INT >= 23 && !ignoring() && "play".equals(channel())) {
+                /* Play Store app: the app's settings page (Battery → Unrestricted), as Google Play asks */
+                Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getContext().getPackageName()));
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(i);
+            } else if (Build.VERSION.SDK_INT >= 23 && !ignoring()) {
                 Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getContext().getPackageName()));
                 i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 getContext().startActivity(i);

@@ -1337,3 +1337,5 @@ body.blocked .pookie-fab,body.blocked #tabbar,body.blocked .promo,body.blocked d
 .fam-talk-btn.on{background:#dc2626;color:#fff;border-color:#dc2626}
 .fam-talk-tip{margin:6px 2px 0;text-align:center}
 #fam-talk .talk-list{margin-bottom:6px}
+.loc-disclosure{padding:12px 14px;border-radius:14px;border:1.5px solid var(--orange);background:color-mix(in srgb,var(--orange) 8%,var(--card));margin-bottom:12px}
+.loc-disclosure p{margin:6px 0 0}
