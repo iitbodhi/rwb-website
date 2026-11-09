@@ -166,4 +166,8 @@ public class TrackPlugin extends Plugin {
     /** Stop a voice message playing now (e.g. the rider plays it again in the app). */
     @PluginMethod
     public void talkStop(PluginCall call) { TalkService.stop(getContext()); call.resolve(); }
+
+    /** The last 150 Track events (fixes, sends, errors, restarts), to copy and send for help. */
+    @PluginMethod
+    public void log(PluginCall call) { JSObject r = new JSObject(); r.put("log", TrackService.report(getContext())); call.resolve(r); }
 }

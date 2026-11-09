@@ -13,6 +13,10 @@ public class RwbMessagingService extends MessagingService {
     @Override
     public void onMessageReceived(RemoteMessage msg) {
         Map<String, String> d = msg.getData();
+        if (d != null && "track_wake".equals(d.get("type"))) {   /* the server hasn't had your position for a while */
+            try { TrackService.wake(getApplicationContext()); } catch (Exception e) { /* never crash on a message */ }
+            return;
+        }
         if (d != null && "talk".equals(d.get("type"))) {
             try { TalkService.handle(getApplicationContext(), d, msg.getSentTime()); } catch (Exception e) { /* never crash on a message */ }
             return;

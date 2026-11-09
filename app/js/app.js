@@ -3438,7 +3438,16 @@ async function svcHealth() {
     const ok = st.running && st.sent && Date.now() - st.sent < 150e3;
     el.innerHTML = `${ok ? '🟢' : '🟠'} Background sharing ${st.running ? 'on' : '<b>stopped</b>'} · sent ${ago(st.sent)} · GPS ${ago(st.fix)}${st.acc ? ` (±${st.acc} m)` : ''}${st.error ? `<br><span class="warn">${esc(st.error)}</span>` : ''}${st.battery && st.bgLocation ? '' : ' · <button class="linkish" data-act="trk-batt">Make Track unstoppable</button>'}`;
     actions['trk-batt'] = () => batteryAsk(true);
+    if (!el.querySelector('[data-act=trk-report]')) el.insertAdjacentHTML('beforeend', ' · <button class="linkish" data-act="trk-report">Track report</button>');
+    actions['trk-report'] = () => trackReport();
     if (!st.running) svcCheck();
+}
+/* the last 150 Track events from the phone, to send to the RWB team if sharing stops with the screen off */
+async function trackReport() {
+    let st = {}, lg = ''; try { st = await RwbTrack().status(); lg = (await RwbTrack().log()).log || ''; } catch { return toast('Update the RWB app to get a Track report', true); }
+    const text = `RWB Track report · ${new Date().toLocaleString('en-IN')}\nApp ${st.version || ''} · battery ${st.battery ? 'unrestricted' : 'RESTRICTED'} · location ${st.bgLocation ? 'all the time' : 'only while using'} · ${navigator.userAgent.replace(/.*Android/, 'Android').slice(0, 60)}\n\n${lg || '(no events yet)'}`;
+    try { if (navigator.share) { await navigator.share({ title: 'RWB Track report', text }); return; } } catch { /* cancelled */ }
+    try { await navigator.clipboard.writeText(text); toast('Track report copied: paste it in WhatsApp to the RWB team'); } catch { toast('Could not copy the report', true); }
 }
 /* two phone settings make Track unstoppable: no battery restrictions, and location "Allow all the time" */
 async function batteryAsk(force = false) {

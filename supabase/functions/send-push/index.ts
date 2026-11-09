@@ -7,6 +7,7 @@
 // Talk (voice messages on Track, setup file 50): { talk: id } sends the message to each receiver's phones; the RWB Android
 // app plays it out loud by itself (even with the screen off) when the receiver shares their live location, or is FAM.
 // { talk_cleanup: true } (every hour) deletes Talk recordings older than 7 days.
+// { track_wake: true } (every minute, only when needed) wakes phones that stopped sending their live location.
 import webpush from "npm:web-push@3.6.7";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { importPKCS8, SignJWT } from "npm:jose@5.9.6";
@@ -120,12 +121,33 @@ async function talkCleanup(secret: string) {
   return Response.json({ removed: n ?? 0 });
 }
 
+/* ---------- Track: wake up phones that stopped sending their live location (setup file 51) ---------- */
+async function trackWake(secret: string) {
+  const { data, error } = await sb.rpc("track_wake_job", { p_secret: secret });
+  if (error) return new Response(error.message, { status: 403 });
+  const tokens = (data ?? []) as string[];
+  const auth = tokens.length ? await fcmToken().catch(() => null) : null;
+  if (!auth) return Response.json({ woke: 0 });
+  const gone: string[] = []; let woke = 0;
+  await Promise.all(tokens.map(async (token) => {
+    const res = await fetch(`https://fcm.googleapis.com/v1/projects/${auth.project}/messages:send`, {
+      method: "POST", headers: { Authorization: `Bearer ${auth.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ message: { token, android: { priority: "HIGH", ttl: "60s" }, data: { type: "track_wake" } } }) });
+    if (res.ok) { woke++; return; }
+    const e = await res.text();
+    if (res.status === 404 || /UNREGISTERED/i.test(e)) gone.push(token);
+  }));
+  if (gone.length) await sb.rpc("fcm_gone", { p_secret: secret, p_tokens: gone });
+  return Response.json({ woke });
+}
+
 Deno.serve(async (req) => {
   try {
     const secret = req.headers.get("x-push-secret") ?? "";
     const reqBody = await req.json();
     if (reqBody.talk) return await sendTalk(secret, Number(reqBody.talk));
     if (reqBody.talk_cleanup) return await talkCleanup(secret);
+    if (reqBody.track_wake) return await trackWake(secret);
     const { id } = reqBody;
     const { data: job, error } = await sb.rpc("push_job", { p_id: id, p_secret: secret });
     if (error) return new Response(error.message, { status: 403 });

@@ -20,6 +20,7 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.PowerManager;
 
+import com.google.android.gms.location.CurrentLocationRequest;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
@@ -36,56 +37,85 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 /**
- * RWB Track: live location the way WhatsApp live location shares it, tuned for battery.
+ * RWB Track: live location that keeps going with the screen off, the app minimised or swiped away (like WhatsApp).
  *
  * Staying alive
- * - A foreground service of type "location" with an ongoing notification (and a Stop button). Android keeps it running
- *   with the screen off, with the app minimised, and after the app is swiped away from recent apps.
- * - It never depends on the app screen: everything runs on the service's own thread.
- * - If Android ever stops it, it asks to be restarted (START_REDELIVER_INTENT) and the app restarts it when opened.
+ * - A foreground service of type "location" with an ongoing notification (and a Stop button).
+ * - While sharing, the phone's processor is kept awake (a partial wake lock, the screen stays off), so the 10-second
+ *   heartbeat always runs: it asks for a fresh GPS fix when none came, re-starts GPS if it went quiet, and re-sends
+ *   positions that couldn't go out (no signal).
+ * - If the phone still freezes the app, the RWB server notices (no position for 2.5 minutes) and wakes it with a
+ *   high-priority push message (RwbMessagingService → wake()), which also lets Android restart the service.
  *
- * Battery
- * - Google's fused location: GPS + Wi-Fi + mobile network, with three speeds:
- *     riding  (moving fast): high accuracy, a fix every ~8 s, at most a send every 15 s
- *     moving slowly         : balanced, every ~20 s, a send every 30 s
- *     stopped (3 min)       : low power, every ~60 s, a heartbeat send every 90 s
- * - Sends reuse one connection (no new HTTPS handshake each time) and only a few hundred bytes.
- * - No permanent wake lock: the CPU is kept awake only for the second it takes to send.
+ * Location
+ * - Always GPS (high accuracy), like WhatsApp: a fix every 5 s while moving, every 20 s while stopped.
+ * - Sent every 10 s while moving (15 m or more), at least once a minute while stopped.
+ * - A position older than 2 minutes is never sent as "now" (the map would show you somewhere you no longer are).
+ *
+ * A report of the last 150 events (fixes, sends, errors, restarts) can be copied from the Track screen.
  */
 public class TrackService extends Service {
-    static final String PREFS = "rwb_track", STATS = "rwb_track_stats";
+    static final String PREFS = "rwb_track", STATS = "rwb_track_stats", LOG = "rwb_track_log";
     static final String CHANNEL = "rwb_track";
-    static final String ACTION_STOP = "in.roninwb.twa.TRACK_STOP";
+    static final String ACTION_STOP = "in.roninwb.twa.TRACK_STOP", ACTION_WAKE = "in.roninwb.twa.TRACK_WAKE";
     static final int NOTIFICATION_ID = 7301;
     static volatile boolean running = false;
 
-    private static final int RIDING = 2, MOVING = 1, STILL = 0;
+    private static final long TICK = 10000L, FRESH = 120000L;
     private HandlerThread thread;
     private Handler handler;
-    private PowerManager.WakeLock sendLock;
+    private PowerManager.WakeLock awake;
     private FusedLocationProviderClient fused;
     private LocationManager lm;
-    private int mode = -1;
+    private boolean moving = true, registered = false, asking = false, sending = false, failed = false;
     private Location last, sent, anchor;
-    private long sentAt = 0, anchorAt = 0;
-    private boolean sending = false;
+    private long lastFixAt = 0, sentAt = 0, anchorAt = 0, registeredAt = 0;
     private String url, anon, key;
     private long until;
 
+    /* ---------- from the app ---------- */
     public static void start(Context c, String url, String anon, String key, long until) {
         c.getSharedPreferences(PREFS, 0).edit().putString("url", url).putString("anon", anon).putString("key", key).putLong("until", until).apply();
         c.getSharedPreferences(STATS, 0).edit().clear().putLong("started", System.currentTimeMillis()).apply();
+        c.getSharedPreferences(LOG, 0).edit().clear().apply();
+        log(c, "share started, until " + time(until));
         Intent i = new Intent(c, TrackService.class);
         if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i); else c.startService(i);
     }
 
     public static void stop(Context c) {
+        log(c, "stopped from the app");
+        running = false;
         c.getSharedPreferences(PREFS, 0).edit().clear().apply();
         c.stopService(new Intent(c, TrackService.class));
     }
 
+    /** The RWB server's wake-up push: get a position out now, or restart the service if Android stopped it. */
+    public static void wake(Context c) {
+        SharedPreferences p = c.getSharedPreferences(PREFS, 0);
+        if (p.getString("key", null) == null || p.getLong("until", 0) < System.currentTimeMillis()) return;
+        log(c, running ? "wake-up push: sending now" : "wake-up push: restarting");
+        try {
+            Intent i = new Intent(c, TrackService.class).setAction(ACTION_WAKE);
+            if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i); else c.startService(i);
+        } catch (Exception e) { log(c, "restart refused: " + e.getClass().getSimpleName()); }
+    }
+
+    /* ---------- the report (last 150 events) ---------- */
+    private static String time(long ms) { return new SimpleDateFormat("HH:mm:ss", Locale.US).format(new Date(ms)); }
+    static synchronized void log(Context c, String what) {
+        SharedPreferences p = c.getSharedPreferences(LOG, 0);
+        String s = p.getString("log", "") + time(System.currentTimeMillis()) + " " + what + "\n";
+        int lines = 0; for (int i = s.length() - 1; i >= 0; i--) if (s.charAt(i) == '\n' && ++lines > 150) { s = s.substring(i + 1); break; }
+        p.edit().putString("log", s).apply();
+    }
+    static String report(Context c) { return c.getSharedPreferences(LOG, 0).getString("log", ""); }
+    private void log(String what) { log(this, what); }
     private void stat(String k, long v) { getSharedPreferences(STATS, 0).edit().putLong(k, v).apply(); }
     private void stat(String k, String v) { getSharedPreferences(STATS, 0).edit().putString(k, v).apply(); }
 
@@ -94,11 +124,13 @@ public class TrackService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         SharedPreferences p = getSharedPreferences(PREFS, 0);
         url = p.getString("url", null); anon = p.getString("anon", null); key = p.getString("key", null); until = p.getLong("until", 0);
-        if (intent != null && ACTION_STOP.equals(intent.getAction())) { stopFromNotification(); return START_NOT_STICKY; }
+        String action = intent == null ? null : intent.getAction();
+        if (ACTION_STOP.equals(action)) { stopFromNotification(); return START_NOT_STICKY; }
         if (!showNotification()) return START_NOT_STICKY;
         if (url == null || anon == null || key == null || until < System.currentTimeMillis()) { finish("time up"); return START_NOT_STICKY; }
-        if (!running) { running = true; begin(); }
-        return START_REDELIVER_INTENT;
+        if (!running) { running = true; if (intent == null) log("restarted by Android"); begin(); }
+        else if (ACTION_WAKE.equals(action) && handler != null) handler.post(() -> { askFix("wake-up"); if (last != null && fresh(last)) send(last, "wake-up"); });
+        return START_STICKY;
     }
 
     private boolean showNotification() {
@@ -124,88 +156,113 @@ public class TrackService extends Service {
             return true;
         } catch (Exception e) {   /* e.g. no location permission, or Android refused a restart from the background */
             stat("error", "start: " + e.getClass().getSimpleName() + " " + e.getMessage());
+            log("could not start: " + e.getClass().getSimpleName() + " " + e.getMessage());
             running = false;
             stopSelf();
             return false;
         }
     }
 
+    @SuppressLint("WakelockTimeout")
     private void begin() {
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
-        sendLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "rwb:track-send");
-        sendLock.setReferenceCounted(false);
+        awake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "rwb:track");
+        awake.setReferenceCounted(false);
+        awake.acquire(Math.max(60000L, until - System.currentTimeMillis() + 120000L));   /* the whole share, never longer */
+        boolean unrestricted = Build.VERSION.SDK_INT < 23 || pm.isIgnoringBatteryOptimizations(getPackageName());
+        log("service running" + (unrestricted ? "" : " · battery is RESTRICTED (Android may pause it)"));
         thread = new HandlerThread("rwb-track");
         thread.start();
         handler = new Handler(thread.getLooper());
-        handler.post(() -> { setMode(MOVING); handler.postDelayed(tick, 30000L); });
+        handler.post(() -> { request(true); askFix("start"); handler.postDelayed(tick, TICK); });
     }
 
-    /* one location request per mode: the slower, the less battery */
+    /* GPS updates: every 5 s while moving, every 20 s while stopped */
     @SuppressLint("MissingPermission")
-    private void setMode(int m) {
-        if (m == mode) return;
-        mode = m;
-        long interval = m == RIDING ? 8000L : m == MOVING ? 20000L : 60000L;
-        int priority = m == RIDING ? Priority.PRIORITY_HIGH_ACCURACY : m == MOVING ? Priority.PRIORITY_BALANCED_POWER_ACCURACY : Priority.PRIORITY_LOW_POWER;
+    private void request(boolean move) {
+        moving = move; registered = true; registeredAt = System.currentTimeMillis();
+        long interval = move ? 5000L : 20000L;
         try {
             if (fused == null) fused = LocationServices.getFusedLocationProviderClient(this);
             fused.removeLocationUpdates(fusedCb);
-            LocationRequest req = new LocationRequest.Builder(priority, interval)
-                .setMinUpdateIntervalMillis(interval / 2).setMinUpdateDistanceMeters(m == STILL ? 0f : 10f)
-                .setWaitForAccurateLocation(false).build();
+            LocationRequest req = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, interval)
+                .setMinUpdateIntervalMillis(Math.min(interval, 3000L)).setMinUpdateDistanceMeters(0f)
+                .setMaxUpdateDelayMillis(0).setWaitForAccurateLocation(false).build();
             fused.requestLocationUpdates(req, fusedCb, thread.getLooper());
-            stat("provider", m == RIDING ? "riding" : m == MOVING ? "moving" : "stopped");
+            stat("provider", move ? "riding" : "stopped");
         } catch (Throwable t) {   /* no Google Play services: the phone's GPS directly */
             try {
                 if (lm == null) lm = (LocationManager) getSystemService(LOCATION_SERVICE);
                 lm.removeUpdates(gpsCb);
-                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, interval, m == STILL ? 0f : 10f, gpsCb, thread.getLooper());
-                try { lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 60000L, 0f, gpsCb, thread.getLooper()); } catch (Exception ignored) { }
+                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, interval, 0f, gpsCb, thread.getLooper());
+                try { lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 30000L, 0f, gpsCb, thread.getLooper()); } catch (Exception ignored) { }
                 stat("provider", "gps");
-            } catch (Exception e) { stat("error", "location: " + e.getMessage()); }
+            } catch (Exception e) { stat("error", "location: " + e.getMessage()); log("location error: " + e.getMessage()); }
         }
+    }
+
+    /* one fresh fix right now (when the regular updates went quiet) */
+    @SuppressLint("MissingPermission")
+    private void askFix(String why) {
+        if (asking || fused == null) return;
+        asking = true;
+        try {
+            CurrentLocationRequest r = new CurrentLocationRequest.Builder().setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+                .setMaxUpdateAgeMillis(15000L).setDurationMillis(25000L).build();
+            fused.getCurrentLocation(r, null)
+                .addOnSuccessListener(l -> handler.post(() -> { asking = false; if (l != null) onFix(l, why); else log("no GPS fix (" + why + ")"); }))
+                .addOnFailureListener(e -> handler.post(() -> { asking = false; log("GPS failed: " + e.getMessage()); }));
+        } catch (Throwable t) { asking = false; }
     }
 
     private final LocationCallback fusedCb = new LocationCallback() {
-        @Override public void onLocationResult(LocationResult r) { Location l = r.getLastLocation(); if (l != null) onFix(l); }
+        @Override public void onLocationResult(LocationResult r) { Location l = r.getLastLocation(); if (l != null) onFix(l, null); }
     };
     private final LocationListener gpsCb = new LocationListener() {
-        @Override public void onLocationChanged(Location l) { onFix(l); }
-        @Override public void onProviderEnabled(String p) { }
-        @Override public void onProviderDisabled(String p) { }
+        @Override public void onLocationChanged(Location l) { onFix(l, null); }
+        @Override public void onProviderEnabled(String p) { log("location switched on"); }
+        @Override public void onProviderDisabled(String p) { log("location switched OFF on the phone"); stat("error", "Location is switched off on the phone"); }
         @Override public void onStatusChanged(String p, int s, Bundle b) { }
     };
 
+    private boolean fresh(Location l) { return System.currentTimeMillis() - l.getTime() < FRESH; }
+
     /* the service's own thread */
-    private void onFix(Location l) {
+    private void onFix(Location l, String why) {
+        if (last != null && l.getTime() <= last.getTime()) return;
         if (last != null && "network".equals(l.getProvider()) && "gps".equals(last.getProvider()) && l.getTime() - last.getTime() < 60000L) return;
-        last = l;
-        long now = System.currentTimeMillis();
-        getSharedPreferences(STATS, 0).edit().putLong("fix", now).putLong("acc", (long) l.getAccuracy())
+        if (!fresh(l)) { log("old fix ignored (" + (System.currentTimeMillis() - l.getTime()) / 1000 + " s)"); return; }
+        last = l; lastFixAt = System.currentTimeMillis();
+        getSharedPreferences(STATS, 0).edit().putLong("fix", lastFixAt).putLong("acc", (long) l.getAccuracy())
             .putString("lat", String.valueOf(l.getLatitude())).putString("lng", String.valueOf(l.getLongitude())).apply();
-        /* riding, moving slowly or stopped */
+        if (why != null) log("fix (" + why + ") ±" + Math.round(l.getAccuracy()) + " m");
+        /* moving or stopped: 50 m from where you were in the last 3 minutes */
         float speed = l.hasSpeed() ? l.getSpeed() : 0f;
-        if (anchor == null || anchor.distanceTo(l) > 50) { anchor = l; anchorAt = now; }
-        int want = speed > 5f ? RIDING : now - anchorAt < 180000L ? MOVING : STILL;
-        setMode(want);
-        long gap = now - sentAt, every = want == RIDING ? 15000L : want == MOVING ? 30000L : 90000L;
+        if (anchor == null || anchor.distanceTo(l) > 50 || speed > 3f) { anchor = l; anchorAt = lastFixAt; }
+        boolean move = lastFixAt - anchorAt < 180000L;
+        if (move != moving) { log(move ? "moving again" : "stopped (3 min): fixes every 20 s"); request(move); }
+        long gap = lastFixAt - sentAt;
         float moved = sent == null ? Float.MAX_VALUE : sent.distanceTo(l);
-        if (sent == null || (moved >= 25 && gap >= every) || gap >= 90000L) send(l);
+        if (sent == null || failed || (moving && moved >= 15 && gap >= 10000L) || gap >= 60000L) send(l, null);
     }
 
-    /* heartbeat (every 30 s): the time limit, a position at least every 90 s, and retries after no signal */
+    /* every 10 s: time limit, a fix if GPS went quiet, re-start GPS if it stays quiet, re-send after no signal */
     private final Runnable tick = new Runnable() {
         @Override public void run() {
-            if (System.currentTimeMillis() > until) { finish("time up"); return; }
-            if (last != null && System.currentTimeMillis() - sentAt >= 90000L) send(last);
-            handler.postDelayed(this, 30000L);
+            long now = System.currentTimeMillis();
+            if (now > until) { finish("time up"); return; }
+            long quiet = now - lastFixAt;
+            if (quiet > (moving ? 30000L : 60000L)) askFix("GPS quiet " + quiet / 1000 + " s");
+            if (quiet > 120000L && now - registeredAt > 120000L) { log("GPS quiet for 2 min: restarting GPS"); request(moving); }
+            if (last != null && fresh(last) && (failed || now - sentAt >= 60000L)) send(last, failed ? "retry" : "heartbeat");
+            else if (last != null && !fresh(last) && now - sentAt >= 60000L) stat("error", "Waiting for GPS (no fresh position)");
+            handler.postDelayed(this, TICK);
         }
     };
 
-    private void send(Location l) {
+    private void send(Location l, String why) {
         if (sending) return;
-        sending = true; sent = l; sentAt = System.currentTimeMillis();
-        sendLock.acquire(20000L);   /* only while sending */
+        sending = true;
         try {
             JSONObject o = new JSONObject();
             o.put("p_key", key); o.put("p_lat", l.getLatitude()); o.put("p_lng", l.getLongitude());
@@ -216,22 +273,28 @@ public class TrackService extends Service {
             int code = Integer.parseInt(r[0]);
             stat("code", code);
             if (code > 0 && code < 300) {
-                stat("sent", System.currentTimeMillis()); stat("error", "");
-                if (r[1].contains("stopped")) finish("stopped");
-            } else { stat("error", code == 0 ? "no internet (will retry)" : "server " + code + ": " + r[1]); sentAt = 0; }
+                sent = l; sentAt = System.currentTimeMillis();
+                if (failed) log("sent again after no signal");
+                failed = false;
+                stat("sent", sentAt); stat("error", "");
+                if (why != null && !"heartbeat".equals(why)) log("sent (" + why + ")");
+                if (r[1].contains("stopped")) finish("stopped (from another phone, or time up)");
+            } else {
+                if (!failed) log(code == 0 ? "no internet: " + r[1] : "server " + code + ": " + r[1]);
+                failed = true;
+                stat("error", code == 0 ? "No internet (retrying every 10 s)" : "server " + code + ": " + r[1]);
+            }
         } catch (Exception e) {
-            stat("error", "no internet (will retry)"); sentAt = 0;
-        } finally {
-            sending = false;
-            if (sendLock.isHeld()) sendLock.release();
-        }
+            if (!failed) log("send error: " + e.getMessage());
+            failed = true; stat("error", "No internet (retrying every 10 s)");
+        } finally { sending = false; }
     }
 
-    /* POST to a Supabase function. Keeps the connection open for the next send (no disconnect). */
+    /* POST to a Supabase function (connections are kept open and reused by Android) */
     private String[] post(String fn, JSONObject body) {
         try {
             HttpURLConnection c = (HttpURLConnection) new URL(url + "/rest/v1/rpc/" + fn).openConnection();
-            c.setRequestMethod("POST"); c.setConnectTimeout(12000); c.setReadTimeout(12000); c.setDoOutput(true);
+            c.setRequestMethod("POST"); c.setConnectTimeout(10000); c.setReadTimeout(10000); c.setDoOutput(true);
             c.setRequestProperty("Content-Type", "application/json");
             c.setRequestProperty("apikey", anon); c.setRequestProperty("Authorization", "Bearer " + anon);
             try (OutputStream os = c.getOutputStream()) { os.write(body.toString().getBytes(StandardCharsets.UTF_8)); }
@@ -257,6 +320,7 @@ public class TrackService extends Service {
 
     private void finish(String why) {
         running = false;
+        log("finished: " + why);
         stat("stopped", System.currentTimeMillis()); stat("why", why);
         getSharedPreferences(PREFS, 0).edit().clear().apply();
         cleanup();
@@ -269,13 +333,14 @@ public class TrackService extends Service {
         try { if (lm != null) lm.removeUpdates(gpsCb); } catch (Exception ignored) { }
         if (handler != null) handler.removeCallbacksAndMessages(null);
         if (thread != null) thread.quitSafely();
-        if (sendLock != null && sendLock.isHeld()) sendLock.release();
+        if (awake != null && awake.isHeld()) awake.release();
     }
 
-    /* swiped away from recent apps: the service keeps running (nothing to do) */
-    @Override public void onTaskRemoved(Intent rootIntent) { super.onTaskRemoved(rootIntent); }
+    /* swiped away from recent apps: the service keeps running */
+    @Override public void onTaskRemoved(Intent rootIntent) { log("app swiped away (sharing continues)"); super.onTaskRemoved(rootIntent); }
 
     @Override public void onDestroy() {
+        if (running) log("service destroyed by Android");
         running = false;
         cleanup();
         super.onDestroy();
