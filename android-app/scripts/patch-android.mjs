@@ -16,6 +16,10 @@ const must = (s, what) => { if (!s) throw new Error('patch-android: ' + what + '
    made by scripts/play-variant.mjs after the APK is built). */
 const CHANNEL = process.env.RWB_CHANNEL === 'play' ? 'play' : 'web';
 
+/* Google's package-name ownership check: the token from Play Console goes inside the app, signed with our key */
+const adi = path.join(root, 'adi-registration.properties');
+if (fs.existsSync(adi)) write(path.join(app, 'src/main/assets/adi-registration.properties'), read(adi).trim() + '\n');
+
 /* ---------- AndroidManifest.xml ---------- */
 const mf = path.join(app, 'src/main/AndroidManifest.xml');
 let m = read(mf);
