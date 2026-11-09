@@ -1,6 +1,6 @@
 /* Site settings — edit URLs here */
 const CONFIG = {
-    JOIN_FORM_URL: 'https://forms.gle/8rWveXjv2ua6PfBB9',
+    JOIN_FORM_URL: 'https://forms.gle/iXPKitqCDMYJvhHe7',
     /* Events come from the RWB App (create and edit them there). The sheet below is only a backup. */
     APP_SUPABASE_URL: 'https://hcowcybshljgkeixudry.supabase.co',
     APP_SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhjb3djeWJzaGxqZ2tlaXh1ZHJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3NDI2MjMsImV4cCI6MjEwODMxODYyM30.LLYjaairRQZ3-Ddwo9kschTeVXjEv84n45RrqEUhi0g',
