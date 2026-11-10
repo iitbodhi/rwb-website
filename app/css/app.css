@@ -1486,3 +1486,5 @@ button.rw-btn{padding:8px 14px}
 .rw-parts .grow,.ride-list .grow{flex:1 1 auto;width:100%}.rw-parts .rw-pn{width:100%}
 .sync-row{display:flex;align-items:center;gap:10px;margin:10px 0 2px;padding:8px 8px 8px 14px;border-radius:14px;background:var(--surface,var(--card));border:1px solid var(--hair,var(--line))}
 .sync-row .grow{color:var(--muted)}
+/* a little air between the sticky header and the first card on every screen */
+#app > header.top{margin-bottom:12px}

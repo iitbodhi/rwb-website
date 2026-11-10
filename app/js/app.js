@@ -732,25 +732,38 @@ const PI = {   /* part icons */
     star: '<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z"/>'
 };
 const pIco = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${PI[k] || PI.star}</svg>`;
-const OIL_BRANDS = ['TVS TRU4', 'Motul', 'Castrol', 'Liqui Moly', 'Shell Advance', 'Mobil 1', 'Gulf'], TYRE_BRANDS = ['TVS Eurogrip', 'MRF', 'CEAT', 'Michelin', 'Pirelli', 'Metzeler', 'Apollo'],
-      PAD_BRANDS = ['TVS genuine', 'Brembo', 'EBC', 'Vesrah', 'Rolon'], CHAIN_BRANDS = ['TVS genuine', 'Rolon', 'DID', 'RK', 'EK'];
+/* brand and product lists (pick from these, or "Other" to type your own) */
+const OIL_BRANDS = ['TVS TRU4 Fully Synthetic', 'TVS TRU4 Semi Synthetic', 'Motul 7100 4T', 'Motul 5100 4T', 'Motul 3100 Gold 4T', 'Motul 300V Factory Line', 'Motul H-Tech 100 4T',
+    'Idemitsu IRG7', 'Idemitsu IRG5', 'Idemitsu IRG3', 'Castrol Power1 Ultimate', 'Castrol Power1 4T', 'Castrol Activ 4T', 'Liqui Moly Motorbike 4T Synth Street Race', 'Liqui Moly Motorbike 4T Street',
+    'Shell Advance Ultra', 'Shell Advance AX7', 'Mobil 1 Racing 4T', 'Mobil Super Moto', 'Gulf Syntrac 4T', 'Gulf Pride 4T Plus', 'Eneos Racing', 'Repsol Moto Racing 4T', 'Ipone Stroke 4',
+    'Valvoline Champ 4T', 'Amsoil Metric Motorcycle Oil', 'IndianOil Servo 4T Synth', 'HP Racer4', 'Petronas Sprinta F900'],
+    TYRE_BRANDS = ['TVS Eurogrip Remora (stock)', 'TVS Eurogrip Protorq Extreme', 'TVS Eurogrip Roadhound', 'TVS Eurogrip Trailhound', 'MRF Revz', 'MRF Zapper', 'CEAT Zoom Rad X1', 'CEAT Zoom Cruz',
+    'Apollo Tramplr XR', 'Apollo Tramplr ST', 'Apollo Alpha H1', 'Reise TourR', 'Reise TrailR', 'Reise TorqR', 'Michelin Road 6', 'Michelin Pilot Street 2', 'Michelin Anakee Street',
+    'Pirelli Diablo Rosso III', 'Pirelli Angel GT II', 'Pirelli Scorpion Trail II', 'Metzeler Sportec M9 RR', 'Metzeler Tourance Next 2', 'Metzeler Roadtec 02', 'Bridgestone Battlax BT46',
+    'Continental ContiRoadAttack 4', 'Dunlop Sportmax Roadsmart IV', 'Maxxis Victra'],
+    PAD_BRANDS = ['TVS genuine', 'Brembo', 'EBC (organic)', 'EBC Sintered HH', 'Vesrah', 'Rolon', 'Ferodo Platinum', 'Ferodo Sinter Grip', 'SBS', 'Galfer', 'Bendix', 'Endurance'],
+    CHAIN_BRANDS = ['TVS genuine', 'Rolon O-ring', 'Rolon Gold', 'DID 520 VX3', 'DID 520 ERV3', 'RK 520 XSO', 'EK 520 SRX2', 'Regina', 'JT Sprockets'],
+    LUBE_BRANDS = ['Motul C2 Chain Lube Road', 'Motul C4 Factory Line', 'Motul C3 Off Road', 'Liqui Moly Chain Lube', 'Liqui Moly Chain Spray White', 'Castrol Chain Spray O-R', 'Muc-Off Chain Lube',
+    'WD-40 Specialist Motorbike Chain Lube', 'Ipone X-Trem Chain Road', 'Shell Advance Chain Lube', 'Gear oil (DIY)'],
+    ACC_BRANDS = ['Zana', 'Rynox', 'ViaTerra', 'Autofy', 'Moto Torque', 'Bobo', 'GRS', 'HJG', 'Maddog', 'Hella', 'Philips', 'Osram', 'Givi', 'SW-Motech', 'Barkbusters', 'Quad Lock',
+    'Ultimateaddons', 'Raida', 'DSG', 'Carbon Racing', 'Oxford', 'TVS genuine accessory'];
 const WEAR = [   /* key, name, icon, typical km, typical days, where the figure comes from, spec hint, brands, service-log words */
     ['engine_oil', 'Engine oil', 'drop', 6000, 180, 'TVS manual: every service', '10W-30', OIL_BRANDS, /engine oil|oil change/i],
-    ['oil_filter', 'Oil filter', 'drop', 6000, 180, 'TVS manual: every service', 'Paper element', ['TVS genuine'], /oil filter/i],
-    ['chain_lube', 'Chain lube', 'chain', 500, null, 'TVS manual: about every 500 km', 'Spray', ['Motul C2', 'Liqui Moly', 'Castrol', 'Muc-Off', 'WD-40 Bike'], /chain (clean|lube|lubric)/i],
+    ['oil_filter', 'Oil filter', 'drop', 6000, 180, 'TVS manual: every service', 'Paper element', ['TVS genuine', 'K&N', 'Uno Minda', 'Bosch', 'Hiflofiltro'], /oil filter/i],
+    ['chain_lube', 'Chain lube', 'chain', 500, null, 'TVS manual: about every 500 km', 'Spray', LUBE_BRANDS, /chain (clean|lube|lubric)/i],
     ['rear_tyre', 'Rear tyre', 'tyre', 18000, null, 'Typical; depends on riding and load', '130/70-17', TYRE_BRANDS, /rear tyre|rear tire|tyre change|new tyre/i],
     ['front_tyre', 'Front tyre', 'tyre', 25000, null, 'Typical; depends on riding', '110/70-17', TYRE_BRANDS, /front tyre|front tire/i],
     ['front_pads', 'Front brake pads', 'disc', 15000, null, 'Typical; check pad thickness at service', 'Sintered / organic', PAD_BRANDS, /front (brake )?pad|brake pad/i],
     ['rear_pads', 'Rear brake pads', 'disc', 20000, null, 'Typical; check pad thickness at service', 'Sintered / organic', PAD_BRANDS, /rear (brake )?pad/i],
     ['chain_kit', 'Chain & sprockets', 'chain', 20000, null, 'Typical with regular lube', 'O-ring 520', CHAIN_BRANDS, /chain (kit|set|sprocket)|sprocket/i],
-    ['air_filter', 'Air filter', 'air', 12000, 365, 'TVS manual: 12,000 km; sooner if dusty', 'Paper element', ['TVS genuine', 'K&N', 'BMC'], /air filter/i],
-    ['spark_plug', 'Spark plug', 'plug', 12000, 365, 'TVS manual: 12,000 km or 1 year', '', ['TVS genuine', 'NGK', 'Bosch'], /spark plug/i],
-    ['brake_fluid', 'Brake fluid', 'drop', 21000, 730, 'TVS manual: 21,000 km or 2 years', 'DOT 4', ['TVS genuine', 'Motul', 'Castrol'], /brake fluid|brake oil/i],
-    ['battery', 'Battery', 'batt', null, 1095, 'Typical: about 3 years', '12 V 6 Ah', ['TVS genuine', 'Exide', 'Amaron'], /battery/i],
-    ['clutch_cable', 'Clutch cable', 'cable', 20000, null, 'Typical; replace if frayed or stiff', '', ['TVS genuine'], /clutch cable/i],
-    ['throttle_cable', 'Accelerator cable', 'cable', 25000, null, 'Typical; replace if frayed or sticky', '', ['TVS genuine'], /(accelerator|throttle) cable/i],
-    ['clutch_plates', 'Clutch plates', 'gear', 30000, null, 'Typical; replace if the clutch slips', '', ['TVS genuine'], /clutch plate/i],
-    ['fork_oil', 'Front fork oil', 'fork', 36000, null, 'TVS manual: 36,000 km, if needed', '', ['TVS genuine', 'Motul'], /fork oil/i]
+    ['air_filter', 'Air filter', 'air', 12000, 365, 'TVS manual: 12,000 km; sooner if dusty', 'Paper element', ['TVS genuine', 'K&N', 'BMC', 'DNA', 'Uno Minda', 'Pipercross'], /air filter/i],
+    ['spark_plug', 'Spark plug', 'plug', 12000, 365, 'TVS manual: 12,000 km or 1 year', '', ['TVS genuine', 'NGK', 'NGK Iridium IX', 'Denso Iridium Power', 'Bosch'], /spark plug/i],
+    ['brake_fluid', 'Brake fluid', 'drop', 21000, 730, 'TVS manual: 21,000 km or 2 years', 'DOT 4', ['TVS genuine DOT 4', 'Motul DOT 4', 'Motul RBF 600', 'Castrol React Performance DOT 4', 'Liqui Moly DOT 4', 'Bosch DOT 4'], /brake fluid|brake oil/i],
+    ['battery', 'Battery', 'batt', null, 1095, 'Typical: about 3 years', '12 V 6 Ah', ['TVS genuine', 'Exide Xplore', 'Amaron Pro Bike Rider', 'Bosch', 'Livguard', 'Yuasa', 'SF Sonic'], /battery/i],
+    ['clutch_cable', 'Clutch cable', 'cable', 20000, null, 'Typical; replace if frayed or stiff', '', ['TVS genuine', 'Uno Minda', 'Rolon', 'Local'], /clutch cable/i],
+    ['throttle_cable', 'Accelerator cable', 'cable', 25000, null, 'Typical; replace if frayed or sticky', '', ['TVS genuine', 'Uno Minda', 'Rolon', 'Local'], /(accelerator|throttle) cable/i],
+    ['clutch_plates', 'Clutch plates', 'gear', 30000, null, 'Typical; replace if the clutch slips', '', ['TVS genuine', 'Rolon', 'EBC', 'FCC'], /clutch plate/i],
+    ['fork_oil', 'Front fork oil', 'fork', 36000, null, 'TVS manual: 36,000 km, if needed', '', ['TVS genuine', 'Motul Fork Oil Expert 10W', 'Motul Fork Oil Factory Line', 'Liqui Moly Fork Oil 10W', 'Castrol Fork Oil'], /fork oil/i]
 ].map(([key, name, ico, km, days, src, spec, brands, re]) => ({ key, name, ico, km, days, src, spec, brands, re }));
 const ACCS = [['nav', 'Navigation screen / phone mount'], ['crash_guard', 'Crash guard'], ['bash_plate', 'Bash plate'], ['saddle_stay', 'Saddle stay'], ['top_rack', 'Top rack'],
     ['top_box', 'Top box'], ['saddle_bags', 'Saddle bags'], ['tank_bag', 'Tank bag'], ['knuckle_guards', 'Knuckle guards'], ['handlebar', 'Handlebar'], ['exhaust', 'Exhaust'],
@@ -851,9 +864,10 @@ function partSheet(p, odo, ride, fromHint = null) {
     openSheet(title, `<form id="ptf">
         ${fromHint ? `<p class="small banner-lite">Filled in from your service log (${fmtDate(fromHint.service_date)}, ${km(fromHint.odometer_km)}). Check and save.</p>` : ''}
         ${p.kind === 'acc' && p.part === 'custom' ? `<label>What is it?<input name="name" maxlength="60" required value="${esc(p.name || '')}" placeholder="e.g. Fog lamp switch"></label>` : ''}
-        <div class="row2"><label>Brand<input name="brand" maxlength="60" list="pt-brands" value="${esc(p.brand || '')}" placeholder="${w ? esc(w.brands[0]) : 'e.g. Zana'}"></label>
-            <label>${w ? 'Grade / size / type' : 'Model'}<input name="spec" maxlength="60" value="${esc(p.spec || '')}" placeholder="${w ? esc(w.spec || '') : 'Model or variant'}"></label></div>
-        <datalist id="pt-brands">${(w?.brands || ['Zana', 'Rynox', 'ViaTerra', 'Moto Torque', 'Autofy', 'Bobo', 'GRS', 'Hella']).map(b => `<option value="${esc(b)}">`).join('')}</datalist>
+        ${(() => { const list = w?.brands || ACC_BRANDS, cur = p.brand || '', known = !cur || list.includes(cur);
+            return `<label>Brand<select name="brand_pick"><option value="">Choose…</option>${list.map(b => `<option${b === cur ? ' selected' : ''}>${esc(b)}</option>`).join('')}<option value="__other"${known ? '' : ' selected'}>Other (type the name)</option></select></label>
+            <label class="pt-other"${known ? ' hidden' : ''}>Brand name<input name="brand_other" maxlength="60" value="${known ? '' : esc(cur)}" placeholder="Type the brand and model"></label>`; })()}
+        <label>${w ? 'Grade / size / type' : 'Model'}<input name="spec" maxlength="60" value="${esc(p.spec || '')}" placeholder="${w ? esc(w.spec || '') : 'Model or variant'}"></label>
         <div class="row2"><label>Fitted on<input type="date" name="installed_on" value="${esc(p.installed_on || '')}" max="${todayISO()}"></label>
             <label>At odometer (km)<input type="number" inputmode="numeric" name="installed_km" min="0" value="${p.installed_km ?? ''}" placeholder="${odo || ''}"></label></div>
         <label>Cost (₹)<input type="number" inputmode="decimal" name="cost" min="0" value="${p.cost ?? ''}" placeholder="optional"></label>
@@ -867,8 +881,10 @@ function partSheet(p, odo, ride, fromHint = null) {
         ${hist.length ? `<details class="pt-hist"><summary class="small">Earlier ${w ? w.name.toLowerCase() : 'ones'} (${hist.length})</summary>${hist.map(h => `<p class="small"><b>${esc([h.brand, h.spec].filter(Boolean).join(' · ') || title)}</b> · ${h.installed_km != null && h.retired_km != null ? km(h.retired_km - h.installed_km) + ' ridden' : ''}${h.retired_on ? ` · replaced ${fmtDate(h.retired_on)}` : ''}${h.cost ? ` · ${rs(h.cost)}` : ''}</p>`).join('')}</details>` : ''}
     </form>`, b => {
         const f = b.querySelector('#ptf');
+        f.brand_pick.onchange = () => { const o = f.querySelector('.pt-other'); o.hidden = f.brand_pick.value !== '__other'; if (!o.hidden) f.brand_other.focus(); };
         const read = () => { const d = Object.fromEntries(new FormData(f)); const num = v => v === '' || v == null ? null : Number(v);
-            return { ...(p.id ? { id: p.id } : {}), kind: p.kind, part: p.part, name: p.part === 'custom' ? (d.name || '').trim() || null : null, brand: (d.brand || '').trim() || null, spec: (d.spec || '').trim() || null,
+            const brand = d.brand_pick === '__other' ? (d.brand_other || '').trim() : d.brand_pick || '';
+            return { ...(p.id ? { id: p.id } : {}), kind: p.kind, part: p.part, name: p.part === 'custom' ? (d.name || '').trim() || null : null, brand: brand || null, spec: (d.spec || '').trim() || null,
                 installed_on: d.installed_on || null, installed_km: num(d.installed_km), cost: num(d.cost), notes: (d.notes || '').trim() || null,
                 ...(() => { if (!w) return { life_km: null, life_days: null }; const lk = num(d.life_km), lm = num(d.life_m);
                     return lk == null && lm == null ? { life_km: w.km, life_days: w.days } : { life_km: lk, life_days: lm != null ? lm * 30 : null }; })() }; };
@@ -2384,8 +2400,9 @@ async function viewAdmin() {
 }
 /* Admin: when the member sheet last checked itself against the app (every 12 hours, or "Sync sheet now") */
 async function syncStatus(st) {
-    st ??= await api.admin.sheetSyncStatus?.().catch(() => null); const row = $('#sync-row'); if (!row || !st) return;
-    row.hidden = false; $('#sync-txt').textContent = st.last?.at ? `Member sheet synced ${timeAgo(st.last.at)}` : 'Member sheet: not synced from the app yet';
+    const row = $('#sync-row'); if (!row) return; row.hidden = false;
+    st ??= await api.admin.sheetSyncStatus?.().catch(() => null); const t = $('#sync-txt'); if (!t) return;
+    t.textContent = st?.last?.at ? `Member sheet synced ${timeAgo(st.last.at)}` : 'Member sheet';
 }
 /* Reports from members (Grievance Officer's queue): acknowledge within 24 h, resolve within 7 days, 2 h for nudity,
    sexual content, impersonation or morphed photos */
