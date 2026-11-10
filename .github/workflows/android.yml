@@ -94,6 +94,7 @@ jobs:
           cd android
           ./gradlew --no-daemon --stacktrace bundleRelease 2>&1 | tail -n 200 | tee -a ../../build.log
           cp app/build/outputs/bundle/release/app-release.aab "$RUNNER_TEMP/RWB-Play-${{ github.run_number }}.aab"
+          cp app/build/outputs/mapping/release/mapping.txt "$RUNNER_TEMP/mapping.txt" 2>/dev/null || echo "no mapping file" | tee -a ../../build.log
           ls -la "$RUNNER_TEMP"/*.aab | tee -a ../../build.log
       - name: Keep the Play Store file (Actions → this run → Artifacts)
         if: env.HAS_KEY == 'true'
@@ -111,6 +112,7 @@ jobs:
           packageName: in.roninwb.twa
           releaseFiles: ${{ runner.temp }}/RWB-Play-${{ github.run_number }}.aab
           releaseName: "2.0.${{ github.run_number }}"
+          mappingFile: ${{ runner.temp }}/mapping.txt
           track: ${{ vars.PLAY_TRACK || 'alpha' }}
           status: ${{ vars.PLAY_STATUS || 'completed' }}
       - name: Save the build log (for fixing problems)

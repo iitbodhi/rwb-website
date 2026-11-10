@@ -118,6 +118,31 @@ if (process.env.RWB_KEYSTORE) {
     }`);
   g = must(g.replace(/buildTypes\s*\{\s*release\s*\{/, 'buildTypes {\n        release {\n            signingConfig signingConfigs.release'), 'release build type');
 }
+/* Release builds are shrunk and obfuscated with R8 (Google Play asks for it: "DEX code optimisation"). Our own code
+   and Capacitor's plugins are kept by name (Capacitor finds plugin methods by name), libraries are optimised. */
+g = g.replace(/minifyEnabled\s+false/, 'minifyEnabled true').replace(/getDefaultProguardFile\('proguard-android\.txt'\)/, "getDefaultProguardFile('proguard-android-optimize.txt')");
+{
+  const pr = path.join(app, 'proguard-rules.pro');
+  let rules = fs.existsSync(pr) ? read(pr) : '';
+  if (!rules.includes('RWB rules')) {
+    rules += `
+# ---- RWB rules ----
+# our plugin, services and receivers (Capacitor calls plugin methods by name; Android starts services by name)
+-keep class in.roninwb.twa.** { *; }
+# Capacitor bridge, plugins and the JavaScript interface of the WebView
+-keep class com.getcapacitor.** { *; }
+-keepclassmembers class * { @android.webkit.JavascriptInterface <methods>; }
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod,SourceFile,LineNumberTable
+# Google sign-in sheet (Credential Manager), as Google's documentation asks
+-if class androidx.credentials.CredentialManager
+-keep class androidx.credentials.playservices.** { *; }
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn javax.annotation.**
+-dontwarn org.slf4j.**
+`;
+    write(pr, rules);
+  }
+}
 /* Google's fused location provider for RWB Track (the same location engine WhatsApp live location uses) */
 if (!g.includes('play-services-location')) g = must(g.replace(/dependencies\s*\{/, "dependencies {\n    implementation 'com.google.android.gms:play-services-location:21.3.0'"), 'dependencies block');
 /* our Firebase message handler (Track's wake-up with the app closed) builds on Capacitor's */
