@@ -2426,9 +2426,9 @@ async function pingCopy() {
     if (!state.me || isFam() || api.demo) return;
     const copy = !NATIVE ? 'browser' : (await nativeInfo()).channel === 'play' ? 'play' : 'apk';
     const key = new Date().toISOString().slice(0, 10) + copy;
-    try { if (localStorage.getItem('rwb-seen') === key) return; } catch { /* ignore */ }
+    try { if (localStorage.getItem('rwb-seen-2') === key) return; } catch { /* ignore */ }
     let build = null; if (NATIVE) try { build = Number((await Native('App').getInfo()).build) || null; } catch { /* ignore */ }
-    try { await api.appSeen(copy, build); localStorage.setItem('rwb-seen', key); } catch { /* try again next time */ }
+    try { await api.appSeen(copy, build); localStorage.setItem('rwb-seen-2', key); } catch { /* try again next time */ }
 }
 const COPY_NAME = { play: 'Play Store test', apk: 'Website APK', browser: 'Browser only', none: 'Not seen lately' };
 const nudgeText = m => `Hi ${(m.nickname || m.full_name || '').split(' ')[0] || 'Warrior'}! 👋\n\nThe RWB App is moving to the Google Play Store and we need riders to help test it. It takes 2 minutes:\n\n1️⃣ Reply with the Gmail address you use for the Play Store on your phone, and we'll add you to the test.\n2️⃣ Once we confirm, uninstall the RWB app you have now.\n3️⃣ Open ${PLAY_TEST_URL} → tap "Become a tester" → "Download it on Google Play" → Install.\n4️⃣ Open RWB and sign in with Google as before. All your data is still there.\n\nThanks for helping RWB go live on the Play Store! 🏍️`;
