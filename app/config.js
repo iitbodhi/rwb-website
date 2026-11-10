@@ -9,7 +9,7 @@ const APP_CONFIG = {
     /* Google sign-in inside the Android app (Android's own account sheet). The "Web client" Client ID from
        Google Cloud → APIs & Services → Credentials (the same one in Supabase → Authentication → Google). Public, not a
        secret. Empty: the app signs in through the browser instead. */
-    GOOGLE_WEB_CLIENT_ID: '',
+    GOOGLE_WEB_CLIENT_ID: '465044657083-f0bfm79ihpctqkpoeq0edk915pii2u2g.apps.googleusercontent.com',
 
     /* Public key for push notifications (safe to publish; the private half lives only in the database) */
     VAPID_PUBLIC_KEY: 'BEoWMKShMPZthuoPUr7VZKT7Ig6F3-W5WSwAjCbkGkeXrFB8WXpXZRZDTcoE4omiwn20Gqa9Gg59zaQJbSOadmI',
