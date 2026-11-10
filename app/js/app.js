@@ -1799,34 +1799,34 @@ function docStatus(d) {
     return { level: 'ok', days, text: 'Valid' };
 }
 /* =================== How-to videos (short guides, also posted as RWB Instagram stories) =================== */
-const VIDEOS = [
-    ['track', 'Track + FAM ✨', 'Live location, SOS and your family in the loop', 111],
+const VIDEOS = [   /* [file, title, what it covers, seconds, who]; who: undefined = members, 'team' = coordinators + admins, 'fam' = RWB FAM */
+    ['home', 'Home & My Ride', 'Your bike, odometer, parts tracker and VRN check', 27],
+    ['track', 'Track & SOS', 'Share your live location on rides, and SOS', 28],
     ['service', 'Service', 'Log services, bills and reminders', 43],
-    ['mileage', 'Mileage', 'Your real km per litre', 44],
+    ['mileage', 'Mileage', 'Your real km per litre with Trip A', 44],
     ['motomart', 'Motomart', 'Buy and sell used riding gear', 43],
-    ['guides', 'Guides', 'Maintenance help and tested gear', 34],
+    ['guides', 'Guides & Pookie', 'Guides, the RWB AI and Teach Pookie', 23],
     ['events', 'Events', 'Rides, meet-ups and shared costs', 40],
-    ['me', 'Me', 'Your profile and settings', 33],
-    ['rwb-members', 'RWB', 'Members and Warriorboards', 34],
-    ['coordinators-and-admins', 'Team tools', 'For coordinators and admins', 45, 'team'],
-    ['fam-track', 'Track', 'See where your rider is', 64, 'fam'],
-    ['fam-app', 'Your RWB App', 'Home, events, updates, Me and your FAM switch', 95, 'fam']
+    ['warriorboards', 'Warriorboards', 'Rankings, members and the RWB team', 27],
+    ['me', 'Me', 'Your profile, theme, notifications and privacy', 31],
+    ['coordinators-and-admins', 'Team tools', 'For coordinators and admins', 33, 'team'],
+    ['fam-app', 'RWB FAM', 'Home, Track, events and settings for family', 23, 'fam']
 ];
 function viewVideos() {
     const list = isFam() ? VIDEOS.filter(v => v[4] === 'fam') : VIDEOS.filter(v => v[4] !== 'fam' && (v[4] !== 'team' || isMod()));
     app.innerHTML = `${top('Videos')}
         <p class="muted" style="margin:-4px 0 16px">${isFam() ? 'Short guides to the RWB App for RWB FAM, with sound and subtitles.' : 'Short guides to every part of the app, with sound and subtitles.'}</p>
         ${!list.length ? '<div class="card empty"><b>Coming soon</b>How-to videos for RWB FAM are on the way.</div>' : ''}
-        <div class="vid-grid">${list.map(([id, title, sub, sec, who]) => `
-            <button class="vid-tile" data-act="play" data-id="${id}" aria-label="Play: ${esc(title)}, ${sec} seconds">
-                <span class="vid-cover"><img src="videos/${id}.jpg" alt="" loading="lazy"><i class="vid-play">▶</i><em>${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}</em></span>
-                <b>${esc(title)}${who === 'team' ? ' <span class="badge coord">Team</span>' : ''}</b><span class="small muted">${esc(sub)}</span>
+        <div class="vid-list">${list.map(([id, title, sub, sec, who]) => `
+            <button class="vid-row" data-act="play" data-id="${id}" aria-label="Play: ${esc(title)}${sec ? `, ${sec} seconds` : ''}">
+                <span class="vid-thumb"><img src="videos/${id}.jpg" alt="" loading="lazy"><i class="vid-play">▶</i></span>
+                <span class="grow"><b>${esc(title)}${who === 'team' ? ' <span class="badge coord">Team</span>' : ''}</b><span class="small muted">${esc(sub)}</span>${sec ? `<span class="vid-len">${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}</span>` : ''}</span>
             </button>`).join('')}</div>
         <p class="small muted" style="text-align:center;margin:18px 0 8px">Also on the RWB Instagram highlights.</p>`;
     actions = {
         play: el => {
             const v = VIDEOS.find(x => x[0] === el.dataset.id);
-            openSheet(v[1], `<video class="vid-player" src="videos/${v[0]}.mp4" poster="videos/${v[0]}.jpg" controls autoplay playsinline preload="auto"></video>
+            openSheet(v[1], `<video class="vid-player" src="videos/${v[0]}.mp4" poster="videos/${v[0]}.jpg" controls controlslist="nodownload noremoteplayback noplaybackrate" disablepictureinpicture disableremoteplayback oncontextmenu="return false" autoplay playsinline preload="auto"></video>
                 <p class="small muted" style="margin-top:10px;text-align:center">${esc(v[2])} · turn your sound on</p>`);
         }
     };
