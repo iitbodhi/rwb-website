@@ -77,11 +77,11 @@
   <p class="b-motto"><span>Explore.</span><b>Evolve.</b><span>Inspire.</span></p>
   <span class="bar"><i></i></span>
 </div>
-<script>/* which intro: full on the first open and after 6 hours away, otherwise a quick one. */
+<script>/* which intro: the full one every time the app opens; the quick one only for people who ask their phone for less motion. */
 (function () {
   var b = document.getElementById('boot'), now = Date.now(), last = 0, rm = matchMedia('(prefers-reduced-motion: reduce)').matches;
   try { last = Number(localStorage.getItem('rwb-intro-seen') || 0); } catch (e) {}
-  var full = !rm && now - last > 6 * 36e5;
+  var full = !rm;   /* the full intro on every open (members asked for it); tap skips it */
   b.className = full ? 'i-full' : 'i-quick';   /* not "full"/"quick": .quick is the app's quick-action row */
   if (full) { try { localStorage.setItem('rwb-intro-seen', String(now)); } catch (e) {} }
   window.INTRO_END = performance.now() + (full ? 2300 : 700);
