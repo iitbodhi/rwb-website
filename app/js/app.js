@@ -204,6 +204,7 @@ async function doRender() {
     const route = name + '/' + (param || '');
     app.classList.toggle('same', route === lastRoute); lastRoute = route;
     paintN = navN;
+    pingCopy().catch(() => {});
     try { await view(); } catch (e) { if (e === STALE) return; paintN = -1; app.innerHTML = top('Oops') + `<div class="card empty"><b>Could not load</b>${esc(e.message)}<p style="margin-top:12px"><button class="btn sm" onclick="location.reload()">Try again</button></p></div>`; }
     finally { paintN = -1; }
     const y = navScroll; navScroll = null;
@@ -2391,6 +2392,7 @@ async function viewAdmin() {
             <button class="stat tap" data-act="mfilter" data-f="all"><b>${s.members}</b><span>Members ›</span></button>
             <button class="stat tap" data-act="mfilter" data-f="app"><b>${s.on_app}</b><span>On the app ›</span></button>
             <button class="stat tap ${s.pending ? 'accent' : ''}" data-act="tab" data-tab="requests"><b>${s.pending}</b><span>Waiting ›</span></button></div>
+        <div class="copies" id="copies" hidden></div>
         <div class="sync-row" id="sync-row" hidden><span class="grow small" id="sync-txt"></span><button class="btn sm ghost" data-act="sheet-sync">Sync sheet now</button></div>
         <div class="seg section scroll" role="tablist">
             <button role="tab" aria-selected="${tab === 'requests'}" data-act="tab" data-tab="requests">Approvals${s.pending ? ` (${s.pending})` : ''}</button>
@@ -2404,7 +2406,7 @@ async function viewAdmin() {
     actions = { tab: el => { state.adminTab = el.dataset.tab; viewAdmin(); }, mfilter: el => { state.adminTab = 'members'; state.memberFilter = el.dataset.f; state.adminSearch = ''; viewAdmin(); } };
     load.listings(true).then(ls => { const n = ls.filter(l => l.status === 'pending').length; const c = $('#mm-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
     api.admin.dupes().then(g => { state.dupes = g; const c = $('#dupe-count'); if (c && g.length) c.textContent = ` (${g.length})`; }).catch(() => {});
-    syncStatus();
+    syncStatus(); appCopies();
     actions['sheet-sync'] = el => busy(el, async () => {
         await api.admin.sheetSync(); const t0 = Date.now(); const txt = $('#sync-txt'); if (txt) txt.textContent = 'Syncing with the member sheet… (about a minute)';
         for (let i = 0; i < 36; i++) {   /* up to 3 minutes */
@@ -2417,6 +2419,37 @@ async function viewAdmin() {
     api.admin.reports?.().then(rs => { const n = (rs || []).filter(r => r.status === 'open').length; const c = $('#rep-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
     try { await ({ requests: adminRequests, motomart: adminMotomart, dupes: adminDupes, members: adminMembers, bdays: adminBdays, reports: adminReports, ai: adminAI })[tab](); }
     catch (e) { $('#admin-body').innerHTML = `<div class="card empty"><b>Could not load</b>${esc(e.message)}</div>`; }
+}
+/* which copy of the app this is, noted once a day so admins can see who is on the Play test */
+const PLAY_TEST_URL = 'https://play.google.com/apps/testing/in.roninwb.twa';
+async function pingCopy() {
+    if (!state.me || isFam() || api.demo) return;
+    const copy = !NATIVE ? 'browser' : (await nativeInfo()).channel === 'play' ? 'play' : 'apk';
+    const key = new Date().toISOString().slice(0, 10) + copy;
+    try { if (localStorage.getItem('rwb-seen') === key) return; } catch { /* ignore */ }
+    let build = null; if (NATIVE) try { build = Number((await Native('App').getInfo()).build) || null; } catch { /* ignore */ }
+    try { await api.appSeen(copy, build); localStorage.setItem('rwb-seen', key); } catch { /* try again next time */ }
+}
+const COPY_NAME = { play: 'Play Store test', apk: 'Website APK', browser: 'Browser only', none: 'Not seen lately' };
+const nudgeText = m => `Hi ${(m.nickname || m.full_name || '').split(' ')[0] || 'Warrior'}! 👋\n\nThe RWB App is moving to the Google Play Store and we need riders to help test it. It takes 2 minutes:\n\n1️⃣ Reply with the Gmail address you use for the Play Store on your phone, and we'll add you to the test.\n2️⃣ Once we confirm, uninstall the RWB app you have now.\n3️⃣ Open ${PLAY_TEST_URL} → tap "Become a tester" → "Download it on Google Play" → Install.\n4️⃣ Open RWB and sign in with Google as before. All your data is still there.\n\nThanks for helping RWB go live on the Play Store! 🏍️`;
+/* Admin: how many members use each copy, and who to nudge to the Play test */
+async function appCopies() {
+    const box = $('#copies'); if (!box) return;
+    const rows = await api.admin.appCopies?.().catch(() => null);
+    if (!$('#copies')) return;
+    if (rows === null || rows === undefined) { box.hidden = false; box.innerHTML = '<p class="small muted">App copies: run setup file 60 (app-copies.sql) in Supabase to see who uses the Play Store test.</p>'; return; }
+    const n = k => rows.filter(r => r.copy === k).length;
+    box.hidden = false;
+    box.innerHTML = `<div class="cp-head"><b>App copies</b><span class="small muted">last 30 days</span></div>
+        <div class="cp-grid">${['play', 'apk', 'browser', 'none'].map(k => `<button class="cp ${k}" data-act="copies" data-k="${k}"><b>${n(k)}</b><span>${COPY_NAME[k]}</span></button>`).join('')}</div>
+        ${n('apk') ? `<button class="btn sm block" data-act="copies" data-k="apk" style="margin-top:8px">Nudge ${n('apk')} APK rider${n('apk') === 1 ? '' : 's'} to the Play test</button>` : ''}`;
+    actions.copies = el => copiesSheet(rows, el.dataset.k);
+}
+function copiesSheet(rows, k) {
+    const list = rows.filter(r => r.copy === k);
+    openSheet(COPY_NAME[k] + ` (${list.length})`, `<p class="small muted" style="margin-bottom:10px">${k === 'play' ? 'These riders opened the Play Store copy. They count towards Google\'s 12 testers.' : k === 'apk' ? 'These riders use the APK from roninwb.in. Tap WhatsApp to send a ready message asking them to join the Play test. Add their Gmail to the tester list in Play Console when they reply.' : k === 'browser' ? 'These riders only used the app in a browser lately.' : 'App accounts that haven\'t opened the app in 30 days (or since this count started).'}</p>
+        <div class="cp-list">${list.map(r => `<div class="row cp-row">${face(r, 'avatar sm')}<span class="grow"><b>${esc(r.full_name)}</b><span class="small muted">${r.seen_at ? 'seen ' + timeAgo(r.seen_at) : 'not seen yet'}${r.build ? ' · build ' + (r.build - 100) : ''}${r.copy === 'play' && r.apk_too ? ' · also has the APK' : ''}</span></span>
+            ${r.phone && k !== 'play' ? `<a class="btn sm ghost" href="${waTo(r.phone, nudgeText(r))}" target="_blank" rel="noopener">WhatsApp</a>` : ''}</div>`).join('') || '<p class="muted">No one here.</p>'}</div>`);
 }
 /* Admin: when the member sheet last checked itself against the app (every 12 hours, or "Sync sheet now") */
 async function syncStatus(st) {

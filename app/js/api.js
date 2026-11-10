@@ -154,6 +154,7 @@ async function supabaseApi(url, key) {
         trackSosResolve: async id => must(await sb.rpc('track_sos_resolve', { p_id: id })),
         gpsBoard: async () => must(await sb.rpc('gps_board')),
         pookieBoard: async () => must(await sb.rpc('pookie_board')),   /* setup file 59 */
+        appSeen: async (copy, build) => { await sb.rpc('app_seen_ping', { p_copy: copy, p_build: build || null }); },   /* setup file 60; quietly ignored before it's run */
         findMyEmail: async (phone, vrn) => must(await sb.rpc('find_my_email', { p_phone: phone, p_vrn: vrn })),
         claimMembership: async (phone, vrn, dob) => must(await sb.rpc('claim_membership', { p_phone: phone, p_vrn: vrn, p_dob: dob })),
         updateMyAnswers: async answers => { const r = await sb.rpc('update_my_answers', { p_answers: answers }); if (r.error && /could not find|function/i.test(r.error.message || '')) throw new Error('Please ask an RWB admin to run setup file 32 first.'); return must(r); },
@@ -353,6 +354,7 @@ async function supabaseApi(url, key) {
         },
         chatNotes: async () => must(await sb.rpc('admin_get_chat_notes')),
         sheetSync: async () => must(await sb.rpc('admin_sheet_sync')),
+        async appCopies() { const r = await sb.rpc('admin_app_copies'); if (r.error) { if (/could not find|function/i.test(r.error.message || '')) return null; throw new Error(r.error.message); } return r.data; },
         async sheetSyncStatus() { const r = await sb.rpc('admin_sheet_sync_status'); if (r.error) { if (/could not find|function/i.test(r.error.message || '')) return null; throw new Error(r.error.message); } return r.data; },
         teachQueue: async () => must(await sb.rpc('admin_teach_queue')),
         teachReview: async (id, ok, text) => must(await sb.rpc('admin_teach_review', { p_id: id, p_ok: ok, p_text: text || null })),
@@ -582,6 +584,7 @@ function demoApi() {
             return wait({ riders, sos, staff: ['superadmin', 'admin', 'coordinator'].includes(m.role), now: new Date().toISOString() }); },
         trackSos: (lat, lng, acc) => { db.sos = [{ id: Date.now(), lat, lng, acc, at: new Date().toISOString() }]; save(); return wait(db.sos[0].id); },
         trackSosResolve: id => { (db.sos || []).forEach(s => { if (s.id === id) s.resolved = true; }); save(); return wait('done'); },
+        appSeen: async () => {},
         pookieBoard: () => wait([{ member_id: 2, full_name: 'Arjun Sen', nickname: 'Sultan', xp: 48, approved: 4 }, { member_id: 3, full_name: 'Priya Dutta', xp: 12, approved: 1 }, { member_id: 1, full_name: me().full_name, xp: 2 + 10 * (db.ta || []).filter(a => a.status === 'approved').length, approved: (db.ta || []).filter(a => a.status === 'approved').length, is_me: true }]),
         gpsBoard: () => wait([{ member_id: 2, full_name: 'Arjun Sen', nickname: 'Sultan', km: 412.6, rides: 9 }, { member_id: 3, full_name: 'Priya Dutta', km: 233.1, rides: 5 }, { member_id: 4, full_name: 'Rahul Ghosh', nickname: 'Rocket', km: 188.4, rides: 4 }, { member_id: 1, full_name: me().full_name, km: 96.2, rides: 2, is_me: true }, { member_id: 5, full_name: 'Sourav Paul', km: 41.0, rides: 1 }]),
         joinHelpAdmins: () => wait(db.members.filter(m => ['superadmin', 'admin'].includes(m.role) && (!m.status || m.status === 'active')).map(m => ({ first_name: (m.nickname || m.full_name).split(' ')[0], phone: m.phone }))),
@@ -714,6 +717,7 @@ function demoApi() {
         admin: {
             sheetSync() { db.syncReq = new Date().toISOString(); setTimeout(() => { db.syncLast = { at: new Date().toISOString(), summary: 'Sync done. Empty rows removed: 0. Cells updated from the app: 3 on 2 rows. Added: 1. Moved to Removed members: 0. (demo)' }; save(); }, 3000); save(); return wait('started'); },
             sheetSyncStatus: () => wait({ requested: db.syncReq || null, last: db.syncLast || null }),
+            appCopies: () => wait(db.members.filter(m => m.user_id && m.status !== 'left' && m.status !== 'removed').map((m, i) => ({ member_id: m.id, full_name: m.full_name, nickname: m.nickname, phone: m.phone, avatar_url: m.avatar_url, copy: ['play', 'apk', 'browser', 'apk', 'none'][i % 5], build: [124, 123, null, 116, null][i % 5], seen_at: new Date(Date.now() - i * 864e5).toISOString(), apk_too: i % 5 === 0 }))),
             teachQueue: () => wait((db.ta || []).filter(a => a.status === 'pending').map(a => ({ ...a, question: (db.tq || []).find(q => q.id === a.question_id)?.question, category: (db.tq || []).find(q => q.id === a.question_id)?.category }))),
             teachReview(id, ok, text) { const a = db.ta.find(x => x.id === id); a.status = ok ? 'approved' : 'rejected'; if (ok) { (db.know ??= []).push({ id: nid(), source: 'answer', title: (db.tq || []).find(q => q.id === a.question_id)?.question, content: (text || a.answer) + ' (RWB rider ' + a.member_name.split(' ')[0] + ')', updated_at: new Date().toISOString() }); } save(); return wait(ok ? 'approved' : 'rejected'); },
             pookieKnowledge: () => wait(db.know || []),
