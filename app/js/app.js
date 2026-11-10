@@ -129,7 +129,8 @@ const load = {
     bdays: async () => (state.bdays ??= isMod() ? await api.birthdays(isAdmin() ? 7 : 0).catch(() => []) : []),   /* birthdays: admins and coordinators only */
     listings: async (force) => (state.listings = !force && state.listings || await api.listings()),
     news: async (force) => (state.news = !force && state.news || (await api.news().catch(() => [])).filter(n => !isFam() || n.kind === 'announcement')),   /* RWB FAM: admin announcements only */
-    docs: async (force) => (state.docs = !force && state.docs || await api.docs().catch(() => []))
+    docs: async (force) => (state.docs = !force && state.docs || await api.docs().catch(() => [])),
+    ride: async (force) => (state.ride = !force && state.ride || { parts: await api.rideParts().catch(() => null), name: await api.rideName().catch(() => '') })
 };
 
 /* ---------- mileage maths ----------
@@ -157,7 +158,7 @@ function mileageStats(logs) {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { videos: viewVideos, docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, teach: viewTeach, crew: viewCrew, events: viewEvents, terms: viewTerms, track: viewTrack };
+const ROUTES = { videos: viewVideos, docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, teach: viewTeach, ride: viewRide, crew: viewCrew, events: viewEvents, terms: viewTerms, track: viewTrack };
 /* roninwb.in/app/#terms: Me screen with the Terms & Conditions open, ready to agree */
 function viewTerms() {
     history.replaceState(null, '', '#me'); document.body.dataset.route = 'me';
@@ -711,6 +712,177 @@ function cluster(services, fuel) {
     </section>`;
 }
 
+/* =================== My Ride: parts and accessories tracker ===================
+   Wear parts: life from the TVS Ronin owner's manual where it gives one (oil and oil filter 6,000 km / 6 months, air filter
+   and spark plug 12,000 km, brake fluid 21,000 km / 2 years, chain lube about every 500 km, fork oil 36,000 km), otherwise
+   typical figures for this class of bike. Every figure can be changed per part. */
+const PI = {   /* part icons */
+    tyre: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/><path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3"/>',
+    drop: '<path d="M12 3.5s6 6.4 6 10.5a6 6 0 0 1-12 0c0-4.1 6-10.5 6-10.5z"/><path d="M9.5 14.5a2.5 2.5 0 0 0 2.5 2.5"/>',
+    chain: '<rect x="2.5" y="9" width="9" height="6" rx="3"/><rect x="12.5" y="9" width="9" height="6" rx="3"/><path d="M9 12h6"/>',
+    disc: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2"/><path d="M12 5.5v.1M18.5 12h-.1M12 18.5v-.1M5.5 12h.1M16.6 7.4l-.1.1M7.4 16.6l.1-.1"/>',
+    air: '<path d="M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h7"/>',
+    plug: '<path d="M10 2.5h4v4h-4zM9 6.5h6l-1 5h-4zM12 11.5v4M10.5 15.5h3l-1.5 6z"/>',
+    batt: '<rect x="3" y="7" width="18" height="12" rx="2"/><path d="M7 7V5h3v2M14 7V5h3v2M7.5 13h3M15 11.5v3M13.5 13h3"/>',
+    cable: '<path d="M4 20c4-1 4-7 8-8s4-7 8-8"/><circle cx="4" cy="20" r="1.5"/><circle cx="20" cy="4" r="1.5"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.2 6.5l2.6 1.5M17.2 16l2.6 1.5M4.2 17.5l2.6-1.5M17.2 8l2.6-1.5"/><circle cx="12" cy="12" r="6.5"/>',
+    fork: '<path d="M8 3v11a4 4 0 0 0 8 0V3M8 8h8"/><path d="M12 18v3"/>',
+    wrench: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8V21h3.2l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>',
+    shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
+    star: '<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z"/>'
+};
+const pIco = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${PI[k] || PI.star}</svg>`;
+const OIL_BRANDS = ['TVS TRU4', 'Motul', 'Castrol', 'Liqui Moly', 'Shell Advance', 'Mobil 1', 'Gulf'], TYRE_BRANDS = ['TVS Eurogrip', 'MRF', 'CEAT', 'Michelin', 'Pirelli', 'Metzeler', 'Apollo'],
+      PAD_BRANDS = ['TVS genuine', 'Brembo', 'EBC', 'Vesrah', 'Rolon'], CHAIN_BRANDS = ['TVS genuine', 'Rolon', 'DID', 'RK', 'EK'];
+const WEAR = [   /* key, name, icon, typical km, typical days, where the figure comes from, spec hint, brands, service-log words */
+    ['engine_oil', 'Engine oil', 'drop', 6000, 180, 'TVS manual: every service', '10W-30', OIL_BRANDS, /engine oil|oil change/i],
+    ['oil_filter', 'Oil filter', 'drop', 6000, 180, 'TVS manual: every service', 'Paper element', ['TVS genuine'], /oil filter/i],
+    ['chain_lube', 'Chain lube', 'chain', 500, null, 'TVS manual: about every 500 km', 'Spray', ['Motul C2', 'Liqui Moly', 'Castrol', 'Muc-Off', 'WD-40 Bike'], /chain (clean|lube|lubric)/i],
+    ['rear_tyre', 'Rear tyre', 'tyre', 18000, null, 'Typical; depends on riding and load', '130/70-17', TYRE_BRANDS, /rear tyre|rear tire|tyre change|new tyre/i],
+    ['front_tyre', 'Front tyre', 'tyre', 25000, null, 'Typical; depends on riding', '110/70-17', TYRE_BRANDS, /front tyre|front tire/i],
+    ['front_pads', 'Front brake pads', 'disc', 15000, null, 'Typical; check pad thickness at service', 'Sintered / organic', PAD_BRANDS, /front (brake )?pad|brake pad/i],
+    ['rear_pads', 'Rear brake pads', 'disc', 20000, null, 'Typical; check pad thickness at service', 'Sintered / organic', PAD_BRANDS, /rear (brake )?pad/i],
+    ['chain_kit', 'Chain & sprockets', 'chain', 20000, null, 'Typical with regular lube', 'O-ring 520', CHAIN_BRANDS, /chain (kit|set|sprocket)|sprocket/i],
+    ['air_filter', 'Air filter', 'air', 12000, 365, 'TVS manual: 12,000 km; sooner if dusty', 'Paper element', ['TVS genuine', 'K&N', 'BMC'], /air filter/i],
+    ['spark_plug', 'Spark plug', 'plug', 12000, 365, 'TVS manual: 12,000 km or 1 year', '', ['TVS genuine', 'NGK', 'Bosch'], /spark plug/i],
+    ['brake_fluid', 'Brake fluid', 'drop', 21000, 730, 'TVS manual: 21,000 km or 2 years', 'DOT 4', ['TVS genuine', 'Motul', 'Castrol'], /brake fluid|brake oil/i],
+    ['battery', 'Battery', 'batt', null, 1095, 'Typical: about 3 years', '12 V 6 Ah', ['TVS genuine', 'Exide', 'Amaron'], /battery/i],
+    ['clutch_cable', 'Clutch cable', 'cable', 20000, null, 'Typical; replace if frayed or stiff', '', ['TVS genuine'], /clutch cable/i],
+    ['throttle_cable', 'Accelerator cable', 'cable', 25000, null, 'Typical; replace if frayed or sticky', '', ['TVS genuine'], /(accelerator|throttle) cable/i],
+    ['clutch_plates', 'Clutch plates', 'gear', 30000, null, 'Typical; replace if the clutch slips', '', ['TVS genuine'], /clutch plate/i],
+    ['fork_oil', 'Front fork oil', 'fork', 36000, null, 'TVS manual: 36,000 km, if needed', '', ['TVS genuine', 'Motul'], /fork oil/i]
+].map(([key, name, ico, km, days, src, spec, brands, re]) => ({ key, name, ico, km, days, src, spec, brands, re }));
+const ACCS = [['nav', 'Navigation screen / phone mount'], ['crash_guard', 'Crash guard'], ['bash_plate', 'Bash plate'], ['saddle_stay', 'Saddle stay'], ['top_rack', 'Top rack'],
+    ['top_box', 'Top box'], ['saddle_bags', 'Saddle bags'], ['tank_bag', 'Tank bag'], ['knuckle_guards', 'Knuckle guards'], ['handlebar', 'Handlebar'], ['exhaust', 'Exhaust'],
+    ['aux_lights', 'Aux / fog lights'], ['windscreen', 'Windscreen / visor'], ['seat', 'Seat / seat cover'], ['tank_pad', 'Tank pad'], ['usb_charger', 'USB charger'],
+    ['mirrors', 'Mirrors'], ['grips', 'Handlebar grips'], ['levers', 'Brake & clutch levers'], ['frame_sliders', 'Frame sliders'], ['tail_tidy', 'Tail tidy'], ['horn', 'Horn'], ['dashcam', 'Dash cam']]
+    .map(([key, name]) => ({ key, name }));
+const wearOf = k => WEAR.find(w => w.key === k), accName = p => p.name || ACCS.find(a => a.key === p.part)?.name || 'Accessory';
+const partName = p => p.kind === 'acc' ? accName(p) : (wearOf(p.part)?.name || p.name || 'Part');
+/* how much of its life a part has used: the larger of distance and time */
+function partWear(p, odo) {
+    const usedKm = p.installed_km != null && odo ? Math.max(0, odo - p.installed_km) : null;
+    const usedDays = p.installed_on ? Math.max(0, Math.round((Date.parse(todayISO()) - Date.parse(p.installed_on)) / 864e5)) : null;
+    const pk = p.life_km && usedKm != null ? usedKm / p.life_km : null, pd = p.life_days && usedDays != null ? usedDays / p.life_days : null;
+    const pc = Math.max(pk ?? 0, pd ?? 0), known = pk != null || pd != null;
+    const lvl = !known ? '' : pc >= 1 ? 'bad' : pc >= .8 ? 'warn' : 'ok';
+    const txt = pk != null ? `${km(usedKm).replace(' km', '')} / ${km(p.life_km)}` : pd != null ? `${Math.round(usedDays / 30)} of ${Math.round(p.life_days / 30)} months` : '';
+    const left = pk != null ? p.life_km - usedKm : null;
+    return { pc, known, lvl, txt, usedKm, usedDays, left };
+}
+/* the newest service record that mentions this part (to suggest it when it isn't tracked yet) */
+const fromLog = (w, services) => services.filter(s => (s.items || []).some(i => w.re.test(i)) || w.re.test(s.notes || '')).sort((a, b) => b.odometer_km - a.odometer_km)[0];
+const curParts = parts => (parts || []).filter(p => !p.retired_on);
+const rideTitle = r => (r?.name || '').trim() || 'My Ride';
+
+function rideWidget(services, fuel, ride) {
+    const last = latestOdo(services, fuel), odo = last?.km || 0, ms = mileageStats(fuel);
+    const n = nextService(services, odo), state_ = odo ? n.status : '';
+    const lastFill = [...fuel].sort((a, b) => b.fill_date.localeCompare(a.fill_date) || b.odometer_km - a.odometer_km)[0];
+    const lastSvc = services[0];
+    const parts = curParts(ride?.parts).filter(p => p.kind === 'wear').map(p => ({ p, w: partWear(p, odo) })).filter(x => x.w.known).sort((a, b) => b.w.pc - a.w.pc).slice(0, 5);
+    const alert = state_ ? `<div class="svc-alert ${state_}"><span class="svc-dot"></span><span class="grow"><b>${state_ === 'due' ? 'Service due' : 'Service due soon'}</b><span>${n.label} · at ${km(n.km)}${n.date ? ` or by ${fmtDayMonth(n.date)}` : ''}</span></span><button class="btn sm" data-act="add-service">Log it</button></div>` : '';
+    return `<section class="cluster ride-w ${state_}">
+        <div class="rw-top"><div class="grow"><b class="rw-name">${esc(rideTitle(ride))}</b><span class="rw-bike">${esc(state.me.bike || 'My bike')}${state.me.vrn ? ` · ${esc(state.me.vrn)}` : ''}</span></div>
+            <a class="rw-btn" href="#ride">My Ride ${ICON.chev}</a></div>
+        <button class="rw-odo" data-act="odo" aria-label="Odometer ${odo ? odo.toLocaleString('en-IN') + ' km' : 'not recorded yet'}. Tap to update">
+            <b class="num" data-count="${odo}">${odo ? odo.toLocaleString('en-IN') : '–'}</b><span>km</span><i>${last ? `${last.manual ? 'updated' : 'from ' + last.src} ${fmtDayMonth(last.d)} · ` : ''}tap to update</i></button>
+        ${alert || (odo ? `<p class="rw-due">${dueText(n)}</p>` : '<p class="rw-due">Tap the km above and enter the odometer reading on your bike</p>')}
+        <div class="rw-stats">
+            <div><b>${ms.avg ? ms.avg.toFixed(1) : '–'}</b><span>km/l avg</span></div>
+            <div><b>${lastFill ? fmtDayMonth(lastFill.fill_date) : '–'}</b><span>${lastFill ? `last fill · ${Number(lastFill.litres).toFixed(1)} L` : 'last fill'}</span></div>
+            <div><b>${lastSvc ? fmtDayMonth(lastSvc.service_date) : '–'}</b><span>${lastSvc && odo ? `last service · ${km(Math.max(0, odo - lastSvc.odometer_km))} ago` : 'last service'}</span></div>
+        </div>
+        ${ride?.parts === null ? '' : parts.length ? `<ul class="rw-parts">${parts.map(({ p, w }, i) => `<li class="${w.lvl}" style="--i:${i}"><a href="#ride">
+            <span class="rw-ico">${pIco(wearOf(p.part)?.ico)}</span><span class="grow"><span class="rw-pn"><b>${esc(partName(p))}</b><em>${esc(p.brand || '')}</em><span class="rw-km">${w.lvl === 'bad' ? '<b>Replace</b>' : esc(w.txt)}</span></span>
+            <span class="rw-bar"><i style="--w:${Math.min(100, Math.round(w.pc * 100))}%"></i></span></span></a></li>`).join('')}</ul>`
+          : `<a class="rw-empty" href="#ride">${pIco('tyre')}<span class="grow"><b>Track your tyres, oil, chain and brake pads</b><span>See how much life each part has left</span></span>${ICON.chev}</a>`}
+    </section>`;
+}
+
+/* --- My Ride screen --- */
+async function viewRide() {
+    const [services, fuel, ride] = await Promise.all([load.services(), load.fuel(), load.ride(true)]);
+    if (ride.parts === null) { app.innerHTML = top('My Ride') + `<div class="card empty"><b>My Ride isn't set up yet</b>An admin needs to run setup file 57 (my-ride.sql) in Supabase.</div>`; return; }
+    const odo = latestOdo(services, fuel)?.km || 0, cur = curParts(ride.parts);
+    const wear = WEAR.map(w => ({ w, p: cur.find(p => p.kind === 'wear' && p.part === w.key) }));
+    const tracked = wear.filter(x => x.p).map(x => ({ ...x, s: partWear(x.p, odo) }));
+    const health = tracked.filter(x => x.s.known).length ? Math.round(100 * tracked.filter(x => x.s.known && x.s.lvl !== 'bad').length / tracked.filter(x => x.s.known).length) : null;
+    const accs = cur.filter(p => p.kind === 'acc');
+    const spent = (ride.parts || []).reduce((a, p) => a + Number(p.cost || 0), 0);
+    const due = tracked.filter(x => x.s.lvl === 'bad' || x.s.lvl === 'warn').length;
+    const C = 2 * Math.PI * 34;
+    app.innerHTML = top('My Ride') + `
+        <section class="cluster ride-hero">
+            <div class="rw-top"><div class="grow"><b class="rw-name">${esc(rideTitle(ride))}</b><span class="rw-bike">${esc(state.me.bike || 'My bike')}${state.me.vrn ? ` · ${esc(state.me.vrn)}` : ''}</span></div>
+                <button class="rw-btn" data-act="ride-name">Rename</button></div>
+            <div class="rh-row">
+                <div class="rh-ring" aria-label="${health == null ? 'Add parts to see ride health' : `Ride health ${health}%`}"><svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="34" class="t"/><circle cx="40" cy="40" r="34" class="f ${health == null ? '' : health >= 80 ? 'ok' : health >= 50 ? 'warn' : 'bad'}" style="--c:${C.toFixed(1)};--o:${(C * (1 - (health ?? 0) / 100)).toFixed(1)}"/></svg><b>${health == null ? '–' : health + '%'}</b><span>health</span></div>
+                <div class="rh-facts"><div><b class="num">${odo ? odo.toLocaleString('en-IN') : '–'}</b><span>km on the odometer</span></div>
+                    <div><b>${tracked.length}</b><span>part${tracked.length === 1 ? '' : 's'} tracked${due ? ` · <em>${due} need${due === 1 ? 's' : ''} attention</em>` : ''}</span></div>
+                    <div><b>${rs(spent)}</b><span>spent on parts and mods</span></div></div>
+            </div>
+        </section>
+        <section class="section"><h2>Wear parts</h2><p class="small muted" style="margin:-4px 0 10px">Life figures come from the TVS Ronin manual where it gives one, otherwise typical figures. Tap a part to set its brand, km and life.</p>
+            <div class="group ride-list">${wear.map(({ w, p }) => {
+                if (p) { const st = partWear(p, odo); return `<button class="rl-row ${st.lvl}" data-part="${w.key}"><span class="rw-ico">${pIco(w.ico)}</span><span class="grow"><span class="rw-pn"><b>${w.name}</b><em>${esc([p.brand, p.spec].filter(Boolean).join(' · ') || 'Brand not set')}</em></span>
+                    ${st.known ? `<span class="rw-bar"><i style="--w:${Math.min(100, Math.round(st.pc * 100))}%"></i></span><span class="rl-sub">${st.lvl === 'bad' ? '<b>Past its life: replace soon</b> · ' : st.lvl === 'warn' ? '<b>Nearly due</b> · ' : ''}${esc(st.txt)}${st.left != null && st.left > 0 ? ` · ${km(st.left)} left` : ''}</span>` : '<span class="rl-sub">Add the km or date it was fitted to track it</span>'}</span>${ICON.chev}</button>`; }
+                const hint = fromLog(w, services);
+                return `<button class="rl-row add" data-part="${w.key}"><span class="rw-ico">${pIco(w.ico)}</span><span class="grow"><span class="rw-pn"><b>${w.name}</b></span><span class="rl-sub">${hint ? `In your service log at ${km(hint.odometer_km)} · tap to track` : 'Not tracked · tap to add'}</span></span><span class="rl-plus">+</span></button>`; }).join('')}</div></section>
+        <section class="section"><h2>Accessories & mods</h2>
+            <div class="group ride-list">${accs.map(p => `<button class="rl-row" data-acc="${p.id}"><span class="rw-ico">${pIco('star')}</span><span class="grow"><span class="rw-pn"><b>${esc(accName(p))}</b><em>${esc([p.brand, p.spec].filter(Boolean).join(' · '))}</em></span>
+                <span class="rl-sub">${[p.installed_on ? 'Fitted ' + fmtDate(p.installed_on) : '', p.cost ? rs(p.cost) : ''].filter(Boolean).join(' · ') || 'Tap to add details'}</span></span>${ICON.chev}</button>`).join('')}
+                <button class="rl-row add" data-act="acc-add"><span class="rw-ico">${pIco('wrench')}</span><span class="grow"><b>Add an accessory or mod</b><span class="rl-sub">Crash guard, top rack, exhaust, aux lights…</span></span><span class="rl-plus">+</span></button></div></section>`;
+    actions = {};
+    actions['ride-name'] = () => openSheet('Name your ride', `<form id="rnf"><label>Ride name<input name="n" maxlength="40" value="${esc(ride.name || '')}" placeholder="e.g. Black Pearl"></label><p class="small muted">Shows on your Home screen. Only you see it.</p><button class="btn block">Save</button></form>`, b => {
+        b.querySelector('#rnf').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { await api.saveRideName(e.target.n.value.trim()); state.ride = null; closeSheet(); toast('Saved'); render(); }); }; });
+    actions['acc-add'] = () => openSheet('Add an accessory', `<div class="acc-pick">${ACCS.map(a => `<button class="chip" data-k="${a.key}">${esc(a.name)}</button>`).join('')}<button class="chip" data-k="custom">Something else…</button></div>`, b =>
+        b.querySelectorAll('[data-k]').forEach(c => c.onclick = () => partSheet({ kind: 'acc', part: c.dataset.k, name: c.dataset.k === 'custom' ? '' : null }, odo, ride)));
+    app.querySelectorAll('[data-part]').forEach(b => b.onclick = () => { const w = wearOf(b.dataset.part), p = cur.find(x => x.kind === 'wear' && x.part === w.key);
+        const hint = !p && fromLog(w, services);
+        partSheet(p || { kind: 'wear', part: w.key, life_km: w.km, life_days: w.days, installed_km: hint ? hint.odometer_km : odo || null, installed_on: hint ? hint.service_date : todayISO(), cost: null }, odo, ride, !p && hint); });
+    app.querySelectorAll('[data-acc]').forEach(b => b.onclick = () => partSheet(cur.find(x => x.id === Number(b.dataset.acc)), odo, ride));
+}
+/* add / edit one part; "Replaced it" keeps the old one as history and starts a fresh one */
+function partSheet(p, odo, ride, fromHint = null) {
+    const w = p.kind === 'wear' ? wearOf(p.part) : null, isNew = !p.id;
+    const hist = (ride.parts || []).filter(x => x.retired_on && x.part === p.part && x.kind === p.kind).sort((a, b) => (b.retired_on || '').localeCompare(a.retired_on || ''));
+    const title = w ? w.name : p.part === 'custom' ? (p.name || 'Accessory') : accName(p);
+    openSheet(title, `<form id="ptf">
+        ${fromHint ? `<p class="small banner-lite">Filled in from your service log (${fmtDate(fromHint.service_date)}, ${km(fromHint.odometer_km)}). Check and save.</p>` : ''}
+        ${p.kind === 'acc' && p.part === 'custom' ? `<label>What is it?<input name="name" maxlength="60" required value="${esc(p.name || '')}" placeholder="e.g. Fog lamp switch"></label>` : ''}
+        <div class="row2"><label>Brand<input name="brand" maxlength="60" list="pt-brands" value="${esc(p.brand || '')}" placeholder="${w ? esc(w.brands[0]) : 'e.g. Zana'}"></label>
+            <label>${w ? 'Grade / size / type' : 'Model'}<input name="spec" maxlength="60" value="${esc(p.spec || '')}" placeholder="${w ? esc(w.spec || '') : 'Model or variant'}"></label></div>
+        <datalist id="pt-brands">${(w?.brands || ['Zana', 'Rynox', 'ViaTerra', 'Moto Torque', 'Autofy', 'Bobo', 'GRS', 'Hella']).map(b => `<option value="${esc(b)}">`).join('')}</datalist>
+        <div class="row2"><label>Fitted on<input type="date" name="installed_on" value="${esc(p.installed_on || '')}" max="${todayISO()}"></label>
+            <label>At odometer (km)<input type="number" inputmode="numeric" name="installed_km" min="0" value="${p.installed_km ?? ''}" placeholder="${odo || ''}"></label></div>
+        <label>Cost (₹)<input type="number" inputmode="decimal" name="cost" min="0" value="${p.cost ?? ''}" placeholder="optional"></label>
+        ${w ? `<div class="row2"><label>Expected life (km)<input type="number" inputmode="numeric" name="life_km" min="0" value="${p.life_km ?? ''}" placeholder="${w.km ?? ''}"></label>
+            <label>or months<input type="number" inputmode="numeric" name="life_m" min="0" value="${p.life_days ? Math.round(p.life_days / 30) : ''}" placeholder="${w.days ? Math.round(w.days / 30) : ''}"></label></div>
+            <p class="small muted" style="margin-top:-6px">${esc(w.src)}${w.km ? ` (${km(w.km)}${w.days ? ` or ${Math.round(w.days / 30)} months` : ''})` : w.days ? ` (${Math.round(w.days / 30)} months)` : ''}. Whichever comes first counts.</p>` : ''}
+        <label>Notes<textarea name="notes" maxlength="1000" rows="2" placeholder="Where you bought it, warranty, anything useful">${esc(p.notes || '')}</textarea></label>
+        <button class="btn block">${isNew ? 'Save' : 'Save changes'}</button>
+        ${!isNew && w ? '<button type="button" class="btn ghost block" data-x="replaced" style="margin-top:8px">I replaced it: start a new one</button>' : ''}
+        ${!isNew ? `<button type="button" class="btn ghost block danger" data-x="del" style="margin-top:8px">Remove</button>` : ''}
+        ${hist.length ? `<details class="pt-hist"><summary class="small">Earlier ${w ? w.name.toLowerCase() : 'ones'} (${hist.length})</summary>${hist.map(h => `<p class="small"><b>${esc([h.brand, h.spec].filter(Boolean).join(' · ') || title)}</b> · ${h.installed_km != null && h.retired_km != null ? km(h.retired_km - h.installed_km) + ' ridden' : ''}${h.retired_on ? ` · replaced ${fmtDate(h.retired_on)}` : ''}${h.cost ? ` · ${rs(h.cost)}` : ''}</p>`).join('')}</details>` : ''}
+    </form>`, b => {
+        const f = b.querySelector('#ptf');
+        const read = () => { const d = Object.fromEntries(new FormData(f)); const num = v => v === '' || v == null ? null : Number(v);
+            return { ...(p.id ? { id: p.id } : {}), kind: p.kind, part: p.part, name: p.part === 'custom' ? (d.name || '').trim() || null : null, brand: (d.brand || '').trim() || null, spec: (d.spec || '').trim() || null,
+                installed_on: d.installed_on || null, installed_km: num(d.installed_km), cost: num(d.cost), notes: (d.notes || '').trim() || null,
+                ...(() => { if (!w) return { life_km: null, life_days: null }; const lk = num(d.life_km), lm = num(d.life_m);
+                    return lk == null && lm == null ? { life_km: w.km, life_days: w.days } : { life_km: lk, life_days: lm != null ? lm * 30 : null }; })() }; };
+        const done = msg => { state.ride = null; closeSheet(); toast(msg); render(); };
+        f.onsubmit = e => { e.preventDefault(); const r = read(); if (r.installed_km != null && odo && r.installed_km > odo + 50) return toast(`That's more than your odometer (${km(odo)}). Update the odometer on Home first.`, true);
+            busy(e.submitter, async () => { await api.saveRidePart(r); done('Saved'); }); };
+        f.querySelector('[data-x=replaced]')?.addEventListener('click', e => busy(e.target, async () => {
+            await api.saveRidePart({ id: p.id, retired_on: todayISO(), retired_km: odo || null });
+            await api.saveRidePart({ kind: p.kind, part: p.part, brand: p.brand, spec: p.spec, installed_on: todayISO(), installed_km: odo || null, life_km: p.life_km, life_days: p.life_days });
+            state.ride = null; closeSheet(); toast(`New ${title.toLowerCase()} started at ${km(odo)}. Edit it to add the brand and cost.`); render(); }));
+        f.querySelector('[data-x=del]')?.addEventListener('click', e => { if (confirmBox(`Remove ${title}?`)) busy(e.target, async () => { await api.deleteRidePart(p.id); done('Removed'); }); });
+    });
+}
+
 /* posts without a page of their own (announcements, blood requests…) open in a window with the full message */
 const NEWS_MAP = new Map();
 /* Alerts hidden on this phone (swipe left, or Clear). Important ones ask first. */
@@ -830,7 +1002,7 @@ function profileTodo(m) {
     return `<a class="banner todo" href="#me"><span class="b-ico">${rules ? ICON.terms : ICON.profile}</span><span class="grow"><b>${rules ? 'Please agree to the RWB Terms & Conditions' : 'Complete your profile'}</b><span class="small muted">${rules && rest.length ? 'And add your ' + rest.join(', ') : rules ? 'Me → Terms & Conditions → Read & agree' : 'Add your ' + rest.join(', ')}</span></span>${ICON.chev}</a>`;
 }
 async function viewHome() {
-    const [services, fuel, bdays, news, listings, docs, evd] = await Promise.all([load.services(), load.fuel(), load.bdays(), load.news(), load.listings().catch(() => []), load.docs(), loadEvents().catch(() => null)]);
+    const [services, fuel, bdays, news, listings, docs, evd, ride] = await Promise.all([load.services(), load.fuel(), load.bdays(), load.news(), load.listings().catch(() => []), load.docs(), loadEvents().catch(() => null), load.ride().catch(() => ({ parts: null, name: '' }))]);
     const nextEvt = evd ? evd.events.filter(e => e.status === 'live' && !evtPast(e) && new Date(e.starts_at) - Date.now() < 14 * 864e5)[0] : null;
     const docWarn = docs.map(d => ({ d, st: docStatus(d) })).filter(x => x.st.level === 'bad' || x.st.level === 'warn').sort((a, b) => a.st.days - b.st.days)[0];
     syncKmpl(fuel);
@@ -842,7 +1014,7 @@ async function viewHome() {
     /* "Clear" hides birthdays, Motomart and member updates on this phone; admin announcements stay until an admin deletes them */
     const feed = visibleNews(news);
     app.innerHTML = top(`Hi, ${firstName(state.me)}`) + `
-        ${cluster(services, fuel)}
+        ${rideWidget(services, fuel, ride)}
         <nav class="quick" aria-label="Quick actions">
             <button data-act="add-fuel"><span>${ICON.fuel}</span>Add fuel</button>
             <button data-act="add-service"><span>${ICON.wrench}</span>Log service</button>
@@ -2729,7 +2901,7 @@ function setTheme(t) {
     try { localStorage.setItem('rwb-theme', t); } catch { /* ignore */ }
     document.documentElement.dataset.theme = t;
     const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-    const m = document.getElementById('theme-color'); if (m) m.content = dark ? '#121110' : '#f7f7f5';
+    const m = document.getElementById('theme-color'); if (m) m.content = dark ? '#121110' : '#e9e6e1';
 }
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => getTheme() === 'system' && setTheme('system'));
 

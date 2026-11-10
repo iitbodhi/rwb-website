@@ -233,6 +233,12 @@ async function supabaseApi(url, key) {
         },
         docUrl: async path => must(await sb.storage.from('docs').createSignedUrl(path, 900)).signedUrl,
 
+        /* My Ride (setup file 57): parts and accessories; null when that file isn't run yet */
+        async rideParts() { const r = await sb.from('ride_parts').select('*').order('installed_km', { ascending: false, nullsFirst: false }); if (r.error) { if (/relation|does not exist|schema cache/i.test(r.error.message || '')) return null; throw new Error(r.error.message); } return r.data; },
+        async saveRidePart(rec) { const { id, ...v } = rec; v.updated_at = new Date().toISOString(); return must(id ? await sb.from('ride_parts').update(v).eq('id', id).select().single() : await sb.from('ride_parts').insert(v).select().single()); },
+        deleteRidePart: async id => must(await sb.from('ride_parts').delete().eq('id', id)),
+        async rideName() { const r = await sb.from('ride_profile').select('name').maybeSingle(); return r.error ? null : r.data?.name || ''; },
+        saveRideName: async name => must(await sb.from('ride_profile').upsert({ name, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })),
         fuel: async () => must(await sb.from('fuel_logs').select('*').order('odometer_km', { ascending: true }).order('fill_date', { ascending: true })),
         async saveFuel(rec) {
             const { id, user_id, created_at, ...row } = rec;
@@ -521,6 +527,16 @@ function demoApi() {
         async saveBike(slot, vrn, model, mid = null) { if (!mid) return this.requestChange('bike', vrn, slot, model); const m = db.members.find(x => x.id === mid); m.member_bikes = (m.member_bikes || []).filter(b => b.slot !== slot); if (vrn) m.member_bikes.push({ slot, vrn: vrn.toUpperCase(), model: model || null, verified: false }); save(); return vrn ? 'saved' : 'removed'; },
         directory: () => demoDir().then(list => list.map(demoHide)),
         setSharing: p => { const out = Object.fromEntries(['vrn', 'bike', 'locality', 'mileage'].map(k => [k, !!p[k]])); me().share = out; save(); return wait(out); },
+        rideParts: () => wait(db.ride ??= [
+            { id: 901, kind: 'wear', part: 'engine_oil', brand: 'Motul 7100', spec: '10W-30', installed_on: daysAgo(95), installed_km: 4120, cost: 1150, life_km: 6000, life_days: 180 },
+            { id: 902, kind: 'wear', part: 'rear_tyre', brand: 'TVS Eurogrip', spec: '130/70-17', installed_on: daysAgo(210), installed_km: 0, cost: null, life_km: 18000 },
+            { id: 903, kind: 'wear', part: 'chain_lube', brand: 'Motul C2', spec: '', installed_on: daysAgo(12), installed_km: 6850, cost: 350, life_km: 500 },
+            { id: 904, kind: 'wear', part: 'front_pads', brand: 'TVS genuine', spec: '', installed_on: daysAgo(210), installed_km: 0, life_km: 15000 },
+            { id: 905, kind: 'acc', part: 'crash_guard', brand: 'Zana', spec: 'Engine guard', installed_on: daysAgo(150), cost: 2800 }]),
+        async saveRidePart(rec) { db.ride ??= []; if (rec.id) Object.assign(db.ride.find(x => x.id === rec.id), rec); else db.ride.push(rec = { ...rec, id: nid() }); save(); return wait(rec); },
+        async deleteRidePart(id) { db.ride = (db.ride || []).filter(x => x.id !== id); save(); },
+        rideName: () => wait(db.rideName || ''),
+        async saveRideName(n) { db.rideName = n; save(); },
         vrnInfo: v => { const m = db.members.find(m => (!m.status || m.status === 'active') && (nk(m.vrn) === nk(v) || (m.member_bikes || []).some(b => nk(b.vrn) === nk(v))));
             if (!m) return wait({ member: false }); const full = !!m.share?.vrn, w = String(m.full_name).trim().split(/\s+/);
             return wait({ member: true, full, name: full ? m.full_name : w.map((x, i) => i ? x[0] + '***' : x.slice(0, 3) + '*'.repeat(Math.max(x.length - 3, 2))).join(' '), area: String(m.locality || '').split(',')[0].trim() || null }); },
