@@ -848,7 +848,7 @@ async function viewRide() {
             <div class="rw-top"><div class="grow"><b class="rw-name">${esc(rideTitle(ride))}</b><span class="rw-bike">${esc(state.me.bike || 'My bike')}${state.me.vrn ? ` · ${esc(state.me.vrn)}` : ''}</span></div>
                 <button class="rw-btn" data-act="ride-name">Rename</button></div>
             <div class="rh-row">
-                <div class="rh-ring" aria-label="${health == null ? 'Add parts to see ride health' : `Ride health ${health}%`}"><svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="34" class="t"/><circle cx="40" cy="40" r="34" class="f ${health == null ? '' : health >= 80 ? 'ok' : health >= 50 ? 'warn' : 'bad'}" style="--c:${C.toFixed(1)};--o:${(C * (1 - (health ?? 0) / 100)).toFixed(1)}"/></svg><b>${health == null ? '–' : health + '%'}</b><span>health</span></div>
+                <div class="rh-ring" aria-label="${health == null ? 'Add parts to see ride health' : `Ride health ${health}%`}"><svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="34" class="t"/><circle cx="40" cy="40" r="34" class="f ${health == null ? '' : health >= 80 ? 'ok' : health >= 50 ? 'warn' : 'bad'}" style="--c:${C.toFixed(1)};--o:${(C * (1 - (health ?? 0) / 100)).toFixed(1)}"/></svg><b>${health == null ? '–' : `${health}<small>%</small>`}</b><span>health</span></div>
                 <div class="rh-facts"><div><b class="num">${odo ? odo.toLocaleString('en-IN') : '–'}</b><span>km on the odometer</span></div>
                     <div><b>${tracked.length}</b><span>part${tracked.length === 1 ? '' : 's'} tracked${due ? ` · <em>${due} need${due === 1 ? 's' : ''} attention</em>` : ''}</span></div>
                     <div><b>${rs(spent)}</b><span>spent on parts and mods</span></div></div>
