@@ -58,8 +58,10 @@ async function supabaseApi(url, key) {
                         if (error) throw error;
                         return;
                     } catch (e) {
-                        if (e?.code === 'CANCELLED') return;   /* closed the sheet: stay on the sign-in screen */
-                        console.warn('Google sheet sign-in unavailable, using the browser:', e?.message || e);
+                        /* anything that went wrong (even a "cancelled" that Android reports when Google isn't set up yet):
+                           sign in through the browser instead, so nobody is ever stuck on this screen */
+                        try { localStorage.setItem('rwb-gsheet-err', `${new Date().toISOString()} ${e?.code || ''} ${e?.message || e}`); } catch { /* ignore */ }
+                        console.warn('Google sheet sign-in failed, using the browser:', e?.code, e?.message || e);
                     }
                 }
                 /* RWB Android app: Google doesn't allow sign-in inside apps' web views, so it opens in the browser

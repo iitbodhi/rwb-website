@@ -354,6 +354,7 @@ function viewSignIn() {
         <div><h1>RWB App</h1><p class="lead">For members of Ronin Warriors of Bengal. Sign in with the Google account you used on the RWB join form.</p></div>
         <button class="btn gbtn block" data-act="google">${G_ICON} Continue with Google</button>
         <p class="small muted">Not a member yet? <a href="${esc(JOIN_URL)}" target="_blank" rel="noopener">Join RWB here</a> with the RWB join form. Once an admin approves you, sign in with the same email.</p>
+        ${(() => { try { const e = localStorage.getItem('rwb-gsheet-err'); return e ? `<p class="small muted" style="opacity:.6;font-size:11px;word-break:break-all">Google sheet: ${esc(e)}</p>` : ''; } catch { return ''; } })()}
     </section>`;
     actions = { google: b => busy(b, () => api.signIn()) };
 }
