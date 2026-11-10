@@ -60,7 +60,9 @@ window.RWB_TNC = {
         'Motomart is a notice board for members. Every sale is directly between the buyer and the seller: RWB does not handle money, check items or guarantee any transaction. Inspect items yourself, never pay in advance to people you don\'t know, and report suspicious posts to an admin.',
         'Sellers must own what they sell, describe it honestly, and must not list stolen, counterfeit, illegal or unsafe items. RWB coordinators may approve, edit or remove posts.',
         'Shared expense records in Events are a convenience only. Settling payments is between the members involved.',
-        'Documents you save in the app (such as your licence or RC) are visible only to you. You are responsible for keeping copies of anything important.'
+        'Documents you save in the app (such as your licence or RC) are visible only to you. You are responsible for keeping copies of anything important.',
+        'Things you add for other members to see (such as Motomart posts and photos, and answers in Teach Pookie) must be your own, true to the best of your knowledge, and lawful. You allow RWB to show, store, edit and use them free of charge within the RWB App and website for the community; for Teach Pookie, approved answers become part of what Pookie (the AI assistant) uses to answer members. You can ask an admin to remove what you added.',
+        'Warriorboards (leaderboards), XP and ranks are for fun and have no money value. RWB admins may correct or remove scores, or remove someone from a board, if they look wrong or were gained unfairly (for example fake rides, fake readings or copied answers).'
     ]],
     ['Photos, videos and social media', [
         'RWB may share photos and videos from rides and events on RWB\'s website, WhatsApp channel and social media pages. If you don\'t want to appear, tell the photographer or an admin, and we will not use, or will remove, images of you on request.',
