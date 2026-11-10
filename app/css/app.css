@@ -1484,3 +1484,5 @@ button.rw-btn{padding:8px 14px}
 .rw-pn .rw-km{flex:none;min-width:0;margin-left:auto;padding-left:8px;font-size:.7rem}
 .rw-parts li a{padding-top:10px}
 .rw-parts .grow,.ride-list .grow{flex:1 1 auto;width:100%}.rw-parts .rw-pn{width:100%}
+.sync-row{display:flex;align-items:center;gap:10px;margin:10px 0 2px;padding:8px 8px 8px 14px;border-radius:14px;background:var(--surface,var(--card));border:1px solid var(--hair,var(--line))}
+.sync-row .grow{color:var(--muted)}

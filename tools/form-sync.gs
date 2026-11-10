@@ -339,6 +339,7 @@ function doPost(e) {
   if (!body || body.secret !== SYNC_SECRET) return json_({ ok: false, error: 'not allowed' });
   if (body.action === 'delete') return removeRows_(body.phone, body.full_name);
   if (body.action === 'status') return setStatus_(body);
+  if (body.action === 'sync') return json_({ ok: true, result: String(syncWithApp() || '') });   /* Admin → Sync sheet now, in the app */
   if (body.action === 'dupes') { const lk = LockService.getScriptLock(); lk.waitLock(20000); try { return json_({ ok: true, result: applyDupeActions_() }); } finally { lk.releaseLock(); } }
   const m = body.member || {};
   if (!m.phone || !m.full_name) return json_({ ok: false, error: 'missing name or number' });
@@ -601,6 +602,8 @@ function syncWithApp() {
       (errors.length ? '\nProblems:\n' + errors.join('\n') : '');
     console.log(sum + extra);
     PropertiesService.getScriptProperties().setProperty('lastSync', new Date().toISOString() + (errors.length ? ' (with problems)' : ''));
+    /* tell the app how it went (Admin → Sync sheet now shows it) */
+    try { UrlFetchApp.fetchAll([rpc_('sheet_sync_done', { p_secret: SYNC_SECRET, p_summary: String(sum + extra).slice(0, 4000) })]); } catch (err) { console.log('Could not report to the app: ' + err); }
     return sum + extra;
   } finally { lock.releaseLock(); }
 }

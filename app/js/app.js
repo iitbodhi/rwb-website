@@ -2355,6 +2355,7 @@ async function viewAdmin() {
             <button class="stat tap" data-act="mfilter" data-f="all"><b>${s.members}</b><span>Members ›</span></button>
             <button class="stat tap" data-act="mfilter" data-f="app"><b>${s.on_app}</b><span>On the app ›</span></button>
             <button class="stat tap ${s.pending ? 'accent' : ''}" data-act="tab" data-tab="requests"><b>${s.pending}</b><span>Waiting ›</span></button></div>
+        <div class="sync-row" id="sync-row" hidden><span class="grow small" id="sync-txt"></span><button class="btn sm ghost" data-act="sheet-sync">Sync sheet now</button></div>
         <div class="seg section scroll" role="tablist">
             <button role="tab" aria-selected="${tab === 'requests'}" data-act="tab" data-tab="requests">Approvals${s.pending ? ` (${s.pending})` : ''}</button>
             <button role="tab" aria-selected="${tab === 'motomart'}" data-act="tab" data-tab="motomart">Motomart<span id="mm-count"></span></button>
@@ -2367,9 +2368,24 @@ async function viewAdmin() {
     actions = { tab: el => { state.adminTab = el.dataset.tab; viewAdmin(); }, mfilter: el => { state.adminTab = 'members'; state.memberFilter = el.dataset.f; state.adminSearch = ''; viewAdmin(); } };
     load.listings(true).then(ls => { const n = ls.filter(l => l.status === 'pending').length; const c = $('#mm-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
     api.admin.dupes().then(g => { state.dupes = g; const c = $('#dupe-count'); if (c && g.length) c.textContent = ` (${g.length})`; }).catch(() => {});
+    syncStatus();
+    actions['sheet-sync'] = el => busy(el, async () => {
+        await api.admin.sheetSync(); const t0 = Date.now(); const txt = $('#sync-txt'); if (txt) txt.textContent = 'Syncing with the member sheet… (about a minute)';
+        for (let i = 0; i < 36; i++) {   /* up to 3 minutes */
+            await new Promise(r => setTimeout(r, 5000)); const st = await api.admin.sheetSyncStatus().catch(() => null);
+            if (st?.last?.at && Date.parse(st.last.at) >= t0 - 5000) { syncStatus(st); openSheet('Sheet synced', `<p class="small" style="white-space:pre-wrap">${esc(st.last.summary || 'Done')}</p>`); return; }
+            if (!$('#sync-txt')) return;   /* left the Admin screen */
+        }
+        if ($('#sync-txt')) $('#sync-txt').textContent = 'The sheet hasn\'t answered yet. It may still be working; check again in a few minutes.';
+    });
     api.admin.reports?.().then(rs => { const n = (rs || []).filter(r => r.status === 'open').length; const c = $('#rep-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
     try { await ({ requests: adminRequests, motomart: adminMotomart, dupes: adminDupes, members: adminMembers, bdays: adminBdays, reports: adminReports, ai: adminAI })[tab](); }
     catch (e) { $('#admin-body').innerHTML = `<div class="card empty"><b>Could not load</b>${esc(e.message)}</div>`; }
+}
+/* Admin: when the member sheet last checked itself against the app (every 12 hours, or "Sync sheet now") */
+async function syncStatus(st) {
+    st ??= await api.admin.sheetSyncStatus?.().catch(() => null); const row = $('#sync-row'); if (!row || !st) return;
+    row.hidden = false; $('#sync-txt').textContent = st.last?.at ? `Member sheet synced ${timeAgo(st.last.at)}` : 'Member sheet: not synced from the app yet';
 }
 /* Reports from members (Grievance Officer's queue): acknowledge within 24 h, resolve within 7 days, 2 h for nudity,
    sexual content, impersonation or morphed photos */

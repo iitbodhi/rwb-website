@@ -351,6 +351,8 @@ async function supabaseApi(url, key) {
             }
         },
         chatNotes: async () => must(await sb.rpc('admin_get_chat_notes')),
+        sheetSync: async () => must(await sb.rpc('admin_sheet_sync')),
+        async sheetSyncStatus() { const r = await sb.rpc('admin_sheet_sync_status'); if (r.error) { if (/could not find|function/i.test(r.error.message || '')) return null; throw new Error(r.error.message); } return r.data; },
         teachQueue: async () => must(await sb.rpc('admin_teach_queue')),
         teachReview: async (id, ok, text) => must(await sb.rpc('admin_teach_review', { p_id: id, p_ok: ok, p_text: text || null })),
         pookieKnowledge: async () => must(await sb.rpc('admin_pookie_knowledge')),
@@ -708,6 +710,8 @@ function demoApi() {
 
         report: (kind, ref, label, reason, details) => { (db.reports ??= []).unshift({ id: Date.now(), created_at: new Date().toISOString(), reporter_name: me().full_name, kind, ref, label, reason, details: details || null, status: 'open' }); save(); return wait(1); },
         admin: {
+            sheetSync() { db.syncReq = new Date().toISOString(); setTimeout(() => { db.syncLast = { at: new Date().toISOString(), summary: 'Sync done. Empty rows removed: 0. Cells updated from the app: 3 on 2 rows. Added: 1. Moved to Removed members: 0. (demo)' }; save(); }, 3000); save(); return wait('started'); },
+            sheetSyncStatus: () => wait({ requested: db.syncReq || null, last: db.syncLast || null }),
             teachQueue: () => wait((db.ta || []).filter(a => a.status === 'pending').map(a => ({ ...a, question: (db.tq || []).find(q => q.id === a.question_id)?.question, category: (db.tq || []).find(q => q.id === a.question_id)?.category }))),
             teachReview(id, ok, text) { const a = db.ta.find(x => x.id === id); a.status = ok ? 'approved' : 'rejected'; if (ok) { (db.know ??= []).push({ id: nid(), source: 'answer', title: (db.tq || []).find(q => q.id === a.question_id)?.question, content: (text || a.answer) + ' (RWB rider ' + a.member_name.split(' ')[0] + ')', updated_at: new Date().toISOString() }); } save(); return wait(ok ? 'approved' : 'rejected'); },
             pookieKnowledge: () => wait(db.know || []),
