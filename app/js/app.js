@@ -3466,11 +3466,12 @@ const BOARDS = {
     gps: { title: 'Track Warriors', sub: 'Kilometres ridden while sharing live location with Track', how: 'How to get on it: tap <b>Track</b> (the middle button) → <b>Share</b> before you ride. Every km you ride while sharing counts, checked by GPS.', has: r => r.km > 0, val: r => Number(r.km), big: r => `${Number(r.km).toLocaleString('en-IN', { maximumFractionDigits: r.km < 100 ? 1 : 0 })} km`, small: r => r.rides ? `${r.rides} ride${r.rides === 1 ? '' : 's'}` : '', empty: 'No one yet! Tap Track → Share on your next ride to be the first Track Warrior.' },
     mileage: { title: 'Mileage Warriors', sub: 'Best average km/l, from full-tank fill-ups', has: r => r.kmpl > 0, val: r => Number(r.kmpl), big: r => kmplTxt(r.kmpl), small: r => r.km ? kmTxt(r.km) : '', empty: 'Add a full-tank fill-up with your Trip A reading to get on this board.' },
     service: { title: 'Service Warriors', sub: 'Most services logged in the app', has: r => r.services > 0, val: r => r.services * 1e5 + (r.last_service ? Date.parse(r.last_service) / 864e5 : 0), big: r => `${r.services} service${r.services === 1 ? '' : 's'}`, small: r => [r.kmpl ? kmplTxt(r.kmpl) : '', r.last_service ? 'last ' + fmtDayMonth(r.last_service) : ''].filter(Boolean).join(' · '), empty: 'Log your services to get on this board.' },
-    road: { title: 'Road Warriors', sub: 'Most km on the odometer', has: r => r.km > 0, val: r => r.km, big: r => kmTxt(r.km), small: r => r.kmpl ? kmplTxt(r.kmpl) : '', empty: 'Update your odometer on Home, or add a fill-up or service, to get on this board.' }
+    road: { title: 'Road Warriors', sub: 'Most km on the odometer', has: r => r.km > 0, val: r => r.km, big: r => kmTxt(r.km), small: r => r.kmpl ? kmplTxt(r.kmpl) : '', empty: 'Update your odometer on Home, or add a fill-up or service, to get on this board.' },
+    pookie: { title: 'Pookie Warriors', sub: 'Most XP from teaching Pookie about the Ronin', how: 'How to get on it: open <a href="#teach"><b>Teach Pookie</b></a> and answer its questions. <b>10 XP</b> for every answer the admins approve, 2 XP while it waits.', has: r => r.xp > 0, val: r => r.xp * 1000 + r.approved, big: r => `${r.xp} XP`, small: r => `${r.approved} taught`, empty: 'Answer a question in Teach Pookie to get on this board.' }
 };
 const rankBoard = (rows, key) => rows.filter(BOARDS[key].has).sort((a, b) => BOARDS[key].val(b) - BOARDS[key].val(a) || a.full_name.localeCompare(b.full_name)).map((r, i) => ({ ...r, rank: i + 1 }));
 function boardHtml(key, raw) {
-    const B = BOARDS[key], board = rankBoard(key === 'gps' ? (state.gps || []) : raw, key);
+    const B = BOARDS[key], board = rankBoard(key === 'gps' ? (state.gps || []) : key === 'pookie' ? (state.pookieBoard || []) : raw, key);
     const me = board.find(r => r.is_me), top3 = board.slice(0, 3), rest = board.slice(3, 6);
     const podium = top3.length ? `<div class="podium">${[top3[1], top3[0], top3[2]].map((r, i) => r ? `<div class="pod p${[2, 1, 3][i]}${r.is_me ? ' me' : ''}">
             ${face(r, 'avatar pod-face')}<span class="pod-medal">${MEDAL[r.rank - 1]}</span><b>${esc(r.nickname || r.full_name.split(' ')[0])}</b><span class="pod-km">${B.big(r)}</span><span class="pod-sub">${esc(B.small(r))}</span></div>` : '<div></div>').join('')}</div>` : '';
@@ -3486,7 +3487,7 @@ function boardHtml(key, raw) {
 const CREW_F = all => { const n = all.filter(m => m.on_app).length; return { all: 'Everyone', app: `On app (${n})`, noapp: `Not on app (${all.length - n})` }; };
 async function viewCrew() {
     const raw = state.board ??= await api.boards().catch(() => api.leaderboard().then(rs => rs.map(r => ({ ...r, services: 0, kmpl: null }))).catch(() => []));
-    if (!state.gps || Date.now() - (state.gpsAt || 0) > 120e3) { state.gps = await api.gpsBoard().catch(() => []); state.gpsAt = Date.now(); }
+    if (!state.gps || Date.now() - (state.gpsAt || 0) > 120e3) { [state.gps, state.pookieBoard] = await Promise.all([api.gpsBoard().catch(() => []), api.pookieBoard?.().catch(() => []) ?? []]); state.gpsAt = Date.now(); }
     state.boardKey = 'gps';   /* Track Warriors first every time the tab opens */
     app.innerHTML = top('RWB') + `
         <section class="board card" id="board">${boardHtml(state.boardKey, raw)}</section>

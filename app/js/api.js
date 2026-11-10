@@ -153,6 +153,7 @@ async function supabaseApi(url, key) {
         trackSos: async (lat, lng, acc) => must(await sb.rpc('track_sos', { p_lat: lat, p_lng: lng, p_acc: acc })),
         trackSosResolve: async id => must(await sb.rpc('track_sos_resolve', { p_id: id })),
         gpsBoard: async () => must(await sb.rpc('gps_board')),
+        pookieBoard: async () => must(await sb.rpc('pookie_board')),   /* setup file 59 */
         findMyEmail: async (phone, vrn) => must(await sb.rpc('find_my_email', { p_phone: phone, p_vrn: vrn })),
         claimMembership: async (phone, vrn, dob) => must(await sb.rpc('claim_membership', { p_phone: phone, p_vrn: vrn, p_dob: dob })),
         updateMyAnswers: async answers => { const r = await sb.rpc('update_my_answers', { p_answers: answers }); if (r.error && /could not find|function/i.test(r.error.message || '')) throw new Error('Please ask an RWB admin to run setup file 32 first.'); return must(r); },
@@ -581,6 +582,7 @@ function demoApi() {
             return wait({ riders, sos, staff: ['superadmin', 'admin', 'coordinator'].includes(m.role), now: new Date().toISOString() }); },
         trackSos: (lat, lng, acc) => { db.sos = [{ id: Date.now(), lat, lng, acc, at: new Date().toISOString() }]; save(); return wait(db.sos[0].id); },
         trackSosResolve: id => { (db.sos || []).forEach(s => { if (s.id === id) s.resolved = true; }); save(); return wait('done'); },
+        pookieBoard: () => wait([{ member_id: 2, full_name: 'Arjun Sen', nickname: 'Sultan', xp: 48, approved: 4 }, { member_id: 3, full_name: 'Priya Dutta', xp: 12, approved: 1 }, { member_id: 1, full_name: me().full_name, xp: 2 + 10 * (db.ta || []).filter(a => a.status === 'approved').length, approved: (db.ta || []).filter(a => a.status === 'approved').length, is_me: true }]),
         gpsBoard: () => wait([{ member_id: 2, full_name: 'Arjun Sen', nickname: 'Sultan', km: 412.6, rides: 9 }, { member_id: 3, full_name: 'Priya Dutta', km: 233.1, rides: 5 }, { member_id: 4, full_name: 'Rahul Ghosh', nickname: 'Rocket', km: 188.4, rides: 4 }, { member_id: 1, full_name: me().full_name, km: 96.2, rides: 2, is_me: true }, { member_id: 5, full_name: 'Sourav Paul', km: 41.0, rides: 1 }]),
         joinHelpAdmins: () => wait(db.members.filter(m => ['superadmin', 'admin'].includes(m.role) && (!m.status || m.status === 'active')).map(m => ({ first_name: (m.nickname || m.full_name).split(' ')[0], phone: m.phone }))),
         rwbAdmins: () => wait(db.members.filter(m => ['superadmin', 'admin'].includes(m.role) && (!m.status || m.status === 'active')).map(m => ({ full_name: m.full_name, nickname: m.nickname, phone: m.phone, role: m.role }))),
