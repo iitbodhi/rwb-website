@@ -46,24 +46,25 @@
 #boot .skip{position:absolute;bottom:calc(20px + env(safe-area-inset-bottom));left:0;right:0;text-align:center;font:500 12px/1 system-ui,sans-serif;color:rgba(255,255,255,.35);letter-spacing:.08em}
 
 /* full intro */
-#boot.full .b-name{animation:bName .7s cubic-bezier(.2,.8,.2,1) .1s both}
-#boot.full .b-name i{animation:bFade .6s ease .55s both}
-#boot.full .coin-in{animation:bToss 1.3s cubic-bezier(.25,.75,.3,1) .25s both}
-#boot.full .coin-in img{animation:bSpin 1.3s linear .25s both}
-#boot.full .shadow{animation:bShadow 1.3s cubic-bezier(.25,.75,.3,1) .25s both}
-#boot.full .rev{animation:bArc .6s cubic-bezier(.3,.7,.2,1) 1.5s both}
-#boot.full .shine::after{animation:bShine .7s ease-in-out 2.3s both}
-#boot.full .b-motto span{animation:bImpact .34s cubic-bezier(.2,1.4,.4,1) both}
-#boot.full .b-motto span::after{animation:bLine .3s ease-out both}
-#boot.full .b-motto span:nth-child(1),#boot.full .b-motto span:nth-child(1)::after{animation-delay:1.62s}
-#boot.full .b-motto span:nth-child(2),#boot.full .b-motto span:nth-child(2)::after{animation-delay:1.92s}
-#boot.full .b-motto span:nth-child(3),#boot.full .b-motto span:nth-child(3)::after{animation-delay:2.22s}
-#boot.full{animation:bShake .5s linear 1.55s}
-#boot.full .b-motto{animation:bThud .9s linear 1.62s}
+#boot.i-full .b-name{animation:bName .7s cubic-bezier(.2,.8,.2,1) .1s both}
+#boot.i-full .b-name i{animation:bFade .6s ease .55s both}
+#boot.i-full .coin-in{animation:bToss 1.3s cubic-bezier(.25,.75,.3,1) .25s both}
+#boot.i-full .coin-in img{animation:bSpin 1.3s linear .25s both}
+#boot.i-full .shadow{animation:bShadow 1.3s cubic-bezier(.25,.75,.3,1) .25s both}
+#boot.i-full .rev{animation:bArc .6s cubic-bezier(.3,.7,.2,1) 1.5s both}
+#boot.i-full .shine::after{animation:bShine .7s ease-in-out 2.3s both}
+#boot.i-full .b-motto span{animation:bImpact .34s cubic-bezier(.2,1.4,.4,1) both}
+#boot.i-full .b-motto span::after{animation:bLine .3s ease-out both}
+#boot.i-full .b-motto span:nth-child(1),#boot.i-full .b-motto span:nth-child(1)::after{animation-delay:1.62s}
+#boot.i-full .b-motto span:nth-child(2),#boot.i-full .b-motto span:nth-child(2)::after{animation-delay:1.92s}
+#boot.i-full .b-motto span:nth-child(3),#boot.i-full .b-motto span:nth-child(3)::after{animation-delay:2.22s}
+#boot.i-full{animation:bShake .5s linear 1.55s}
+#boot.i-full .b-motto{animation:bThud .9s linear 1.62s}
 /* short intro (opened again soon): one quick flip */
-#boot.quick .coin-in{animation:bFlip .7s cubic-bezier(.25,.75,.3,1) both}
-#boot.quick .rev{animation:bArc .5s ease .25s both}
-#boot.quick .b-name,#boot.quick .b-motto{animation:bFade .4s ease both}
+#boot.i-quick .coin-in{animation:bFlip .7s cubic-bezier(.25,.75,.3,1) both}
+#boot.i-quick .rev{animation:bArc .5s ease .25s both}
+#boot.i-quick .b-name,#boot.i-quick .b-motto{animation:bFade .4s ease both}
+#boot.i-quick .b-motto span::after{transform:none}
 #boot .b-motto span::after{animation-fill-mode:both}
 
 @keyframes bName{from{opacity:0;letter-spacing:.9em;filter:blur(6px)}to{opacity:1;letter-spacing:.3em;filter:none}}
@@ -89,42 +90,15 @@
   <p class="b-motto"><span>Explore.</span><span>Evolve.</span><span>Inspire.</span></p>
   <span class="skip">Tap to skip</span>
 </div>
-<script>/* which intro: full on the first open and after 6 hours away, otherwise a quick one. Sound: Android app only, can be turned off in Me. */
+<script>/* which intro: full on the first open and after 6 hours away, otherwise a quick one. */
 (function () {
   var b = document.getElementById('boot'), now = Date.now(), last = 0, rm = matchMedia('(prefers-reduced-motion: reduce)').matches;
   try { last = Number(localStorage.getItem('rwb-intro-seen') || 0); } catch (e) {}
   var full = !rm && now - last > 6 * 36e5;
-  b.className = full ? 'full' : 'quick';
+  b.className = full ? 'i-full' : 'i-quick';   /* not "full"/"quick": .quick is the app's quick-action row */
   if (full) { try { localStorage.setItem('rwb-intro-seen', String(now)); } catch (e) {} }
   window.INTRO_END = performance.now() + (full ? 2900 : 800);
   b.addEventListener('click', function () { window.INTRO_END = 0; if (window.hideBootNow) window.hideBootNow(); });
-  var sound = true; try { sound = localStorage.getItem('rwb-intro-sound') !== 'off'; } catch (e) {}
-  var app = /RWB-Android-App/.test(navigator.userAgent) || !!window.androidBridge;
-  if (!full || !sound || !app) return;
-  try {
-    var A = window.AudioContext || window.webkitAudioContext, ac = new A(); if (ac.state === 'suspended') ac.resume();
-    var t0 = ac.currentTime + 0.05, out = ac.createGain(); out.gain.value = 0.55; out.connect(ac.destination);
-    var noise = ac.createBuffer(1, ac.sampleRate * 1.6, ac.sampleRate), d = noise.getChannelData(0);
-    for (var k = 0; k < d.length; k++) d[k] = Math.random() * 2 - 1;
-    /* whoosh while the coin flies */
-    var n = ac.createBufferSource(), bp = ac.createBiquadFilter(), g = ac.createGain(); n.buffer = noise; bp.type = 'bandpass'; bp.Q.value = 1.2;
-    bp.frequency.setValueAtTime(350, t0 + 0.25); bp.frequency.exponentialRampToValueAtTime(2600, t0 + 0.85); bp.frequency.exponentialRampToValueAtTime(500, t0 + 1.5);
-    g.gain.setValueAtTime(0.0001, t0 + 0.25); g.gain.exponentialRampToValueAtTime(0.35, t0 + 0.8); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.55);
-    n.connect(bp); bp.connect(g); g.connect(out); n.start(t0 + 0.25); n.stop(t0 + 1.6);
-    /* the coin lands: a short metal ring */
-    [1760, 2637, 3951].forEach(function (f, j) { var o = ac.createOscillator(), og = ac.createGain(); o.type = 'sine'; o.frequency.value = f;
-      og.gain.setValueAtTime(0.0001, t0 + 1.52); og.gain.exponentialRampToValueAtTime(0.12 / (j + 1), t0 + 1.53); og.gain.exponentialRampToValueAtTime(0.0001, t0 + 2.1);
-      o.connect(og); og.connect(out); o.start(t0 + 1.52); o.stop(t0 + 2.15); });
-    /* three impacts, one per word */
-    [1.62, 1.92, 2.22].forEach(function (t, j) { var o = ac.createOscillator(), og = ac.createGain(); o.type = 'sine';
-      o.frequency.setValueAtTime(150 - j * 8, t0 + t); o.frequency.exponentialRampToValueAtTime(42, t0 + t + 0.22);
-      og.gain.setValueAtTime(0.0001, t0 + t); og.gain.exponentialRampToValueAtTime(j === 2 ? 1 : 0.8, t0 + t + 0.008); og.gain.exponentialRampToValueAtTime(0.0001, t0 + t + 0.42);
-      o.connect(og); og.connect(out); o.start(t0 + t); o.stop(t0 + t + 0.45);
-      var c = ac.createBufferSource(), hp = ac.createBiquadFilter(), cg = ac.createGain(); c.buffer = noise; hp.type = 'highpass'; hp.frequency.value = 2500;
-      cg.gain.setValueAtTime(0.25, t0 + t); cg.gain.exponentialRampToValueAtTime(0.0001, t0 + t + 0.06);
-      c.connect(hp); hp.connect(cg); cg.connect(out); c.start(t0 + t); c.stop(t0 + t + 0.08); });
-    setTimeout(function () { try { ac.close(); } catch (e) {} }, 3600);
-  } catch (e) {}
 })();</script>
 <script>window.BOOT_T = performance.now();
 /* if the app hasn't started after 15 s, show what went wrong (a screenshot of this tells us the cause) */

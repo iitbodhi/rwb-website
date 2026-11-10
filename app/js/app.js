@@ -2086,7 +2086,6 @@ function viewMe() {
 
         <h2 class="group-title">Appearance</h2>
         <div class="seg" role="radiogroup" aria-label="Theme">${[['light', 'Light'], ['dark', 'Dark'], ['system', 'Auto']].map(([k, l]) => `<button role="radio" aria-selected="${theme === k}" aria-checked="${theme === k}" data-act="theme" data-t="${k}">${l}</button>`).join('')}</div>
-        ${NATIVE ? `<div class="group" style="margin-top:12px"><label class="toggle-row"><span class="grow">Intro sound<span class="small muted">A short sound with the opening animation</span></span><span class="switch-only"><input type="checkbox" id="intro-snd"${(() => { try { return localStorage.getItem('rwb-intro-sound') !== 'off'; } catch { return true; } })() ? ' checked' : ''}></span></label></div>` : ''}
 
         ${isAndroid ? `<h2 class="group-title">WhatsApp</h2>
         <div class="group"><label class="toggle-row"><span class="grow">Open WhatsApp links in<span class="small muted">For phones with both WhatsApp and WhatsApp Business</span></span>
@@ -3613,7 +3612,6 @@ document.addEventListener('click', e => {
     const b = e.target.closest('[data-report]'); if (!b) return;
     e.preventDefault(); reportSheet(b.dataset.report, b.dataset.ref || '', b.dataset.label || '');
 });
-document.addEventListener('change', e => { if (e.target.id === 'intro-snd') { try { localStorage.setItem('rwb-intro-sound', e.target.checked ? 'on' : 'off'); } catch { /* ignore */ } toast(e.target.checked ? 'Intro sound on' : 'Intro sound off'); } });
 /* Me → Delete my account (Google Play asks every app with accounts to offer this) */
 document.addEventListener('click', e => {
     const b = e.target.closest('[data-del-acct]'); if (!b) return;
