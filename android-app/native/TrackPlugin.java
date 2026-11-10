@@ -155,7 +155,12 @@ public class TrackPlugin extends Plugin {
     @PluginMethod
     public void start(PluginCall call) {
         String url = call.getString("url"), anon = call.getString("anon"), key = call.getString("key");
-        Double until = call.getDouble("until");
+        /* the end time in ms: a big whole number arrives as a Long, which getDouble() ignores (it returned null, so the
+           service never started); read any number type, or a number sent as text */
+        Long until = null;
+        Object u = call.getData().opt("until");
+        if (u instanceof Number) until = ((Number) u).longValue();
+        else if (u instanceof String) { try { until = (long) Double.parseDouble((String) u); } catch (Exception ignored) { } }
         if (url == null || anon == null || key == null || until == null) { call.reject("Missing sharing details"); return; }
         try {
             TrackService.start(getContext(), url, anon, key, until.longValue());

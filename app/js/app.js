@@ -3436,7 +3436,7 @@ async function startShare(hours, eventId = null, note = '') {
     const until = await api.trackStart(p.lat, p.lng, p.acc, hours, eventId, note);
     trk.until = Date.parse(until) || Date.now() + hours * 36e5; trk.event = eventId; trk.note = note; trk.sent = p; trk.sentAt = Date.now(); trk.last = p;
     trk.svc = false; let svc = null;
-    if (await hasSvc()) svc = await svcStart().catch(e => { toast(`Background sharing couldn't start: ${e.message || e}. Sharing works while the app is open.`, true); return null; });
+    if (await hasSvc()) svc = await svcStart().catch(e => { svcErr = String(e?.message || e); toast(`Background sharing couldn't start: ${svcErr}. Sharing works while the app is open.`, true); return null; });
     trackSave({ until: trk.until, event: eventId, note, svc: trk.svc });
     startWatch();
     toast(`You're sharing your live location 📍 ${hours >= 12 ? 'until you stop' : 'for ' + TRACK_HOURS.find(h => h[0] === hours)[1]}`);
@@ -3467,6 +3467,7 @@ function resumeShare() {
     const s = trackSaved(); if (!s) return;
     if (s.until <= Date.now()) { trackSave(null); return; }
     trk.until = s.until; trk.event = s.event || null; trk.note = s.note || ''; trk.svc = !!s.svc; startWatch();
+    if (!trk.svc && NATIVE) hasSvc().then(ok => ok && svcStart().then(() => { trackSave({ ...s, svc: true }); }).catch(e => { svcErr = String(e?.message || e); })).catch(() => {});
     if (trk.svc) svcCheck(); else gpsFix(60000).then(sendFix).catch(() => {});
 }
 document.addEventListener('visibilitychange', () => {
@@ -3478,7 +3479,7 @@ document.addEventListener('visibilitychange', () => {
 });
 /* ---------- RWB Track service (RWB Android app from build 2.0.x with the service): shares with the screen off ---------- */
 const RwbTrack = () => Native('RwbTrack');
-let svcOk = null;
+let svcOk = null, svcErr = '';
 async function hasSvc() {
     if (!NATIVE) return false; if (svcOk !== null) return svcOk;
     try { await RwbTrack().status(); svcOk = true; } catch { svcOk = false; }
@@ -3505,6 +3506,13 @@ async function svcCheck() {
 /* on the Track screen: is the background sharing healthy? (last GPS fix, last position sent, last problem) */
 async function svcHealth() {
     let st; try { st = await RwbTrack().status(); } catch { return; }
+    if (!trk.svc) {   /* sharing only while the app is open: say so, with a button to start the background service */
+        const el = $('#trk-health') || (() => { const e = document.createElement('p'); e.id = 'trk-health'; e.className = 'small trk-health'; $('#trk-status')?.after(e); return e; })();
+        el.innerHTML = `🟠 Background sharing <b>off</b>: sharing pauses when the screen is off.${svcErr ? `<br><span class="warn">${esc(svcErr)}</span>` : ''} · <button class="linkish" data-act="trk-svc">Turn on</button> · <button class="linkish" data-act="trk-report">Track report</button>`;
+        actions['trk-svc'] = async () => { try { await svcStart(); svcErr = ''; trackSave({ until: trk.until, event: trk.event, note: trk.note, svc: true }); toast('Background sharing is on 📍'); refreshTrack(); } catch (e) { svcErr = String(e?.message || e); toast(`Couldn't start: ${svcErr}`, true); svcHealth(); } };
+        actions['trk-report'] = () => trackReport();
+        return;
+    }
     if (st.lat && st.fix) trk.last = { lat: +st.lat, lng: +st.lng, acc: st.acc || null, t: st.fix };
     const el = $('#trk-health') || (() => { const e = document.createElement('p'); e.id = 'trk-health'; e.className = 'small trk-health'; $('#trk-status')?.after(e); return e; })();
     const ago = ms => !ms ? 'never' : Date.now() - ms < 90e3 ? `${Math.max(1, Math.round((Date.now() - ms) / 1000))} s ago` : `${Math.round((Date.now() - ms) / 6e4)} min ago`;
@@ -3527,7 +3535,7 @@ document.addEventListener('click', e => {
 /* the last 150 Track events from the phone, to send to the RWB team if sharing stops with the screen off */
 async function trackReport() {
     let st = {}, lg = ''; try { st = await RwbTrack().status(); lg = (await RwbTrack().log()).log || ''; } catch { return toast('Update the RWB app to get a Track report', true); }
-    const text = `RWB Track report · ${new Date().toLocaleString('en-IN')}\nApp ${st.version || ''} · battery ${st.battery ? 'unrestricted' : 'RESTRICTED'} · location ${st.bgLocation ? 'all the time' : 'only while using'} · ${navigator.userAgent.replace(/.*Android/, 'Android').slice(0, 60)}\n\n${lg || '(no events yet)'}`;
+    const text = `RWB Track report · ${new Date().toLocaleString('en-IN')}\nApp ${st.version || ''} · service ${trk.svc ? 'on' : 'OFF'}${svcErr ? ' (' + svcErr + ')' : ''} · battery ${st.battery ? 'unrestricted' : 'RESTRICTED'} · location ${st.bgLocation ? 'all the time' : 'only while using'} · ${navigator.userAgent.replace(/.*Android/, 'Android').slice(0, 60)}\n\n${lg || '(no events yet)'}`;
     try { if (navigator.share) { await navigator.share({ title: 'RWB Track report', text }); return; } } catch { /* cancelled */ }
     try { await navigator.clipboard.writeText(text); toast('Track report copied: paste it in WhatsApp to the RWB team'); } catch { toast('Could not copy the report', true); }
 }
@@ -3798,7 +3806,7 @@ async function refreshTrack() {
     const riders = trk.filter ? d.riders.filter(r => r.event_id === trk.filter) : d.riders;
     const ev = trk.filter ? (state.evd?.events || []).find(e => e.id === trk.filter) : null;
     const rider = d.fam ? riders.find(r => r.mine) : null, rName = esc(firstName(state.fam?.member));
-    if (trk.svc && sharing()) svcHealth();
+    if (NATIVE && sharing()) svcHealth();
     if (!d.fam) { const mine = d.sos.find(x => x.me); if (mine) setMySos({ id: mine.id, at: Date.parse(mine.at) || Date.now() }); else setMySos(null); }
     const sosB = app.querySelector('[data-act=trk-sos]'); if (sosB) sosB.textContent = mySos() ? '🆘 SOS sent · Cancel' : '🆘 SOS';
     $('#trk-status').innerHTML = d.fam ? `<span class="small muted">${rider ? `<b>${rName}</b> is sharing live${riders.length > 1 ? ` · ${riders.length - 1} more on the same ride` : ''}` : `${rName} isn't sharing a live location right now. You'll see them here when they share on Track.`}${d.sos.length ? ' · <b class="sos-txt">SOS</b>' : ''}</span>` : `${sharing() ? `<span class="trk-live-pill"><span class="dot"></span>You're live · ${esc(leftTxt(trk.until))}</span>` : ''}
