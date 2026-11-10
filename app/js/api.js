@@ -154,7 +154,7 @@ async function supabaseApi(url, key) {
         trackSosResolve: async id => must(await sb.rpc('track_sos_resolve', { p_id: id })),
         gpsBoard: async () => must(await sb.rpc('gps_board')),
         pookieBoard: async () => must(await sb.rpc('pookie_board')),   /* setup file 59 */
-        appSeen: async (copy, build) => { await sb.rpc('app_seen_ping', { p_copy: copy, p_build: build || null }); },   /* setup file 60; quietly ignored before it's run */
+        appSeen: async (copy, build) => { const r = await sb.rpc('app_seen_ping', { p_copy: copy, p_build: build || null }); if (r.error) throw new Error(r.error.message); },   /* setup file 60; quietly ignored before it's run */
         findMyEmail: async (phone, vrn) => must(await sb.rpc('find_my_email', { p_phone: phone, p_vrn: vrn })),
         claimMembership: async (phone, vrn, dob) => must(await sb.rpc('claim_membership', { p_phone: phone, p_vrn: vrn, p_dob: dob })),
         updateMyAnswers: async answers => { const r = await sb.rpc('update_my_answers', { p_answers: answers }); if (r.error && /could not find|function/i.test(r.error.message || '')) throw new Error('Please ask an RWB admin to run setup file 32 first.'); return must(r); },
