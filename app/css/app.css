@@ -1669,3 +1669,7 @@ button.rw-btn{padding:8px 14px}
 .mem-title{font:700 1.5rem/1.1 var(--display);text-transform:uppercase;letter-spacing:.02em;margin-bottom:4px}
 .lb-mem{display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:6px 12px 6px 9px;border-radius:999px;background:rgba(255,255,255,.18);box-shadow:inset 0 0 0 1px rgba(255,255,255,.28);color:#fff;text-decoration:none;font:600 .8rem/1 var(--body)}
 .lb-mem svg{width:16px;height:16px}.lb-mem:active{transform:scale(.96)}
+/* hero: text fills the left, the RWB logo floats on the far right */
+.lb-hero .grow{flex:1 1 auto}
+.lb-cup{width:76px;height:76px;padding:0;background:none;box-shadow:0 0 0 2px rgba(255,255,255,.35),0 14px 30px -10px rgba(0,0,0,.55);overflow:hidden}
+.lb-cup img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}

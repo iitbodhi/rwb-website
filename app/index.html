@@ -22,7 +22,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,800;1,800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/app.css">
 <style>/* intro / loading screen: calm and premium. The background slowly shifts colour, the logo fades and settles in,
-   "Ronin Warriors of Bengal" above it, the motto below. Tap to skip; still for people who ask for less motion. */
+   "Ronin Warriors of Bengal" above it, the motto below. Tap skips it (no label); still for people who ask for less motion. */
 #boot{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;padding:24px;overflow:hidden;
   background:#0f0c0a;color:#f3efe9;transition:opacity .5s ease,visibility .5s;-webkit-tap-highlight-color:transparent}
 #boot.out{opacity:0;visibility:hidden}
@@ -52,7 +52,6 @@
   <p class="b-name">Ronin Warriors of Bengal</p>
   <img class="b-logo" src="icons/logo-384.png" alt="">
   <p class="b-motto">Explore. <b>Evolve.</b> Inspire.</p>
-  <span class="skip">Tap to skip</span>
 </div>
 <script>/* which intro: full on the first open and after 6 hours away, otherwise a quick one. */
 (function () {

@@ -3524,7 +3524,7 @@ async function viewCrew() {
         <section class="lb-hero"><div class="grow"><span class="lb-kick">RWB Hall of Fame</span><h2>Leaderboards</h2>
             <p>${best ? `Your best: <b>#${mine[best]}</b> in ${BOARDS[best].title}${mine[best] <= 3 ? ' 🔥' : ''}` : isFam() ? 'The riders leading RWB right now' : 'Ride, log and teach Pookie to climb the ranks'}</p>
             <a class="lb-mem" href="#members">${CREW_ICON}RWB Members ›</a></div>
-            <span class="lb-cup">${TROPHY}</span></section>
+            <span class="lb-cup"><img src="icons/logo-384.png" alt="RWB"></span></section>
         <div class="lb-tabs" role="tablist" aria-label="Leaderboard">${keys.map(k => `<button role="tab" aria-selected="${k === state.boardKey}" data-act="board" data-b="${k}">
             <span class="lt-ico">${LB_ICON[k]}</span><b>${BOARDS[k].title.replace(' Warriors', '')}</b><small>${mine[k] ? `You #${mine[k]}` : '—'}</small></button>`).join('')}</div>
         <section class="board card lb-card" id="board">${boardHtml(state.boardKey, raw)}</section>
