@@ -6,6 +6,11 @@ const APP_CONFIG = {
     SUPABASE_URL: 'https://hcowcybshljgkeixudry.supabase.co',
     SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhjb3djeWJzaGxqZ2tlaXh1ZHJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3NDI2MjMsImV4cCI6MjEwODMxODYyM30.LLYjaairRQZ3-Ddwo9kschTeVXjEv84n45RrqEUhi0g',
 
+    /* Google sign-in inside the Android app (Android's own account sheet). The "Web client" Client ID from
+       Google Cloud → APIs & Services → Credentials (the same one in Supabase → Authentication → Google). Public, not a
+       secret. Empty: the app signs in through the browser instead. */
+    GOOGLE_WEB_CLIENT_ID: '',
+
     /* Public key for push notifications (safe to publish; the private half lives only in the database) */
     VAPID_PUBLIC_KEY: 'BEoWMKShMPZthuoPUr7VZKT7Ig6F3-W5WSwAjCbkGkeXrFB8WXpXZRZDTcoE4omiwn20Gqa9Gg59zaQJbSOadmI',
 

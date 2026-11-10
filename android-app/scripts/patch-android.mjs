@@ -124,5 +124,7 @@ if (!g.includes('play-services-location')) g = must(g.replace(/dependencies\s*\{
 if (!g.includes('firebase-messaging')) g = g.replace(/dependencies\s*\{/, "dependencies {\n    implementation 'com.google.firebase:firebase-messaging:24.1.0'");
 /* Play Store app: Google's in-app update screen ("New Update Available" → update without leaving the app) */
 if (!g.includes('com.google.android.play:app-update')) g = g.replace(/dependencies\s*\{/, "dependencies {\n    implementation 'com.google.android.play:app-update:2.1.0'");
+/* Google sign-in with Android's own account sheet (Credential Manager) */
+if (!g.includes('androidx.credentials:credentials:')) g = g.replace(/dependencies\s*\{/, "dependencies {\n    implementation 'androidx.credentials:credentials:1.3.0'\n    implementation 'androidx.credentials:credentials-play-services-auth:1.3.0'\n    implementation 'com.google.android.libraries.identity.googleid:googleid:1.1.1'");
 write(bg, g);
 console.log('patch-android: done (versionCode ' + (100 + run) + (process.env.RWB_KEYSTORE ? ', signed' : ', unsigned check build') + ')');

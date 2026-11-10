@@ -279,6 +279,37 @@ public class TrackPlugin extends Plugin {
         ask(call, "android.permission.POST_NOTIFICATIONS");
     }
 
+    /* ---------- Google sign-in with Android's own account sheet ("Sign in to RWB App"), no browser ---------- */
+    /** { clientId: the Web client ID, nonce: SHA-256 of the app's random value } → { idToken } (reject code CANCELLED when closed) */
+    @PluginMethod
+    public void googleSignIn(PluginCall call) {
+        String cid = call.getString("clientId"), nonce = call.getString("nonce");
+        if (cid == null || cid.isEmpty()) { call.reject("Google sign-in isn't set up", "FAILED"); return; }
+        try {
+            com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption.Builder ob = new com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption.Builder(cid);
+            if (nonce != null) ob.setNonce(nonce);
+            androidx.credentials.GetCredentialRequest req = new androidx.credentials.GetCredentialRequest.Builder().addCredentialOption(ob.build()).build();
+            androidx.credentials.CredentialManager.create(getContext()).getCredentialAsync(getActivity(), req, new android.os.CancellationSignal(),
+                androidx.core.content.ContextCompat.getMainExecutor(getContext()),
+                new androidx.credentials.CredentialManagerCallback<androidx.credentials.GetCredentialResponse, androidx.credentials.exceptions.GetCredentialException>() {
+                    @Override public void onResult(androidx.credentials.GetCredentialResponse res) {
+                        try {
+                            androidx.credentials.Credential c = res.getCredential();
+                            if (c instanceof androidx.credentials.CustomCredential && com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL.equals(c.getType())) {
+                                com.google.android.libraries.identity.googleid.GoogleIdTokenCredential g = com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.createFrom(((androidx.credentials.CustomCredential) c).getData());
+                                JSObject o = new JSObject(); o.put("idToken", g.getIdToken()); o.put("email", g.getId());
+                                call.resolve(o);
+                            } else call.reject("Not a Google account", "FAILED");
+                        } catch (Throwable t) { call.reject("Google sign-in: " + t.getMessage(), "FAILED"); }
+                    }
+                    @Override public void onError(androidx.credentials.exceptions.GetCredentialException e) {
+                        boolean closed = e instanceof androidx.credentials.exceptions.GetCredentialCancellationException;
+                        call.reject(e.getMessage() != null ? e.getMessage() : String.valueOf(e.getType()), closed ? "CANCELLED" : "FAILED");
+                    }
+                });
+        } catch (Throwable t) { call.reject("Google sign-in: " + t.getMessage(), "FAILED"); }
+    }
+
     /** The last 150 Track events (fixes, sends, errors, restarts), to copy and send for help. */
     @PluginMethod
     public void log(PluginCall call) { JSObject r = new JSObject(); r.put("log", TrackService.report(getContext())); call.resolve(r); }

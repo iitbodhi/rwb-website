@@ -46,6 +46,22 @@ async function supabaseApi(url, key) {
         async signIn() {
             const cap = window.Capacitor;
             if (cap?.isNativePlatform?.()) {
+                /* RWB Android app from build 20: Android's own Google account sheet ("Sign in to RWB App"), no browser.
+                   Falls back to the browser below if it isn't set up yet, or on an older app. */
+                const gid = typeof APP_CONFIG !== 'undefined' ? APP_CONFIG.GOOGLE_WEB_CLIENT_ID : '';
+                if (gid) {
+                    try {
+                        const raw = Array.from(crypto.getRandomValues(new Uint8Array(24)), b => b.toString(16).padStart(2, '0')).join('');
+                        const hashed = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))), b => b.toString(16).padStart(2, '0')).join('');
+                        const r = await cap.registerPlugin('RwbTrack').googleSignIn({ clientId: gid, nonce: hashed });
+                        const { error } = await sb.auth.signInWithIdToken({ provider: 'google', token: r.idToken, nonce: raw });
+                        if (error) throw error;
+                        return;
+                    } catch (e) {
+                        if (e?.code === 'CANCELLED') return;   /* closed the sheet: stay on the sign-in screen */
+                        console.warn('Google sheet sign-in unavailable, using the browser:', e?.message || e);
+                    }
+                }
                 /* RWB Android app: Google doesn't allow sign-in inside apps' web views, so it opens in the browser
                    and comes back through in.roninwb.twa://auth (handled by finishNativeSignIn) */
                 const { data, error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: 'in.roninwb.twa://auth', skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } } });
