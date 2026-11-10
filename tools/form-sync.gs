@@ -70,7 +70,7 @@ function setup() {
   ScriptApp.newTrigger('onSheetEdit').forSpreadsheet(ss).onEdit().create();
   ScriptApp.newTrigger('publishForm').timeBased().everyHours(1).create();
   ScriptApp.newTrigger('syncAnswers').timeBased().everyDays(1).atHour(3).create();
-  ScriptApp.newTrigger('syncWithApp').timeBased().everyMinutes(10).create();
+  ScriptApp.newTrigger('syncWithApp').timeBased().everyHours(3).create();   /* full check every 3 hours: each one downloads every member, which uses Supabase's free data allowance (approvals and form entries reach the sheet instantly anyway) */
   columns_(responsesSheet_());
   makeTabs_();
   console.log('Working on the tab "' + responsesSheet_().getName() + '"');
@@ -177,7 +177,7 @@ function ensureTriggers_() {
   const have = ScriptApp.getProjectTriggers().map(t => t.getHandlerFunction()), ss = SpreadsheetApp.getActive(), made = [];
   if (!have.includes('onFormSubmitSync')) { ScriptApp.newTrigger('onFormSubmitSync').forSpreadsheet(ss).onFormSubmit().create(); made.push('form'); }
   if (!have.includes('onSheetEdit')) { ScriptApp.newTrigger('onSheetEdit').forSpreadsheet(ss).onEdit().create(); made.push('edit'); }
-  if (!have.includes('syncWithApp')) { ScriptApp.newTrigger('syncWithApp').timeBased().everyMinutes(10).create(); made.push('10-minute check'); }
+  if (!have.includes('syncWithApp')) { ScriptApp.newTrigger('syncWithApp').timeBased().everyHours(3).create(); made.push('3-hour check'); }
   if (made.length) console.log('Triggers reinstalled: ' + made.join(', '));
 }
 
