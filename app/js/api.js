@@ -353,14 +353,6 @@ async function supabaseApi(url, key) {
             }
         },
         chatNotes: async () => must(await sb.rpc('admin_get_chat_notes')),
-        sheetSync: async () => must(await sb.rpc('admin_sheet_sync')),
-        async appCopies() { const r = await sb.rpc('admin_app_copies'); if (r.error) { if (/could not find the function|PGRST202/i.test((r.error.message || '') + (r.error.code || ''))) { window.rwbCopiesWhy = `${r.error.code || ''} ${r.error.message || ''}`.trim(); return null; } throw new Error(r.error.message); } return r.data; },
-        async sheetSyncStatus() { const r = await sb.rpc('admin_sheet_sync_status'); if (r.error) { if (/could not find|function/i.test(r.error.message || '')) return null; throw new Error(r.error.message); } return r.data; },
-        teachQueue: async () => must(await sb.rpc('admin_teach_queue')),
-        teachReview: async (id, ok, text) => must(await sb.rpc('admin_teach_review', { p_id: id, p_ok: ok, p_text: text || null })),
-        pookieKnowledge: async () => must(await sb.rpc('admin_pookie_knowledge')),
-        pookieForget: async id => must(await sb.rpc('admin_pookie_forget', { p_id: id })),
-        pookieAddQuestions: async rows => must(await sb.rpc('admin_pookie_add_questions', { p: rows })),
         saveChatNotes: async notes => must(await sb.rpc('admin_set_chat_notes', { p_notes: notes })),
 
         /* report a Motomart post or a member's profile to the RWB team / Grievance Officer (setup file 55) */
@@ -370,6 +362,14 @@ async function supabaseApi(url, key) {
             return must(r);
         },
         admin: {
+            sheetSync: async () => must(await sb.rpc('admin_sheet_sync')),
+            async appCopies() { const r = await sb.rpc('admin_app_copies'); if (r.error) { if (/could not find the function|PGRST202/i.test((r.error.message || '') + (r.error.code || ''))) { window.rwbCopiesWhy = `${r.error.code || ''} ${r.error.message || ''}`.trim(); return null; } throw new Error(r.error.message); } return r.data; },
+            async sheetSyncStatus() { const r = await sb.rpc('admin_sheet_sync_status'); if (r.error) { if (/could not find|function/i.test(r.error.message || '')) return null; throw new Error(r.error.message); } return r.data; },
+            teachQueue: async () => must(await sb.rpc('admin_teach_queue')),
+            teachReview: async (id, ok, text) => must(await sb.rpc('admin_teach_review', { p_id: id, p_ok: ok, p_text: text || null })),
+            pookieKnowledge: async () => must(await sb.rpc('admin_pookie_knowledge')),
+            pookieForget: async id => must(await sb.rpc('admin_pookie_forget', { p_id: id })),
+            pookieAddQuestions: async rows => must(await sb.rpc('admin_pookie_add_questions', { p: rows })),
             stats: async () => must(await sb.rpc('admin_stats')),
             async reports() { const r = await sb.rpc('admin_reports'); if (r.error) { if (/could not find|function/i.test(r.error.message || '')) return null; throw new Error(r.error.message); } return r.data || []; },
             reportDone: async (id, outcome) => must(await sb.rpc('admin_report_done', { p_id: id, p_outcome: outcome })),
