@@ -1652,3 +1652,20 @@ button.rw-btn{padding:8px 14px}
 /* the same screen refreshing: no replay */
 #app.same .lp-who,#app.same .lp-step,#app.same .lp-step span,#app.same .lp-crown,#app.same .lb-list li,#app.same .lb-me{animation-duration:0s!important;animation-delay:0s!important}
 @media (prefers-reduced-motion:reduce){.lp-who,.lp-step span,.lp-crown,.lb-list li,.lb-me{opacity:1!important}.lp-step{transform:none!important}.lp.empty .lp-who{opacity:.55!important}}
+/* podium riders hop now and then: #1 highest, then #2 and #3 in a wave */
+.lp-ring{animation:lbHop 4.2s cubic-bezier(.3,0,.3,1) calc(2.4s + var(--hd)) infinite}
+.lp1{--hop:-12px;--hd:0s}.lp2{--hop:-8px;--hd:.22s}.lp3{--hop:-6px;--hd:.44s}
+.lp1 .lp-ring{animation:lbRing 4s linear infinite,lbHop 4.2s cubic-bezier(.3,0,.3,1) 2.4s infinite}
+.lp.empty .lp-ring{animation:none}
+.lp-crown{top:-22px}
+@keyframes lbHop{0%,72%,100%{transform:translateY(0)}78%{transform:translateY(var(--hop)) scaleY(1.03)}84%{transform:translateY(0) scaleY(.96)}88%{transform:translateY(calc(var(--hop) * .3))}93%{transform:translateY(0)}}
+@media (prefers-reduced-motion:reduce){.lp-ring{animation:none!important}}
+/* way into the member list, under the leaderboards */
+.mem-entry{display:flex;align-items:center;gap:12px;margin:14px 0 6px;padding:13px 14px;border-radius:18px;text-decoration:none;color:var(--ink);background:var(--surface,var(--card));border:1px solid var(--hair,var(--line))}
+.mem-entry:active{transform:scale(.98)}
+.mem-entry .grow{display:grid;gap:2px;min-width:0}.mem-entry b{font-weight:600}
+.mem-entry .chev{width:20px;height:20px;fill:none;stroke:var(--muted);stroke-width:2;flex:none}
+.mem-faces{display:flex;flex:none}.mem-faces .avatar{width:34px;height:34px;font-size:.72rem;box-shadow:0 0 0 2px var(--card)}.mem-faces .avatar + .avatar{margin-left:-12px}
+.mem-title{font:700 1.5rem/1.1 var(--display);text-transform:uppercase;letter-spacing:.02em;margin-bottom:4px}
+.lb-mem{display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:6px 12px 6px 9px;border-radius:999px;background:rgba(255,255,255,.18);box-shadow:inset 0 0 0 1px rgba(255,255,255,.28);color:#fff;text-decoration:none;font:600 .8rem/1 var(--body)}
+.lb-mem svg{width:16px;height:16px}.lb-mem:active{transform:scale(.96)}
