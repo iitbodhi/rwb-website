@@ -1,14 +1,20 @@
 /* RWB App service worker: keeps the app shell available offline and loads it fast.
    Bump VERSION whenever app files change so phones pick up the new version. */
-const VERSION = 'rwb-app-v131';
+const VERSION = 'rwb-app-v132';
 const SHELL = ['./', 'index.html', 'config.js', 'css/app.css', 'js/app.js', 'js/api.js', '../js/data.js', '../js/terms.js',
     'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
     e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
+const IMG = 'rwb-img-v1';   /* survives app updates (photo addresses don't change) */
+let trimming = false;
+function trimImages(c) {   /* keep the newest 600 photos (about 25 MB) */
+    if (trimming) return; trimming = true;
+    c.keys().then(ks => Promise.all(ks.slice(0, Math.max(0, ks.length - 600)).map(k => c.delete(k)))).finally(() => { trimming = false; });
+}
 self.addEventListener('activate', e => {
-    e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+    e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION && k !== IMG).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', e => {
     const url = new URL(e.request.url);
@@ -31,7 +37,18 @@ self.addEventListener('fetch', e => {
             return res;
         })));
     }
-    /* everything else (Supabase, Google Sheets, Drive) goes straight to the network */
+    /* photos from Supabase Storage (profile photos, Motomart photos): kept on the phone and shown from there.
+       A changed profile photo has a new address (?v=…), and Motomart photos never change, so a saved copy is always right.
+       This keeps Supabase's free data allowance (egress) for what really needs the network. */
+    if (/\/storage\/v1\/object\/public\//.test(url.pathname)) {
+        const key = e.request.url;   /* fetched as CORS (not "opaque"), so the browser stores just the photo's real size */
+        e.respondWith(caches.open(IMG).then(c => c.match(key).then(hit => hit || fetch(key, { mode: 'cors', credentials: 'omit' }).then(res => {
+            if (res.ok) { c.put(key, res.clone()); trimImages(c); }
+            return res;
+        }).catch(() => fetch(e.request)))));
+        return;
+    }
+    /* everything else (Supabase data, Google Sheets, Drive) goes straight to the network */
 });
 
 /* ---------- push notifications ---------- */

@@ -114,7 +114,7 @@ async function supabaseApi(url, key) {
         async setAvatar(file) {   /* file = small square JPEG, or null to remove */
             const me = await uid(), path = `${me}/avatar.jpg`;
             if (!file) { await sb.storage.from('avatars').remove([path]); return must(await sb.from('members').update({ avatar_url: null }).eq('user_id', me).select().single()); }
-            must(await sb.storage.from('avatars').upload(path, file, { contentType: 'image/jpeg', upsert: true, cacheControl: '3600' }));
+            must(await sb.storage.from('avatars').upload(path, file, { contentType: 'image/jpeg', upsert: true, cacheControl: '31536000' }));
             const url = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl + '?v=' + Date.now();
             return must(await sb.from('members').update({ avatar_url: url }).eq('user_id', me).select().single());
         },
@@ -256,7 +256,7 @@ async function supabaseApi(url, key) {
             try {
                 for (const f of newFiles) {
                     const path = `${me}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
-                    must(await sb.storage.from(PHOTO_BUCKET).upload(path, f, { contentType: 'image/jpeg', upsert: false }));
+                    must(await sb.storage.from(PHOTO_BUCKET).upload(path, f, { contentType: 'image/jpeg', upsert: false, cacheControl: '31536000' }));
                     added.push(path);
                 }
                 const { id, user_id, created_at, updated_at, published_at, status, reject_reason, ...row } = rec;
