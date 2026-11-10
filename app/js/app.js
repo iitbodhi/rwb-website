@@ -3535,7 +3535,7 @@ document.addEventListener('click', e => {
 /* the last 150 Track events from the phone, to send to the RWB team if sharing stops with the screen off */
 async function trackReport() {
     let st = {}, lg = ''; try { st = await RwbTrack().status(); lg = (await RwbTrack().log()).log || ''; } catch { return toast('Update the RWB app to get a Track report', true); }
-    const text = `RWB Track report · ${new Date().toLocaleString('en-IN')}\nApp ${st.version || ''} · service ${trk.svc ? 'on' : 'OFF'}${svcErr ? ' (' + svcErr + ')' : ''} · battery ${st.battery ? 'unrestricted' : 'RESTRICTED'} · location ${st.bgLocation ? 'all the time' : 'only while using'} · ${navigator.userAgent.replace(/.*Android/, 'Android').slice(0, 60)}\n\n${lg || '(no events yet)'}`;
+    const text = `RWB Track report · ${new Date().toLocaleString('en-IN')}\nApp build ${await Native('App')?.getInfo?.().then(i => i.version + ' (' + i.build + ')').catch(() => '?') || '?'} · service ${trk.svc ? 'on' : 'OFF'}${svcErr ? ' (' + svcErr + ')' : ''} · battery ${st.battery ? 'unrestricted' : 'RESTRICTED'} · location ${st.bgLocation ? 'all the time' : 'only while using'} · ${navigator.userAgent.replace(/.*Android/, 'Android').slice(0, 60)}\n\n${lg || '(no events yet)'}`;
     try { if (navigator.share) { await navigator.share({ title: 'RWB Track report', text }); return; } } catch { /* cancelled */ }
     try { await navigator.clipboard.writeText(text); toast('Track report copied: paste it in WhatsApp to the RWB team'); } catch { toast('Could not copy the report', true); }
 }
