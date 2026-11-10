@@ -1,6 +1,6 @@
 /* RWB Terms & Conditions: one source for roninwb.in/terms.html and the RWB App */
 window.RWB_TNC = {
-    updated: '26 October 2026',
+    updated: '10 November 2026',
     version: '2.0',
     sections: [
 
@@ -50,7 +50,9 @@ window.RWB_TNC = {
         'Wear proper protective gear: an ISI-certified helmet at all times, and riding jacket, gloves and boots wherever possible. Make sure your bike is roadworthy.',
         'Stunts, racing and reckless riding are not allowed on RWB rides. Ride leads may ask anyone to leave a ride for safety reasons.',
         'RWB may share safety information (such as your blood group or emergency contact) with medical staff, the police or your emergency contact if you are hurt or in danger.',
-        'Members may be asked to help in an emergency only where they can do so safely. Helping is never an obligation.'
+        'Members may be asked to help in an emergency only where they can do so safely. Helping is never an obligation.',
+        'Never use your phone or the RWB App while riding. Start Track before you set off; it keeps sharing on its own. Pull over safely before you check the map, reply to messages or send an SOS.',
+        'Track and SOS help the RWB team and your family find you, but they are not an emergency service and depend on your phone, battery, GPS and mobile network. In an emergency, always call 112 first.'
     ]],
     ['RWB App, website and Motomart', [
         'The RWB App and website are provided free, “as is” and “as available”, by volunteers. We do our best to keep them accurate and running, but we cannot promise they will always be available, error-free or secure.',
@@ -79,6 +81,12 @@ window.RWB_TNC = {
     ['Changes to these Terms', [
         'RWB may update these Terms from time to time. The date at the top shows the latest version.',
         'Members will be told about important changes in the RWB App or the WhatsApp groups, and may be asked to agree again. Continuing as a member after a change means you accept the updated Terms.'
+    ]],
+    ['Reporting content and complaints (Grievance Officer)', [
+        'If you see anything in the RWB App or website that is unlawful, harmful, abusive, misleading, a scam, an impersonation, or that shares someone\'s private details or images without consent, report it: tap Report on the Motomart post or chat message, or write to the Grievance Officer.',
+        'Grievance Officer: Sayantan Sarkar, Ronin Warriors of Bengal, Kolkata, West Bengal. Email: ronin.warriors.bengal@gmail.com (subject “Grievance”). We acknowledge every complaint within 24 hours and resolve it within 7 days.',
+        'Content that shows nudity or sexual acts, impersonates someone, or is a morphed or fake image of a person is removed within 2 hours of a complaint by that person or someone on their behalf. Content we are told to remove by a court order or an authorised government officer is removed within the time the law sets.',
+        'Admins may remove content, and suspend or remove members, who break these Terms or the law. Where the law requires, we keep the relevant records and share them with the authorities.'
     ]],
     ['Governing law and contact', [
         'These Terms are governed by the laws of India. Any dispute will be subject to the courts of Kolkata, West Bengal. We will always try to resolve concerns informally first.',

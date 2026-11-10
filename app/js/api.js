@@ -333,8 +333,16 @@ async function supabaseApi(url, key) {
         chatNotes: async () => must(await sb.rpc('admin_get_chat_notes')),
         saveChatNotes: async notes => must(await sb.rpc('admin_set_chat_notes', { p_notes: notes })),
 
+        /* report a Motomart post or a member's profile to the RWB team / Grievance Officer (setup file 55) */
+        async report(kind, ref, label, reason, details) {
+            const r = await sb.rpc('report_content', { p_kind: kind, p_ref: String(ref ?? ''), p_label: label || '', p_reason: reason, p_details: details || null });
+            if (r.error && /could not find|function/i.test(r.error.message || '')) throw new Error('Reporting isn\'t set up yet. Please message an admin or email ronin.warriors.bengal@gmail.com.');
+            return must(r);
+        },
         admin: {
             stats: async () => must(await sb.rpc('admin_stats')),
+            async reports() { const r = await sb.rpc('admin_reports'); if (r.error) { if (/could not find|function/i.test(r.error.message || '')) return null; throw new Error(r.error.message); } return r.data || []; },
+            reportDone: async (id, outcome) => must(await sb.rpc('admin_report_done', { p_id: id, p_outcome: outcome })),
             /* duplicates found in the RWB contact sheet (setup file 49); [] until that file is run */
             async dupes() { const r = await sb.rpc('admin_dupes'); if (r.error) { if (/could not find|function/i.test(r.error.message || '')) return []; throw new Error(r.error.message); } return r.data || []; },
             resolveDupe: async (key, remove, ignore = false) => must(await sb.rpc('admin_resolve_dupe', { p_key: key, p_remove: remove || [], p_ignore: !!ignore })),
@@ -647,7 +655,10 @@ function demoApi() {
         chatNotes: async () => db.chatNotes || '', async saveChatNotes(n) { db.chatNotes = n; save(); },
         async testPush() { db.news.push({ id: nid(), kind: 'admin', title: 'Test notification ✅', body: 'Push notifications are working on this phone.', url: '#news', audience: 'admins', created_at: new Date().toISOString() }); save(); },
 
+        report: (kind, ref, label, reason, details) => { (db.reports ??= []).unshift({ id: Date.now(), created_at: new Date().toISOString(), reporter_name: me().full_name, kind, ref, label, reason, details: details || null, status: 'open' }); save(); return wait(1); },
         admin: {
+            reports: () => wait(db.reports ??= []),
+            reportDone: (id, outcome) => { const r = (db.reports || []).find(x => x.id === id); if (r) Object.assign(r, { status: 'done', outcome, handled_by: me().full_name, handled_at: new Date().toISOString() }); save(); return wait('done'); },
             dupes: () => wait(db.dupes ??= [
                 { key: 'phone:9000000002', kind: 'phone', value: '9000000002', entries: [
                     { id: 'a1', row: 214, name: 'Rahul Sen', phone: '9000000002', vrn: 'WB06C7788', email: 'rahul@example.com', joined: '12/03/2024 18:20', status: 'In App', filled: 16, tnc: true, best: true, on_app: true, member: 'active' },

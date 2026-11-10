@@ -2095,6 +2095,7 @@ function viewMe() {
         <h2 class="group-title">App</h2>
         <div class="group">
             <a href="../privacy.html" target="_blank" rel="noopener"><span class="g-ico">${ICON.shield}</span><span class="grow"><b>Privacy</b></span>${ICON.out}</a>
+            <button data-report="other"><span class="g-ico">🚩</span><span class="grow"><b>Report a problem</b><span class="small muted">Something wrong, unsafe or abusive in the app? Tell the RWB team</span></span></button>
             <button data-act="out" class="danger-row"><span class="grow"><b>Sign out</b></span></button>
             <button data-del-acct class="danger-row"><span class="grow"><b>Delete my account</b><span class="small muted">Deletes your RWB App account and what you added in the app</span></span></button>
         </div>
@@ -2173,13 +2174,52 @@ async function viewAdmin() {
             <button role="tab" aria-selected="${tab === 'dupes'}" data-act="tab" data-tab="dupes">Duplicates<span id="dupe-count"></span></button>
             <button role="tab" aria-selected="${tab === 'members'}" data-act="tab" data-tab="members">Members</button>
             <button role="tab" aria-selected="${tab === 'bdays'}" data-act="tab" data-tab="bdays">Birthdays</button>
+            <button role="tab" aria-selected="${tab === 'reports'}" data-act="tab" data-tab="reports">Reports<span id="rep-count"></span></button>
             <button role="tab" aria-selected="${tab === 'ai'}" data-act="tab" data-tab="ai">Pookie</button></div>
         <div id="admin-body"><p class="muted">Loading…</p></div>`;
     actions = { tab: el => { state.adminTab = el.dataset.tab; viewAdmin(); }, mfilter: el => { state.adminTab = 'members'; state.memberFilter = el.dataset.f; state.adminSearch = ''; viewAdmin(); } };
     load.listings(true).then(ls => { const n = ls.filter(l => l.status === 'pending').length; const c = $('#mm-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
     api.admin.dupes().then(g => { state.dupes = g; const c = $('#dupe-count'); if (c && g.length) c.textContent = ` (${g.length})`; }).catch(() => {});
-    try { await ({ requests: adminRequests, motomart: adminMotomart, dupes: adminDupes, members: adminMembers, bdays: adminBdays, ai: adminAI })[tab](); }
+    api.admin.reports?.().then(rs => { const n = (rs || []).filter(r => r.status === 'open').length; const c = $('#rep-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
+    try { await ({ requests: adminRequests, motomart: adminMotomart, dupes: adminDupes, members: adminMembers, bdays: adminBdays, reports: adminReports, ai: adminAI })[tab](); }
     catch (e) { $('#admin-body').innerHTML = `<div class="card empty"><b>Could not load</b>${esc(e.message)}</div>`; }
+}
+/* Reports from members (Grievance Officer's queue): acknowledge within 24 h, resolve within 7 days, 2 h for nudity,
+   sexual content, impersonation or morphed photos */
+async function adminReports() {
+    const rs = await api.admin.reports();
+    const body = $('#admin-body'); if (!body) return;
+    if (rs === null) { body.innerHTML = '<div class="card empty"><b>Reports aren\'t set up yet</b>Run setup file 55 (reports.sql) in Supabase → SQL Editor.</div>'; return; }
+    const urgent = r => /nud|sexual|impersonat|fake profile|morphed/i.test(r.reason);
+    const due = r => { const h = urgent(r) ? 2 : 7 * 24, left = Date.parse(r.created_at) + h * 36e5 - Date.now();
+        return left <= 0 ? '<b class="warn">Overdue</b>' : left < 36e5 * 3 ? `<b class="warn">${Math.max(1, Math.round(left / 6e4))} min left</b>` : `${Math.round(left / 36e5 / (left > 48 * 36e5 ? 24 : 1))} ${left > 48 * 36e5 ? 'days' : 'h'} left`; };
+    const open = rs.filter(r => r.status === 'open').sort((a, b) => urgent(b) - urgent(a)), done = rs.filter(r => r.status !== 'open');
+    const card = r => `<div class="card" style="margin-bottom:10px${r.status === 'open' && urgent(r) ? ';border:2px solid var(--danger,#c0392b)' : ''}">
+        <div class="row" style="justify-content:space-between;gap:8px"><b>${urgent(r) ? '🚨 ' : '🚩 '}${esc(r.reason)}</b><span class="small muted">${timeAgo(r.created_at)}</span></div>
+        <p class="small" style="margin:4px 0">${r.kind === 'listing' ? 'Motomart post' : 'Report'}${r.label ? ': <b>' + esc(r.label) + '</b>' : ''}</p>
+        ${r.details ? `<p class="small" style="margin:4px 0;white-space:pre-wrap">${esc(r.details)}</p>` : ''}
+        <p class="small muted">From ${esc(r.reporter_name || 'a member')}${r.status === 'open' ? ' · ' + due(r) : ` · ✅ ${esc(r.outcome || 'Handled')} (${esc(r.handled_by || '')}, ${timeAgo(r.handled_at)})`}</p>
+        ${r.status === 'open' ? `<div class="btns" style="margin-top:8px">${r.kind === 'listing' && r.ref ? `<button class="btn ghost sm" data-act="rep-open" data-ref="${esc(r.ref)}">Open post</button>` : ''}<button class="btn sm" data-act="rep-done" data-id="${r.id}">Mark resolved</button></div>` : ''}</div>`;
+    body.innerHTML = `<p class="small muted" style="margin-bottom:12px">Members' reports. Reply to the person within 24 hours and resolve within 7 days. 🚨 Nudity, sexual content, impersonation or morphed photos: remove within 2 hours. </p>
+        <details class="card" style="margin-bottom:12px"><summary><b>📋 How to handle complaints and data breaches</b></summary><div class="small" style="margin-top:8px">
+            <p><b>A report or complaint</b> (in the app, by email to ronin.warriors.bengal@gmail.com, or on WhatsApp)</p>
+            <ol><li>Within <b>24 hours</b>: reply to the person ("We got your complaint and are looking into it").</li>
+            <li>🚨 Nudity, sexual content, impersonation or a morphed photo of a person: remove it (delete the post, or remove the photo/nickname) within <b>2 hours</b>, then check the details.</li>
+            <li>Otherwise check it against the RWB Terms. Remove the content, warn or suspend the member if needed.</li>
+            <li>Within <b>7 days</b>: tell the person what you did, then tap <b>Mark resolved</b> here with a short note. Tell Sayantan (Grievance Officer) about anything serious.</li>
+            <li>Police, court or government order to remove something: remove it within <b>3 hours</b> and tell the super admin. Keep the order.</li></ol>
+            <p style="margin-top:8px"><b>A data breach</b> (member data leaked, an admin's phone or Google account lost or hacked, the member sheet shared by mistake, strange admin activity)</p>
+            <ol><li>Stop it now: change the Google password, sign out other devices, remove the person's admin role in the app, and turn off sharing on the member sheet.</li>
+            <li>Tell the super admin and Sayantan straight away. Write down what happened, when, which data and how many members.</li>
+            <li>Serious cyber incidents: report to <b>CERT-In within 6 hours</b> (incident@cert-in.org.in).</li>
+            <li>Tell the members affected without delay: what happened, what it means for them, and what they should do (for example, watch for scam calls).</li>
+            <li>Report to the <b>Data Protection Board of India</b> as the DPDP rules require (an initial report straight away and a full report within 72 hours).</li></ol>
+        </div></details>
+        ${open.length ? open.map(card).join('') : '<div class="card empty"><b>No open reports</b>All clear 👍</div>'}
+        ${done.length ? `<details style="margin-top:14px"><summary class="small muted">Resolved (last 60 days): ${done.length}</summary>${done.map(card).join('')}</details>` : ''}`;
+    actions['rep-done'] = el => { const out = prompt('What did you do? (e.g. "Post removed", "Warned the member", "No action: not against the Terms")'); if (out === null) return;
+        busy(el, async () => { await api.admin.reportDone(Number(el.dataset.id), out); toast('Resolved'); adminReports(); }); };
+    actions['rep-open'] = async el => { const ls = await load.listings(true).catch(() => []); const l = ls.find(x => String(x.id) === el.dataset.ref); if (l) listingDetail(l); else toast('That post is no longer there (deleted)'); };
 }
 /* Every new entry (join form or app) waits here. Admins see 4 checks before approving. */
 /* free sites to look up a VRN; the admin picks any one (or all three) */
@@ -2234,6 +2274,7 @@ function reqCard(r) {
             ${c.k === 'vrn' && r.vrn ? `<span class="vrn-tools"><button class="link-btn" data-act="copy-vrn" data-v="${esc(r.vrn)}">Copy</button><button class="link-btn" data-act="vrn-sites" data-v="${esc(r.vrn)}">Check VRN ↗</button></span>` : ''}
             ${c.k === 'vrn' && r.vrn_other ? `<small class="dup">⚠ Same VRN as ${esc(r.vrn_other)}</small>` : ''}</li>`).join('')}</ul>
         ${r.match_linked && r.on_app && r.check_entry !== 'new' ? '<p class="warn small" style="margin-bottom:10px">⚠ This number is already linked to another app account.</p>' : ''}
+        ${isMinor(r.dob) ? `<p class="warn small" style="margin-bottom:10px">⛔ Under 18 (age ${ageOf(r.dob)} from the date of birth given). RWB is for riders 18 and over, so this entry can't be approved. Reject it, or check the date of birth with them if it's a typo.</p>` : ''}
         <details class="answers"><summary>All answers</summary>${r.answers && Object.keys(r.answers).length ? `<dl class="facts">${Object.entries(r.answers).map(([q, a]) => `<dt>${esc(q)}</dt><dd>${esc(a)}</dd>`).join('')}<dt>Phone link</dt><dd><a href="${waTo(r.phone)}" target="_blank" rel="noopener">WhatsApp ${esc(r.phone)}</a></dd></dl>` : `<dl class="facts">
             <dt>WhatsApp</dt><dd><a href="${waTo(r.phone)}" target="_blank" rel="noopener">${esc(r.phone)}</a></dd><dt>Email</dt><dd>${esc(r.email || '–')}</dd>
             ${r.dob ? `<dt>Birthday</dt><dd>${fmtDayMonth(r.dob)}</dd>` : ''}<dt>Bike</dt><dd>${esc(r.bike || '–')}</dd>${r.blood_group ? `<dt>Blood group</dt><dd>${esc(r.blood_group)}</dd>` : ''}
@@ -2241,6 +2282,12 @@ function reqCard(r) {
             ${r.emergency_phone ? `<dt>Emergency</dt><dd>${esc(r.emergency_phone)}</dd>` : ''}${r.alt_phone ? `<dt>Alt. mobile</dt><dd>${esc(r.alt_phone)}</dd>` : ''}</dl>`}</details>
         <div class="btns req-btns" style="margin-top:12px"><button class="btn ghost" data-act="ask" data-id="${r.id}" aria-label="Message ${esc(r.full_name)} on WhatsApp">💬 Message</button><button class="btn ghost" data-act="reject" data-id="${r.id}">Reject</button><button class="btn" data-act="approve" data-id="${r.id}">Approve</button></div></div>`;
 }
+/* age from a date of birth (YYYY-MM-DD); RWB is 18+ (Terms, Privacy Policy and the DPDP Act's rules for children) */
+function ageOf(dob) {
+    const d = String(dob || '').slice(0, 10).split('-').map(Number); if (d.length < 3 || !d[0] || d[0] < 1910) return null;
+    const n = new Date(); let a = n.getFullYear() - d[0]; if (n.getMonth() + 1 < d[1] || (n.getMonth() + 1 === d[1] && n.getDate() < d[2])) a--; return a;
+}
+const isMinor = dob => { const a = ageOf(dob); return a !== null && a < 18; };
 /* Tap a check: choose how it should count */
 function checkSheet(r, k) {
     const c = r.checks || {}, cur = k === 'vrn' ? (r.vrn_verified ? 'ok' : c.vrn === 'no' ? 'no' : 'auto') : k === 'tnc' ? (c.tnc || 'auto') : (c[k] || 'auto');
@@ -2871,6 +2918,7 @@ function listingDetail(l) {
             ${own && ['live', 'sold'].includes(l.status) ? `<button class="btn ${l.status === 'live' ? '' : 'ghost'} block" data-x="toggle">${l.status === 'live' ? 'Mark as sold' : 'Put back on sale'}</button>` : ''}
             ${(own || adm) && l.status !== 'rejected' ? '<button class="btn ghost block" data-x="share">Share to WhatsApp group</button>' : ''}
             ${own ? '<button class="btn ghost block" data-x="edit">Edit post</button>' : ''}
+            ${!own && l.status === 'live' ? `<button class="linkish" data-report="listing" data-ref="${l.id}" data-label="${esc(l.product_name + ' · ' + l.seller_name)}" style="margin:6px auto 0;display:block;color:var(--muted)">🚩 Report this post</button>` : ''}
             ${own || adm ? '<button class="btn danger block" data-x="del">Delete post</button>' : ''}
         </div>`, body => {
         const on = (x, fn) => { const b = body.querySelector(`[data-x=${x}]`); if (b) b.onclick = () => fn(b); };
@@ -3524,6 +3572,30 @@ async function svcHealth() {
     actions['trk-report'] = () => trackReport();
     if (!st.running) svcCheck();
 }
+/* Report a Motomart post, or anything else, to the RWB team (the Grievance Officer's queue, setup file 55) */
+const REPORT_REASONS = {
+    listing: ['Scam or fraud', 'Stolen, fake or illegal item', 'Wrong or misleading details', 'Abusive or offensive', 'Nudity or sexual content', 'Someone else\'s photos or details', 'Other'],
+    other: ['Abuse, threats or harassment', 'Impersonation or fake profile', 'Nudity or sexual content', 'Morphed or fake photo of a person', 'My private details shared without consent', 'Scam or fraud', 'Something isn\'t working', 'Other']
+};
+function reportSheet(kind, ref = '', label = '') {
+    const rs = REPORT_REASONS[kind] || REPORT_REASONS.other;
+    openSheet(kind === 'listing' ? 'Report this post' : 'Report a problem', `<form id="rpf">
+        ${label ? `<p class="small muted" style="margin-bottom:10px">${esc(label)}</p>` : ''}
+        <fieldset><legend>What's wrong?</legend>${rs.map((r, i) => `<label class="check-row"><input type="radio" name="reason" value="${esc(r)}"${i ? '' : ' required'}><span>${esc(r)}</span></label>`).join('')}</fieldset>
+        <label>Details <span class="muted small">${kind === 'listing' ? '(optional)' : '(who or what, where in the app, when)'}</span><textarea name="details" rows="3" maxlength="1000" placeholder="${kind === 'listing' ? 'Anything that helps the admins check' : 'e.g. a member\'s profile photo, a Track note, a Motomart post'}"></textarea></label>
+        <p class="small muted">Only the RWB team sees your report and your name. We reply within 24 hours and sort it out within 7 days; nudity, sexual content, impersonation or a morphed photo is removed within 2 hours. Grievance Officer: Sayantan Sarkar, <a href="mailto:ronin.warriors.bengal@gmail.com?subject=Grievance">ronin.warriors.bengal@gmail.com</a>. In danger? Call <a href="tel:112"><b>112</b></a>.</p>
+        <button class="btn block">Send report</button></form>`, body => {
+        const f = body.querySelector('#rpf');
+        f.onsubmit = e => { e.preventDefault(); const d = Object.fromEntries(new FormData(f));
+            if (!d.reason) return toast('Choose what\'s wrong', true);
+            if (kind !== 'listing' && !String(d.details || '').trim()) return toast('Add a few details so the admins can find it', true);
+            busy(f.querySelector('button.btn'), async () => { await api.report(kind, ref, label, d.reason, d.details); closeSheet(); toast('Thanks. The RWB team will look into it 🙏'); }); };
+    });
+}
+document.addEventListener('click', e => {
+    const b = e.target.closest('[data-report]'); if (!b) return;
+    e.preventDefault(); reportSheet(b.dataset.report, b.dataset.ref || '', b.dataset.label || '');
+});
 /* Me → Delete my account (Google Play asks every app with accounts to offer this) */
 document.addEventListener('click', e => {
     const b = e.target.closest('[data-del-acct]'); if (!b) return;
@@ -4038,6 +4110,7 @@ function viewFamMe() {
         <h2 class="group-title">App</h2>
         <div class="group">
             <a href="../privacy.html" target="_blank" rel="noopener"><span class="g-ico">${ICON.shield}</span><span class="grow"><b>Privacy</b></span>${ICON.out}</a>
+            <button data-report="other"><span class="g-ico">🚩</span><span class="grow"><b>Report a problem</b><span class="small muted">Something wrong, unsafe or abusive in the app? Tell the RWB team</span></span></button>
             <button data-act="out" class="danger-row"><span class="grow"><b>Sign out</b></span></button>
             <button data-del-acct class="danger-row"><span class="grow"><b>Delete my account</b><span class="small muted">Deletes your RWB App account and what you added in the app</span></span></button>
         </div>
