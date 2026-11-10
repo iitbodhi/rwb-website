@@ -62,7 +62,7 @@ import java.util.Locale;
 public class TrackService extends Service {
     static final String PREFS = "rwb_track", STATS = "rwb_track_stats", LOG = "rwb_track_log";
     static final String CHANNEL = "rwb_track_live";   /* new id: Android never lets an app raise an old channel's importance */
-    static final String ACTION_STOP = "in.roninwb.twa.TRACK_STOP", ACTION_WAKE = "in.roninwb.twa.TRACK_WAKE";
+    static final String ACTION_STOP = "in.roninwb.twa.TRACK_STOP", ACTION_WAKE = "in.roninwb.twa.TRACK_WAKE", ACTION_SHOW = "in.roninwb.twa.TRACK_SHOW";
     static final int NOTIFICATION_ID = 7301;
     static volatile boolean running = false;
 
@@ -126,6 +126,7 @@ public class TrackService extends Service {
         url = p.getString("url", null); anon = p.getString("anon", null); key = p.getString("key", null); until = p.getLong("until", 0);
         String action = intent == null ? null : intent.getAction();
         if (ACTION_STOP.equals(action)) { stopFromNotification(); return START_NOT_STICKY; }
+        if (ACTION_SHOW.equals(action) && !running && (url == null || until < System.currentTimeMillis())) { stopSelf(); return START_NOT_STICKY; }
         if (!showNotification()) return START_NOT_STICKY;
         if (url == null || anon == null || key == null || until < System.currentTimeMillis()) { finish("time up"); return START_NOT_STICKY; }
         if (!running) { running = true; if (intent == null) log("restarted by Android"); begin(); }
@@ -149,12 +150,14 @@ public class TrackService extends Service {
         Intent open = getPackageManager().getLaunchIntentForPackage(getPackageName());
         PendingIntent pi = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         PendingIntent stopPi = PendingIntent.getService(this, 1, new Intent(this, TrackService.class).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        /* Android 14+ lets people swipe this notification away (or "Clear all"): put it straight back while sharing */
+        PendingIntent showPi = PendingIntent.getService(this, 2, new Intent(this, TrackService.class).setAction(ACTION_SHOW), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CHANNEL) : new Notification.Builder(this);
         int icon = getResources().getIdentifier("ic_stat_rwb", "drawable", getPackageName());
         if (icon == 0) icon = getApplicationInfo().icon;
         b.setSmallIcon(icon).setContentTitle("RWB is sharing your live location")
             .setContentText("Tap to open the RWB App").setOngoing(true).setContentIntent(pi)
-            .setOnlyAlertOnce(true).setShowWhen(true).setWhen(System.currentTimeMillis()).setCategory(Notification.CATEGORY_SERVICE).setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setDeleteIntent(showPi).setOnlyAlertOnce(true).setShowWhen(true).setWhen(System.currentTimeMillis()).setCategory(Notification.CATEGORY_SERVICE).setVisibility(Notification.VISIBILITY_PUBLIC)
             .addAction(new Notification.Action.Builder(0, "Stop sharing", stopPi).build());
         if (Build.VERSION.SDK_INT >= 31) b.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
         try {
