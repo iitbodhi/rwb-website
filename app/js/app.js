@@ -3244,10 +3244,11 @@ async function boot() {
         }
         state.fam = null; delete document.body.dataset.fam;
         state.me = await api.me();
+        { const back = takeReturn(); if (back && !location.hash.startsWith(back)) history.replaceState(null, '', back); }   /* back from Android's settings */
         api.settings().then(v => { state.settings = v || {}; }).catch(() => { state.settings = {}; });
         await load.news(true);
         await render();
-        if (!trk.resumed) { trk.resumed = true; resumeShare(); if (NATIVE) { nativePushOn(false).catch(() => {}); setTimeout(nativeUpdateAsk, 2500); } else setTimeout(appPromo, 1500); }
+        if (!trk.resumed) { trk.resumed = true; resumeShare(); if (NATIVE) { nativePushOn(false).catch(() => {}); setTimeout(nativeUpdateAsk, 2500); if (sharing()) setTimeout(() => RwbTrack()?.perms?.().then(p => notifCheck({ notif: p?.notifications })).catch(() => {}), 1500); } else setTimeout(appPromo, 1500); }
     } catch (e) {
         tabbar.hidden = true;
         app.innerHTML = `<section class="signin"><img src="icons/logo-128.png" alt=""><div><h1>Can't connect</h1><p class="lead">${esc(e.message || 'Please check your internet connection.')}</p></div><button class="btn block" onclick="location.reload()">Try again</button></section>`;
@@ -3369,25 +3370,65 @@ function locDisclosure() {
         sheet.addEventListener('close', () => fin(false), { once: true });
     });
 }
-/* RWB Android app: the notice, then Android's location pop-up, then "Allow all the time", then notifications (so the
-   "RWB is sharing your location" notification can show). Returns false only if location was refused. */
+/* RWB Android app, before sharing: the notice, Android's location pop-up and the notifications pop-up (so the
+   "RWB is sharing your location" notification shows). Returns { ok, bg }: ok false only if location was refused;
+   bg true when "Allow all the time" should be asked AFTER sharing has started (that page is in Android's settings,
+   and Android can restart the app when you come back from it, so sharing must already be running by then). */
 async function nativeTrackPerms() {
-    const T = RwbTrack(); if (!NATIVE || !T?.perms) return true;
-    let p = await T.perms().catch(() => null); if (!p) return true;
+    const T = RwbTrack(); if (!NATIVE || !T?.perms) return { ok: true, bg: false };
+    let p = await T.perms().catch(() => null); if (!p) return { ok: true, bg: false };
     const needFg = !p.fine && !p.coarse;
     let askBg = !p.background; try { askBg = askBg && (needFg || Date.now() - Number(localStorage.getItem('rwb-bg-asked') || 0) > 3 * 864e5); } catch { /* ignore */ }
     if (needFg || askBg) {
         const go = await locDisclosure();
-        if (!go) return !needFg;
+        if (!go) return { ok: !needFg, bg: false };
         try { localStorage.setItem('rwb-bg-asked', String(Date.now())); } catch { /* ignore */ }
-        if (needFg) { p = await T.askLocation().catch(() => p); if (!p.fine && !p.coarse) return false; }
-        if (!p.background) p = await T.askBackground().catch(() => p);
+        if (needFg) { p = await T.askLocation().catch(() => p); if (!p.fine && !p.coarse) return { ok: false, bg: false }; }
     }
-    if (!p.notifications) await T.askNotifications().catch(() => {});
-    return true;
+    if (!p.notifications) p = await T.askNotifications().catch(() => p) || p;
+    return { ok: true, bg: askBg && !p.background, notif: p.notifications !== false };
+}
+/* opening one of Android's settings pages: remember where we were, so coming back (even if Android restarted the
+   app) lands on the Track map instead of the home page */
+const RETURN_KEY = 'rwb-return';
+function markReturn(hash = '#track') { try { localStorage.setItem(RETURN_KEY, JSON.stringify({ hash, at: Date.now() })); } catch { /* ignore */ } }
+function takeReturn() {
+    try { const v = JSON.parse(localStorage.getItem(RETURN_KEY) || 'null'); localStorage.removeItem(RETURN_KEY); return v && Date.now() - v.at < 15 * 6e4 ? v.hash : null; } catch { return null; }
+}
+/* after sharing started: "Allow all the time" (Android 11+ opens RWB's location page), then back to the map */
+async function bgAfterShare(perm) {
+    const T = RwbTrack(); if (!perm?.bg || !T?.askBackground) return notifCheck(perm);
+    const ok = await new Promise(res => {
+        openSheet('One more step', `<p class="small" style="margin-bottom:12px">You're sharing now ✅. To keep it going with the screen off for the whole ride, Android's next screen asks about location: choose <b>Allow all the time</b>, then come back to RWB.</p>
+            <button class="btn block" data-x="go">Open</button><button class="btn ghost block" data-x="no" style="margin-top:8px">Later</button>`, body => {
+            body.querySelector('[data-x=go]').onclick = () => { res(true); closeSheet(); };
+            body.querySelector('[data-x=no]').onclick = () => { res(false); closeSheet(); };
+        });
+        sheet.addEventListener('close', () => res(false), { once: true });
+    });
+    if (!ok) return notifCheck(perm);
+    markReturn('#track');
+    await T.askBackground().catch(() => {});
+    try { localStorage.removeItem(RETURN_KEY); } catch { /* ignore */ }
+    if (location.hash !== '#track') location.hash = '#track'; else refreshTrack();
+    if (sharing() && trk.svc) svcCheck();
+    notifCheck(perm);
+}
+/* notifications turned off (or the pop-up refused twice, so Android won't show it again): the sharing notification
+   can't show, so say how to turn them on */
+async function notifCheck(perm) {
+    if (!perm || perm.notif !== false) return;
+    try { if (Date.now() - Number(localStorage.getItem('rwb-notif-tip') || 0) < 864e5) return; localStorage.setItem('rwb-notif-tip', String(Date.now())); } catch { /* ignore */ }
+    openSheet('Turn on notifications', `<p class="small" style="margin-bottom:12px">Notifications are off for RWB, so the <b>"RWB is sharing your live location"</b> notification can't show (and you won't get SOS alerts). Sharing still works.</p>
+        <p class="small" style="margin-bottom:12px">Tap <b>Open settings</b> → <b>Notifications</b> → turn them <b>on</b>, then come back.</p>
+        <button class="btn block" data-x="go">Open settings</button><button class="btn ghost block" data-x="no" style="margin-top:8px">Later</button>`, body => {
+        body.querySelector('[data-x=go]').onclick = () => { markReturn('#track'); RwbTrack()?.settings().catch(() => {}); closeSheet(); };
+        body.querySelector('[data-x=no]').onclick = () => closeSheet();
+    });
 }
 async function startShare(hours, eventId = null, note = '') {
-    if (!(await nativeTrackPerms())) throw new Error('RWB needs your location to share it. Tap Share again and allow location.');
+    const perm = await nativeTrackPerms();
+    if (!perm.ok) throw new Error('RWB needs your location to share it. Tap Share again and allow location.');
     if (!(await locationOn())) throw new Error('Location is off. Turn on Location to share your live location.');
     try { localStorage.removeItem(STOP_KEY); } catch { /* ignore */ }
     const p = await quickStartFix();
@@ -3398,8 +3439,9 @@ async function startShare(hours, eventId = null, note = '') {
     if (await hasSvc()) svc = await svcStart().catch(e => { toast(`Background sharing couldn't start: ${e.message || e}. Sharing works while the app is open.`, true); return null; });
     trackSave({ until: trk.until, event: eventId, note, svc: trk.svc });
     startWatch();
-    if (svc && (svc.battery === false || svc.bgLocation === false)) setTimeout(() => batteryAsk(), 900);
     toast(`You're sharing your live location 📍 ${hours >= 12 ? 'until you stop' : 'for ' + TRACK_HOURS.find(h => h[0] === hours)[1]}`);
+    if (perm.bg || perm.notif === false) setTimeout(() => bgAfterShare(perm), 700);
+    else if (svc && (svc.battery === false || svc.bgLocation === false)) setTimeout(() => batteryAsk(), 900);
 }
 /* stopping is instant on the phone; the server is told in the background (tried again until it works) */
 const STOP_KEY = 'rwb-track-stop';
@@ -3429,6 +3471,7 @@ function resumeShare() {
 }
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
+    { const back = takeReturn(); if (back && state.me && !location.hash.startsWith(back)) location.hash = back; }
     if (sharing() && trk.svc) { if (trk.watch == null) startWatch(); svcCheck(); }
     else if (sharing()) { keepAwake(true); if (trk.watch == null && trk.native == null) startWatch(); gpsFix(20000).then(sendFix).catch(() => {}); }
     if (location.hash.startsWith('#track')) refreshTrack();
@@ -3500,8 +3543,8 @@ async function batteryAsk(force = false) {
         ${item(st.bgLocation, 'Location: Allow all the time', 'Settings → Permissions → Location → <b>Allow all the time</b>. Only used while you share.', 'always', 'Open settings')}
         <ol class="small help-steps" style="margin-top:14px"><li>Samsung: also Settings → Battery → Background usage limits → add RWB to <b>Never sleeping apps</b>.</li><li>Xiaomi, Redmi, Poco, Realme, Oppo, Vivo, OnePlus: Settings → Apps → RWB → Battery → <b>No restrictions</b>, and turn on <b>Autostart</b>.</li></ol>
         <button class="btn ghost block" data-x="later" style="margin-top:10px">Done</button>`, body => {
-        body.querySelector('[data-x=allow]')?.addEventListener('click', () => { RwbTrack()?.battery().catch(() => {}); closeSheet(); });
-        body.querySelector('[data-x=always]')?.addEventListener('click', () => { RwbTrack()?.settings().catch(() => {}); closeSheet(); });
+        body.querySelector('[data-x=allow]')?.addEventListener('click', () => { markReturn(location.hash || '#track'); RwbTrack()?.battery().catch(() => {}); closeSheet(); });
+        body.querySelector('[data-x=always]')?.addEventListener('click', () => { markReturn(location.hash || '#track'); RwbTrack()?.settings().catch(() => {}); closeSheet(); });
         body.querySelector('[data-x=later]').onclick = () => closeSheet();
     });
 }

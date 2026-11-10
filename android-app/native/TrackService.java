@@ -61,7 +61,7 @@ import java.util.Locale;
  */
 public class TrackService extends Service {
     static final String PREFS = "rwb_track", STATS = "rwb_track_stats", LOG = "rwb_track_log";
-    static final String CHANNEL = "rwb_track";
+    static final String CHANNEL = "rwb_track_live";   /* new id: Android never lets an app raise an old channel's importance */
     static final String ACTION_STOP = "in.roninwb.twa.TRACK_STOP", ACTION_WAKE = "in.roninwb.twa.TRACK_WAKE";
     static final int NOTIFICATION_ID = 7301;
     static volatile boolean running = false;
@@ -135,10 +135,16 @@ public class TrackService extends Service {
 
     private boolean showNotification() {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL) == null) {
-            NotificationChannel ch = new NotificationChannel(CHANNEL, "Live location (Track)", NotificationManager.IMPORTANCE_LOW);
-            ch.setShowBadge(false);
-            nm.createNotificationChannel(ch);
+        if (Build.VERSION.SDK_INT >= 26) {
+            try { nm.deleteNotificationChannel("rwb_track"); } catch (Exception ignored) { }   /* the old, silent-section channel */
+            if (nm.getNotificationChannel(CHANNEL) == null) {
+                /* DEFAULT: always shown in the status bar and the notification list (not tucked under "Silent"), but no sound */
+                NotificationChannel ch = new NotificationChannel(CHANNEL, "Sharing live location (Track)", NotificationManager.IMPORTANCE_DEFAULT);
+                ch.setSound(null, null); ch.enableVibration(false); ch.setShowBadge(false);
+                ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+                ch.setDescription("Shows while RWB shares your live location. Tap Stop sharing to end it.");
+                nm.createNotificationChannel(ch);
+            }
         }
         Intent open = getPackageManager().getLaunchIntentForPackage(getPackageName());
         PendingIntent pi = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
@@ -148,6 +154,7 @@ public class TrackService extends Service {
         if (icon == 0) icon = getApplicationInfo().icon;
         b.setSmallIcon(icon).setContentTitle("RWB is sharing your live location")
             .setContentText("Tap to open the RWB App").setOngoing(true).setContentIntent(pi)
+            .setOnlyAlertOnce(true).setShowWhen(true).setWhen(System.currentTimeMillis()).setCategory(Notification.CATEGORY_SERVICE).setVisibility(Notification.VISIBILITY_PUBLIC)
             .addAction(new Notification.Action.Builder(0, "Stop sharing", stopPi).build());
         if (Build.VERSION.SDK_INT >= 31) b.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
         try {
