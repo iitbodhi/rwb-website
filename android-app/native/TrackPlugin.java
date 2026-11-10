@@ -36,6 +36,10 @@ public class TrackPlugin extends Plugin {
     /* ---------- "Turn on location?" (the standard Android pop-up, like Google Maps) ---------- */
     private ActivityResultLauncher<IntentSenderRequest> locLauncher, updLauncher;
     private PluginCall locCall;
+    /* ---------- Android permission pop-ups: location, "Allow all the time", notifications ---------- */
+    private ActivityResultLauncher<String[]> manyLauncher;
+    private ActivityResultLauncher<String> oneLauncher;
+    private PluginCall permCall;
 
     @Override
     public void load() {
@@ -49,6 +53,10 @@ public class TrackPlugin extends Plugin {
         /* Talk was removed (Nov 2026): tidy away its old notification channels on phones that had them */
         try { if (Build.VERSION.SDK_INT >= 26) { android.app.NotificationManager nm = (android.app.NotificationManager) getContext().getSystemService(android.content.Context.NOTIFICATION_SERVICE);
             if (nm != null) { nm.deleteNotificationChannel("talk"); nm.deleteNotificationChannel("talk_play"); } } } catch (Exception ignored) { }
+        try {
+            manyLauncher = getActivity().registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), res -> permDone());
+            oneLauncher = getActivity().registerForActivityResult(new ActivityResultContracts.RequestPermission(), ok -> permDone());
+        } catch (Exception e) { manyLauncher = null; oneLauncher = null; }
         try { updLauncher = getActivity().registerForActivityResult(new ActivityResultContracts.StartIntentSenderForResult(), res -> { }); }
         catch (Exception e) { updLauncher = null; }
     }
@@ -219,6 +227,51 @@ public class TrackPlugin extends Plugin {
             r.put("bgLocation", Build.VERSION.SDK_INT < 29 || getContext().checkSelfPermission("android.permission.ACCESS_BACKGROUND_LOCATION") == android.content.pm.PackageManager.PERMISSION_GRANTED);
         } catch (Exception ignored) { }
         return r;
+    }
+
+
+    /* ---------- permissions ---------- */
+    private boolean has(String p) { return getContext().checkSelfPermission(p) == android.content.pm.PackageManager.PERMISSION_GRANTED; }
+    private JSObject perms() {
+        JSObject r = new JSObject();
+        r.put("sdk", Build.VERSION.SDK_INT);
+        r.put("fine", has("android.permission.ACCESS_FINE_LOCATION"));
+        r.put("coarse", has("android.permission.ACCESS_COARSE_LOCATION"));
+        r.put("background", Build.VERSION.SDK_INT < 29 || has("android.permission.ACCESS_BACKGROUND_LOCATION"));
+        boolean n = Build.VERSION.SDK_INT < 33 || has("android.permission.POST_NOTIFICATIONS");
+        try { n = n && androidx.core.app.NotificationManagerCompat.from(getContext()).areNotificationsEnabled(); } catch (Throwable ignored) { }
+        r.put("notifications", n);
+        return r;
+    }
+    private void permDone() { PluginCall c = permCall; permCall = null; if (c != null) c.resolve(perms()); }
+    private void ask(PluginCall call, String... want) {
+        if (permCall != null) { permCall.resolve(perms()); permCall = null; }
+        try {
+            if (want.length == 1 && oneLauncher != null) { permCall = call; oneLauncher.launch(want[0]); return; }
+            if (want.length > 1 && manyLauncher != null) { permCall = call; manyLauncher.launch(want); return; }
+        } catch (Exception e) { permCall = null; }
+        call.resolve(perms());
+    }
+    /** { sdk, fine, coarse, background, notifications } */
+    @PluginMethod
+    public void perms(PluginCall call) { call.resolve(perms()); }
+    /** Android's location pop-up (precise / approximate, while using the app). */
+    @PluginMethod
+    public void askLocation(PluginCall call) {
+        if (has("android.permission.ACCESS_FINE_LOCATION")) { call.resolve(perms()); return; }
+        ask(call, "android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION");
+    }
+    /** "Allow all the time": Android 10 shows it in a pop-up; Android 11+ opens RWB's location page with that option. */
+    @PluginMethod
+    public void askBackground(PluginCall call) {
+        if (Build.VERSION.SDK_INT < 29 || has("android.permission.ACCESS_BACKGROUND_LOCATION") || !has("android.permission.ACCESS_FINE_LOCATION") && !has("android.permission.ACCESS_COARSE_LOCATION")) { call.resolve(perms()); return; }
+        ask(call, "android.permission.ACCESS_BACKGROUND_LOCATION");
+    }
+    /** Android 13+: the "Allow RWB to send you notifications?" pop-up. */
+    @PluginMethod
+    public void askNotifications(PluginCall call) {
+        if (Build.VERSION.SDK_INT < 33 || has("android.permission.POST_NOTIFICATIONS")) { call.resolve(perms()); return; }
+        ask(call, "android.permission.POST_NOTIFICATIONS");
     }
 
     /** The last 150 Track events (fixes, sends, errors, restarts), to copy and send for help. */

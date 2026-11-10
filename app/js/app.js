@@ -821,6 +821,7 @@ async function viewHome() {
     syncKmpl(fuel);
     const today = bdays.filter(b => b.day === todayISO());
     const fresh = listings.filter(l => l.status === 'live').slice(0, 8);
+    firstNotifAsk();
     let pushAsk = false; try { pushAsk = NATIVE ? !localStorage.getItem(FCM_KEY) && !localStorage.getItem('rwb-push-dismissed') : pushSupported() && Notification.permission === 'default' && !localStorage.getItem('rwb-push-dismissed'); } catch { /* ignore */ }
     const names = today.map(b => b.full_name.split(' ')[0]);
     /* "Clear" hides birthdays, Motomart and member updates on this phone; admin announcements stay until an admin deletes them */
@@ -3354,7 +3355,39 @@ function quickStartFix() {
         }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
     });
 }
+/* Google Play's "prominent disclosure": shown BEFORE Android asks for location */
+const LOC_DISCLOSURE = `<div class="loc-disclosure"><b>📍 How RWB uses your location</b><p class="small">RWB collects your <b>location</b> to share your live position with the RWB members on the Track map, with your RWB FAM and with the RWB team for <b>SOS</b>, <b>even when the app is closed or not in use</b>. This happens <b>only while you share</b> (you pick 1, 4 or 8 hours, or until you stop) and stops when you tap Stop. Your location is never sold or used for ads.</p></div>`;
+function locDisclosure() {
+    return new Promise(res => {
+        let done = false; const fin = v => { if (!done) { done = true; res(v); } };
+        openSheet('Location for Track', `${LOC_DISCLOSURE}
+            <p class="small" style="margin:12px 0">Next, Android asks for your location. Choose <b>While using the app</b>, then on the next screen choose <b>Allow all the time</b>, so sharing keeps going with the screen off.</p>
+            <button class="btn block" data-x="go">Continue</button><button class="btn ghost block" data-x="no" style="margin-top:8px">Not now</button>`, body => {
+            body.querySelector('[data-x=go]').onclick = () => { fin(true); closeSheet(); };
+            body.querySelector('[data-x=no]').onclick = () => { fin(false); closeSheet(); };
+        });
+        sheet.addEventListener('close', () => fin(false), { once: true });
+    });
+}
+/* RWB Android app: the notice, then Android's location pop-up, then "Allow all the time", then notifications (so the
+   "RWB is sharing your location" notification can show). Returns false only if location was refused. */
+async function nativeTrackPerms() {
+    const T = RwbTrack(); if (!NATIVE || !T?.perms) return true;
+    let p = await T.perms().catch(() => null); if (!p) return true;
+    const needFg = !p.fine && !p.coarse;
+    let askBg = !p.background; try { askBg = askBg && (needFg || Date.now() - Number(localStorage.getItem('rwb-bg-asked') || 0) > 3 * 864e5); } catch { /* ignore */ }
+    if (needFg || askBg) {
+        const go = await locDisclosure();
+        if (!go) return !needFg;
+        try { localStorage.setItem('rwb-bg-asked', String(Date.now())); } catch { /* ignore */ }
+        if (needFg) { p = await T.askLocation().catch(() => p); if (!p.fine && !p.coarse) return false; }
+        if (!p.background) p = await T.askBackground().catch(() => p);
+    }
+    if (!p.notifications) await T.askNotifications().catch(() => {});
+    return true;
+}
 async function startShare(hours, eventId = null, note = '') {
+    if (!(await nativeTrackPerms())) throw new Error('RWB needs your location to share it. Tap Share again and allow location.');
     if (!(await locationOn())) throw new Error('Location is off. Turn on Location to share your live location.');
     try { localStorage.removeItem(STOP_KEY); } catch { /* ignore */ }
     const p = await quickStartFix();
@@ -3461,7 +3494,7 @@ async function batteryAsk(force = false) {
     let st = {}; try { st = await RwbTrack().status(); } catch { /* ignore */ }
     if (!force && st.battery && st.bgLocation) return;
     const item = (ok, title, how, x, btn) => `<div class="trk-set${ok ? ' ok' : ''}"><span class="ts-ico">${ok ? '✅' : '⚠️'}</span><span class="grow"><b>${title}</b><span class="small muted">${how}</span></span>${ok ? '' : `<button class="btn sm" data-x="${x}">${btn}</button>`}</div>`;
-    openSheet('Make Track unstoppable', `<div class="loc-disclosure"><b>📍 How RWB uses your location</b><p class="small">RWB collects your <b>location</b> to share your live position with the RWB members on the Track map, with your RWB FAM and with the RWB team for <b>SOS</b>, <b>even when the app is closed or not in use</b>. This happens <b>only while you share</b> (you pick 1, 4 or 8 hours, or until you stop) and stops when you tap Stop. Your location is never sold or used for ads.</p></div>
+    openSheet('Make Track unstoppable', `${LOC_DISCLOSURE}
         <p class="small" style="margin-bottom:12px">Two phone settings keep your live location going with the screen off, the app minimised or swiped away, for the whole ride.</p>
         ${item(st.battery, 'Battery: no restrictions', 'So the phone never pauses RWB to save battery.', 'allow', 'Allow')}
         ${item(st.bgLocation, 'Location: Allow all the time', 'Settings → Permissions → Location → <b>Allow all the time</b>. Only used while you share.', 'always', 'Open settings')}
@@ -3892,6 +3925,7 @@ async function viewFamHome() {
     const [news, evd] = await Promise.all([load.news(), loadEvents().catch(() => null)]);
     const up = evd ? evd.events.filter(e => e.status === 'live' && !evtPast(e)).slice(0, 3) : [];
     const feed = visibleNews(news);
+    firstNotifAsk();
     let pushAsk = false; try { pushAsk = NATIVE ? !localStorage.getItem(FCM_KEY) && !localStorage.getItem('rwb-push-dismissed') : pushSupported() && Notification.permission === 'default' && !localStorage.getItem('rwb-push-dismissed'); } catch { /* ignore */ }
     app.innerHTML = top(`Hi, ${firstName(state.me)}`) + `
         <section class="card fam-rider">
@@ -4083,6 +4117,15 @@ const NATIVE = !!window.Capacitor?.isNativePlatform?.();
 const nativePlugins = {};
 function Native(name) { if (!NATIVE) return null; try { return nativePlugins[name] ??= capRegister(name); } catch (e) { console.error(e); return null; } }
 const FCM_KEY = 'rwb-fcm';
+/* RWB Android app: right after the first sign-in, Android asks "Allow RWB to send you notifications?" once */
+function firstNotifAsk() {
+    if (!NATIVE) return;
+    try { if (localStorage.getItem('rwb-notif-first')) return; localStorage.setItem('rwb-notif-first', '1'); } catch { return; }
+    setTimeout(() => nativePushOn(true).then(ok => {
+        if (!ok) return; try { localStorage.setItem('rwb-push-dismissed', '1'); } catch { /* ignore */ }
+        if (!location.hash || location.hash.startsWith('#home')) render();
+    }).catch(() => {}), 700);
+}
 async function nativePushOn(ask = true) {
     const P = Native('PushNotifications'); if (!P) return false;
     let st = await P.checkPermissions();
