@@ -594,7 +594,7 @@ async function joinHelpSheet(sess) {
 /* =================== Home =================== */
 const ICON = {
     fuel: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="ac" x="7" y="6.5" width="5" height="4" rx=".8"/><path d="M5 20.5V5.5A1.5 1.5 0 0 1 6.5 4h6A1.5 1.5 0 0 1 14 5.5v15M3.5 20.5h12M14 9h2a1.5 1.5 0 0 1 1.5 1.5V16a1.5 1.5 0 0 0 3 0V8.5L18 6"/><rect x="7" y="6.5" width="5" height="4" rx=".8"/></svg>',
-    wrench: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle class="ac" cx="15.6" cy="8.4" r="3.4"/><path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8V21h3.2l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>',
+    wrench: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8V21h3.2l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>',
     tag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M3.5 4.5a1 1 0 0 1 1-1h7.1l3.2 3.2L3.5 15.6z"/><path d="M3.5 11.6V4.5a1 1 0 0 1 1-1h7.1l8.9 8.9-8.1 8.1z"/><circle cx="8" cy="8" r="1.5"/></svg>',
     chat: '<svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/><path d="M9 10h.01M12 10h.01M15 10h.01"/></svg>',
     book: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M6.5 3H9v15H6.5A1.5 1.5 0 0 0 5 19.5v-15A1.5 1.5 0 0 1 6.5 3z"/><path d="M5 19.5v-15A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5zm0 0A1.5 1.5 0 0 0 6.5 21H19M12 7.5h4M12 10.5h3"/></svg>',
