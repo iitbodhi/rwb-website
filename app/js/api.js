@@ -354,7 +354,7 @@ async function supabaseApi(url, key) {
         },
         chatNotes: async () => must(await sb.rpc('admin_get_chat_notes')),
         sheetSync: async () => must(await sb.rpc('admin_sheet_sync')),
-        async appCopies() { const r = await sb.rpc('admin_app_copies'); if (r.error) { if (/could not find the function|PGRST202/i.test((r.error.message || '') + (r.error.code || ''))) return null; throw new Error(r.error.message); } return r.data; },
+        async appCopies() { const r = await sb.rpc('admin_app_copies'); if (r.error) { if (/could not find the function|PGRST202/i.test((r.error.message || '') + (r.error.code || ''))) { window.rwbCopiesWhy = `${r.error.code || ''} ${r.error.message || ''}`.trim(); return null; } throw new Error(r.error.message); } return r.data; },
         async sheetSyncStatus() { const r = await sb.rpc('admin_sheet_sync_status'); if (r.error) { if (/could not find|function/i.test(r.error.message || '')) return null; throw new Error(r.error.message); } return r.data; },
         teachQueue: async () => must(await sb.rpc('admin_teach_queue')),
         teachReview: async (id, ok, text) => must(await sb.rpc('admin_teach_review', { p_id: id, p_ok: ok, p_text: text || null })),

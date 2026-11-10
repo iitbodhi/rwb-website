@@ -2438,7 +2438,7 @@ async function appCopies() {
     const rows = await api.admin.appCopies?.().catch(e => ({ err: e.message || String(e) }));
     if (!$('#copies')) return;
     if (rows?.err) { box.hidden = false; box.innerHTML = `<p class="small muted">App copies couldn't load: ${esc(rows.err)} <button class="btn sm ghost" data-act="copies-retry">Try again</button></p>`; actions['copies-retry'] = () => appCopies(); return; }
-    if (rows === null || rows === undefined) { box.hidden = false; box.innerHTML = '<p class="small muted">App copies: run setup file 60 (app-copies.sql) in Supabase to see who uses the Play Store test. <button class="btn sm ghost" data-act="copies-retry">Check again</button></p>'; actions['copies-retry'] = () => appCopies(); return; }
+    if (rows === null || rows === undefined) { box.hidden = false; box.innerHTML = `<p class="small muted">App copies: run setup file 60 (app-copies.sql) in Supabase to see who uses the Play Store test.${window.rwbCopiesWhy ? `<br><span style="opacity:.7">Supabase says: ${esc(window.rwbCopiesWhy)}</span>` : ''} <button class="btn sm ghost" data-act="copies-retry">Check again</button></p>`; actions['copies-retry'] = () => appCopies(); return; }
     const n = k => rows.filter(r => r.copy === k).length;
     box.hidden = false;
     box.innerHTML = `<div class="cp-head"><b>App copies</b><span class="small muted">last 30 days</span></div>
