@@ -793,24 +793,42 @@ function rideWidget(services, fuel, ride) {
     const n = nextService(services, odo), state_ = odo ? n.status : '';
     const lastFill = [...fuel].sort((a, b) => b.fill_date.localeCompare(a.fill_date) || b.odometer_km - a.odometer_km)[0];
     const lastSvc = services[0];
-    const parts = curParts(ride?.parts).filter(p => p.kind === 'wear').map(p => ({ p, w: partWear(p, odo) })).filter(x => x.w.known).sort((a, b) => b.w.pc - a.w.pc).slice(0, 5);
-    const alert = state_ ? `<div class="svc-alert ${state_}"><span class="svc-dot"></span><span class="grow"><b>${state_ === 'due' ? 'Service due' : 'Service due soon'}</b><span>${n.label} · at ${km(n.km)}${n.date ? ` or by ${fmtDayMonth(n.date)}` : ''}</span></span><button class="btn sm" data-act="add-service">Log it</button></div>` : '';
+    const tracked = curParts(ride?.parts).filter(p => p.kind === 'wear').map(p => ({ p, w: partWear(p, odo) })).filter(x => x.w.known).sort((a, b) => b.w.pc - a.w.pc);
+    /* odometer: mechanical-style digit wheels that roll into place */
+    const digits = String(Math.max(0, Math.round(odo))).padStart(6, '0').split('');
+    const firstReal = digits.findIndex(d => d !== '0');
+    const wheels = digits.map((d, i) => `<span class="od-w${odo && i < firstReal ? ' lead' : ''}${i === 5 ? ' unit' : ''}"><span class="od-r" style="--d:${d};--i:${i}">${'0123456789'.split('').map(x => `<i>${x}</i>`).join('')}</span></span>`).join('');
+    /* small alert pills: service due, then worn parts */
+    const pills = [];
+    if (state_) pills.push(`<button class="rw-pill ${state_ === 'due' ? 'bad' : 'warn'}" data-act="add-service">${state_ === 'due' ? 'Service due' : 'Service soon'} · ${km(n.km)}</button>`);
+    tracked.filter(x => x.w.lvl === 'bad').forEach(x => pills.push(`<a class="rw-pill bad" href="#ride">${esc(partName(x.p))}: replace</a>`));
+    tracked.filter(x => x.w.lvl === 'warn').forEach(x => pills.push(`<a class="rw-pill warn" href="#ride">${esc(partName(x.p))}: ${x.w.left != null ? km(x.w.left) + ' left' : 'nearly due'}</a>`));
+    if (!pills.length && odo) pills.push(`<span class="rw-pill ok">${tracked.length ? 'All tracked parts OK' : 'Next: ' + dueText(n).replace(/^[A-Z]/, c => c.toLowerCase())}</span>`);
+    /* parts: pages of 3, swipe left and right */
+    const pages = []; for (let k = 0; k < tracked.length; k += 3) pages.push(tracked.slice(k, k + 3));
+    const row = ({ p, w }) => `<a class="rw-part ${w.lvl}" href="#ride"><span class="rw-ico">${pIco(wearOf(p.part)?.ico)}</span><span class="grow"><span class="rw-pn"><b>${esc(partName(p))}</b><em>${esc(p.brand || '')}</em><span class="rw-km">${w.lvl === 'bad' ? '<b>Replace</b>' : esc(w.txt)}</span></span>
+        <span class="rw-bar"><i style="--w:${Math.min(100, Math.round(w.pc * 100))}%"></i></span></span></a>`;
+    const partsHtml = ride?.parts === null ? '' : pages.length ? `<div class="rw-car" id="rw-car">${pages.map(pg => `<div class="rw-page">${pg.map(row).join('')}</div>`).join('')}</div>
+        ${pages.length > 1 ? `<p class="rw-dots" aria-hidden="true">${pages.map((_, k) => `<i${k ? '' : ' class="on"'}></i>`).join('')}</p>` : ''}`
+      : `<a class="rw-empty" href="#ride">${pIco('tyre')}<span class="grow"><b>Track your tyres, oil, chain and brake pads</b><span>See how much life each part has left</span></span>${ICON.chev}</a>`;
+    const stat = (ico, b, t) => `<span class="rw-st">${ico}<b>${b}</b>${t ? `<em>${t}</em>` : ''}</span>`;
     return `<section class="cluster ride-w ${state_}">
         <div class="rw-top"><div class="grow"><b class="rw-name">${esc(rideTitle(ride))}</b><span class="rw-bike">${esc(state.me.bike || 'My bike')}${state.me.vrn ? ` · ${esc(state.me.vrn)}` : ''}</span></div>
             <a class="rw-btn" href="#ride">My Ride ${ICON.chev}</a></div>
-        <button class="rw-odo" data-act="odo" aria-label="Odometer ${odo ? odo.toLocaleString('en-IN') + ' km' : 'not recorded yet'}. Tap to update">
-            <b class="num" data-count="${odo}">${odo ? odo.toLocaleString('en-IN') : '–'}</b><span>km</span><i>${last ? `${last.manual ? 'updated' : 'from ' + last.src} ${fmtDayMonth(last.d)} · ` : ''}tap to update</i></button>
-        ${alert || (odo ? `<p class="rw-due">${dueText(n)}</p>` : '<p class="rw-due">Tap the km above and enter the odometer reading on your bike</p>')}
-        <div class="rw-stats">
-            <div><b>${ms.avg ? ms.avg.toFixed(1) : '–'}</b><span>km/l avg</span></div>
-            <div><b>${lastFill ? fmtDayMonth(lastFill.fill_date) : '–'}</b><span>${lastFill ? `last fill · ${Number(lastFill.litres).toFixed(1)} L` : 'last fill'}</span></div>
-            <div><b>${lastSvc ? fmtDayMonth(lastSvc.service_date) : '–'}</b><span>${lastSvc && odo ? `last service · ${km(Math.max(0, odo - lastSvc.odometer_km))} ago` : 'last service'}</span></div>
-        </div>
-        ${ride?.parts === null ? '' : parts.length ? `<ul class="rw-parts">${parts.map(({ p, w }, i) => `<li class="${w.lvl}" style="--i:${i}"><a href="#ride">
-            <span class="rw-ico">${pIco(wearOf(p.part)?.ico)}</span><span class="grow"><span class="rw-pn"><b>${esc(partName(p))}</b><em>${esc(p.brand || '')}</em><span class="rw-km">${w.lvl === 'bad' ? '<b>Replace</b>' : esc(w.txt)}</span></span>
-            <span class="rw-bar"><i style="--w:${Math.min(100, Math.round(w.pc * 100))}%"></i></span></span></a></li>`).join('')}</ul>`
-          : `<a class="rw-empty" href="#ride">${pIco('tyre')}<span class="grow"><b>Track your tyres, oil, chain and brake pads</b><span>See how much life each part has left</span></span>${ICON.chev}</a>`}
+        <div class="rw-mid"><button class="rw-odo" data-act="odo" aria-label="Odometer ${odo ? odo.toLocaleString('en-IN') + ' km' : 'not recorded yet'}. Tap to update">
+            <span class="od-box">${wheels}<span class="od-km">km</span></span>
+            <span class="od-sub">${last ? `${last.manual ? 'Updated' : 'From ' + last.src} ${fmtDayMonth(last.d)}` : 'Tap to enter your km'}<i>Update ›</i></span></button>
+            ${tracked.length ? (() => { const ok = Math.round(100 * tracked.filter(x => x.w.lvl !== 'bad').length / tracked.length), C = 2 * Math.PI * 21;
+                return `<a class="rw-health ${ok >= 80 ? 'ok' : ok >= 50 ? 'warn' : 'bad'}" href="#ride" aria-label="Ride health ${ok}%"><svg viewBox="0 0 50 50"><circle cx="25" cy="25" r="21" class="t"/><circle cx="25" cy="25" r="21" class="f" style="--c:${C.toFixed(1)};--o:${(C * (1 - ok / 100)).toFixed(1)}"/></svg><b>${ok}<small>%</small></b><span>health</span></a>`; })() : ''}</div>
+        <div class="rw-pills">${pills.slice(0, 3).join('')}${pills.length > 3 ? `<a class="rw-pill more" href="#ride">+${pills.length - 3}</a>` : ''}</div>
+        <div class="rw-line">${stat(pIco('drop'), ms.avg ? ms.avg.toFixed(1) : '–', 'km/l')}${stat(ICON.fuel, lastFill ? fmtDayMonth(lastFill.fill_date) : '–', lastFill ? Number(lastFill.litres).toFixed(1) + ' L' : '')}${stat(ICON.wrench, lastSvc ? fmtDayMonth(lastSvc.service_date) : '–', lastSvc && odo ? km(Math.max(0, odo - lastSvc.odometer_km)).replace(' km', '') + ' km ago' : '')}</div>
+        ${partsHtml}
     </section>`;
+}
+/* Home dial: swipe pages of parts; the dots follow */
+function bindRideWidget() {
+    const car = $('#rw-car'), dots = app.querySelectorAll('.rw-dots i'); if (!car || !dots.length) return;
+    car.addEventListener('scroll', () => { const k = Math.round(car.scrollLeft / car.clientWidth); dots.forEach((d, i) => d.classList.toggle('on', i === k)); }, { passive: true });
 }
 
 /* --- My Ride screen --- */
@@ -1062,7 +1080,7 @@ async function viewHome() {
             <a href="https://roninwb.in" target="_blank" rel="noopener"><span class="g-ico">${ICON.globe}</span><span class="grow"><b>roninwb.in</b><span class="small muted">Rides, events, gallery and the team</span></span>${ICON.out}</a>
         </div></section>`;
     swipeToDismiss(app, () => { if (!app.querySelector('.news-mini [data-swipe]')) render(); });
-    bindVrnCheck();
+    bindVrnCheck(); bindRideWidget();
     actions = {
         evt: el => location.hash = '#events/' + el.dataset.id,
         'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); render(); }),
