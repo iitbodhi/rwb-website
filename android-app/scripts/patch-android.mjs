@@ -116,7 +116,7 @@ if (process.env.RWB_KEYSTORE) {
             keyPassword System.getenv("RWB_KEY_PASSWORD")
         }
     }`);
-  g = must(g.replace(/buildTypes\s*\{\s*release\s*\{/, 'buildTypes {\n        release {\n            signingConfig signingConfigs.release'), 'release build type');
+  g = must(g.replace(/buildTypes\s*\{\s*release\s*\{/, 'buildTypes {\n        release {\n            signingConfig signingConfigs.release\n            ndk { debugSymbolLevel \'SYMBOL_TABLE\' }   /* native debug symbols go into the bundle (Play\'s crash reports) */'), 'release build type');
 }
 /* Release builds are shrunk and obfuscated with R8 (Google Play asks for it: "DEX code optimisation"). Our own code
    and Capacitor's plugins are kept by name (Capacitor finds plugin methods by name), libraries are optimised. */
