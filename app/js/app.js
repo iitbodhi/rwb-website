@@ -230,13 +230,14 @@ const initials = m => (m?.full_name || '?').split(/\s+/).slice(0, 2).map(w => w[
 /* profile photo if the member added one, otherwise their initials */
 const face = (m, cls = 'avatar') => `<span class="${cls}">${m?.avatar_url ? `<img src="${esc(m.avatar_url)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<i>${esc(initials(m))}</i></span>`;
 const CREW_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19.5c.6-3.3 3-5 6-5s5.4 1.7 6 5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.4.2 4 1.7 4.5 4.4"/></svg>';
+const GUIDE_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.5v-15A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5zm0 0A1.5 1.5 0 0 0 6.5 21H19M9 3v15M12 7.5h4M12 10.5h3"/></svg>';
 const PLAY_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="4"/><path d="M10 9.2v5.6l4.8-2.8z" fill="currentColor"/></svg>';
 const docsAlert = () => (state.docs || []).some(d => docStatus(d).level !== 'ok' && docStatus(d).level !== 'none');
 /* Android in the browser (not the RWB Android app): a small pulsing "Get app" button; never shown on iPhone */
 const getAppBtn = () => !NATIVE && /android/i.test(navigator.userAgent) ? `<a class="get-app" href="${apkUrl()}" download="RWB-App.apk" aria-label="Download the RWB Android app"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span>App</span></a>` : '';
 const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1>${right}${getAppBtn()}
     <a class="icon-btn bell vid-btn" href="#videos" aria-label="How-to videos">${PLAY_ICON}</a>
-    <a class="icon-btn bell crew-btn" href="#crew" aria-label="RWB members and leaderboards">${CREW_ICON}</a>
+    ${isFam() ? '' : `<a class="icon-btn bell guide-btn" href="#guides" aria-label="Guides">${GUIDE_ICON}</a>`}
     <a class="icon-btn bell" href="#news" aria-label="Announcements${unread() ? ' (new)' : ''}">${BELL}${unread() ? '<i class="dot"></i>' : ''}</a>
     <a href="#me" aria-label="My profile" class="avatar-link">${face(state.me)}</a></header>`;
 
@@ -3458,7 +3459,7 @@ async function adminAI() {
         busy(e.submitter, async () => { const n = await api.admin.pookieAddQuestions([{ category: 'General', question: q }]); toast(n ? 'Question added' : 'That question is already there'); e.target.reset(); }); };
 }
 
-/* =================== RWB: three leaderboards + members =================== */
+/* =================== RWB: leaderboards =================== */
 const MEDAL = ['🥇', '🥈', '🥉'];
 const kmTxt = n => Number(n).toLocaleString('en-IN') + ' km';
 const kmplTxt = v => Number(v).toFixed(1) + ' km/l';
@@ -3470,32 +3471,70 @@ const BOARDS = {
     pookie: { title: 'Pookie Warriors', sub: 'Most XP from teaching Pookie about the Ronin', how: 'How to get on it: open <a href="#teach"><b>Teach Pookie</b></a> and answer its questions. <b>10 XP</b> for every answer the admins approve, 2 XP while it waits.', has: r => r.xp > 0, val: r => r.xp * 1000 + r.approved, big: r => `${r.xp} XP`, small: r => `${r.approved} taught`, empty: 'Answer a question in Teach Pookie to get on this board.' }
 };
 const rankBoard = (rows, key) => rows.filter(BOARDS[key].has).sort((a, b) => BOARDS[key].val(b) - BOARDS[key].val(a) || a.full_name.localeCompare(b.full_name)).map((r, i) => ({ ...r, rank: i + 1 }));
+const LB_ICON = { gps: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M12 21.5s-6.5-5.8-6.5-11a6.5 6.5 0 0 1 13 0c0 5.2-6.5 11-6.5 11z"/><path d="M12 21.5s-6.5-5.8-6.5-11a6.5 6.5 0 0 1 13 0c0 5.2-6.5 11-6.5 11z"/><circle cx="12" cy="10.5" r="2.4"/></svg>',
+    mileage: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="ac" x="7" y="6.5" width="5" height="4" rx=".8"/><path d="M5 20.5V5.5A1.5 1.5 0 0 1 6.5 4h6A1.5 1.5 0 0 1 14 5.5v15M3.5 20.5h12M14 9h2a1.5 1.5 0 0 1 1.5 1.5V16a1.5 1.5 0 0 0 3 0V8.5L18 6"/><rect x="7" y="6.5" width="5" height="4" rx=".8"/></svg>',
+    service: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8V21h3.2l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>',
+    road: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M4 19a8 8 0 1 1 16 0z"/><path d="M4 19a8 8 0 1 1 16 0M12 19l3.5-5.5M7 15.5h.01M8.5 11.5h.01M12 10h.01M15.5 11.5h.01"/></svg>',
+    pookie: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M3 9l9-4.5L21 9l-9 4.5z"/><path d="M3 9l9-4.5L21 9l-9 4.5zM7 11v4.5c1.4 1.3 3 2 5 2s3.6-.7 5-2V11M21 9v5"/></svg>' };
+const TROPHY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4.5v1.5A3 3 0 0 0 7.4 10.5M17 6h2.5v1.5a3 3 0 0 1-2.9 3M12 14v3.5M8.5 20.5h7M9.5 17.5h5v3h-5z"/></svg>';
+const CROWN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8l4.2 3.6L12 5l4.3 6.6L20.5 8l-1.8 10H5.3z"/></svg>';
+const lbRows = (key, raw) => rankBoard(key === 'gps' ? (state.gps || []) : key === 'pookie' ? (state.pookieBoard || []) : raw, key);
+const lbName = r => esc(r.nickname || r.full_name.split(' ')[0]);
 function boardHtml(key, raw) {
-    const B = BOARDS[key], board = rankBoard(key === 'gps' ? (state.gps || []) : key === 'pookie' ? (state.pookieBoard || []) : raw, key);
-    const me = board.find(r => r.is_me), top3 = board.slice(0, 3), rest = board.slice(3, 6);
-    const podium = top3.length ? `<div class="podium">${[top3[1], top3[0], top3[2]].map((r, i) => r ? `<div class="pod p${[2, 1, 3][i]}${r.is_me ? ' me' : ''}">
-            ${face(r, 'avatar pod-face')}<span class="pod-medal">${MEDAL[r.rank - 1]}</span><b>${esc(r.nickname || r.full_name.split(' ')[0])}</b><span class="pod-km">${B.big(r)}</span><span class="pod-sub">${esc(B.small(r))}</span></div>` : '<div></div>').join('')}</div>` : '';
-    return `<div class="seg board-seg" role="tablist" aria-label="Leaderboard">${Object.entries(BOARDS).map(([k, b]) => `<button role="tab" aria-selected="${k === key}" data-act="board" data-b="${k}">${b.title.replace(' Warriors', '')}</button>`).join('')}</div>
-            <div class="row" style="justify-content:space-between;align-items:baseline;margin-bottom:2px"><h2 class="board-title">${B.title}</h2><span class="small muted">${board.length} rider${board.length === 1 ? '' : 's'}</span></div>
-            <p class="small muted" style="margin-bottom:6px">${B.sub}</p>${B.how && !isFam() ? `<p class="small board-how">${B.how}</p>` : ''}
-            ${board.length ? podium + (rest.length ? `<ol class="board-list" start="4">${rest.map(r => `<li class="${r.is_me ? 'me' : ''}"><span class="rk">${r.rank}</span>${face(r, 'avatar sm')}<span class="grow"><b>${esc(r.full_name)}</b><span class="small muted">${esc(r.bike || '')}</span></span><span class="num km">${B.big(r)}<small>${esc(B.small(r))}</small></span></li>`).join('')}</ol>` : '')
-                + (me && me.rank > 6 ? `<p class="board-me">You're <b>#${me.rank}</b> of ${board.length} with ${B.big(me)}</p>` : '')
-                + (!me ? `<p class="small muted" style="margin-top:10px">${state.me.show_on_leaderboard === false ? 'You\'re hidden from the leaderboards (Me → Privacy).' : B.empty}</p>` : '')
-              : `<p class="muted" style="margin-top:8px">${B.empty}</p>`}
-            <p class="board-dots" aria-hidden="true">${Object.keys(BOARDS).map(k => `<i${k === key ? ' class="on"' : ''}></i>`).join('')}</p>`;
+    const B = BOARDS[key], board = lbRows(key, raw);
+    const me = board.find(r => r.is_me), top3 = board.slice(0, 3), rest = board.slice(3, 10);
+    const pod = (r, p) => r ? `<div class="lp lp${p}${r.is_me ? ' me' : ''}" style="--d:${[0, .5, .25, .7][p]}s">
+            <div class="lp-who">${p === 1 ? `<span class="lp-crown">${CROWN}</span>` : ''}<span class="lp-ring">${face(r, 'avatar lp-face')}</span>
+            <b>${lbName(r)}</b><span class="lp-val lb-count">${B.big(r)}</span><span class="lp-sub">${esc(B.small(r))}</span></div>
+            <div class="lp-step"><span>${p}</span></div></div>` : `<div class="lp lp${p} empty" style="--d:${[0, .5, .25, .7][p]}s"><div class="lp-who"><span class="lp-ring"><span class="avatar lp-face"><i>?</i></span></span><b>Open spot</b></div><div class="lp-step"><span>${p}</span></div></div>`;
+    return `<div class="lb-head"><span class="lb-ico">${LB_ICON[key]}</span><div class="grow"><h2 class="board-title">${B.title}</h2><p class="small muted">${B.sub}</p></div><span class="lb-n"><b class="lb-count">${board.length}</b><small>rider${board.length === 1 ? '' : 's'}</small></span></div>
+        ${board.length ? `<div class="lb-stage"><i class="lb-rays"></i>${[1, 2, 3].map(i => `<i class="lb-spark s${i}"></i>`).join('')}<div class="lb-podium">${pod(top3[1], 2)}${pod(top3[0], 1)}${pod(top3[2], 3)}</div></div>`
+            + (rest.length ? `<ol class="lb-list" start="4">${rest.map((r, i) => `<li class="${r.is_me ? 'me' : ''}" style="--i:${i}"><span class="rk">${r.rank}</span>${face(r, 'avatar sm')}<span class="grow"><b>${esc(r.full_name)}</b><span class="small muted">${esc(r.bike || '')}</span></span><span class="num km"><span class="lb-count">${B.big(r)}</span><small>${esc(B.small(r))}</small></span></li>`).join('')}</ol>` : '')
+            + (me && me.rank > 10 ? `<p class="lb-me">You're <b>#${me.rank}</b> of ${board.length} with ${B.big(me)}. ${board[me.rank - 2] ? `Just <b>${esc(lbGap(key, board[me.rank - 2], me))}</b> behind #${me.rank - 1}.` : ''}</p>` : '')
+            + (!me && !isFam() ? `<p class="small muted lb-note">${state.me.show_on_leaderboard === false ? 'You\'re hidden from the leaderboards (Me → Privacy).' : B.empty}</p>` : '')
+          : `<div class="lb-empty"><span class="lb-trophy">${TROPHY}</span><b>Be the first!</b><span class="muted">${B.empty}</span></div>`}
+        ${B.how && !isFam() ? `<p class="small board-how">${B.how}</p>` : ''}`;
 }
-const CREW_F = all => { const n = all.filter(m => m.on_app).length; return { all: 'Everyone', app: `On app (${n})`, noapp: `Not on app (${all.length - n})` }; };
+/* how far behind the next rider you are, in the board's own units */
+function lbGap(key, ahead, me) {
+    const d = { gps: ahead.km - me.km, mileage: ahead.kmpl - me.kmpl, service: ahead.services - me.services, road: ahead.km - me.km, pookie: ahead.xp - me.xp }[key];
+    return key === 'mileage' ? kmplTxt(Math.max(d, 0.1)) : key === 'service' ? `${Math.max(d, 1)} service${d > 1 ? 's' : ''}` : key === 'pookie' ? `${Math.max(d, 1)} XP` : kmTxt(Math.max(Math.round(d), 1));
+}
+/* numbers roll up from zero when a board appears */
+function lbCount(root) {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    root.querySelectorAll('.lb-count').forEach((el, n) => {
+        const txt = el.textContent, m = txt.match(/\d[\d,]*(\.\d+)?/); if (!m) return;
+        const end = parseFloat(m[0].replace(/,/g, '')), dec = m[1] ? m[1].length - 1 : 0, t0 = performance.now() + Math.min(n, 8) * 60, dur = 1100;
+        const fmt = v => txt.replace(m[0], v.toLocaleString('en-IN', { minimumFractionDigits: dec, maximumFractionDigits: dec }));
+        el.textContent = fmt(0);
+        const step = t => { const k = Math.min(1, Math.max(0, (t - t0) / dur)); el.textContent = fmt(end * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(step); };
+        requestAnimationFrame(step);
+    });
+}
 async function viewCrew() {
     const raw = state.board ??= await api.boards().catch(() => api.leaderboard().then(rs => rs.map(r => ({ ...r, services: 0, kmpl: null }))).catch(() => []));
     if (!state.gps || Date.now() - (state.gpsAt || 0) > 120e3) { [state.gps, state.pookieBoard] = await Promise.all([api.gpsBoard().catch(() => []), api.pookieBoard?.().catch(() => []) ?? []]); state.gpsAt = Date.now(); }
-    state.boardKey = 'gps';   /* Track Warriors first every time the tab opens */
-    app.innerHTML = top('RWB') + `
-        <section class="board card" id="board">${boardHtml(state.boardKey, raw)}</section>
-        <section class="section"><h2>Members</h2><div id="crew-body"><p class="muted">Loading…</p></div></section>`;
+    state.boardKey ??= 'gps';
     const keys = Object.keys(BOARDS);
-    const showBoard = (k, dir = 0) => { state.boardKey = k; const el = $('#board'); if (!el) return; el.innerHTML = boardHtml(k, raw);
-        if (dir) { el.classList.remove('slide-l', 'slide-r'); void el.offsetWidth; el.classList.add(dir > 0 ? 'slide-l' : 'slide-r'); } };
-    actions = { board: el => showBoard(el.dataset.b, Math.sign(keys.indexOf(el.dataset.b) - keys.indexOf(state.boardKey))) };
+    const mine = Object.fromEntries(keys.map(k => [k, lbRows(k, raw).find(r => r.is_me)?.rank || 0]));
+    const best = keys.filter(k => mine[k]).sort((a, b) => mine[a] - mine[b])[0];
+    app.innerHTML = top('RWB') + `
+        <section class="lb-hero"><div class="grow"><span class="lb-kick">RWB Hall of Fame</span><h2>Leaderboards</h2>
+            <p>${best ? `Your best: <b>#${mine[best]}</b> in ${BOARDS[best].title}${mine[best] <= 3 ? ' 🔥' : ''}` : isFam() ? 'The riders leading RWB right now' : 'Ride, log and teach Pookie to climb the ranks'}</p></div>
+            <span class="lb-cup">${TROPHY}</span></section>
+        <div class="lb-tabs" role="tablist" aria-label="Leaderboard">${keys.map(k => `<button role="tab" aria-selected="${k === state.boardKey}" data-act="board" data-b="${k}">
+            <span class="lt-ico">${LB_ICON[k]}</span><b>${BOARDS[k].title.replace(' Warriors', '')}</b><small>${mine[k] ? `You #${mine[k]}` : '—'}</small></button>`).join('')}</div>
+        <section class="board card lb-card" id="board">${boardHtml(state.boardKey, raw)}</section>
+        <p class="board-dots" aria-hidden="true">${keys.map(k => `<i${k === state.boardKey ? ' class="on"' : ''}></i>`).join('')}</p>`;
+    lbCount($('#board'));
+    const showBoard = (k, dir = 0) => { state.boardKey = k; const el = $('#board'); if (!el) return; app.classList.remove('same'); el.innerHTML = boardHtml(k, raw);
+        app.querySelectorAll('.lb-tabs [data-b]').forEach(b => b.setAttribute('aria-selected', b.dataset.b === k));
+        app.querySelector(`.lb-tabs [data-b="${k}"]`)?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+        app.querySelectorAll('.board-dots i').forEach((d, i) => d.classList.toggle('on', keys[i] === k));
+        el.classList.remove('slide-l', 'slide-r'); void el.offsetWidth; if (dir) el.classList.add(dir > 0 ? 'slide-l' : 'slide-r');
+        lbCount(el); };
+    actions = { board: el => { if (el.dataset.b !== state.boardKey) showBoard(el.dataset.b, Math.sign(keys.indexOf(el.dataset.b) - keys.indexOf(state.boardKey))); } };
     /* swipe left / right to change leaderboard */
     let sx = null, sy = 0;
     $('#board').addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
@@ -3505,38 +3544,6 @@ async function viewCrew() {
         const i = keys.indexOf(state.boardKey), j = Math.min(keys.length - 1, Math.max(0, i + (dx < 0 ? 1 : -1)));
         if (j !== i) showBoard(keys[j], dx < 0 ? 1 : -1);
     }, { passive: true });
-    if (isMod() && !isAdmin()) $('#crew-body').insertAdjacentHTML('beforebegin', '<button class="btn ghost block" data-act="fam-all" style="margin-bottom:12px">👨‍👩‍👧 RWB FAM members</button>');
-    if (isAdmin()) {   /* admins get their full member tools here too */
-        $('#crew-body').id = 'admin-body';
-        await adminMembers(); return;
-    }
-    const all = state.dir ??= teamFirst(await api.directory());
-    const team = all.filter(isTeam), others = all.filter(m => !isTeam(m));
-    const name = m => `${esc(m.full_name)}${m.nickname ? ` <span class="muted" style="font-weight:400">“${esc(m.nickname)}”</span>` : ''}`;
-    $('#crew-body').innerHTML = (team.length ? `<div class="team card"><h3 class="team-title">RWB team <span class="small muted">for help or emergencies</span></h3>
-            ${team.map(m => `<div class="row member-row team-row">${face(m, 'avatar sm')}
-                <div class="grow"><div class="who">${name(m)} ${roleBadge(m)}</div><div class="meta">${esc(m.phone ? m.phone.replace(/(\d{5})(\d{5})/, '$1 $2') : '')}${m.vrn ? ` · ${esc(m.vrn)}` : ''}${m.avg_kmpl ? ` · <b class="kmpl-tag">${kmplTxt(m.avg_kmpl)}</b>` : ''}</div></div>
-                ${m.phone ? `<a class="icon-btn call" href="tel:+91${esc(m.phone)}" aria-label="Call ${esc(m.full_name)}">${ICON_PHONE}</a><a class="icon-btn wa-btn" href="${waTo(m.phone)}" target="_blank" rel="noopener" aria-label="WhatsApp ${esc(m.full_name)}">${ICON_WA}</a>` : ''}</div>`).join('')}</div>` : '')
-        + `<div class="chips" id="cf" style="margin-bottom:10px">${Object.entries(CREW_F(all)).map(([k, v]) => `<button class="chip" data-f="${k}" aria-pressed="${(state.crewFilter || 'all') === k}">${v}</button>`).join('')}</div>
-        <input class="search" type="search" id="cq" placeholder="${isMod() ? 'Search name, bike number or place' : 'Search members by name'}" value="${esc(state.crewSearch || '')}" aria-label="Search members">
-        <p class="small muted" id="ccount" style="margin:-4px 0 10px"></p><div class="list" id="cl"></div><button class="btn ghost block section" id="cmore" hidden>Show more</button>`;
-    let limit = 50;
-    const draw = () => {
-        const q = (state.crewSearch || '').trim().toLowerCase(), qv = vrnKey(q);
-        const f = state.crewFilter || 'all', inF = m => f === 'all' || (f === 'app' ? m.on_app : !m.on_app);
-        const pool = (q || f !== 'all' ? all : others).filter(inF);   /* while searching or filtering, the team is included too */
-        const hits = pool.filter(m => !q || [m.full_name, m.nickname, m.bike, m.locality].some(v => (v || '').toLowerCase().includes(q)) || (qv.length >= 2 && [m.vrn, ...(m.bikes || []).map(b => b.vrn)].some(v => vrnKey(v).includes(qv))));
-        $('#ccount').textContent = q ? `${hits.length} found${isMod() && qv.length >= 4 && !hits.length ? '. That bike isn\'t registered with RWB.' : ''}` : f === 'app' ? `${hits.length} members on the app` : f === 'noapp' ? `${hits.length} members not on the app yet` : `${all.length} members in RWB`;
-        $('#cl').innerHTML = hits.slice(0, limit).map(m => `<div class="card row member-row">${face(m, 'avatar sm')}
-            <div class="grow"><div class="who">${name(m)} ${roleBadge(m)}${m.on_app ? ' <span class="badge ok">On app</span>' : ''}</div>
-            <div class="meta">${m.avg_kmpl ? `<b class="kmpl-tag">${kmplTxt(m.avg_kmpl)}</b> · ` : ''}${esc([m.bike, m.locality].filter(Boolean).join(', ') || 'RWB member')}</div></div>
-            ${m.vrn ? `<span class="vrn${m.vrn_verified ? ' ok' : ''}" title="${m.vrn_verified ? 'VRN verified by RWB' : ''}">${esc(qv.length >= 2 && !vrnKey(m.vrn).includes(qv) ? ((m.bikes || []).find(b => vrnKey(b.vrn).includes(qv))?.vrn || m.vrn) : m.vrn)}${m.vrn_verified ? ' ✓' : ''}</span>` : ''}</div>`).join('') || (q ? '<div class="card empty">No one matches.</div>' : '');
-        $('#cmore').hidden = hits.length <= limit;
-    };
-    $('#cq').oninput = e => { state.crewSearch = e.target.value; limit = 50; draw(); };
-    $('#cf').onclick = e => { const b = e.target.closest('[data-f]'); if (!b) return; state.crewFilter = b.dataset.f; limit = 50; $('#cf').querySelectorAll('[data-f]').forEach(x => x.setAttribute('aria-pressed', x === b)); draw(); };
-    $('#cmore').onclick = () => { limit += 100; draw(); };
-    draw();
 }
 /* VRN check on Home: members learn only "member or not"; admins and coordinators also see who it is */
 const vrnCheckCard = () => `<form class="card vrn-check" id="vcf"><b>🔎 VRN check</b><span class="small muted">Spotted a Ronin? See if the rider is in RWB.</span>
