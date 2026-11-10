@@ -228,7 +228,6 @@ const unread = () => (state.news || []).some(n => n.id > seenNews());
 const initials = m => (m?.full_name || '?').split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 /* profile photo if the member added one, otherwise their initials */
 const face = (m, cls = 'avatar') => `<span class="${cls}">${m?.avatar_url ? `<img src="${esc(m.avatar_url)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<i>${esc(initials(m))}</i></span>`;
-const DOC_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/><path d="M8 13.5h8M8 16.5h5"/></svg>';
 const CREW_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19.5c.6-3.3 3-5 6-5s5.4 1.7 6 5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.4.2 4 1.7 4.5 4.4"/></svg>';
 const PLAY_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="4"/><path d="M10 9.2v5.6l4.8-2.8z" fill="currentColor"/></svg>';
 const docsAlert = () => (state.docs || []).some(d => docStatus(d).level !== 'ok' && docStatus(d).level !== 'none');
@@ -594,18 +593,31 @@ async function joinHelpSheet(sess) {
 
 /* =================== Home =================== */
 const ICON = {
-    fuel: '<svg viewBox="0 0 24 24"><path d="M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M3 21h12M7 8h4M14 9h2.5a1.5 1.5 0 0 1 1.5 1.5V17a1.5 1.5 0 0 0 3 0V8l-3-3"/></svg>',
-    wrench: '<svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8V21h3.2l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>',
-    tag: '<svg viewBox="0 0 24 24"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>',
+    fuel: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="ac" x="7" y="6.5" width="5" height="4" rx=".8"/><path d="M5 20.5V5.5A1.5 1.5 0 0 1 6.5 4h6A1.5 1.5 0 0 1 14 5.5v15M3.5 20.5h12M14 9h2a1.5 1.5 0 0 1 1.5 1.5V16a1.5 1.5 0 0 0 3 0V8.5L18 6"/><rect x="7" y="6.5" width="5" height="4" rx=".8"/></svg>',
+    wrench: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle class="ac" cx="15.6" cy="8.4" r="3.4"/><path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8V21h3.2l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>',
+    tag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M3.5 4.5a1 1 0 0 1 1-1h7.1l3.2 3.2L3.5 15.6z"/><path d="M3.5 11.6V4.5a1 1 0 0 1 1-1h7.1l8.9 8.9-8.1 8.1z"/><circle cx="8" cy="8" r="1.5"/></svg>',
     chat: '<svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/><path d="M9 10h.01M12 10h.01M15 10h.01"/></svg>',
-    book: '<svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 21a2 2 0 0 1 2-2h13v2H6M9 7h6"/></svg>',
+    book: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M6.5 3H9v15H6.5A1.5 1.5 0 0 0 5 19.5v-15A1.5 1.5 0 0 1 6.5 3z"/><path d="M5 19.5v-15A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5zm0 0A1.5 1.5 0 0 0 6.5 21H19M12 7.5h4M12 10.5h3"/></svg>',
     helmet: '<svg viewBox="0 0 24 24"><path d="M3 15a9 9 0 0 1 18 0v2H3zM12 6v5h9M3 17l1 3h8"/></svg>',
     globe: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
     shield: '<svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>',
     dl: '<svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
     chev: '<svg viewBox="0 0 24 24" class="chev"><path d="M9 6l6 6-6 6"/></svg>',
-    out: '<svg viewBox="0 0 24 24" class="chev"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></svg>'
+    out: '<svg viewBox="0 0 24 24" class="chev"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></svg>',
+    home: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M9.5 14.5h5v6h-5z"/><path d="M3.5 10.5 12 4l8.5 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-4.5v-6h-5v6H5A1.5 1.5 0 0 1 3.5 19z"/></svg>',
+    cart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M6.3 8h14.2l-1.8 6.7a1.6 1.6 0 0 1-1.6 1.2h-8a1.6 1.6 0 0 1-1.6-1.3z"/><path d="M3 4h2.2l2.3 10.6a1.6 1.6 0 0 0 1.6 1.3h8a1.6 1.6 0 0 0 1.6-1.2L20.5 8H6.3"/><circle cx="10" cy="19.8" r="1.3"/><circle cx="17" cy="19.8" r="1.3"/></svg>',
+    cal: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M5.5 5h13a2 2 0 0 1 2 2v3h-17V7a2 2 0 0 1 2-2z"/><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><rect x="7.5" y="13.5" width="3" height="3" rx=".7"/></svg>',
+    folder: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5V10H3z"/><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/><path d="M8 14h8M8 17h5"/></svg>',
+    approve: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M12 3l7.5 2.8v5.7c0 4.6-3.2 7.7-7.5 9-4.3-1.3-7.5-4.4-7.5-9V5.8z"/><path d="M12 3l7.5 2.8v5.7c0 4.6-3.2 7.7-7.5 9-4.3-1.3-7.5-4.4-7.5-9V5.8z"/><path d="m8.8 12.2 2.2 2.2 4.4-4.6"/></svg>',
+    members: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle class="ac" cx="9" cy="8" r="3"/><circle cx="9" cy="8" r="3"/><path d="M3.5 19.5c.5-3.5 2.6-5.7 5.5-5.7s5 2.2 5.5 5.7M15 5.3a3 3 0 0 1 0 5.4M17 14.2c1.9.6 3.2 2.5 3.5 5.3"/></svg>',
+    cake: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M5 14a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1.5c-1.2 1-2.3 1-3.5 0s-2.3-1-3.5 0-2.3 1-3.5 0-2.3-1-3.5 0z"/><path d="M4 20.5h16M5 20.5V14a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6.5M5 15.5c1.2-1 2.3-1 3.5 0s2.3 1 3.5 0 2.3-1 3.5 0 2.3 1 3.5 0M8 12V9.5M12 12V9.5M16 12V9.5M8 7.2c-.7-.6-.7-1.5 0-2.2.7.7.7 1.6 0 2.2zM12 7.2c-.7-.6-.7-1.5 0-2.2.7.7.7 1.6 0 2.2zM16 7.2c-.7-.6-.7-1.5 0-2.2.7.7.7 1.6 0 2.2z"/></svg>',
+    alert: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M12 3.8 2.8 19.5h18.4z"/><path d="M12 3.8 2.8 19.5h18.4zM12 10v4.2M12 16.9v.1"/></svg>',
+    bell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M6 16.5V11a6 6 0 0 1 12 0v5.5z"/><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0"/></svg>',
+    file: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M13.5 3v4.5H18z"/><path d="M6.5 3h7L18 7.5V20a1 1 0 0 1-1 1H6.5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM13.5 3v4.5H18M8.5 12.5h7M8.5 16h5"/></svg>',
+    terms: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M13.5 3v4.5H18z"/><path d="M6.5 3h7L18 7.5V20a1 1 0 0 1-1 1H6.5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM13.5 3v4.5H18M8.8 14.2l2 2 4-4.2"/></svg>',
+    profile: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle class="ac" cx="9" cy="8" r="3.2"/><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5c.5-3.6 2.6-5.8 5.5-5.8 1.3 0 2.4.4 3.3 1.2M14.5 20l.4-2.4 4.6-4.6a1.3 1.3 0 0 1 1.9 1.9l-4.6 4.6z"/></svg>'
 };
+const DOC_ICON = ICON.folder;
 
 /* the newest odometer reading: from whichever entry (service or fill-up) has the latest date */
 function latestOdo(services = [], fuel = []) {
@@ -813,7 +825,7 @@ function missingOf(m) {
 function profileTodo(m) {
     const miss = missingOf(m || {}); if (!miss.length) return '';
     const rules = miss.includes('rules'), rest = miss.filter(x => x !== 'rules');
-    return `<a class="banner todo" href="#me"><span class="b-ico">${rules ? '📜' : '✍️'}</span><span class="grow"><b>${rules ? 'Please agree to the RWB Terms & Conditions' : 'Complete your profile'}</b><span class="small muted">${rules && rest.length ? 'And add your ' + rest.join(', ') : rules ? 'Me → Terms & Conditions → Read & agree' : 'Add your ' + rest.join(', ')}</span></span>${ICON.chev}</a>`;
+    return `<a class="banner todo" href="#me"><span class="b-ico">${rules ? ICON.terms : ICON.profile}</span><span class="grow"><b>${rules ? 'Please agree to the RWB Terms & Conditions' : 'Complete your profile'}</b><span class="small muted">${rules && rest.length ? 'And add your ' + rest.join(', ') : rules ? 'Me → Terms & Conditions → Read & agree' : 'Add your ' + rest.join(', ')}</span></span>${ICON.chev}</a>`;
 }
 async function viewHome() {
     const [services, fuel, bdays, news, listings, docs, evd] = await Promise.all([load.services(), load.fuel(), load.bdays(), load.news(), load.listings().catch(() => []), load.docs(), loadEvents().catch(() => null)]);
@@ -839,16 +851,16 @@ async function viewHome() {
         ${isAdmin() ? `<section class="admin-dock" aria-label="Admin">
             <div class="ad-head"><b>${ICON.shield} Admin</b><span class="small muted" id="ad-sum"></span><a href="#admin" data-adtab="requests" class="ad-all">Open ›</a></div>
             <div class="ad-grid">
-                <a href="#admin" data-adtab="requests"><span class="ad-ico">✅</span>Approvals<i class="ad-n" id="ad-req" hidden></i></a>
-                <a href="#admin" data-adtab="members"><span class="ad-ico">👥</span>Members</a>
-                <a href="#admin" data-adtab="motomart"><span class="ad-ico">🛒</span>Motomart<i class="ad-n" id="ad-mm" hidden></i></a>
-                <a href="#admin" data-adtab="bdays"><span class="ad-ico">🎂</span>Birthdays</a>
+                <a href="#admin" data-adtab="requests"><span class="ad-ico">${ICON.approve}</span>Approvals<i class="ad-n" id="ad-req" hidden></i></a>
+                <a href="#admin" data-adtab="members"><span class="ad-ico">${ICON.members}</span>Members</a>
+                <a href="#admin" data-adtab="motomart"><span class="ad-ico">${ICON.cart}</span>Motomart<i class="ad-n" id="ad-mm" hidden></i></a>
+                <a href="#admin" data-adtab="bdays"><span class="ad-ico">${ICON.cake}</span>Birthdays</a>
             </div><a class="ad-dupes" href="#admin" data-adtab="dupes" id="ad-dupes" hidden></a></section>` : isMod() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
         ${profileTodo(state.me)}
-        ${docWarn ? `<a class="banner doc-warn ${docWarn.st.level}" href="#docs"><span class="b-ico">📄</span><span class="grow"><b>${esc(docName(docWarn.d))}</b> ${docWarn.st.days < 0 ? `expired on ${fmtDate(docWarn.d.expiry_date)}` : docWarn.st.days === 0 ? 'expires today' : `expires in ${docWarn.st.days} day${docWarn.st.days === 1 ? '' : 's'}`}. Renew it and update My documents.</span>${ICON.chev}</a>` : ''}
+        ${docWarn ? `<a class="banner doc-warn ${docWarn.st.level}" href="#docs"><span class="b-ico">${ICON.file}</span><span class="grow"><b>${esc(docName(docWarn.d))}</b> ${docWarn.st.days < 0 ? `expired on ${fmtDate(docWarn.d.expiry_date)}` : docWarn.st.days === 0 ? 'expires today' : `expires in ${docWarn.st.days} day${docWarn.st.days === 1 ? '' : 's'}`}. Renew it and update My documents.</span>${ICON.chev}</a>` : ''}
         ${nextEvt ? `<div class="home-evt">${eventCard(nextEvt, evd)}</div>` : ''}
-        ${today.length ? `<div class="banner bday"><span class="b-ico">🎂</span><span class="grow"><b>${esc(names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : names[0])}</b> ${names.length > 1 ? 'have' : 'has'} a birthday today</span><button class="btn sm wa" data-act="wish">Wish</button></div>` : ''}
-        ${pushAsk ? `<div class="banner"><span class="b-ico">🔔</span><span class="grow">${isMod() ? 'Get birthdays, Motomart posts and ride news as notifications' : 'Get ride news, events and Motomart posts as notifications'}</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
+        ${today.length ? `<div class="banner bday"><span class="b-ico">${ICON.cake}</span><span class="grow"><b>${esc(names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : names[0])}</b> ${names.length > 1 ? 'have' : 'has'} a birthday today</span><button class="btn sm wa" data-act="wish">Wish</button></div>` : ''}
+        ${pushAsk ? `<div class="banner"><span class="b-ico">${ICON.bell}</span><span class="grow">${isMod() ? 'Get birthdays, Motomart posts and ride news as notifications' : 'Get ride news, events and Motomart posts as notifications'}</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
         ${vrnCheckCard()}
         ${feed.length ? `<section class="section"><h2>Latest from RWB <span class="h-acts"><button data-act="clear-feed">Clear</button><a href="#news">See all</a></span></h2><div class="group news-mini">${feed.slice(0, 3).map(n => newsRow(n, false, true)).join('')}</div></section>` : ''}
         <section class="section"><h2>Fresh on Motomart <a href="#motomart">See all</a></h2>
@@ -876,7 +888,7 @@ async function viewHome() {
     if (isAdmin()) {
         app.querySelectorAll('[data-adtab]').forEach(a => a.addEventListener('click', () => { state.adminTab = a.dataset.adtab; }));
         api.admin.dupes().then(g => { state.dupes = g; const a = $('#ad-dupes'); if (!a || !g.length) return;
-            a.innerHTML = `<span>⚠️</span><span class="grow"><b>${g.length} possible duplicate${g.length > 1 ? 's' : ''}</b> in the sheet · you choose which entry stays</span>${ICON.chev}`; a.hidden = false;
+            a.innerHTML = `<span class="b-ico">${ICON.alert}</span><span class="grow"><b>${g.length} possible duplicate${g.length > 1 ? 's' : ''}</b> in the sheet · you choose which entry stays</span>${ICON.chev}`; a.hidden = false;
             app.querySelector('.admin-dock')?.classList.add('busy'); }).catch(() => {});
         api.admin.stats().then(s => {
             const mm = listings.filter(l => l.status === 'pending').length, set = (id, n) => { const el = $('#' + id); if (el) { el.textContent = n; el.hidden = !n; } };
@@ -2074,6 +2086,7 @@ function viewMe() {
 
         <h2 class="group-title">Appearance</h2>
         <div class="seg" role="radiogroup" aria-label="Theme">${[['light', 'Light'], ['dark', 'Dark'], ['system', 'Auto']].map(([k, l]) => `<button role="radio" aria-selected="${theme === k}" aria-checked="${theme === k}" data-act="theme" data-t="${k}">${l}</button>`).join('')}</div>
+        ${NATIVE ? `<div class="group" style="margin-top:12px"><label class="toggle-row"><span class="grow">Intro sound<span class="small muted">A short sound with the opening animation</span></span><span class="switch-only"><input type="checkbox" id="intro-snd"${(() => { try { return localStorage.getItem('rwb-intro-sound') !== 'off'; } catch { return true; } })() ? ' checked' : ''}></span></label></div>` : ''}
 
         ${isAndroid ? `<h2 class="group-title">WhatsApp</h2>
         <div class="group"><label class="toggle-row"><span class="grow">Open WhatsApp links in<span class="small muted">For phones with both WhatsApp and WhatsApp Business</span></span>
@@ -3273,10 +3286,14 @@ const ICON_PHONE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" 
 const ICON_WA = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.8-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2s.2-1.1.2-1.2-.2-.2-.4-.3z"/></svg>';
 
 /* =================== Boot =================== */
+/* the app is ready: let the intro finish (tap skips it), then fade it out */
 function hideBoot() {
     const b = document.getElementById('boot'); if (!b || b.dataset.out) return;
-    b.dataset.out = '1'; const wait = Math.max(0, 900 - (performance.now() - (window.BOOT_T || 0)));
-    setTimeout(() => { b.classList.add('out'); setTimeout(() => b.remove(), 600); }, wait);
+    b.dataset.out = '1';
+    const go = () => { if (b.classList.contains('out')) return; b.classList.add('out'); setTimeout(() => b.remove(), 600); };
+    window.hideBootNow = go;
+    const end = window.INTRO_END ?? (window.BOOT_T || 0) + 900;
+    setTimeout(go, Math.max(0, end - performance.now()));
 }
 async function boot() {
     try {
@@ -3596,6 +3613,7 @@ document.addEventListener('click', e => {
     const b = e.target.closest('[data-report]'); if (!b) return;
     e.preventDefault(); reportSheet(b.dataset.report, b.dataset.ref || '', b.dataset.label || '');
 });
+document.addEventListener('change', e => { if (e.target.id === 'intro-snd') { try { localStorage.setItem('rwb-intro-sound', e.target.checked ? 'on' : 'off'); } catch { /* ignore */ } toast(e.target.checked ? 'Intro sound on' : 'Intro sound off'); } });
 /* Me → Delete my account (Google Play asks every app with accounts to offer this) */
 document.addEventListener('click', e => {
     const b = e.target.closest('[data-del-acct]'); if (!b) return;
@@ -3985,7 +4003,7 @@ const isFam = () => state.me?.role === 'fam';
 const famOn = () => isFam() && state.fam?.approved !== false && state.fam?.active !== false;
 const FAM_ROUTES = ['home', 'track', 'events', 'me', 'news', 'crew', 'videos'];
 const FAM_CODE_KEY = 'rwb-fam-code';
-const FAM_ICON = '<svg viewBox="0 0 24 24"><circle cx="8" cy="7.5" r="2.6"/><circle cx="16.5" cy="8.5" r="2.1"/><path d="M3.5 19c.4-3.4 2.2-5.6 4.5-5.6s4.1 2.2 4.5 5.6M13.4 14.6c.8-.9 1.8-1.4 3.1-1.4 2 0 3.5 1.7 3.9 4.6"/><path d="M12 21.2s-2.6-1.6-2.6-3.3a1.4 1.4 0 0 1 2.6-.7 1.4 1.4 0 0 1 2.6.7c0 1.7-2.6 3.3-2.6 3.3z"/></svg>';
+const FAM_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M12 21.2s-2.6-1.6-2.6-3.3a1.4 1.4 0 0 1 2.6-.7 1.4 1.4 0 0 1 2.6.7c0 1.7-2.6 3.3-2.6 3.3z"/><circle cx="8" cy="7.5" r="2.6"/><circle cx="16.5" cy="8.5" r="2.1"/><path d="M3.5 19c.4-3.4 2.2-5.6 4.5-5.6s4.1 2.2 4.5 5.6M13.4 14.6c.8-.9 1.8-1.4 3.1-1.4 2 0 3.5 1.7 3.9 4.6"/><path d="M12 21.2s-2.6-1.6-2.6-3.3a1.4 1.4 0 0 1 2.6-.7 1.4 1.4 0 0 1 2.6.7c0 1.7-2.6 3.3-2.6 3.3z"/></svg>';
 const famCodeNorm = c => { const t = String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return t ? 'RWB-' + t.replace(/^RWB/, '').slice(0, 8) : ''; };
 const famCodeSaved = () => { try { return localStorage.getItem(FAM_CODE_KEY) || ''; } catch { return ''; } };
 const famLink = code => `https://roninwb.in/fam/?c=${encodeURIComponent(code)}`;
@@ -4057,7 +4075,7 @@ async function viewFamHome() {
             <div class="fam-odo"><span class="fam-odo-l">${esc(m.bike || 'Motorcycle')} · odometer</span><b>${m.odo ? Number(m.odo).toLocaleString('en-IN') : '–'}</b><em>km</em></div>
             <a class="btn block" href="#track">📍 Where is ${esc(first)}?</a>
         </section>
-        ${pushAsk ? `<div class="banner"><span class="b-ico">🔔</span><span class="grow">Get important RWB announcements as notifications</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
+        ${pushAsk ? `<div class="banner"><span class="b-ico">${ICON.bell}</span><span class="grow">Get important RWB announcements as notifications</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
         ${vrnCheckCard()}
         ${up.length ? `<section class="section"><h2>RWB events <a href="#events">See all</a></h2><div class="list home-evt">${up.map(e => eventCard(e, evd)).join('')}</div></section>` : ''}
         ${feed.length ? `<section class="section"><h2>Important updates <span class="h-acts"><a href="#news">See all</a></span></h2><div class="group news-mini">${feed.slice(0, 3).map(n => newsRow(n, false, true)).join('')}</div></section>` : ''}
