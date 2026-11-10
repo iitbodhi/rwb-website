@@ -122,6 +122,8 @@ async function supabaseApi(url, key) {
         directory: async () => must(await sb.rpc('member_directory')),
         setSharing: async p => must(await sb.rpc('set_my_sharing', { p })),
         vrnCheck: async v => must(await sb.rpc('vrn_check', { p_vrn: v })),
+        /* setup file 56: member or not + the name partly hidden + area; null when that file isn't run yet */
+        async vrnInfo(v) { const r = await sb.rpc('vrn_check_info', { p_vrn: v }); if (r.error) { if (/could not find|function/i.test(r.error.message || '')) return null; throw new Error(r.error.message); } return r.data; },
         agreeTnc: async () => { const r = await sb.rpc('agree_tnc'); if (r.error && /could not find|function/i.test(r.error.message || '')) return must(await sb.rpc('request_change', { p_kind: 'tnc', p_value: 'agree' })); return must(r); },
         withdrawTnc: async () => { const r = await sb.rpc('withdraw_tnc'); if (r.error && /could not find|function/i.test(r.error.message || '')) return must(await sb.rpc('request_change', { p_kind: 'tnc', p_value: 'disagree' })); return must(r); },
         leaveRwb: async note => must(await sb.rpc('leave_rwb', { p_note: note || null })),
@@ -319,6 +321,18 @@ async function supabaseApi(url, key) {
                     : /fetch|network|load failed/i.test(e.message) ? (navigator.onLine ? 'Pookie\'s server refused the request. An admin can check it in Admin → Pookie → Run a check.' : 'No internet connection. Please try again.') : e.message);
             }
         },
+        /* Teach Pookie (setup file 56) */
+        teach: {
+            next: async skip => must(await sb.rpc('teach_next', { p_skip: skip || [] })),
+            answer: async (qid, text) => must(await sb.rpc('teach_answer', { p_qid: qid, p_answer: text })),
+            stats: async () => must(await sb.rpc('teach_stats')),
+        },
+        async pookieOp(op, extra = {}) {
+            const token = (await sb.auth.getSession()).data.session?.access_token;
+            const r = await fetch(url + '/functions/v1/ask-ronin', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: key, Authorization: 'Bearer ' + token }, body: JSON.stringify({ op, ...extra }) });
+            const b = await r.json().catch(() => ({ error: `The Pookie function answered HTTP ${r.status}. Deploy the latest ask-ronin.` }));
+            if (b.error) throw new Error(b.error); return b;
+        },
         async diagnoseAI() {
             const token = (await sb.auth.getSession()).data.session?.access_token;
             const r = await fetch(url + '/functions/v1/ask-ronin', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: key, Authorization: 'Bearer ' + token }, body: JSON.stringify({ diagnose: true }) })
@@ -331,6 +345,11 @@ async function supabaseApi(url, key) {
             }
         },
         chatNotes: async () => must(await sb.rpc('admin_get_chat_notes')),
+        teachQueue: async () => must(await sb.rpc('admin_teach_queue')),
+        teachReview: async (id, ok, text) => must(await sb.rpc('admin_teach_review', { p_id: id, p_ok: ok, p_text: text || null })),
+        pookieKnowledge: async () => must(await sb.rpc('admin_pookie_knowledge')),
+        pookieForget: async id => must(await sb.rpc('admin_pookie_forget', { p_id: id })),
+        pookieAddQuestions: async rows => must(await sb.rpc('admin_pookie_add_questions', { p: rows })),
         saveChatNotes: async notes => must(await sb.rpc('admin_set_chat_notes', { p_notes: notes })),
 
         /* report a Motomart post or a member's profile to the RWB team / Grievance Officer (setup file 55) */
@@ -502,6 +521,9 @@ function demoApi() {
         async saveBike(slot, vrn, model, mid = null) { if (!mid) return this.requestChange('bike', vrn, slot, model); const m = db.members.find(x => x.id === mid); m.member_bikes = (m.member_bikes || []).filter(b => b.slot !== slot); if (vrn) m.member_bikes.push({ slot, vrn: vrn.toUpperCase(), model: model || null, verified: false }); save(); return vrn ? 'saved' : 'removed'; },
         directory: () => demoDir().then(list => list.map(demoHide)),
         setSharing: p => { const out = Object.fromEntries(['vrn', 'bike', 'locality', 'mileage'].map(k => [k, !!p[k]])); me().share = out; save(); return wait(out); },
+        vrnInfo: v => { const m = db.members.find(m => (!m.status || m.status === 'active') && (nk(m.vrn) === nk(v) || (m.member_bikes || []).some(b => nk(b.vrn) === nk(v))));
+            if (!m) return wait({ member: false }); const full = !!m.share?.vrn, w = String(m.full_name).trim().split(/\s+/);
+            return wait({ member: true, full, name: full ? m.full_name : w.map((x, i) => i ? x[0] + '***' : x.slice(0, 3) + '*'.repeat(Math.max(x.length - 3, 2))).join(' '), area: String(m.locality || '').split(',')[0].trim() || null }); },
         vrnCheck: v => wait(db.members.some(m => (!m.status || m.status === 'active') && (nk(m.vrn) === nk(v) || (m.member_bikes || []).some(b => nk(b.vrn) === nk(v))))),
         agreeTnc: () => { Object.assign(me(), { tnc_agreed: true, tnc_version: window.RWB_TNC?.version || null, tnc_agreed_at: new Date().toISOString() }); save(); return wait('ok'); },
         withdrawTnc: () => { Object.assign(me(), { tnc_agreed: false, tnc_version: null }); save(); return wait('withdrawn'); },
@@ -652,11 +674,29 @@ function demoApi() {
             return { reply, left: db.chatLeft };
         },
         diagnoseAI: async () => ['version demo', 'settings: OK (demo mode)', 'test answer: "OK"'],
+        teach: {
+            async next(skip = []) {
+                db.tq ??= [['Engine & oil', 'Which engine oil brand and grade do you use in your Ronin 225, and how has the engine felt with it?'], ['Brakes, tyres & suspension', 'What tyre pressures (front and rear) do you run on the Ronin, solo and with a pillion?'], ['Chain & drive', 'How often do you clean and lube the chain on your Ronin, and which products do you use?'], ['Common issues & fixes', 'Have you faced the ISG / engine malfunction warning light coming on? What did it turn out to be?'], ['Riding & touring', 'How does the Ronin handle hills and ghats, like the roads to Darjeeling or Sikkim?']].map(([category, question], i) => ({ id: i + 1, category, question, answers: 0 }));
+                db.ta ??= [];
+                const q = db.tq.find(x => !skip.includes(x.id) && !db.ta.some(a => a.question_id === x.id));
+                return wait({ question: q || null, stats: this._stats() });
+            },
+            _stats() { const ok = (db.ta || []).filter(a => a.status === 'approved').length, w = (db.ta || []).filter(a => a.status === 'pending').length;
+                return { answered: (db.ta || []).length, approved: ok, waiting: w, xp: ok * 10 + w * 2, rank: 1, questions: (db.tq || []).length, top: [{ name: 'Arjun', xp: 48, approved: 4 }, { name: me().full_name.split(' ')[0], xp: ok * 10 + w * 2, approved: ok, me: true }, { name: 'Priya', xp: 12, approved: 1 }].sort((a, b) => b.xp - a.xp) }; },
+            async answer(qid, text) { if (String(text).trim().length < 8) throw new Error('Write a little more so Pookie can learn from it'); db.ta.push({ id: nid(), question_id: qid, answer: text, status: 'pending', member_name: me().full_name, created_at: new Date().toISOString() }); save(); return wait(this._stats()); },
+            stats() { return wait(this._stats()); },
+        },
+        async pookieOp(op) { await new Promise(r => setTimeout(r, 900)); return op === 'gen-questions' ? { added: 20 } : (db.gl = (db.gl || 0) + 1) > 3 ? { done: true, total: 3, learned: 3, failed: 0 } : { learned: ['Chain cleaning guide', 'First service checklist', 'Monsoon care'][db.gl - 1], left: 3 - db.gl, total: 3 }; },
         chatNotes: async () => db.chatNotes || '', async saveChatNotes(n) { db.chatNotes = n; save(); },
         async testPush() { db.news.push({ id: nid(), kind: 'admin', title: 'Test notification ✅', body: 'Push notifications are working on this phone.', url: '#news', audience: 'admins', created_at: new Date().toISOString() }); save(); },
 
         report: (kind, ref, label, reason, details) => { (db.reports ??= []).unshift({ id: Date.now(), created_at: new Date().toISOString(), reporter_name: me().full_name, kind, ref, label, reason, details: details || null, status: 'open' }); save(); return wait(1); },
         admin: {
+            teachQueue: () => wait((db.ta || []).filter(a => a.status === 'pending').map(a => ({ ...a, question: (db.tq || []).find(q => q.id === a.question_id)?.question, category: (db.tq || []).find(q => q.id === a.question_id)?.category }))),
+            teachReview(id, ok, text) { const a = db.ta.find(x => x.id === id); a.status = ok ? 'approved' : 'rejected'; if (ok) { (db.know ??= []).push({ id: nid(), source: 'answer', title: (db.tq || []).find(q => q.id === a.question_id)?.question, content: (text || a.answer) + ' (RWB rider ' + a.member_name.split(' ')[0] + ')', updated_at: new Date().toISOString() }); } save(); return wait(ok ? 'approved' : 'rejected'); },
+            pookieKnowledge: () => wait(db.know || []),
+            pookieForget(id) { db.know = (db.know || []).filter(k => k.id !== id); save(); return wait('forgotten'); },
+            pookieAddQuestions: rows => wait(rows.length),
             reports: () => wait(db.reports ??= []),
             reportDone: (id, outcome) => { const r = (db.reports || []).find(x => x.id === id); if (r) Object.assign(r, { status: 'done', outcome, handled_by: me().full_name, handled_at: new Date().toISOString() }); save(); return wait('done'); },
             dupes: () => wait(db.dupes ??= [

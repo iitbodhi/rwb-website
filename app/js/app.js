@@ -157,7 +157,7 @@ function mileageStats(logs) {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { videos: viewVideos, docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, crew: viewCrew, events: viewEvents, terms: viewTerms, track: viewTrack };
+const ROUTES = { videos: viewVideos, docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, teach: viewTeach, crew: viewCrew, events: viewEvents, terms: viewTerms, track: viewTrack };
 /* roninwb.in/app/#terms: Me screen with the Terms & Conditions open, ready to agree */
 function viewTerms() {
     history.replaceState(null, '', '#me'); document.body.dataset.route = 'me';
@@ -611,6 +611,8 @@ const ICON = {
     approve: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M12 3l7.5 2.8v5.7c0 4.6-3.2 7.7-7.5 9-4.3-1.3-7.5-4.4-7.5-9V5.8z"/><path d="M12 3l7.5 2.8v5.7c0 4.6-3.2 7.7-7.5 9-4.3-1.3-7.5-4.4-7.5-9V5.8z"/><path d="m8.8 12.2 2.2 2.2 4.4-4.6"/></svg>',
     members: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle class="ac" cx="9" cy="8" r="3"/><circle cx="9" cy="8" r="3"/><path d="M3.5 19.5c.5-3.5 2.6-5.7 5.5-5.7s5 2.2 5.5 5.7M15 5.3a3 3 0 0 1 0 5.4M17 14.2c1.9.6 3.2 2.5 3.5 5.3"/></svg>',
     cake: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M5 14a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1.5c-1.2 1-2.3 1-3.5 0s-2.3-1-3.5 0-2.3 1-3.5 0-2.3-1-3.5 0z"/><path d="M4 20.5h16M5 20.5V14a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6.5M5 15.5c1.2-1 2.3-1 3.5 0s2.3 1 3.5 0 2.3-1 3.5 0 2.3 1 3.5 0M8 12V9.5M12 12V9.5M16 12V9.5M8 7.2c-.7-.6-.7-1.5 0-2.2.7.7.7 1.6 0 2.2zM12 7.2c-.7-.6-.7-1.5 0-2.2.7.7.7 1.6 0 2.2zM16 7.2c-.7-.6-.7-1.5 0-2.2.7.7.7 1.6 0 2.2z"/></svg>',
+    mega: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M4 10v4h3l7 4V6L7 10z"/><path d="M4 10v4h3l7 4V6L7 10zM17.5 9a4 4 0 0 1 0 6M8 14.5l1.2 4.5"/></svg>',
+    bike: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle class="ac" cx="6" cy="16" r="3.4"/><circle cx="6" cy="16" r="3.4"/><circle cx="18" cy="16" r="3.4"/><path d="m6 16 4-6h4.5l3.5 6M10 10 8.6 7H6.5M14.5 10l1.6-3H19"/></svg>',
     alert: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M12 3.8 2.8 19.5h18.4z"/><path d="M12 3.8 2.8 19.5h18.4zM12 10v4.2M12 16.9v.1"/></svg>',
     bell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M6 16.5V11a6 6 0 0 1 12 0v5.5z"/><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0"/></svg>',
     file: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M13.5 3v4.5H18z"/><path d="M6.5 3h7L18 7.5V20a1 1 0 0 1-1 1H6.5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM13.5 3v4.5H18M8.5 12.5h7M8.5 16h5"/></svg>',
@@ -786,7 +788,7 @@ function clearNews(list) {
 const linkifyNews = t => esc(t).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
     .replace(/(?<![\w/])((?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5})(?!\d)/g, m => { const d = m.replace(/\D/g, '').slice(-10); return `<a href="tel:+91${d}">${m}</a> <a class="wa-mini" href="${waTo(d)}" target="_blank" rel="noopener" aria-label="WhatsApp ${d}">WhatsApp</a>`; });
 function newsSheet(n) {
-    openSheet(n.title, `<p class="small muted" style="margin-bottom:12px">${KIND_ICON[n.kind] || '📣'} ${timeAgo(n.created_at)}${n.audience === 'admins' ? ' · admins only' : n.audience === 'moderators' ? ' · team only' : ''}</p>
+    openSheet(n.title, `<p class="small muted" style="margin-bottom:12px"><span class="inl-ico">${KIND_ICON[n.kind] || ICON.mega}</span> ${timeAgo(n.created_at)}${n.audience === 'admins' ? ' · admins only' : n.audience === 'moderators' ? ' · team only' : ''}</p>
         <div class="news-full">${n.body ? linkifyNews(n.body) : '<span class="muted">No details.</span>'}</div>
         <button class="btn ghost block" data-x="share" style="margin-top:16px">Share on WhatsApp</button>`, body => {
         body.querySelector('[data-x=share]').onclick = () => openWA(waShare(`📣 *${n.title}*${n.body ? '\n\n' + n.body : ''}\n\n– RWB App: https://${APP_LINK}`));
@@ -800,9 +802,9 @@ function newsRow(n, del = false, compact = false) {
     const hello = n.kind === 'member' && /say hello to (.+?)!?$/i.exec(n.body || '');
     if (hello && !del) return newsRow({ ...n, kind: 'member' }, true, compact).replace('<a class="news-row', `<a data-act="hello" data-name="${esc(hello[1])}" class="news-row`).replace(/<button class="icon-btn del"[^]*?<\/button>/, ICON.chev);
     const openAttr = own ? ` data-act="news-open" data-nid="${n.id}"` : '';
-    if (compact) return `<a class="news-row mini ${n.kind}" href="${esc(href)}"${openAttr}${sw}><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || '📣'}</span>
+    if (compact) return `<a class="news-row mini ${n.kind}" href="${esc(href)}"${openAttr}${sw}><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || ICON.mega}</span>
         <span class="grow"><b>${esc(n.title)}</b><span class="news-line">${n.body ? esc(n.body) + ' · ' : ''}${shortAgo(n.created_at)}${n.audience === 'admins' ? ' · admins' : n.audience === 'moderators' ? ' · team' : ''}</span></span>${ICON.chev}</a>`;
-    return `<a class="news-row ${n.kind}" href="${esc(href)}"${openAttr}${sw}><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || '📣'}</span>
+    return `<a class="news-row ${n.kind}" href="${esc(href)}"${openAttr}${sw}><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || ICON.mega}</span>
         <span class="grow"><b>${esc(n.title)}</b>${n.body ? `<span class="news-body">${esc(n.body)}</span>` : ''}<span class="small muted">${timeAgo(n.created_at)}${n.audience === 'admins' ? ', admins only' : n.audience === 'moderators' ? ', team only' : ''}</span></span>
         ${del ? `<button class="icon-btn del" data-act="del-news" data-id="${n.id}" aria-label="Delete">✕</button>` : ICON.chev}</a>`;
 }
@@ -845,7 +847,7 @@ async function viewHome() {
             <button data-act="add-fuel"><span>${ICON.fuel}</span>Add fuel</button>
             <button data-act="add-service"><span>${ICON.wrench}</span>Log service</button>
             <button data-act="fam" class="fam-q" aria-label="RWB FAM: invite your family"><span>${FAM_ICON}</span>FAM</button>
-            <button data-act="sell"><span>${ICON.tag}</span>Sell gear</button>
+            <button data-act="sell"><span>${ICON.cart}</span>Sell gear</button>
             <a href="#docs" aria-label="Documents${docsAlert() ? ' (something needs renewing)' : ''}"><span>${DOC_ICON}${docsAlert() ? '<i class="dot dot-red"></i>' : ''}</span>Documents</a>
         </nav>
         ${isAdmin() ? `<section class="admin-dock" aria-label="Admin">
@@ -866,6 +868,7 @@ async function viewHome() {
         <section class="section"><h2>Fresh on Motomart <a href="#motomart">See all</a></h2>
             ${fresh.length ? `<div class="strip">${fresh.map(listingCard).join('')}</div>` : `<a class="group-row-card" href="#motomart"><span class="g-ico">${ICON.tag}</span><span class="grow"><b>Nothing for sale yet</b><span class="small muted">Selling old gear? Post it here for fellow riders.</span></span>${ICON.chev}</a>`}</section>
         <section class="section"><h2>Explore</h2><div class="group">
+            <a href="#teach"><span class="g-ico">${ICON.chat}</span><span class="grow"><b>Teach Pookie</b><span class="small muted">Answer Pookie's Ronin questions, earn XP and help every rider</span></span>${ICON.chev}</a>
             <a href="#guides" data-guide="maint"><span class="g-ico">${ICON.book}</span><span class="grow"><b>Maintenance guides</b><span class="small muted">How-tos and checklists from our coordinators</span></span>${ICON.chev}</a>
             <a href="#guides" data-guide="acc"><span class="g-ico">${ICON.helmet}</span><span class="grow"><b>Recommended gear</b><span class="small muted">Accessories tested and scored by RWB</span></span>${ICON.chev}</a>
             <a href="https://roninwb.in" target="_blank" rel="noopener"><span class="g-ico">${ICON.globe}</span><span class="grow"><b>roninwb.in</b><span class="small muted">Rides, events, gallery and the team</span></span>${ICON.out}</a>
@@ -2803,7 +2806,7 @@ async function drawPushState() {
 
 /* =================== Announcements =================== */
 const STICKY = n => n.kind === 'announcement' || n.kind === 'event';   /* only admins can remove these */
-const KIND_ICON = { event: '📅', announcement: '📣', birthday: '🎂', motomart: '🛒', member: '🏍️', admin: '🛡️', personal: '🙋', sos: '🆘' };
+const KIND_ICON = { event: ICON.cal, announcement: ICON.mega, birthday: ICON.cake, motomart: ICON.cart, member: ICON.bike, admin: ICON.approve, personal: ICON.profile, sos: ICON.alert };
 function shortAgo(iso) {
     const s = (Date.now() - new Date(iso)) / 1000;
     if (s < 60) return 'now'; if (s < 3600) return Math.floor(s / 60) + 'm'; if (s < 86400) return Math.floor(s / 3600) + 'h';
@@ -2819,7 +2822,7 @@ function timeAgo(iso) {
 const linkify = t => esc(t).replace(/https?:\/\/[^\s<]+/g, u => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`).replace(/\n/g, '<br>');
 function newsCard(n, del = false) {
     const go = n.url && n.url !== '#news' && n.url.startsWith('#');
-    return `<article class="card news ${n.kind}"><div class="row" style="align-items:flex-start"><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || '📣'}</span>
+    return `<article class="card news ${n.kind}"><div class="row" style="align-items:flex-start"><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || ICON.mega}</span>
         <div class="grow"><h3>${esc(n.title)}</h3>${n.body ? `<p>${linkify(n.body)}</p>` : ''}
         <p class="small muted" style="margin-top:6px">${timeAgo(n.created_at)}${n.audience === 'admins' ? ' · admins only' : n.audience === 'moderators' ? ' · team only' : ''}${go ? ` · <a href="${esc(n.url)}">Open</a>` : ''}</p></div>
         ${del ? `<button class="icon-btn" data-act="del-news" data-id="${n.id}" aria-label="Delete">🗑</button>` : ''}</div></article>`;
@@ -2829,13 +2832,13 @@ async function viewNews() {
     try { if (all[0]) localStorage.setItem('rwb-news-seen', String(Math.max(...all.map(n => n.id)))); } catch { /* ignore */ }
     const news = visibleNews(all);
     const canClear = news.length > 0;
-    app.innerHTML = top('News', canClear ? `<button class="icon-btn clear-btn" data-act="clear-news" aria-label="Clear notifications" title="Clear">${ICON_CLEAR}</button>` : '') + `
+    app.innerHTML = top('News') + `
         ${isAdmin() ? `<details class="howto" style="margin-bottom:6px"><summary>Post an announcement</summary>
             <form id="ann" style="padding-bottom:16px"><label>Title<input name="title" required maxlength="120" placeholder="e.g. Sunday breakfast ride"></label>
             <label>Message<textarea name="body" maxlength="1000" placeholder="Meeting point, time, anything members should know"></textarea></label>
             <p class="small muted">Goes to everyone's feed and as a notification to every phone that has them on.</p>
             <button class="btn block">Send to all members</button></form></details>` : ''}
-        <section class="section">${news.length ? `<p class="small muted swipe-hint">Swipe an alert left or right to hide it.</p><div class="group">${news.map(n => newsRow(n, isAdmin())).join('')}</div>` : `<div class="card empty"><b>${all.length ? 'All caught up' : 'No news yet'}</b>${isFam() ? 'Important announcements from the RWB admins show up here.' : 'Announcements, birthdays and new Motomart posts show up here.'}</div>`}</section>`;
+        <section class="section">${news.length ? `<div class="news-bar"><p class="small muted swipe-hint">Swipe an alert left or right to hide it.</p>${canClear ? '<button class="clear-all" data-act="clear-news">Clear all</button>' : ''}</div><div class="group">${news.map(n => newsRow(n, isAdmin())).join('')}</div>` : `<div class="card empty"><b>${all.length ? 'All caught up' : 'No news yet'}</b>${isFam() ? 'Important announcements from the RWB admins show up here.' : 'Announcements, birthdays and new Motomart posts show up here.'}</div>`}</section>`;
     swipeToDismiss(app, () => { if (!app.querySelector('[data-swipe]')) render(); });
     actions = {
         'clear-news': () => clearNews(all), 'del-news': b => { if (confirmBox('Delete this from the feed?')) busy(b, async () => { await api.deleteNews(Number(b.dataset.id)); render(); }); } };
@@ -3057,6 +3060,7 @@ async function viewChat() {
     loadChat();
     await Promise.all([load.services().catch(() => []), load.fuel().catch(() => [])]);
     app.innerHTML = top('Pookie', (chat.msgs.length ? '<button class="btn sm ghost" data-act="clear">New chat</button>' : '') + '<button class="icon-btn chat-close" data-act="chat-close" aria-label="Close Pookie">✕</button>') + `
+        <a class="teach-chip" href="#teach"><span>${ICON.book}</span><span class="grow"><b>Teach Pookie</b> · answer Ronin questions, earn XP</span>${ICON.chev}</a>
         <div id="chatlog" class="chatlog" aria-live="polite"></div>
         <form id="ask" class="askbar">
             <div id="att" class="att" hidden></div>
@@ -3138,9 +3142,71 @@ async function sendChat(text) {
 }
 
 /* Admin: teach Pookie RWB-specific things */
+/* =================== Teach Pookie: members answer Pookie's Ronin questions; admins check; Pookie learns =================== */
+const TEACH_LEVELS = [[0, 'Rookie', 'helmet'], [30, 'Rider', 'bike'], [100, 'Mechanic', 'wrench'], [250, 'Road Guru', 'globe'], [500, 'Ronin Sensei', 'approve']];
+const teachLevel = xp => { let i = 0; while (i + 1 < TEACH_LEVELS.length && xp >= TEACH_LEVELS[i + 1][0]) i++; const [from, name, ico] = TEACH_LEVELS[i], next = TEACH_LEVELS[i + 1];
+    return { name, ico, next: next?.[1], need: next ? next[0] - xp : 0, p: next ? (xp - from) / (next[0] - from) : 1 }; };
+async function viewTeach() {
+    const skip = state.teachSkip ??= [];
+    let d; try { d = await api.teach.next(skip); } catch (e) {
+        app.innerHTML = top('Teach Pookie') + `<div class="card empty"><b>Teach Pookie isn't set up yet</b>${/function|could not find/i.test(e.message) ? 'An admin needs to run setup file 56 in Supabase.' : esc(e.message)}</div>`; return; }
+    const st = d.stats || {}, lv = teachLevel(st.xp || 0), q = d.question;
+    app.innerHTML = top('Teach Pookie') + `
+        <section class="teach-hero card">
+            <div class="th-row"><span class="th-badge" aria-hidden="true">${ICON[lv.ico]}</span><div class="grow"><b class="th-level">${lv.name}</b>
+                <span class="small muted">${st.xp || 0} XP${lv.next ? ` · ${lv.need} XP to ${lv.next}` : ' · top level!'}</span></div>
+                <div class="th-num"><b>${st.approved || 0}</b><span>taught</span></div></div>
+            <div class="th-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(lv.p * 100)}"><i style="width:${Math.round(lv.p * 100)}%"></i></div>
+            <p class="small muted" style="margin-top:8px">Answer from your own experience with the Ronin. Admins check every answer before Pookie uses it. <b>+10 XP</b> for each answer they approve.</p>
+        </section>
+        ${q ? `<section class="teach-q card" id="tq">
+            <div class="tq-head"><span class="tq-ava" aria-hidden="true">${ICON.chat}</span><div><b>Pookie asks</b><span class="tq-cat">${esc(q.category)}</span></div></div>
+            <p class="tq-text" id="tq-text" aria-live="polite">${esc(q.question)}</p>
+            <form id="tqf"><label class="sr-only" for="tqa">Your answer</label>
+                <textarea id="tqa" name="a" rows="4" maxlength="1500" placeholder="Share what you know: brands, km, prices, steps, what worked and what didn't…"></textarea>
+                <div class="tq-btns"><button type="button" class="btn ghost sm" data-x="skip">Skip</button><button class="btn sm grow">Teach Pookie</button></div></form>
+            <p class="small muted" style="margin-top:8px">${q.answers ? `${q.answers} rider${q.answers > 1 ? 's have' : ' has'} answered this already. Yours adds more.` : 'Nobody has answered this yet. Be the first!'}</p>
+        </section>` : `<div class="card empty"><b>You've answered every question 🙌</b>Thank you! Admins add new questions regularly, so check back soon.</div>`}
+        ${(st.top || []).length ? `<section class="section"><h2>Top teachers</h2><ol class="group teach-top">${st.top.map((t, i) => `<li class="${t.me ? 'me' : ''}"><span class="rk">${i + 1}</span><span class="grow"><b>${esc(t.name)}${t.me ? ' (you)' : ''}</b><span class="small muted">${t.approved} taught</span></span><b class="xp">${t.xp} XP</b></li>`).join('')}</ol></section>` : ''}
+        <p class="small muted" style="text-align:center;margin:18px 8px 0">Pookie also reads the maintenance PDFs in Guides. Please don't share anyone's private details in answers.</p>`;
+    if (!q) return;
+    /* Pookie "types" the question */
+    const qt = $('#tq-text'), full = q.question;
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) { let k = 0; qt.textContent = ''; const tick = () => { k += 2; qt.textContent = full.slice(0, k); if (k < full.length) setTimeout(tick, 14); }; tick(); }
+    const f = $('#tqf');
+    f.querySelector('[data-x=skip]').onclick = () => { skip.push(q.id); render(); };
+    f.onsubmit = e => { e.preventDefault(); const t = f.a.value.trim();
+        if (t.length < 8) return toast('Write a little more so Pookie can learn from it', true);
+        busy(e.submitter, async () => { const before = st.xp || 0, s2 = await api.teach.answer(q.id, t);
+            const card = $('#tq'); card.classList.add('tq-done'); card.insertAdjacentHTML('beforeend', `<div class="tq-xp" aria-hidden="true">+${Math.max(2, (s2.xp || 0) - before)} XP</div>`);
+            toast('Thanks! An admin will check it, then Pookie learns it 🎓');
+            setTimeout(render, 900); }); };
+}
 async function adminAI() {
     const notes = await api.chatNotes();
-    $('#admin-body').innerHTML = `<div class="card"><h3>Teach Pookie</h3>
+    const [queue, know] = await Promise.all([api.admin.teachQueue?.().catch(() => null), api.admin.pookieKnowledge?.().catch(() => null)]);
+    const ready = queue !== null && know !== null;
+    const nAns = (know || []).filter(k => k.source === 'answer').length, nGuide = (know || []).filter(k => k.source === 'guide').length;
+    $('#admin-body').innerHTML = (ready ? `<div class="card"><h3>Answers to check${queue.length ? ` (${queue.length})` : ''}</h3>
+        <p class="small muted" style="margin:4px 0 10px">From Teach Pookie. Approve what's right (edit it first if needed); Pookie uses approved answers from the next question.</p>
+        ${queue.length ? queue.map(a => `<div class="tq-review" data-id="${a.id}"><p class="small muted">${esc(a.category || '')} · ${esc(a.member_name || 'member')} · ${timeAgo(a.created_at)}</p>
+            <b>${esc(a.question)}</b><textarea rows="3" maxlength="1500">${esc(a.answer)}</textarea>
+            <div class="btns"><button class="btn ghost sm" data-x="no">Reject</button><button class="btn sm" data-x="ok">Approve</button></div></div>`).join('')
+          : '<p class="muted">Nothing waiting 👍</p>'}</div>
+        <div class="card section"><h3>Learn from the Guides PDFs</h3>
+        <p class="small muted" style="margin:4px 0 10px">Pookie reads each maintenance PDF in Guides and keeps notes from it. Run this again after adding new PDFs. It needs the Gemini key, and the PDFs shared as "Anyone with the link".</p>
+        <p class="small"><b>${nGuide}</b> guide${nGuide === 1 ? '' : 's'} learned</p>
+        <button class="btn ghost block" id="learn">Learn from Guides</button><pre id="learn-out" class="diag" hidden></pre></div>
+        <div class="card section"><h3>What Pookie has learned</h3>
+        <p class="small muted" style="margin:4px 0 10px"><b>${nAns}</b> rider answer${nAns === 1 ? '' : 's'} and <b>${nGuide}</b> guide${nGuide === 1 ? '' : 's'}. Remove anything that's wrong or out of date.</p>
+        ${(know || []).length ? `<details><summary class="small">Show all</summary>${know.map(k => `<div class="kn-row"><span class="grow"><span class="small muted">${k.source === 'guide' ? '📄 Guide' : '🧑 Rider'}</span><b>${esc(k.title)}</b><span class="small">${esc(k.content.slice(0, 160))}${k.content.length > 160 ? '…' : ''}</span></span><button class="btn ghost sm" data-forget="${k.id}">Forget</button></div>`).join('')}</details>` : ''}
+        </div>
+        <div class="card section"><h3>Pookie's questions</h3>
+        <p class="small muted" style="margin:4px 0 10px">Members see these in Teach Pookie, the least-answered first. Add your own, or let the AI write 20 new ones.</p>
+        <form id="addq" class="row" style="gap:8px"><input name="q" maxlength="300" placeholder="e.g. Which oil filter do you use?" style="flex:1"><button class="btn sm">Add</button></form>
+        <button class="btn ghost block" id="genq" style="margin-top:10px">✨ Write 20 new questions with AI</button></div>`
+      : `<div class="card"><h3>Teach Pookie</h3><p class="small muted">Run setup file 56 in Supabase (and deploy the latest ask-ronin function) to turn on Teach Pookie, the answers queue and learning from the Guides PDFs.</p></div>`) + `
+        <div class="card section"><h3>Admin notes for Pookie</h3>
         <p class="small muted" style="margin:4px 0 12px">Anything written here, Pookie knows and trusts. For example: patron service centres with area and phone, RWB ride rules, the sticker process, recommended oil brands, tyre pressures your coordinators use, upcoming ride details. Members never see this text directly.</p>
         <form id="ainotes"><textarea name="notes" rows="12" maxlength="8000" placeholder="e.g. Patron service centres:\n- Example Motors, Salt Lake Sector 5 (10% off for RWB members)\n\nRide rules: helmet and riding jacket compulsory on all RWB rides…">${esc(notes)}</textarea>
         <button class="btn block">Save notes</button></form></div>
@@ -3149,6 +3215,24 @@ async function adminAI() {
         <button class="btn ghost block" id="diag">Run a check</button><pre id="diag-out" class="diag" hidden></pre></div>`;
     $('#diag').onclick = e => busy(e.target, async () => { const out = $('#diag-out'); out.hidden = false; out.textContent = 'Checking… (up to 30 seconds)'; out.textContent = (await api.diagnoseAI()).filter(Boolean).join('\n'); });
     $('#ainotes').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { await api.saveChatNotes(e.target.notes.value.trim()); toast('Saved. Pookie will use this from the next question.'); }); };
+    if (!ready) return;
+    const body = $('#admin-body');
+    body.querySelectorAll('.tq-review').forEach(r => r.querySelectorAll('[data-x]').forEach(b => b.onclick = () => busy(b, async () => {
+        const ok = b.dataset.x === 'ok'; await api.admin.teachReview(Number(r.dataset.id), ok, r.querySelector('textarea').value.trim());
+        r.remove(); toast(ok ? 'Approved. Pookie knows it now 🎓' : 'Rejected'); })));
+    body.querySelectorAll('[data-forget]').forEach(b => b.onclick = () => { if (confirmBox('Remove this from what Pookie knows?')) busy(b, async () => { await api.admin.pookieForget(Number(b.dataset.forget)); b.closest('.kn-row').remove(); toast('Pookie forgot it'); }); });
+    $('#learn').onclick = e => busy(e.target, async () => {
+        const out = $('#learn-out'); out.hidden = false; out.textContent = 'Reading the Guides PDFs, one at a time (about 20–60 seconds each)…\n';
+        for (let i = 0; i < 60; i++) {
+            const r = await api.pookieOp('learn-guides', { retry: i === 0 });
+            if (r.done) { out.textContent += `\nDone. ${r.learned} of ${r.total} guides learned${r.failed ? ` (${r.failed} couldn't be read)` : ''}.`; break; }
+            out.textContent += r.learned ? `✓ ${r.learned}\n` : `✗ ${r.failed}: ${r.reason}\n`;
+        }
+        toast('Pookie has read the guides 📄');
+    });
+    $('#genq').onclick = e => busy(e.target, async () => { const r = await api.pookieOp('gen-questions'); toast(`${r.added} new question${r.added === 1 ? '' : 's'} added`); });
+    $('#addq').onsubmit = e => { e.preventDefault(); const q = e.target.q.value.trim(); if (q.length < 12) return toast('Write the full question', true);
+        busy(e.submitter, async () => { const n = await api.admin.pookieAddQuestions([{ category: 'General', question: q }]); toast(n ? 'Question added' : 'That question is already there'); e.target.reset(); }); };
 }
 
 /* =================== RWB: three leaderboards + members =================== */
@@ -3239,14 +3323,15 @@ function bindVrnCheck() {
         e.preventDefault(); const v = e.target.v.value, out = $('#vcr');
         if (vrnKey(v).length < 6) return toast('Type the full bike number, e.g. WB 02 AB 1234', true);
         busy(e.submitter, async () => {
-            const yes = await api.vrnCheck(v), key = vrnKey(v);
+            const info = isMod() ? null : await api.vrnInfo?.(v).catch(() => null);   /* members: name partly hidden + area */
+            const yes = info ? !!info.member : await api.vrnCheck(v), key = vrnKey(v);
             const owns = x => vrnKey(x.vrn) === key || (x.member_bikes || x.bikes || []).some(b => vrnKey(b.vrn) === key);
             let who = '', full = null;
             if (yes && isAdmin()) { const all = await api.admin.members().catch(() => state.adminMembers || []); state.adminMembers = all; full = all.find(x => !isGone(x) && owns(x)); }   /* always fresh */
             else if (yes && isMod()) { const dir = state.dir ??= teamFirst(await api.directory().catch(() => [])); const m = dir.find(owns); if (m) who = m.full_name; }
             out.hidden = false; out.className = 'vcr ' + (yes ? 'yes' : 'no');
             out.innerHTML = !yes ? '<b>❌ Naah. Not an RWB Member.</b><span>Approach the rider politely and let them know about RWB (Ronin Warriors of Bengal) or simply ask them to visit <a href="https://roninwb.in" target="_blank" rel="noopener">roninwb.in</a></span>'
-                : full ? vrnAdminCard(full, key) : `<b>✅ Yeah! RWB Member.</b>${who ? `<span>${esc(who)}</span>` : ''}`;
+                : full ? vrnAdminCard(full, key) : `<b>✅ Yeah! RWB Member.</b>${who ? `<span>${esc(who)}</span>` : ''}${info?.name ? `<span class="vc-who"><b>${esc(info.name)}</b>${info.area ? ` · ${esc(info.area)}` : ''}</span>${info.full ? '' : '<span class="small muted">Name partly hidden for the rider\'s privacy.</span>'}` : ''}`;
             out.insertAdjacentHTML('afterbegin', '<button type="button" class="vcr-x" aria-label="Close">✕</button>');
             out.querySelector('.vcr-x').onclick = () => { out.hidden = true; out.innerHTML = ''; vcf.reset(); };
             const op = out.querySelector('[data-x=vc-open]'); if (op) op.onclick = () => memberSheet(full);

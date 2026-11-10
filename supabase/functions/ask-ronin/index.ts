@@ -88,6 +88,7 @@ THE RWB APP (help members find things)
 
 /* ---------------- RWB website knowledge (cached, never slows answers down) ---------------- */
 let cache: { at: number; ttl: number; text: string } | null = null;
+let guideList: { id: string; name: string; description?: string }[] = [];
 const get = (u: string, ms = 3500) => fetch(u, { signal: AbortSignal.timeout(ms), redirect: "follow" });
 async function siteKnowledge(): Promise<string> {
   if (cache && Date.now() - cache.at < cache.ttl) return cache.text;
@@ -105,6 +106,7 @@ async function siteKnowledge(): Promise<string> {
       mUrl ? get(mUrl).then((r) => r.json()) : Promise.resolve([]),
       aUrl ? get(aUrl).then((r) => r.text()) : Promise.resolve(""),
     ]);
+    if (guides.status === "fulfilled" && Array.isArray(guides.value)) guideList = (guides.value as { id: string; name: string }[]).filter((p) => /^[\w-]+$/.test(String(p.id)));
     if (guides.status === "fulfilled" && Array.isArray(guides.value) && guides.value.length) {
       out.push("RWB MAINTENANCE GUIDES available in the app (Guides → Maintenance):\n" +
         (guides.value as { name: string; description?: string }[]).slice(0, 60)
@@ -140,12 +142,12 @@ async function listFlashModels(key: string): Promise<string[]> {
 }
 
 /** Finds the first model + setting that answers. stream=true → word-by-word answer, false → whole answer at once. */
-async function openGemini(key: string, preferred: string[], body: Record<string, unknown>, stream: boolean, log: string[]): Promise<Response> {
+async function openGemini(key: string, preferred: string[], body: Record<string, unknown>, stream: boolean, log: string[], waitMs = 30000): Promise<Response> {
   const attempt = async (model: string, t: number): Promise<Response | "next-setting" | "next-model"> => {
     const gc = { ...(body.generationConfig as object) } as Record<string, unknown>;
     if (THINKING[t]) gc.thinkingConfig = THINKING[t];
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), stream ? 15000 : 30000);
+    const timer = setTimeout(() => ctrl.abort(), stream ? 15000 : waitMs);
     const t0 = Date.now();
     try {
       const r = await fetch(`${GEMINI}/models/${model}:${stream ? "streamGenerateContent?alt=sse" : "generateContent"}`, {
@@ -249,7 +251,39 @@ function textStream(src: Response, pick: (d: never) => string, onEmpty: () => Pr
     .pipeThrough(new TextEncoderStream());
 }
 
-const VERSION = "pookie-6";
+/* ---------------- What RWB riders (Teach Pookie) and the Guides PDFs taught Pookie ---------------- */
+type K = { title: string; content: string; source: string };
+let kcache: { at: number; rows: K[] } | null = null;
+// deno-lint-ignore no-explicit-any
+async function knowledgeRows(server: any): Promise<K[]> {
+  if (kcache && Date.now() - kcache.at < 5 * 60e3) return kcache.rows;
+  const r = await server.from("pookie_knowledge").select("title,content,source").eq("active", true).limit(3000);
+  kcache = { at: Date.now(), rows: r.error ? [] : (r.data as K[]) };
+  return kcache.rows;
+}
+const STOP = new Set(("the a an and or of to in on for with is are was were be my your you it this that what which how when where do does did have has " +
+  "can should would will ronin bike tvs 225 any about from like just get got not but its very much more most also there their them they me we our us").split(" "));
+const words = (s: string) => [...new Set(String(s).toLowerCase().replace(/[^a-z0-9\u0980-\u09ff\u0900-\u097f ]+/g, " ").split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w)))];
+/** The tips and guide notes that match what the rider is asking about (by shared words), shortest list that helps. */
+function relevantKnowledge(rows: K[], text: string): string {
+  const q = words(text); if (!q.length || !rows.length) return "";
+  const scored = rows.map((k) => {
+    const t = (k.title + " " + k.content).toLowerCase(), title = k.title.toLowerCase(); let sc = 0;
+    for (const w of q) if (t.includes(w)) sc += title.includes(w) ? 2 : 1;
+    return { k, sc };
+  }).filter((x) => x.sc >= 2).sort((a, b) => b.sc - a.sc);
+  const tips = scored.filter((x) => x.k.source !== "guide").slice(0, 12), guides = scored.filter((x) => x.k.source === "guide").slice(0, 3);
+  const out: string[] = [];
+  if (tips.length) out.push("TIPS FROM RWB RIDERS (taught to you in Teach Pookie and checked by RWB admins; use them for practical, local advice and say they come from RWB riders):\n" +
+    tips.map((x) => `- Q: ${x.k.title}\n  A: ${x.k.content.slice(0, 700)}`).join("\n"));
+  if (guides.length) out.push("FROM THE RWB MAINTENANCE GUIDES (PDFs in the app under Guides; mention the guide name when you use it):\n" +
+    guides.map((x) => `[${x.k.title}]\n${x.k.content.slice(0, 4000)}`).join("\n\n"));
+  return out.join("\n\n");
+}
+const pdfTitle = (n: string) => String(n).replace(/\.pdf$/i, "").replace(/[_-]+/g, " ").trim();
+function b64(bytes: Uint8Array): string { let s = ""; for (let i = 0; i < bytes.length; i += 32768) s += String.fromCharCode(...bytes.subarray(i, i + 32768)); return btoa(s); }
+
+const VERSION = "pookie-7";
 const list = (s: unknown, dflt: string) => String(s || dflt).split(",").map((x) => x.trim()).filter(Boolean);
 
 /* ---------------- Request ---------------- */
@@ -258,7 +292,7 @@ Deno.serve(async (req) => {
   const t0 = Date.now(), log: string[] = [`version ${VERSION}`];
   const asUser = createClient(SB_URL, ANON, { global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } }, auth: { persistSession: false } });
   const server = createClient(SB_URL, SERVICE, { auth: { persistSession: false } });
-  const input = await req.json().catch(() => ({})) as { messages?: { role: string; text: string }[]; context?: unknown; image?: string; stream?: boolean; diagnose?: boolean };
+  const input = await req.json().catch(() => ({})) as { messages?: { role: string; text: string }[]; context?: unknown; image?: string; stream?: boolean; diagnose?: boolean; op?: string; retry?: boolean };
 
   /* Admin → Pookie → "Run a check": test every step and report, without using anyone's quota */
   if (input.diagnose) {
@@ -286,7 +320,71 @@ Deno.serve(async (req) => {
     return json({ log });
   }
 
-  const [quota, cfgRes, knowledge] = await Promise.all([asUser.rpc("chat_take_quota"), server.rpc("chat_config"), siteKnowledge()]);
+  /* Admin → Pookie: read the Guides PDFs (one per call, the app repeats), or write new Teach Pookie questions */
+  if (input.op === "learn-guides" || input.op === "gen-questions") {
+    const adm = await asUser.rpc("is_admin");
+    if (adm.error || !adm.data) return json({ error: "Admins only" }, 403);
+    const c = (await server.rpc("chat_config")).data || {};
+    if (input.op === "learn-guides") {
+      cache = null; await siteKnowledge();
+      const have = await server.from("pookie_knowledge").select("ref,active,content").eq("source", "guide");
+      if (have.error) return json({ error: "Run setup file 56 in Supabase first. " + have.error.message }, 400);
+      const failed = new Set((have.data || []).filter((r: { active: boolean; content: string }) => !r.active && r.content.startsWith("FAILED")).map((r: { ref: string }) => r.ref));
+      const done = new Set((have.data || []).map((r: { ref: string }) => r.ref).filter((r: string) => input.retry ? !failed.has(r) : true));
+      const todo = guideList.filter((p) => !done.has(p.id));
+      const learned = guideList.filter((p) => done.has(p.id) && !failed.has(p.id)).length;
+      if (!todo.length) return json({ done: true, total: guideList.length, learned, failed: input.retry ? 0 : failed.size });
+      if (!c.key) return json({ error: "Reading PDFs needs the Gemini key (Groq can't read PDFs). Add it as in setup file 30." }, 400);
+      const p = todo[0], title = pdfTitle(p.name);
+      const save = (content: string, active: boolean) => server.from("pookie_knowledge").upsert({ source: "guide", ref: p.id, title, content, active, updated_at: new Date().toISOString() }, { onConflict: "source,ref" });
+      try {
+        const r = await fetch(`https://drive.google.com/uc?export=download&id=${p.id}`, { redirect: "follow", signal: AbortSignal.timeout(40000) });
+        const bytes = new Uint8Array(await r.arrayBuffer());
+        if (!r.ok || String.fromCharCode(...bytes.subarray(0, 4)) !== "%PDF") throw new Error(`couldn't download it as a PDF (HTTP ${r.status}). Is it shared as "Anyone with the link"?`);
+        if (bytes.length > 18e6) throw new Error("it is bigger than 18 MB");
+        const g = await openGemini(c.key, list(c.models, "gemini-flash-latest,gemini-flash-lite-latest"), {
+          contents: [{ role: "user", parts: [{ inlineData: { mimeType: "application/pdf", data: b64(bytes) } }, { text:
+            `This PDF ("${title}") is a maintenance guide from the Ronin Warriors of Bengal (RWB) riding club, mostly about the TVS Ronin 225. ` +
+            "Write notes so an assistant can answer riders' questions from it: every practical fact, step, interval, quantity, torque value, tool, part number, " +
+            "warning and tip that is in the PDF. Use short bullet points grouped under topic headings, at most about 1,500 words. Only what the PDF says; do not add " +
+            "outside facts. If the PDF has no readable text, reply with exactly: NO TEXT" }] }],
+          generationConfig: { temperature: 0.1, maxOutputTokens: 4096 } }, false, log, 100000);
+        const notes = partsText(await g.json()).trim();
+        if (!notes || /^NO TEXT/i.test(notes)) throw new Error("no readable text in it (a scanned image PDF?)");
+        await save(notes.slice(0, 20000), true); kcache = null;
+        return json({ learned: title, left: todo.length - 1, total: guideList.length });
+      } catch (e) {
+        await save("FAILED: " + String((e as Error).message || e).slice(0, 300), false);
+        return json({ failed: title, reason: String((e as Error).message || e).slice(0, 300), left: todo.length - 1, total: guideList.length });
+      }
+    }
+    /* gen-questions: 20 new questions for Teach Pookie */
+    const have = await server.from("pookie_questions").select("question,category").limit(600);
+    if (have.error) return json({ error: "Run setup file 56 in Supabase first. " + have.error.message }, 400);
+    const cats = [...new Set((have.data || []).map((q: { category: string }) => q.category))];
+    const ask = "You help an assistant learn from experienced TVS Ronin 225 owners in West Bengal, India. Write 20 NEW, specific, friendly questions to ask them " +
+      "(maintenance, problems and fixes, parts and prices, tyres, brakes, electricals, chain, mileage, monsoon and hill riding, touring, accessories, paperwork, local workshops and routes). " +
+      `Use these categories where they fit: ${cats.join(", ")}. Do not repeat or rephrase any of these existing questions:\n` +
+      (have.data || []).slice(0, 300).map((q: { question: string }) => "- " + q.question).join("\n") +
+      '\n\nReply with ONLY a JSON array like [{"category":"Engine & oil","question":"..."}].';
+    let txt = "";
+    try {
+      if (c.groq_key) txt = groqFull(await (await openGroq(c.groq_key, list(c.groq_models, ""), [{ role: "user", content: ask }], false, log)).json());
+    } catch (e) { log.push(String(e)); }
+    if (!txt && c.key) {
+      try { txt = partsText(await (await openGemini(c.key, list(c.models, "gemini-flash-latest"), { contents: [{ role: "user", parts: [{ text: ask }] }], generationConfig: { temperature: 0.8, maxOutputTokens: 4096 } }, false, log)).json()); }
+      catch (e) { log.push(String(e)); }
+    }
+    let rows: { category: string; question: string }[] = [];
+    try { rows = JSON.parse(txt.slice(txt.indexOf("["), txt.lastIndexOf("]") + 1)); } catch { /* below */ }
+    rows = (Array.isArray(rows) ? rows : []).filter((r) => r && typeof r.question === "string" && r.question.trim().length > 15)
+      .map((r) => ({ category: String(r.category || "General").slice(0, 40), question: r.question.trim().slice(0, 300), source: "ai" }));
+    if (!rows.length) return json({ error: "The AI didn't return usable questions. Try again.", detail: log.slice(-4).join(" | ") }, 502);
+    const ins = await server.from("pookie_questions").upsert(rows, { onConflict: "question", ignoreDuplicates: true }).select("id");
+    return json({ added: ins.data?.length ?? 0 });
+  }
+
+  const [quota, cfgRes, knowledge, learnedRows] = await Promise.all([asUser.rpc("chat_take_quota"), server.rpc("chat_config"), siteKnowledge(), knowledgeRows(server)]);
   if (quota.error) return json({ error: quota.error.message }, 429);
   const refund = async () => { await asUser.rpc("chat_refund"); };
 
@@ -303,8 +401,9 @@ Deno.serve(async (req) => {
     const hasImage = !!(image && typeof image === "string" && image.length < 1_500_000);
 
     const today = new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "long", year: "numeric" });
+    const asked = turns.filter((t) => t.role === "user").slice(-3).map((t) => t.text).join(" ");
     const system = [
-      BASE_KNOWLEDGE, `Today's date: ${today}.`, knowledge,
+      BASE_KNOWLEDGE, `Today's date: ${today}.`, knowledge, relevantKnowledge(learnedRows, asked),
       cfg.notes ? "NOTES FROM RWB ADMINS (trust these for RWB-specific info):\n" + cfg.notes : "",
       context ? "ABOUT THIS RIDER (from their own app data, use only if relevant):\n" + JSON.stringify(context).slice(0, 1500) : "",
     ].filter(Boolean).join("\n\n");

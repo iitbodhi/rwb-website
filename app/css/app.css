@@ -460,11 +460,11 @@ body{background:var(--paper);letter-spacing:.005em}
 .bg i:nth-child(2){right:-35vmax;top:30vh;background:radial-gradient(closest-side,rgba(120,110,100,.12),transparent);animation:drift-b 32s ease-in-out infinite alternate}
 .bg i:nth-child(3){left:0;bottom:-40vmax;background:radial-gradient(closest-side,rgba(240,140,70,.13),transparent);animation:drift-c 38s ease-in-out infinite alternate}
 :root[data-theme=dark] .bg i:nth-child(1){background:radial-gradient(closest-side,rgba(232,102,46,.20),transparent)}
-:root[data-theme=dark] .bg i:nth-child(2){background:radial-gradient(closest-side,rgba(90,70,160,.10),transparent)}
+:root[data-theme=dark] .bg i:nth-child(2){background:radial-gradient(closest-side,rgba(232,140,60,.10),transparent)}
 :root[data-theme=dark] .bg i:nth-child(3){background:radial-gradient(closest-side,rgba(240,120,50,.12),transparent)}
 @media (prefers-color-scheme:dark){
   :root[data-theme=system] .bg i:nth-child(1){background:radial-gradient(closest-side,rgba(232,102,46,.20),transparent)}
-  :root[data-theme=system] .bg i:nth-child(2){background:radial-gradient(closest-side,rgba(90,70,160,.10),transparent)}
+  :root[data-theme=system] .bg i:nth-child(2){background:radial-gradient(closest-side,rgba(232,140,60,.10),transparent)}
   :root[data-theme=system] .bg i:nth-child(3){background:radial-gradient(closest-side,rgba(240,120,50,.12),transparent)}}
 @keyframes drift-a{to{transform:translate3d(45vw,30vh,0) scale(1.15)}}
 @keyframes drift-b{to{transform:translate3d(-50vw,-25vh,0) scale(.9)}}
@@ -1271,7 +1271,6 @@ body.blocked .pookie-fab,body.blocked #tabbar,body.blocked .promo,body.blocked d
 /* =================== Look refresh (Nov 2026): RWB's own instrument style ===================
    Duotone icons (outline + a soft orange part), quick actions as small gauge dials, calm motion.
    Everything here is CSS only; motion is off for people who ask their phone for less motion. */
-@property --sw{syntax:'<angle>';inherits:false;initial-value:56deg}
 svg .ac{fill:currentColor!important;fill-opacity:.16;stroke:none!important}
 .tabbar a[aria-current=page] svg .ac{fill-opacity:.32}
 .tabbar svg{stroke-width:1.7}
@@ -1279,24 +1278,20 @@ svg .ac{fill:currentColor!important;fill-opacity:.16;stroke:none!important}
 .tabbar a:not(.tab-brand) svg{transition:transform .25s cubic-bezier(.3,1.6,.5,1)}
 .tabbar a[aria-current=page]:not(.tab-brand) svg{transform:translateY(-1px) scale(1.06)}
 
-/* quick actions: a round dial with an orange index arc, like the instruments on the Ronin */
+/* quick actions: clean round tiles; the icon pops when tapped and the row rises in one by one */
 .quick > *{gap:7px}
 .quick span{position:relative;width:56px;height:56px;border-radius:50%;border:1px solid var(--hair);
-  background:radial-gradient(circle at 50% 30%,color-mix(in srgb,var(--surface) 92%,#fff),var(--surface) 70%);
-  box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 8px 18px -12px rgba(0,0,0,.45);transition:transform .18s cubic-bezier(.3,1.5,.5,1)}
-.quick span::before{content:"";position:absolute;inset:-1px;border-radius:50%;pointer-events:none;
-  background:conic-gradient(from 214deg,var(--orange) 0 var(--sw),transparent var(--sw));
-  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 2.5px),#000 calc(100% - 2px));mask:radial-gradient(farthest-side,transparent calc(100% - 2.5px),#000 calc(100% - 2px));
-  transition:--sw .45s cubic-bezier(.2,.8,.2,1)}
-.quick span::after{content:"";position:absolute;top:3px;left:50%;width:2px;height:5px;margin-left:-1px;border-radius:2px;background:var(--hair)}
-.quick > :active span,.quick > :focus-visible span{transform:scale(.93);--sw:292deg}
-.quick svg{width:25px;height:25px;stroke-width:1.7}
+  background:linear-gradient(160deg,color-mix(in srgb,var(--surface) 85%,#fff),var(--surface) 60%);
+  box-shadow:0 1px 0 rgba(255,255,255,.07) inset,0 10px 20px -14px rgba(0,0,0,.5);transition:transform .2s cubic-bezier(.3,1.5,.5,1),box-shadow .2s}
+.quick svg{width:25px;height:25px;stroke-width:1.7;transition:transform .35s cubic-bezier(.3,1.8,.5,1)}
+.quick > :active span{transform:scale(.92);box-shadow:0 0 0 6px color-mix(in srgb,var(--orange) 14%,transparent)}
+.quick > :active svg{transform:scale(1.15) rotate(-8deg)}
+.quick > *{animation:qIn .45s cubic-bezier(.2,.9,.3,1.2) both}
+.quick > :nth-child(2){animation-delay:.04s}.quick > :nth-child(3){animation-delay:.08s}.quick > :nth-child(4){animation-delay:.12s}.quick > :nth-child(5){animation-delay:.16s}
+@keyframes qIn{from{opacity:0;transform:translateY(10px) scale(.9)}to{opacity:1;transform:none}}
 @media (max-width:380px){.quick span{width:52px;height:52px;border-radius:50%}}
-/* FAM: the one filled dial, no pulsing */
-.quick .fam-q span{border-radius:50%;background:radial-gradient(circle at 50% 28%,#f59a5c,var(--orange) 55%,#a8380f)}
-.quick .fam-q span::before{background:conic-gradient(from 214deg,rgba(255,255,255,.85) 0 var(--sw),transparent var(--sw))}
-.quick .fam-q span::after{background:rgba(255,255,255,.5)}
-.quick .fam-q svg .ac{fill-opacity:.55}
+.quick .fam-q span{border-radius:50%;border:0;background:linear-gradient(150deg,#f59a5c,var(--orange) 55%,#a8380f)}
+.quick .fam-q svg .ac{fill-opacity:.5}
 
 /* admin dock: icons instead of emoji */
 .ad-ico{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;color:var(--orange);background:color-mix(in srgb,var(--orange) 9%,transparent);border:1px solid color-mix(in srgb,var(--orange) 22%,transparent)}
@@ -1309,8 +1304,6 @@ svg .ac{fill:currentColor!important;fill-opacity:.16;stroke:none!important}
 /* Pookie: RWB colours instead of a generic blue-purple AI button */
 .pookie-fab{border-radius:50%;color:#ffb07a;background:radial-gradient(circle at 32% 26%,#3b2a20,#17110d 70%);
   box-shadow:0 12px 26px -10px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.08) inset,0 0 0 1px color-mix(in srgb,var(--orange) 45%,transparent)}
-.pookie-fab::before{content:"";position:absolute;inset:-1px;border-radius:50%;pointer-events:none;background:conic-gradient(from 214deg,var(--orange) 0 56deg,transparent 56deg);
-  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 2.5px),#000 calc(100% - 2px));mask:radial-gradient(farthest-side,transparent calc(100% - 2.5px),#000 calc(100% - 2px))}
 .pookie-fab .pookie-tag{bottom:-9px}
 
 /* small press feedback on cards and rows */
@@ -1327,8 +1320,70 @@ svg .ac{fill:currentColor!important;fill-opacity:.16;stroke:none!important}
   @keyframes dialPar{to{transform:translateY(26px) scale(.96)}}
 }
 @media (prefers-reduced-motion:reduce){
-  .quick span,.quick span::before,.tabbar a svg,.cluster .fill,.cluster::before,.cluster .dial{transition:none!important;animation:none!important}
+  .quick > *,.quick svg,.quick span,.tabbar a svg,.cluster .fill,.cluster::before,.cluster .dial{transition:none!important;animation:none!important}
 }
 /* Pookie: no floating, no purple ring */
 .pookie-fab{animation:none}
 .pookie-fab::after{display:none}
+
+/* News: "Clear all" sits right above the list */
+.news-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:-2px 0 8px}
+.news-bar .swipe-hint{margin:0}
+.clear-all{flex:none;margin-left:auto;background:none;border:0;padding:6px 2px;font:600 .8rem/1 var(--body);color:var(--orange);cursor:pointer}
+.clear-all:active{opacity:.6}
+.news-ico svg,.inl-ico svg{width:20px;height:20px;fill:none;stroke:var(--orange);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.news-row.mini .news-ico svg{width:17px;height:17px}
+.inl-ico{display:inline-grid;vertical-align:-4px}
+/* banners: the action button always at the far right */
+.banner > .grow{flex:1 1 auto;min-width:0}
+.banner > .btn{margin-left:auto;flex:none}
+
+/* living background: the soft orange glows drift slowly (GPU only) */
+.bg i:nth-child(1){animation:drift-a 14s ease-in-out infinite alternate}
+.bg i:nth-child(2){animation:drift-b 17s ease-in-out infinite alternate}
+.bg i:nth-child(3){animation:drift-c 20s ease-in-out infinite alternate}
+.bg i:nth-child(1){background:radial-gradient(closest-side,rgba(212,80,26,.22),transparent)}
+.bg i:nth-child(3){background:radial-gradient(closest-side,rgba(240,140,70,.18),transparent)}
+:root[data-theme=dark] .bg i:nth-child(1){background:radial-gradient(closest-side,rgba(232,102,46,.26),transparent)}
+:root[data-theme=dark] .bg i:nth-child(2){background:radial-gradient(closest-side,rgba(232,140,60,.10),transparent)}
+:root[data-theme=dark] .bg i:nth-child(3){background:radial-gradient(closest-side,rgba(240,120,50,.16),transparent)}
+@media (prefers-reduced-motion:reduce){.bg i{animation:none!important}}
+#app.same .quick > *{animation:none}
+
+/* =================== Teach Pookie =================== */
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.teach-btn{text-decoration:none;white-space:nowrap}
+.teach-hero{padding:16px}
+.th-row{display:flex;align-items:center;gap:12px}
+.th-badge{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;font-size:1.5rem;background:linear-gradient(150deg,#f59a5c,var(--orange) 55%,#a8380f);box-shadow:0 8px 18px -10px rgba(212,80,26,.8)}
+.th-level{display:block;font:800 1.35rem/1 var(--display,'Barlow Condensed');text-transform:uppercase;letter-spacing:.02em}
+.th-num{text-align:center}.th-num b{display:block;font:800 1.5rem/1 var(--display,'Barlow Condensed');color:var(--orange)}.th-num span{font-size:.7rem;color:var(--muted)}
+.th-bar{height:8px;border-radius:8px;background:var(--paper-2,var(--line));overflow:hidden;margin-top:12px}
+.th-bar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#f59a5c,var(--orange));transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.teach-q{position:relative;margin-top:14px;padding:16px;overflow:hidden}
+.tq-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.tq-head b{display:block;font-size:.85rem}
+.tq-ava{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:#ffb07a;background:radial-gradient(circle at 32% 26%,#3b2a20,#17110d 70%);flex:none}
+.tq-ava svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tq-cat{display:inline-block;font-size:.7rem;font-weight:600;color:var(--orange);background:color-mix(in srgb,var(--orange) 10%,transparent);padding:2px 8px;border-radius:99px;margin-top:2px}
+.tq-text{font:600 1.08rem/1.4 var(--body);margin:0 0 12px;min-height:3em}
+.tq-btns{display:flex;gap:8px;margin-top:8px}.tq-btns .grow{flex:1}
+.teach-q.tq-done{animation:tqDone .8s ease both}
+@keyframes tqDone{40%{transform:scale(1.02);box-shadow:0 0 0 3px color-mix(in srgb,var(--orange) 40%,transparent)}100%{transform:translateX(-24px);opacity:.2}}
+.tq-xp{position:absolute;right:18px;top:14px;font:800 1.4rem/1 var(--display,'Barlow Condensed');color:var(--orange);animation:xpUp .9s ease-out both}
+@keyframes xpUp{from{opacity:0;transform:translateY(12px) scale(.8)}30%{opacity:1;transform:translateY(0) scale(1.15)}to{opacity:0;transform:translateY(-26px)}}
+.teach-top{list-style:none;padding:0;margin:0}
+.teach-top li{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.teach-top li:last-child{border-bottom:0}.teach-top li.me{background:color-mix(in srgb,var(--orange) 7%,transparent)}
+.teach-top .rk{width:22px;font-weight:800;color:var(--muted)}.teach-top .grow{display:flex;flex-direction:column}.teach-top .xp{color:var(--orange)}
+.tq-review{border-top:1px solid var(--line);padding:12px 0}.tq-review:first-of-type{border-top:0}
+.tq-review textarea{margin:8px 0}
+.kn-row{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)}
+.kn-row .grow{display:flex;flex-direction:column;gap:2px;min-width:0}
+@media (prefers-reduced-motion:reduce){.teach-q.tq-done,.tq-xp{animation:none}}
+.th-badge{color:#fff}.th-badge svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.th-badge svg .ac{fill-opacity:.35}
+body[data-route=teach] .pookie-fab{display:none}
+.teach-chip{display:flex;align-items:center;gap:10px;margin:2px 0 10px;padding:9px 12px;border-radius:14px;text-decoration:none;color:var(--ink);font-size:.82rem;
+  background:color-mix(in srgb,var(--orange) 8%,var(--surface,var(--card)));border:1px solid color-mix(in srgb,var(--orange) 25%,var(--hair,var(--line)))}
+.teach-chip svg{width:18px;height:18px;fill:none;stroke:var(--orange);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.teach-chip .chev{width:16px;height:16px;stroke:var(--muted)}
