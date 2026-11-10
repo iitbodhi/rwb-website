@@ -1,6 +1,6 @@
 -- RWB App setup file 52: "Delete my account" in the app (required by Google Play). Run after file 51. Safe to run more than once.
--- A member: they leave RWB, their app account and everything they added in the app (records, bills, fuel log, documents,
---   Talk messages) are deleted, like Admin → Remove. The member record stays as "Left", and their row moves to
+-- A member: they leave RWB, their app account and everything they added in the app (records, bills, fuel log, documents)
+--   are deleted, like Admin → Remove. The member record stays as "Left", and their row moves to
 --   "Removed members" in the admins' sheet, as the Privacy Policy says. Admins can bring them back.
 -- An RWB FAM user: their FAM access and Google sign-in are deleted.
 create or replace function public.delete_my_account(p_reason text default null) returns text

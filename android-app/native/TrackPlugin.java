@@ -46,6 +46,9 @@ public class TrackPlugin extends Plugin {
                 JSObject r = new JSObject(); r.put("on", res.getResultCode() == Activity.RESULT_OK || locationOn()); c.resolve(r);
             });
         } catch (Exception e) { locLauncher = null; }
+        /* Talk was removed (Nov 2026): tidy away its old notification channels on phones that had them */
+        try { if (Build.VERSION.SDK_INT >= 26) { android.app.NotificationManager nm = (android.app.NotificationManager) getContext().getSystemService(android.content.Context.NOTIFICATION_SERVICE);
+            if (nm != null) { nm.deleteNotificationChannel("talk"); nm.deleteNotificationChannel("talk_play"); } } } catch (Exception ignored) { }
         try { updLauncher = getActivity().registerForActivityResult(new ActivityResultContracts.StartIntentSenderForResult(), res -> { }); }
         catch (Exception e) { updLauncher = null; }
     }
@@ -217,22 +220,6 @@ public class TrackPlugin extends Plugin {
         } catch (Exception ignored) { }
         return r;
     }
-
-    /* ---------- Talk ---------- */
-    /** Play voice messages out loud on this phone (follows the Talk switch in the app). */
-    @PluginMethod
-    public void talkSetReceive(PluginCall call) {
-        TalkService.setReceive(getContext(), Boolean.TRUE.equals(call.getBoolean("on", true)));
-        JSObject r = new JSObject(); r.put("on", TalkService.receiveOn(getContext())); call.resolve(r);
-    }
-    /** Ids of messages played out loud since the last call (the app marks them as heard). */
-    @PluginMethod
-    public void talkPlayed(PluginCall call) {
-        JSObject r = new JSObject(); r.put("ids", TalkService.takePlayed(getContext())); call.resolve(r);
-    }
-    /** Stop a voice message playing now (e.g. the rider plays it again in the app). */
-    @PluginMethod
-    public void talkStop(PluginCall call) { TalkService.stop(getContext()); call.resolve(); }
 
     /** The last 150 Track events (fixes, sends, errors, restarts), to copy and send for help. */
     @PluginMethod
