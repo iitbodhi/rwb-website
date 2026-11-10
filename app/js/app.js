@@ -1806,7 +1806,7 @@ const VIDEOS = [
     ['guides', 'Guides', 'Maintenance help and tested gear', 34],
     ['events', 'Events', 'Rides, meet-ups and shared costs', 40],
     ['me', 'Me', 'Your profile and settings', 33],
-    ['rwb-members', 'RWB', 'Members and leaderboards', 34],
+    ['rwb-members', 'RWB', 'Members and Warriorboards', 34],
     ['coordinators-and-admins', 'Team tools', 'For coordinators and admins', 45, 'team'],
     ['fam-track', 'Track', 'See where your rider is', 64, 'fam'],
     ['fam-app', 'Your RWB App', 'Home, events, updates, Me and your FAM switch', 95, 'fam']
@@ -2313,7 +2313,7 @@ function viewMe() {
         <p class="small muted" style="margin:-4px 0 8px">Other members always see your name, nickname and photo. Choose what else they see. RWB admins and coordinators can always see your details.</p>
         <div class="group" id="share-box">${SHARE_OPTS.map(([k, t, d]) => `<label class="toggle-row"><span class="grow">${t}<span class="small muted">${d}</span></span><span class="switch-only"><input type="checkbox" data-share="${k}"${m.share?.[k] ? ' checked' : ''}></span></label>`).join('')}
             <button class="bike-add" data-act="share-all">${SHARE_OPTS.every(([k]) => m.share?.[k]) ? '🔒 Hide all from members' : '👁 Share all with members'}</button></div>
-        <div class="group" style="margin-top:12px"><label class="toggle-row"><span class="grow">Show me on the leaderboards<span class="small muted">Other members see your name, photo, km, average mileage and how many services you've logged</span></span><span class="switch-only"><input type="checkbox" id="lb"${m.show_on_leaderboard !== false ? ' checked' : ''}></span></label></div>
+        <div class="group" style="margin-top:12px"><label class="toggle-row"><span class="grow">Show me on the Warriorboards<span class="small muted">Other members see your name, photo, km, average mileage and how many services you've logged</span></span><span class="switch-only"><input type="checkbox" id="lb"${m.show_on_leaderboard !== false ? ' checked' : ''}></span></label></div>
 
         <h2 class="group-title">App</h2>
         <div class="group">
@@ -2359,7 +2359,7 @@ function viewMe() {
     $('#share-box').querySelectorAll('[data-share]').forEach(x => x.onchange = async () => { const next = Object.fromEntries(SHARE_OPTS.map(([k]) => [k, !!m.share?.[k]])); next[x.dataset.share] = x.checked; if (await saveShare(next)) toast(x.checked ? 'Shared with members' : 'Hidden from members'); });
     actions['share-all'] = async () => { const all = !SHARE_OPTS.every(([k]) => m.share?.[k]); if (await saveShare(Object.fromEntries(SHARE_OPTS.map(([k]) => [k, all])))) toast(all ? 'Your details are shared with members' : 'Your details are hidden from members'); };
     $('#lb').onchange = async e => {
-        try { state.me = await api.updateMe({ show_on_leaderboard: e.target.checked }); state.board = null; state.dir = null; toast(e.target.checked ? 'You\'re on the leaderboards' : 'Hidden from the leaderboards'); }
+        try { state.me = await api.updateMe({ show_on_leaderboard: e.target.checked }); state.board = null; state.dir = null; toast(e.target.checked ? 'You\'re on the Warriorboards' : 'Hidden from the Warriorboards'); }
         catch (err) { e.target.checked = !e.target.checked; toast(err.message, true); }
     };
     $('#pic').onchange = async e => {
@@ -3492,7 +3492,7 @@ function boardHtml(key, raw) {
         ${board.length ? `<div class="lb-stage"><i class="lb-rays"></i>${[1, 2, 3].map(i => `<i class="lb-spark s${i}"></i>`).join('')}<div class="lb-podium">${pod(top3[1], 2)}${pod(top3[0], 1)}${pod(top3[2], 3)}</div></div>`
             + (rest.length ? `<ol class="lb-list" start="4">${rest.map((r, i) => `<li class="${r.is_me ? 'me' : ''}" style="--i:${i}"><span class="rk">${r.rank}</span>${face(r, 'avatar sm')}<span class="grow"><b>${esc(r.full_name)}</b><span class="small muted">${esc(r.bike || '')}</span></span><span class="num km"><span class="lb-count">${B.big(r)}</span><small>${esc(B.small(r))}</small></span></li>`).join('')}</ol>` : '')
             + (me && me.rank > 10 ? `<p class="lb-me">You're <b>#${me.rank}</b> of ${board.length} with ${B.big(me)}. ${board[me.rank - 2] ? `Just <b>${esc(lbGap(key, board[me.rank - 2], me))}</b> behind #${me.rank - 1}.` : ''}</p>` : '')
-            + (!me && !isFam() ? `<p class="small muted lb-note">${state.me.show_on_leaderboard === false ? 'You\'re hidden from the leaderboards (Me → Privacy).' : B.empty}</p>` : '')
+            + (!me && !isFam() ? `<p class="small muted lb-note">${state.me.show_on_leaderboard === false ? 'You\'re hidden from the Warriorboards (Me → Privacy).' : B.empty}</p>` : '')
           : `<div class="lb-empty"><span class="lb-trophy">${TROPHY}</span><b>Be the first!</b><span class="muted">${B.empty}</span></div>`}
         ${B.how && !isFam() ? `<p class="small board-how">${B.how}</p>` : ''}`;
 }
@@ -3521,11 +3521,11 @@ async function viewCrew() {
     const mine = Object.fromEntries(keys.map(k => [k, lbRows(k, raw).find(r => r.is_me)?.rank || 0]));
     const best = keys.filter(k => mine[k]).sort((a, b) => mine[a] - mine[b])[0];
     app.innerHTML = top('RWB') + `
-        <section class="lb-hero"><div class="grow"><span class="lb-kick">RWB Hall of Fame</span><h2>Leaderboards</h2>
+        <section class="lb-hero"><div class="grow"><span class="lb-kick">RWB Hall of Fame</span><h2>Warriorboards</h2>
             <p>${best ? `Your best: <b>#${mine[best]}</b> in ${BOARDS[best].title}${mine[best] <= 3 ? ' 🔥' : ''}` : isFam() ? 'The riders leading RWB right now' : 'Ride, log and teach Pookie to climb the ranks'}</p>
             <a class="lb-mem" href="#members">${CREW_ICON}RWB Members ›</a></div>
             <span class="lb-cup"><img src="icons/logo-384.png" alt="RWB"></span></section>
-        <div class="lb-tabs" role="tablist" aria-label="Leaderboard">${keys.map(k => `<button role="tab" aria-selected="${k === state.boardKey}" data-act="board" data-b="${k}">
+        <div class="lb-tabs" role="tablist" aria-label="Warriorboard">${keys.map(k => `<button role="tab" aria-selected="${k === state.boardKey}" data-act="board" data-b="${k}">
             <span class="lt-ico">${LB_ICON[k]}</span><b>${BOARDS[k].title.replace(' Warriors', '')}</b><small>${mine[k] ? `You #${mine[k]}` : '—'}</small></button>`).join('')}</div>
         <section class="board card lb-card" id="board">${boardHtml(state.boardKey, raw)}</section>
         <p class="board-dots" aria-hidden="true">${keys.map(k => `<i${k === state.boardKey ? ' class="on"' : ''}></i>`).join('')}</p>
@@ -3551,7 +3551,7 @@ async function viewCrew() {
 }
 /* =================== RWB members (directory; admins get their member tools) =================== */
 async function viewMembers() {
-    app.innerHTML = top('RWB') + `<a class="back-link" href="#crew">‹ Leaderboards</a><h2 class="mem-title">RWB Members</h2>
+    app.innerHTML = top('RWB') + `<a class="back-link" href="#crew">‹ Warriorboards</a><h2 class="mem-title">RWB Members</h2>
         <p class="small muted" style="margin:-2px 0 12px">Find riders and reach the RWB team for help</p><div id="crew-body"><p class="muted">Loading…</p></div>`;
     actions = {};
     if (isMod() && !isAdmin()) $('#crew-body').insertAdjacentHTML('beforebegin', '<button class="btn ghost block" data-act="fam-all" style="margin-bottom:12px">👨‍👩‍👧 RWB FAM members</button>');
