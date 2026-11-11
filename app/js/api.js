@@ -366,6 +366,8 @@ async function supabaseApi(url, key) {
             async appCopies() { const r = await sb.rpc('admin_app_copies'); if (r.error) { if (/could not find the function|PGRST202/i.test((r.error.message || '') + (r.error.code || ''))) { window.rwbCopiesWhy = `${r.error.code || ''} ${r.error.message || ''}`.trim(); return null; } throw new Error(r.error.message); } return r.data; },
             async sheetSyncStatus() { const r = await sb.rpc('admin_sheet_sync_status'); if (r.error) { if (/could not find|function/i.test(r.error.message || '')) return null; throw new Error(r.error.message); } return r.data; },
             teachQueue: async () => must(await sb.rpc('admin_teach_queue')),
+            /* answers waiting in Teach Pookie (setup file 61; falls back to the queue on older setups) */
+            async pookiePending() { const r = await sb.rpc('admin_pookie_pending'); if (!r.error) return r.data || 0; const q = await sb.rpc('admin_teach_queue'); return q.error ? 0 : (q.data || []).length; },
             teachReview: async (id, ok, text) => must(await sb.rpc('admin_teach_review', { p_id: id, p_ok: ok, p_text: text || null })),
             pookieKnowledge: async () => must(await sb.rpc('admin_pookie_knowledge')),
             pookieForget: async id => must(await sb.rpc('admin_pookie_forget', { p_id: id })),
@@ -689,8 +691,10 @@ function demoApi() {
         async ask(messages) {
             await new Promise(r => setTimeout(r, 700));
             const q = messages.at(-1).text.toLowerCase();
-            const reply = /chain/.test(q) ? 'For the Ronin 225 chain:\n\n1. **Clean** it every 500–700 km (sooner after rain) with a chain cleaner and brush.\n2. **Dry** it, then **lube** the inner side of the rollers while turning the wheel.\n3. Let it sit 15–20 minutes before riding.\n\nCheck the slack too. If it looks loose or kinked, get it adjusted at a service centre.'
-                : '*(Demo mode: this is a sample answer.)*\n\nOnce Pookie is connected, I can help with your Ronin 225, maintenance, riding tips and using the RWB App.';
+            const reply = /chain/.test(q) ? `${me().full_name.split(' ')[0]}, Arjun from RWB swears by this:\n\n- Clean the chain every 500–700 km, sooner after rain\n- Lube the inner side while turning the wheel, wait 15 min\n\nYour chain will thank you 😄`
+                : /^(hi|hello|hey|thanks|thank you)\b/.test(q) ? `Hey ${me().full_name.split(' ')[0]}! 👋 Ask me anything RWB warriors taught me.`
+                : `Hmm, ${me().full_name.split(' ')[0]}… I don't know that yet. Wait for someone to teach that to me first. 🙏\n\nI've put your question in **Teach Pookie** as URGENT, so the warriors can teach me.`;
+            if (/don't know/.test(reply)) { db.tq ??= []; if (!db.tq.some(x => x.question === messages.at(-1).text)) db.tq.unshift({ id: nid(), category: 'Asked by riders', question: messages.at(-1).text, answers: 0, urgent: true, asked: 1 }); }
             db.chatLeft = (db.chatLeft ?? 20) - 1; save();
             const onText = arguments[3]; let shown = '';
             for (const w of reply.split(/(?<= )/)) { shown += w; onText?.(shown); await new Promise(r => setTimeout(r, 25)); }
@@ -701,12 +705,15 @@ function demoApi() {
             async next(skip = []) {
                 db.tq ??= [['Engine & oil', 'Which engine oil brand and grade do you use in your Ronin 225, and how has the engine felt with it?'], ['Brakes, tyres & suspension', 'What tyre pressures (front and rear) do you run on the Ronin, solo and with a pillion?'], ['Chain & drive', 'How often do you clean and lube the chain on your Ronin, and which products do you use?'], ['Common issues & fixes', 'Have you faced the ISG / engine malfunction warning light coming on? What did it turn out to be?'], ['Riding & touring', 'How does the Ronin handle hills and ghats, like the roads to Darjeeling or Sikkim?']].map(([category, question], i) => ({ id: i + 1, category, question, answers: 0 }));
                 db.ta ??= [];
-                const q = db.tq.find(x => !skip.includes(x.id) && !db.ta.some(a => a.question_id === x.id));
+                const open = db.tq.filter(x => !skip.includes(x.id) && !db.ta.some(a => a.question_id === x.id)), q = open.find(x => x.urgent) || open[0];
                 return wait({ question: q || null, stats: this._stats() });
             },
             _stats() { const ok = (db.ta || []).filter(a => a.status === 'approved').length, w = (db.ta || []).filter(a => a.status === 'pending').length;
-                return { answered: (db.ta || []).length, approved: ok, waiting: w, xp: ok * 10 + w * 2, rank: 1, questions: (db.tq || []).length, top: [{ name: 'Arjun', xp: 48, approved: 4 }, { name: me().full_name.split(' ')[0], xp: ok * 10 + w * 2, approved: ok, me: true }, { name: 'Priya', xp: 12, approved: 1 }].sort((a, b) => b.xp - a.xp) }; },
-            async answer(qid, text) { if (String(text).trim().length < 8) throw new Error('Write a little more so Pookie can learn from it'); db.ta.push({ id: nid(), question_id: qid, answer: text, status: 'pending', member_name: me().full_name, created_at: new Date().toISOString() }); save(); return wait(this._stats()); },
+                return { answered: (db.ta || []).length, approved: ok, waiting: w, xp: ok * 10 + w * 2, rank: 1, questions: (db.tq || []).length, urgent: (db.tq || []).filter(x => x.urgent && !(db.ta || []).some(a => a.question_id === x.id)).length, top: [{ name: 'Arjun', xp: 48, approved: 4 }, { name: me().full_name.split(' ')[0], xp: ok * 10 + w * 2, approved: ok, me: true }, { name: 'Priya', xp: 12, approved: 1 }].sort((a, b) => b.xp - a.xp) }; },
+            async answer(qid, text) { if (String(text).trim().length < 8) throw new Error('Write a little more so Pookie can learn from it'); const live = me().role === 'admin', q = (db.tq || []).find(x => x.id === qid);
+                db.ta.push({ id: nid(), question_id: qid, answer: text, status: live ? 'approved' : 'pending', member_name: me().full_name, created_at: new Date().toISOString() });
+                if (live) { (db.know ??= []).push({ id: nid(), source: 'answer', title: q?.question, content: text + ' (RWB rider ' + me().full_name.split(' ')[0] + ')', updated_at: new Date().toISOString() }); if (q) q.urgent = false; }
+                save(); return wait({ ...this._stats(), live }); },
             stats() { return wait(this._stats()); },
         },
         async pookieOp(op) { await new Promise(r => setTimeout(r, 900)); return op === 'gen-questions' ? { added: 20 } : (db.gl = (db.gl || 0) + 1) > 3 ? { done: true, total: 3, learned: 3, failed: 0 } : { learned: ['Chain cleaning guide', 'First service checklist', 'Monsoon care'][db.gl - 1], left: 3 - db.gl, total: 3 }; },
@@ -718,8 +725,9 @@ function demoApi() {
             sheetSync() { db.syncReq = new Date().toISOString(); setTimeout(() => { db.syncLast = { at: new Date().toISOString(), summary: 'Sync done. Empty rows removed: 0. Cells updated from the app: 3 on 2 rows. Added: 1. Moved to Removed members: 0. (demo)' }; save(); }, 3000); save(); return wait('started'); },
             sheetSyncStatus: () => wait({ requested: db.syncReq || null, last: db.syncLast || null }),
             appCopies: () => wait(db.members.filter(m => m.user_id && m.status !== 'left' && m.status !== 'removed').map((m, i) => ({ member_id: m.id, full_name: m.full_name, nickname: m.nickname, phone: m.phone, avatar_url: m.avatar_url, copy: ['play', 'apk', 'browser', 'apk', 'none'][i % 5], build: [124, 123, null, 116, null][i % 5], seen_at: new Date(Date.now() - i * 864e5).toISOString(), apk_too: i % 5 === 0 }))),
+            pookiePending: () => wait((db.ta || []).filter(a => a.status === 'pending').length),
             teachQueue: () => wait((db.ta || []).filter(a => a.status === 'pending').map(a => ({ ...a, question: (db.tq || []).find(q => q.id === a.question_id)?.question, category: (db.tq || []).find(q => q.id === a.question_id)?.category }))),
-            teachReview(id, ok, text) { const a = db.ta.find(x => x.id === id); a.status = ok ? 'approved' : 'rejected'; if (ok) { (db.know ??= []).push({ id: nid(), source: 'answer', title: (db.tq || []).find(q => q.id === a.question_id)?.question, content: (text || a.answer) + ' (RWB rider ' + a.member_name.split(' ')[0] + ')', updated_at: new Date().toISOString() }); } save(); return wait(ok ? 'approved' : 'rejected'); },
+            teachReview(id, ok, text) { const a = db.ta.find(x => x.id === id); a.status = ok ? 'approved' : 'rejected'; if (ok) { const tq = (db.tq || []).find(q => q.id === a.question_id); if (tq) tq.urgent = false; (db.know ??= []).push({ id: nid(), source: 'answer', title: (db.tq || []).find(q => q.id === a.question_id)?.question, content: (text || a.answer) + ' (RWB rider ' + a.member_name.split(' ')[0] + ')', updated_at: new Date().toISOString() }); } save(); return wait(ok ? 'approved' : 'rejected'); },
             pookieKnowledge: () => wait(db.know || []),
             pookieForget(id) { db.know = (db.know || []).filter(k => k.id !== id); save(); return wait('forgotten'); },
             pookieAddQuestions: rows => wait(rows.length),

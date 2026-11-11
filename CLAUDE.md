@@ -17,8 +17,8 @@
   - **Every new call must be added to both, and in the same object.** Live admin calls belong inside `admin: {}`. A past bug came from live admin calls sitting outside it.
 - `app/css/app.css`: styles. New blocks are appended at the end.
 - `app/sw.js`: **bump `VERSION` (rwb-app-vNNN) on every web change.**
-- `supabase/*.sql`: setup files. Bodhi runs each one himself in the Supabase SQL Editor. Files are numbered as sent to him; the last was 60 (app-copies.sql), so the next is **61**. Make each file safe to run twice and end it with `notify pgrst, 'reload schema';`.
-- `supabase/functions/ask-ronin`: Pookie, the AI (Groq/Gemini). Teach Pookie data is in `pookie_*` tables.
+- `supabase/*.sql`: setup files. Bodhi runs each one himself in the Supabase SQL Editor. Files are numbered as sent to him; the last was 61 (pookie-v2.sql), so the next is **62**. Make each file safe to run twice and end it with `notify pgrst, 'reload schema';`.
+- `supabase/functions/ask-ronin`: Pookie, the AI. Bodhi deploys it by pasting into Supabase → Edge Functions. Since v8 (file 61) it answers only from teachings (`pookie_knowledge`: rider answers, admin answers, Guides PDF text read with unpdf, plus the website team/gear lists); the AI (Groq first, Gemini backup) only words the reply. Unknown questions → "I don't know that yet…" and `pookie_log_unknown` marks them URGENT in Teach Pookie. The old "Admin notes for Pookie" box is gone (its lines became `admin` teachings).
 - `privacy.html`, `js/terms.js`: legal text. Terms version is 2.0. The Grievance Officer is Sayantan Sarkar (ronin.warriors.bengal@gmail.com). Update these whenever a feature changes what data is collected or shown.
 - `app/videos/`: how-to videos, each under 60 s. `tools/tutorials/record2.py` records the demo app, `howto_tts.py` adds the voice, `howto_make.py` renders.
 

@@ -1695,3 +1695,13 @@ button.rw-btn{padding:8px 14px}
 .vid-thumb img{object-position:50% 11%;transform:scale(1.8)}
 .vid-thumb .vid-play{right:4px;bottom:4px;transform:none;width:22px;height:22px;font-size:9px;padding-left:2px}
 .vid-row{padding:10px 12px}
+
+/* Pookie v2: URGENT questions, the waiting-answers number on the Pookie bubble */
+.tq-urgent{display:inline-block;margin:0 6px 0 0;padding:2px 7px;border-radius:99px;background:#e5484d;color:#fff;font:800 .62rem/1.3 var(--body);letter-spacing:.08em;vertical-align:middle;animation:urgentPulse 1.6s ease-in-out infinite}
+.tq-head .tq-urgent{margin-left:8px}
+.tq-why{margin:-2px 0 8px;color:#ff8a8d}
+.th-urgent{margin-top:8px}
+@keyframes urgentPulse{50%{box-shadow:0 0 0 4px rgba(229,72,77,.25)}}
+@media (prefers-reduced-motion:reduce){.tq-urgent{animation:none}}
+.pookie-fab .fab-n{position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;padding:0 5px;border-radius:99px;background:var(--orange);color:#fff;font:800 .68rem/20px var(--body);font-style:normal;text-align:center;border:2px solid var(--bg,#111);z-index:1}
+.pookie-fab .fab-n[hidden]{display:none}

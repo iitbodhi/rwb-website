@@ -1066,7 +1066,7 @@ async function viewHome() {
                 <a href="#admin" data-adtab="members"><span class="ad-ico">${ICON.members}</span>Members</a>
                 <a href="#admin" data-adtab="motomart"><span class="ad-ico">${ICON.cart}</span>Motomart<i class="ad-n" id="ad-mm" hidden></i></a>
                 <a href="#admin" data-adtab="bdays"><span class="ad-ico">${ICON.cake}</span>Birthdays</a>
-            </div><a class="ad-dupes" href="#admin" data-adtab="dupes" id="ad-dupes" hidden></a></section>` : isMod() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
+            </div><a class="ad-dupes" href="#admin" data-adtab="dupes" id="ad-dupes" hidden></a><a class="ad-dupes" href="#admin" data-adtab="ai" id="ad-pookie" hidden></a></section>` : isMod() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
         ${profileTodo(state.me)}
         ${docWarn ? `<a class="banner doc-warn ${docWarn.st.level}" href="#docs"><span class="b-ico">${ICON.file}</span><span class="grow"><b>${esc(docName(docWarn.d))}</b> ${docWarn.st.days < 0 ? `expired on ${fmtDate(docWarn.d.expiry_date)}` : docWarn.st.days === 0 ? 'expires today' : `expires in ${docWarn.st.days} day${docWarn.st.days === 1 ? '' : 's'}`}. Renew it and update My documents.</span>${ICON.chev}</a>` : ''}
         ${nextEvt ? `<div class="home-evt">${eventCard(nextEvt, evd)}</div>` : ''}
@@ -1077,13 +1077,13 @@ async function viewHome() {
         <section class="section"><h2>Fresh on Motomart <a href="#motomart">See all</a></h2>
             ${fresh.length ? `<div class="strip">${fresh.map(listingCard).join('')}</div>` : `<a class="group-row-card" href="#motomart"><span class="g-ico">${ICON.tag}</span><span class="grow"><b>Nothing for sale yet</b><span class="small muted">Selling old gear? Post it here for fellow riders.</span></span>${ICON.chev}</a>`}</section>
         <section class="section"><h2>Explore</h2><div class="group">
-            <a href="#teach"><span class="g-ico">${ICON.chat}</span><span class="grow"><b>Teach Pookie</b><span class="small muted">Answer Pookie's Ronin questions, earn XP and help every rider</span></span>${ICON.chev}</a>
+            <a href="#teach"><span class="g-ico">${ICON.chat}</span><span class="grow"><b>Teach Pookie</b><span class="small muted" id="teach-sub">Answer Pookie's Ronin questions, earn XP and help every rider</span></span>${ICON.chev}</a>
             <a href="#guides" data-guide="maint"><span class="g-ico">${ICON.book}</span><span class="grow"><b>Maintenance guides</b><span class="small muted">How-tos and checklists from our coordinators</span></span>${ICON.chev}</a>
             <a href="#guides" data-guide="acc"><span class="g-ico">${ICON.helmet}</span><span class="grow"><b>Recommended gear</b><span class="small muted">Accessories tested and scored by RWB</span></span>${ICON.chev}</a>
             <a href="https://roninwb.in" target="_blank" rel="noopener"><span class="g-ico">${ICON.globe}</span><span class="grow"><b>roninwb.in</b><span class="small muted">Rides, events, gallery and the team</span></span>${ICON.out}</a>
         </div></section>`;
     swipeToDismiss(app, () => { if (!app.querySelector('.news-mini [data-swipe]')) render(); });
-    bindVrnCheck(); bindRideWidget();
+    bindVrnCheck(); bindRideWidget(); teachUrgent('#teach-sub');
     actions = {
         evt: el => location.hash = '#events/' + el.dataset.id,
         'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); render(); }),
@@ -1101,6 +1101,9 @@ async function viewHome() {
         app.querySelectorAll('[data-adtab]').forEach(a => a.addEventListener('click', () => { state.adminTab = a.dataset.adtab; }));
         api.admin.dupes().then(g => { state.dupes = g; const a = $('#ad-dupes'); if (!a || !g.length) return;
             a.innerHTML = `<span class="b-ico">${ICON.alert}</span><span class="grow"><b>${g.length} possible duplicate${g.length > 1 ? 's' : ''}</b> in the sheet · you choose which entry stays</span>${ICON.chev}`; a.hidden = false;
+            app.querySelector('.admin-dock')?.classList.add('busy'); }).catch(() => {});
+        api.admin.pookiePending?.().then(n => { pookieBadge(n); const a = $('#ad-pookie'); if (!a || !n) return;
+            a.innerHTML = `<span class="b-ico">${ICON.chat}</span><span class="grow"><b>${n} Pookie answer${n > 1 ? 's' : ''}</b> to check · approve what's right</span>${ICON.chev}`; a.hidden = false;
             app.querySelector('.admin-dock')?.classList.add('busy'); }).catch(() => {});
         api.admin.stats().then(s => {
             const mm = listings.filter(l => l.status === 'pending').length, set = (id, n) => { const el = $('#' + id); if (el) { el.textContent = n; el.hidden = !n; } };
@@ -2401,7 +2404,7 @@ async function viewAdmin() {
             <button role="tab" aria-selected="${tab === 'members'}" data-act="tab" data-tab="members">Members</button>
             <button role="tab" aria-selected="${tab === 'bdays'}" data-act="tab" data-tab="bdays">Birthdays</button>
             <button role="tab" aria-selected="${tab === 'reports'}" data-act="tab" data-tab="reports">Reports<span id="rep-count"></span></button>
-            <button role="tab" aria-selected="${tab === 'ai'}" data-act="tab" data-tab="ai">Pookie</button></div>
+            <button role="tab" aria-selected="${tab === 'ai'}" data-act="tab" data-tab="ai">Pookie<span id="ai-count"></span></button></div>
         <div id="admin-body"><p class="muted">Loading…</p></div>`;
     actions = { tab: el => { state.adminTab = el.dataset.tab; viewAdmin(); }, mfilter: el => { state.adminTab = 'members'; state.memberFilter = el.dataset.f; state.adminSearch = ''; viewAdmin(); } };
     load.listings(true).then(ls => { const n = ls.filter(l => l.status === 'pending').length; const c = $('#mm-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
@@ -2416,6 +2419,7 @@ async function viewAdmin() {
         }
         if ($('#sync-txt')) $('#sync-txt').textContent = 'The sheet hasn\'t answered yet. It may still be working; check again in a few minutes.';
     });
+    api.admin.pookiePending?.().then(n => { pookieBadge(n); const c = $('#ai-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
     api.admin.reports?.().then(rs => { const n = (rs || []).filter(r => r.status === 'open').length; const c = $('#rep-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
     try { await ({ requests: adminRequests, motomart: adminMotomart, dupes: adminDupes, members: adminMembers, bdays: adminBdays, reports: adminReports, ai: adminAI })[tab](); }
     catch (e) { $('#admin-body').innerHTML = `<div class="card empty"><b>Could not load</b>${esc(e.message)}</div>`; }
@@ -3285,12 +3289,12 @@ const CHAT_KEY = () => 'rwb-chat-' + (state.me?.id || 'x');
 const chat = { msgs: null, busy: false, image: null, left: null };
 const loadChat = () => { if (chat.msgs) return; try { chat.msgs = JSON.parse(localStorage.getItem(CHAT_KEY())) || []; } catch { chat.msgs = []; } };
 const saveChat = () => { try { localStorage.setItem(CHAT_KEY(), JSON.stringify(chat.msgs.slice(-40))); } catch { /* ignore */ } };
-const SUGGEST = ['My chain is making noise. What should I do?', 'Which engine oil does the Ronin 225 use?', 'How do I track mileage with Trip A?', 'How do I sell my old helmet on Motomart?', 'Tips for a long ride to the hills', 'Engine warning light is on. Is it safe to ride?'];
+const SUGGEST = ['Which chain lube works in monsoon?', 'What tyre pressure do RWB riders use?', 'Which engine oil for the Ronin 225?', 'How do I track mileage with Trip A?', 'How do I sell my old helmet on Motomart?', 'Tips for a ride to the hills'];
 const AI_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/><path d="M9 10h.01M12 10h.01M15 10h.01"/></svg>';
 
 /* tiny, safe markdown: **bold**, *italic*, lists, links, paragraphs */
 function md(text) {
-    const lines = esc(text).split(/\n/); let html = '', list = null;
+    const lines = esc(String(text || '').replace(/\[\[[^\]]*\]\]/g, '').trim()).split(/\n/); let html = '', list = null;
     const inline = s => s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*(?!\s)(.+?)\*(?!\*)/g, '$1<i>$2</i>')
         .replace(/`([^`]+)`/g, '<code>$1</code>').replace(/(https?:\/\/[^\s<)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
     const close = () => { if (list) { html += `</${list}>`; list = null; } };
@@ -3319,7 +3323,7 @@ async function viewChat() {
     loadChat();
     await Promise.all([load.services().catch(() => []), load.fuel().catch(() => [])]);
     app.innerHTML = top('Pookie', (chat.msgs.length ? '<button class="btn sm ghost" data-act="clear">New chat</button>' : '') + '<button class="icon-btn chat-close" data-act="chat-close" aria-label="Close Pookie">✕</button>') + `
-        <a class="teach-chip" href="#teach"><span>${ICON.book}</span><span class="grow"><b>Teach Pookie</b> · answer Ronin questions, earn XP</span>${ICON.chev}</a>
+        <a class="teach-chip" href="#teach"><span>${ICON.book}</span><span class="grow" id="chip-sub"><b>Teach Pookie</b> · answer Ronin questions, earn XP</span>${ICON.chev}</a>
         <div id="chatlog" class="chatlog" aria-live="polite"></div>
         <form id="ask" class="askbar">
             <div id="att" class="att" hidden></div>
@@ -3328,9 +3332,9 @@ async function viewChat() {
                 <textarea id="q" rows="1" maxlength="1500" placeholder="Ask Pookie…" aria-label="Your question"></textarea>
                 <button class="btn send" aria-label="Send">➤</button>
             </div>
-            <p class="muted ai-note">Pookie is an AI and can make mistakes.<span id="left"></span></p>
+            <p class="muted ai-note">Pookie answers from what RWB warriors taught it.<span id="left"></span></p>
         </form>`;
-    drawChat();
+    drawChat(); teachUrgent('#chip-sub', true);
     const q = $('#q'), form = $('#ask');
     const grow = () => { q.style.height = 'auto'; q.style.height = Math.min(q.scrollHeight, 140) + 'px'; };
     q.oninput = grow;
@@ -3359,8 +3363,8 @@ function drawChat() {
     const log = $('#chatlog'); if (!log) return;
     log.innerHTML = chat.msgs.length ? chat.msgs.map(m => `<div class="msg ${m.role}">${m.img ? `<img src="${esc(m.img)}" alt="" class="msg-img">` : ''}${m.role === 'model' ? md(m.text) : `<p>${esc(m.text).replace(/\n/g, '<br>')}</p>`}${m.err ? '<p class="small" style="margin-top:6px"><button class="btn sm ghost" data-act="retry">Try again</button></p>' : ''}</div>`).join('')
         + (chat.busy ? '<div class="msg model typing"><span></span><span></span><span></span></div>' : '')
-        : `<div class="chat-hello"><div class="ai-badge">${AI_ICON}</div><h2>Hi ${esc(firstName(state.me))}, I'm Pookie</h2>
-            <p class="muted">Ask me about your Ronin 225, maintenance, a strange noise, riding tips, or how to use this app. You can also send a photo of a part or a warning light.</p>
+        : `<div class="chat-hello"><div class="ai-badge">${AI_ICON}</div><h2>Hey ${esc(firstName(state.me))}, Pookie here 🏍️</h2>
+            <p class="muted">I only know what RWB warriors taught me: Ronin care, tyres, chain, oil, gear, routes and this app. If I don't know something, I'll say so and ask the warriors to teach me.</p>
             <div class="chips sugg">${SUGGEST.map(s => `<button class="chip" data-act="suggest">${esc(s)}</button>`).join('')}</div></div>`;
     actions.retry = () => { const last = [...chat.msgs].reverse().find(m => m.role === 'user'); chat.msgs = chat.msgs.filter(m => !m.err); if (last) { chat.msgs.pop(); sendChat(last.text); } };
     requestAnimationFrame(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }));
@@ -3400,7 +3404,13 @@ async function sendChat(text) {
     }
 }
 
-/* Admin: teach Pookie RWB-specific things */
+/* "N URGENT questions" on the Teach Pookie links (questions riders asked that Pookie didn't know) */
+function teachUrgent(sel, chip) {
+    if (isFam()) return;
+    api.teach?.stats().then(st => { const el = $(sel); if (!el || !st?.urgent) return;
+        el.innerHTML = chip ? `<b>Teach Pookie</b> · <span class="tq-urgent">URGENT</span> ${st.urgent} question${st.urgent > 1 ? 's' : ''} to answer`
+            : `<span class="tq-urgent">URGENT</span> ${st.urgent} rider question${st.urgent > 1 ? 's' : ''} Pookie couldn't answer. Can you?`; }).catch(() => {});
+}
 /* =================== Teach Pookie: members answer Pookie's Ronin questions; admins check; Pookie learns =================== */
 const TEACH_LEVELS = [[0, 'Rookie', 'helmet'], [30, 'Rider', 'bike'], [100, 'Mechanic', 'wrench'], [250, 'Road Guru', 'globe'], [500, 'Ronin Sensei', 'approve']];
 const teachLevel = xp => { let i = 0; while (i + 1 < TEACH_LEVELS.length && xp >= TEACH_LEVELS[i + 1][0]) i++; const [from, name, ico] = TEACH_LEVELS[i], next = TEACH_LEVELS[i + 1];
@@ -3416,10 +3426,12 @@ async function viewTeach() {
                 <span class="small muted">${st.xp || 0} XP${lv.next ? ` · ${lv.need} XP to ${lv.next}` : ' · top level!'}</span></div>
                 <div class="th-num"><b>${st.approved || 0}</b><span>taught</span></div></div>
             <div class="th-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(lv.p * 100)}"><i style="width:${Math.round(lv.p * 100)}%"></i></div>
-            <p class="small muted" style="margin-top:8px">Answer from your own experience with the Ronin. Admins check every answer before Pookie uses it. <b>+10 XP</b> for each answer they approve.</p>
+            <p class="small muted" style="margin-top:8px">Answer from your own experience with the Ronin. Pookie answers riders <b>only</b> from what warriors teach it, so every answer counts. Admins check each one first. <b>+10 XP</b> for each answer they approve.</p>
+            ${st.urgent ? `<p class="small th-urgent"><span class="tq-urgent">URGENT</span> ${st.urgent} question${st.urgent > 1 ? 's' : ''} from riders that Pookie couldn't answer</p>` : ''}
         </section>
         ${q ? `<section class="teach-q card" id="tq">
-            <div class="tq-head"><span class="tq-ava" aria-hidden="true">${ICON.chat}</span><div><b>Pookie asks</b><span class="tq-cat">${esc(q.category)}</span></div></div>
+            <div class="tq-head"><span class="tq-ava" aria-hidden="true">${ICON.chat}</span><div><b>Pookie asks</b>${q.urgent ? '<span class="tq-urgent">URGENT</span>' : ''}<span class="tq-cat">${esc(q.category)}</span></div></div>
+            ${q.urgent ? `<p class="small tq-why">A warrior asked Pookie this and it didn't know${q.asked > 1 ? ` (asked ${q.asked} times)` : ''}. Your answer helps right away.</p>` : ''}
             <p class="tq-text" id="tq-text" aria-live="polite">${esc(q.question)}</p>
             <form id="tqf"><label class="sr-only" for="tqa">Your answer</label>
                 <textarea id="tqa" name="a" rows="4" maxlength="1500" placeholder="Share what you know: brands, km, prices, steps, what worked and what didn't…"></textarea>
@@ -3438,14 +3450,20 @@ async function viewTeach() {
         if (t.length < 8) return toast('Write a little more so Pookie can learn from it', true);
         busy(e.submitter, async () => { const before = st.xp || 0, s2 = await api.teach.answer(q.id, t);
             const card = $('#tq'); card.classList.add('tq-done'); card.insertAdjacentHTML('beforeend', `<div class="tq-xp" aria-hidden="true">+${Math.max(2, (s2.xp || 0) - before)} XP</div>`);
-            toast('Thanks! An admin will check it, then Pookie learns it 🎓');
+            toast(s2.live ? 'Pookie knows it now 🎓 (admin answers go live at once)' : 'Thanks! An admin will check it, then Pookie learns it 🎓');
             setTimeout(render, 900); }); };
 }
+/* the little number on the floating Pookie bubble: answers waiting for an admin */
+function pookieBadge(n) {
+    const fab = document.getElementById('pookie-fab'); if (!fab) return;
+    let b = fab.querySelector('.fab-n'); if (!b) { b = document.createElement('i'); b.className = 'fab-n'; fab.appendChild(b); }
+    b.textContent = n > 99 ? '99+' : n || ''; b.hidden = !n; fab.setAttribute('aria-label', n ? `Ask Pookie (${n} answer${n > 1 ? 's' : ''} waiting for admins)` : 'Ask Pookie, the RWB AI');
+}
 async function adminAI() {
-    const notes = await api.chatNotes();
     const [queue, know] = await Promise.all([api.admin.teachQueue?.().catch(() => null), api.admin.pookieKnowledge?.().catch(() => null)]);
     const ready = queue !== null && know !== null;
-    const nAns = (know || []).filter(k => k.source === 'answer').length, nGuide = (know || []).filter(k => k.source === 'guide').length;
+    const nAns = (know || []).filter(k => k.source === 'answer').length, nGuide = (know || []).filter(k => k.source === 'guide').length, nAdm = (know || []).filter(k => k.source === 'admin').length;
+    if (queue) { pookieBadge(queue.length); const c = $('#ai-count'); if (c) c.textContent = queue.length ? ` (${queue.length})` : ''; }
     $('#admin-body').innerHTML = (ready ? `<div class="card"><h3>Answers to check${queue.length ? ` (${queue.length})` : ''}</h3>
         <p class="small muted" style="margin:4px 0 10px">From Teach Pookie. Approve what's right (edit it first if needed); Pookie uses approved answers from the next question.</p>
         ${queue.length ? queue.map(a => `<div class="tq-review" data-id="${a.id}"><p class="small muted">${esc(a.category || '')} · ${esc(a.member_name || 'member')} · ${timeAgo(a.created_at)}</p>
@@ -3453,41 +3471,39 @@ async function adminAI() {
             <div class="btns"><button class="btn ghost sm" data-x="no">Reject</button><button class="btn sm" data-x="ok">Approve</button></div></div>`).join('')
           : '<p class="muted">Nothing waiting 👍</p>'}</div>
         <div class="card section"><h3>Learn from the Guides PDFs</h3>
-        <p class="small muted" style="margin:4px 0 10px">Pookie reads each maintenance PDF in Guides and keeps notes from it. Run this again after adding new PDFs. It needs the Gemini key, and the PDFs shared as "Anyone with the link".</p>
+        <p class="small muted" style="margin:4px 0 10px">Pookie reads the text of each maintenance PDF in Guides. Run this again after adding new PDFs. The PDFs must be shared as "Anyone with the link". Scanned (photo) PDFs also need the Gemini key.</p>
         <p class="small"><b>${nGuide}</b> guide${nGuide === 1 ? '' : 's'} learned</p>
         <button class="btn ghost block" id="learn">Learn from Guides</button><pre id="learn-out" class="diag" hidden></pre></div>
         <div class="card section"><h3>What Pookie has learned</h3>
-        <p class="small muted" style="margin:4px 0 10px"><b>${nAns}</b> rider answer${nAns === 1 ? '' : 's'} and <b>${nGuide}</b> guide${nGuide === 1 ? '' : 's'}. Remove anything that's wrong or out of date.</p>
-        ${(know || []).length ? `<details><summary class="small">Show all</summary>${know.map(k => `<div class="kn-row"><span class="grow"><span class="small muted">${k.source === 'guide' ? '📄 Guide' : '🧑 Rider'}</span><b>${esc(k.title)}</b><span class="small">${esc(k.content.slice(0, 160))}${k.content.length > 160 ? '…' : ''}</span></span><button class="btn ghost sm" data-forget="${k.id}">Forget</button></div>`).join('')}</details>` : ''}
+        <p class="small muted" style="margin:4px 0 10px"><b>${nAns}</b> rider answer${nAns === 1 ? '' : 's'}, <b>${nGuide}</b> guide${nGuide === 1 ? '' : 's'}${nAdm ? ` and <b>${nAdm}</b> admin note${nAdm === 1 ? '' : 's'}` : ''}. Pookie answers only from these, so remove anything that's wrong or out of date. Tip: your own answers in Teach Pookie go live at once.</p>
+        ${(know || []).length ? `<details><summary class="small">Show all</summary>${know.map(k => `<div class="kn-row"><span class="grow"><span class="small muted">${k.source === 'guide' ? '📄 Guide' : k.source === 'admin' ? '🛡️ Admin' : '🧑 Rider'}</span><b>${esc(k.title)}</b><span class="small">${esc(k.content.slice(0, 160))}${k.content.length > 160 ? '…' : ''}</span></span><button class="btn ghost sm" data-forget="${k.id}">Forget</button></div>`).join('')}</details>` : ''}
         </div>
         <div class="card section"><h3>Pookie's questions</h3>
         <p class="small muted" style="margin:4px 0 10px">Members see these in Teach Pookie, the least-answered first. Add your own, or let the AI write 20 new ones.</p>
         <form id="addq" class="row" style="gap:8px"><input name="q" maxlength="300" placeholder="e.g. Which oil filter do you use?" style="flex:1"><button class="btn sm">Add</button></form>
         <button class="btn ghost block" id="genq" style="margin-top:10px">✨ Write 20 new questions with AI</button></div>`
       : `<div class="card"><h3>Teach Pookie</h3><p class="small muted">Run setup file 56 in Supabase (and deploy the latest ask-ronin function) to turn on Teach Pookie, the answers queue and learning from the Guides PDFs.</p></div>`) + `
-        <div class="card section"><h3>Admin notes for Pookie</h3>
-        <p class="small muted" style="margin:4px 0 12px">Anything written here, Pookie knows and trusts. For example: patron service centres with area and phone, RWB ride rules, the sticker process, recommended oil brands, tyre pressures your coordinators use, upcoming ride details. Members never see this text directly.</p>
-        <form id="ainotes"><textarea name="notes" rows="12" maxlength="8000" placeholder="e.g. Patron service centres:\n- Example Motors, Salt Lake Sector 5 (10% off for RWB members)\n\nRide rules: helmet and riding jacket compulsory on all RWB rides…">${esc(notes)}</textarea>
-        <button class="btn block">Save notes</button></form></div>
         <div class="card section"><h3>Is Pookie working?</h3>
-        <p class="small muted" style="margin:4px 0 12px">Runs a quick test of every step (settings, Gemini key, models) and shows what happened. Doesn't use anyone's daily questions.</p>
+        <p class="small muted" style="margin:4px 0 12px">Runs a quick test of every step (settings, teachings, AI keys) and shows what happened. Doesn't use anyone's daily questions.</p>
         <button class="btn ghost block" id="diag">Run a check</button><pre id="diag-out" class="diag" hidden></pre></div>`;
     $('#diag').onclick = e => busy(e.target, async () => { const out = $('#diag-out'); out.hidden = false; out.textContent = 'Checking… (up to 30 seconds)'; out.textContent = (await api.diagnoseAI()).filter(Boolean).join('\n'); });
-    $('#ainotes').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { await api.saveChatNotes(e.target.notes.value.trim()); toast('Saved. Pookie will use this from the next question.'); }); };
     if (!ready) return;
     const body = $('#admin-body');
     body.querySelectorAll('.tq-review').forEach(r => r.querySelectorAll('[data-x]').forEach(b => b.onclick = () => busy(b, async () => {
         const ok = b.dataset.x === 'ok'; await api.admin.teachReview(Number(r.dataset.id), ok, r.querySelector('textarea').value.trim());
-        r.remove(); toast(ok ? 'Approved. Pookie knows it now 🎓' : 'Rejected'); })));
+        r.remove(); toast(ok ? 'Approved. Pookie knows it now 🎓' : 'Rejected');
+        const left = body.querySelectorAll('.tq-review').length; pookieBadge(left); const c = $('#ai-count'); if (c) c.textContent = left ? ` (${left})` : ''; })));
     body.querySelectorAll('[data-forget]').forEach(b => b.onclick = () => { if (confirmBox('Remove this from what Pookie knows?')) busy(b, async () => { await api.admin.pookieForget(Number(b.dataset.forget)); b.closest('.kn-row').remove(); toast('Pookie forgot it'); }); });
     $('#learn').onclick = e => busy(e.target, async () => {
-        const out = $('#learn-out'); out.hidden = false; out.textContent = 'Reading the Guides PDFs, one at a time (about 20–60 seconds each)…\n';
-        for (let i = 0; i < 60; i++) {
-            const r = await api.pookieOp('learn-guides', { retry: i === 0 });
-            if (r.done) { out.textContent += `\nDone. ${r.learned} of ${r.total} guides learned${r.failed ? ` (${r.failed} couldn't be read)` : ''}.`; break; }
+        const out = $('#learn-out'); out.hidden = false; out.textContent = 'Reading the Guides PDFs, one at a time (a few seconds each)…\n';
+        let errs = 0, finished = false;
+        for (let i = 0; i < 80 && errs < 3; i++) {
+            let r; try { r = await api.pookieOp('learn-guides', { retry: i === 0 }); errs = 0; }
+            catch (err) { errs++; out.textContent += `✗ ${err.message || 'The server stopped on this one'}${errs < 3 ? ' · moving on…' : ''}\n`; continue; }
+            if (r.done) { finished = true; out.textContent += `\nDone. ${r.learned} of ${r.total} guides learned${r.failed ? ` (${r.failed} couldn't be read, see above)` : ''}.`; break; }
             out.textContent += r.learned ? `✓ ${r.learned}\n` : `✗ ${r.failed}: ${r.reason}\n`;
         }
-        toast('Pookie has read the guides 📄');
+        toast(finished ? 'Pookie has read the guides 📄' : 'Stopped. Press Learn from Guides again to carry on.', !finished);
     });
     $('#genq').onclick = e => busy(e.target, async () => { const r = await api.pookieOp('gen-questions'); toast(`${r.added} new question${r.added === 1 ? '' : 's'} added`); });
     $('#addq').onsubmit = e => { e.preventDefault(); const q = e.target.q.value.trim(); if (q.length < 12) return toast('Write the full question', true);
