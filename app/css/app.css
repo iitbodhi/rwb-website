@@ -1706,47 +1706,62 @@ button.rw-btn{padding:8px 14px}
 .pookie-fab .fab-n{position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;padding:0 5px;border-radius:99px;background:var(--orange);color:#fff;font:800 .68rem/20px var(--body);font-style:normal;text-align:center;border:2px solid var(--bg,#111);z-index:1}
 .pookie-fab .fab-n[hidden]{display:none}
 
-/* =================== Calendar =================== */
-.cal-btn svg{width:22px;height:22px}
+/* =================== Calendar (glass) =================== */
+.cal-btn svg{width:21px;height:21px}
 @media (max-width:400px){.top{gap:4px}.top .icon-btn{width:34px}}
-.c-event{--cc:var(--orange)} .c-renew{--cc:#d6453b} .c-service{--cc:#2f7fd8} .c-ride{--cc:#1f9a62} .c-mine{--cc:#8a5cd6}
-.c-holiday{--cc:#e0a21b} .c-bday{--cc:#e05591} .c-fuel{--cc:#8c8781}
-.cal-card{padding:12px 10px 12px}
-.cal-head{display:flex;align-items:center;gap:4px;margin:0 2px 8px}
-.cal-head h2{flex:1;text-align:center;font:700 1.15rem/1.2 var(--body);text-transform:none}
-.cal-head h2 .muted{font-weight:500}
-.cal-head .icon-btn{font-size:1.6rem;line-height:1;width:38px;height:38px}
-.cal-today{order:-1;margin-right:2px}
-.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;touch-action:pan-y;user-select:none}
-.cal-grid .cw{text-align:center;font-size:.72rem;font-weight:600;color:var(--muted);padding:2px 0 6px}
-.cd{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;min-height:52px;padding:6px 0 4px;border:0;border-radius:12px;background:transparent;color:var(--ink);cursor:pointer;font:inherit}
-.cd b{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;font-weight:600;font-size:.95rem}
-.cd:hover{background:var(--paper-2)}
-.cd.other{opacity:.38}
-.cd.sun b{color:var(--muted)}
-.cd.hol b{color:#b07a06;background:color-mix(in srgb,#e0a21b 16%,transparent)}
+.c-event{--cc:var(--orange)} .c-renew{--cc:#d6453b} .c-service{--cc:#2f7fd8} .c-ride{--cc:#1f9a62} .c-mine{--cc:#8a5cd6} .c-holiday{--cc:#d99a12} .c-fuel{--cc:#8c8781}
+.cal-card{position:relative;margin-top:4px;padding:12px 10px 8px;border-radius:24px;border:1px solid var(--hair);
+  background:linear-gradient(160deg,color-mix(in srgb,var(--card) 70%,transparent),color-mix(in srgb,var(--card) 42%,transparent));
+  backdrop-filter:blur(18px) saturate(1.5);-webkit-backdrop-filter:blur(18px) saturate(1.5);box-shadow:var(--lift);contain:layout paint}
+.cal-head{display:flex;align-items:center;gap:2px;padding:0 4px 6px 10px}
+.cal-head h2{flex:1;margin:0;font:700 1.05rem/1.2 var(--body);text-transform:none;letter-spacing:0}
+.cal-head h2 span{font-weight:500;color:var(--muted)}
+.cal-nav{display:grid;place-items:center;width:34px;height:34px;border:0;border-radius:50%;background:transparent;color:var(--ink);cursor:pointer}
+.cal-nav svg{width:18px;height:18px}
+.cal-nav:active,.cal-nav[aria-expanded=true]{background:color-mix(in srgb,var(--ink) 8%,transparent)}
+.cal-today{height:28px;padding:0 11px;margin-right:2px;border-radius:99px;border:1px solid var(--hair);background:color-mix(in srgb,var(--card) 60%,transparent);color:var(--ink);font:600 .76rem/1 var(--body);cursor:pointer}
+.cal-filters{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 4px 10px}
+.cal-filters::-webkit-scrollbar{display:none}
+.cal-filters button{flex:none;display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 11px 0 9px;border-radius:99px;border:1px solid var(--hair);background:color-mix(in srgb,var(--card) 55%,transparent);color:var(--muted);font:600 .76rem/1 var(--body);cursor:pointer}
+.cal-filters svg{width:14px;height:14px}
+.cal-filters [aria-pressed=true]{color:var(--cc);border-color:color-mix(in srgb,var(--cc) 45%,transparent);background:color-mix(in srgb,var(--cc) 12%,transparent)}
+.cal-filters [aria-pressed=false]{opacity:.6}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));row-gap:1px;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.cal-grid .cw{text-align:center;font-size:.66rem;font-weight:600;color:var(--muted);padding:0 0 4px;letter-spacing:.04em}
+.cd{display:flex;flex-direction:column;align-items:center;gap:1px;height:44px;padding:3px 0 0;border:0;border-radius:12px;background:transparent;color:var(--ink);cursor:pointer;font:inherit;-webkit-tap-highlight-color:transparent}
+.cd b{display:grid;place-items:center;width:27px;height:27px;border-radius:50%;font-weight:500;font-size:.86rem;transition:background .15s}
+.cd.other{opacity:.32}
+.cd.hol b{color:#b47d06;font-weight:700}
 :root[data-theme=dark] .cd.hol b{color:#f2c25a}
-.cd.today b{background:var(--orange);color:#fff}
-.cd.sel{background:var(--orange-soft)}
-.cd.sel.today{background:var(--orange-soft)}
-.cdots{display:flex;gap:3px;height:6px}
-.cdots i{width:6px;height:6px;border-radius:50%;background:var(--cc)}
-.cal-filters{margin-top:12px;gap:6px}
-.cal-filters .chip{display:inline-flex;align-items:center;gap:5px;font-size:.78rem;padding:5px 10px}
-.cal-filters .chip i{width:8px;height:8px;border-radius:50%;background:var(--cc)}
-.cal-filters .chip[aria-pressed=true]{background:color-mix(in srgb,var(--cc) 14%,var(--card));border-color:var(--cc);color:var(--ink)}
-.cal-filters .chip[aria-pressed=false]{opacity:.55;text-decoration:line-through}
-.cal-it{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:11px 12px 11px 10px;border-radius:14px;border:1px solid var(--line);border-left:4px solid var(--cc);background:var(--card);color:var(--ink);cursor:pointer;font:inherit}
-.cal-it .grow{display:flex;flex-direction:column;min-width:0}
-.cal-it .grow b{font-weight:600;overflow:hidden;text-overflow:ellipsis}
-.cal-it svg{width:18px;height:18px;flex:none;color:var(--muted)}
+@media (prefers-color-scheme:dark){:root[data-theme=system] .cd.hol b{color:#f2c25a}}
+.cd.sel b{background:color-mix(in srgb,var(--orange) 16%,transparent);color:var(--orange);font-weight:700}
+.cd.today b{background:var(--orange);color:#fff;font-weight:700}
+.cdi{display:flex;gap:1px;height:11px;align-items:center}
+.cdi i{display:grid;place-items:center;width:11px;height:11px;color:var(--cc);font-style:normal}
+.cdi svg{width:10px;height:10px;stroke-width:2.6}
+.cdi .more{font-size:.62rem;font-weight:700;color:var(--muted);width:auto}
+.cal-day{margin-top:18px}
+.cal-list{display:grid;gap:6px}
+.cal-it{display:flex;align-items:center;gap:11px;width:100%;text-align:left;padding:9px 12px 9px 9px;border-radius:16px;border:1px solid var(--hair);background:var(--surface);box-shadow:var(--lift);color:var(--ink);cursor:pointer;font:inherit;-webkit-tap-highlight-color:transparent}
+.cal-it:active{transform:scale(.99)}
+.cal-it .grow{display:flex;flex-direction:column;min-width:0;flex:1}
+.cal-it b,.cal-it small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-it b{font-weight:600;font-size:.92rem}
+.cal-it small{font-size:.76rem;color:var(--muted);margin-top:1px}
 .cal-it.off b{text-decoration:line-through;opacity:.6}
-.cal-it.soft{opacity:.75}
-.cal-it.bad{background:color-mix(in srgb,#d6453b 8%,var(--card))}
-.cal-it.warn{background:color-mix(in srgb,#e0a21b 9%,var(--card))}
-.cal-ico{flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:color-mix(in srgb,var(--cc) 14%,transparent);font-size:1.05rem}
-.cal-attn{margin-bottom:14px}
-.cal-foot{margin:18px 4px 8px;line-height:1.5}
-.cal-sh-when{display:flex;align-items:center;gap:12px}
+.cal-it.soft{opacity:.7}
+.cal-when{flex:none;font-size:.74rem;font-weight:600;color:var(--muted)}
+.cal-it.bad .cal-when{color:#d6453b}
+.cal-it.warn .cal-when{color:#b47d06}
+.cal-ico{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:10px;color:var(--cc);background:color-mix(in srgb,var(--cc) 13%,transparent)}
+.cal-ico svg{width:17px;height:17px}
+.cal-none{margin:2px 4px;font-size:.84rem;color:var(--muted)}
+.cal-more{display:block;margin:8px auto 0;padding:6px 14px;border:0;background:transparent;color:var(--orange);font:600 .82rem/1 var(--body);cursor:pointer}
+.cal-sh-when{display:flex;align-items:center;gap:12px;margin:0}
 .cal-sh-when > span:last-child{display:flex;flex-direction:column}
-.section > h2 button[data-act=cal-add]{float:right}
+.cal-sh-when small{font-size:.8rem;color:var(--muted)}
+body[data-route=calendar] .btn.fab{padding:11px 18px;font-size:.88rem}
+
+/* smoothness: pause decorative loops while scrolling, keep the background glows on their own GPU layer */
+.bg{contain:strict}
+html.scrolling .bg i,html.scrolling .pookie-fab,html.scrolling .pookie-fab::after,html.scrolling .brand-ring::after{animation-play-state:paused!important}

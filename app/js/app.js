@@ -130,7 +130,7 @@ const load = {
     listings: async (force) => (state.listings = !force && state.listings || await api.listings()),
     news: async (force) => (state.news = !force && state.news || (await api.news().catch(() => [])).filter(n => !isFam() || n.kind === 'announcement')),   /* RWB FAM: admin announcements only */
     docs: async (force) => (state.docs = !force && state.docs || await api.docs().catch(() => [])),
-    reminders: async () => state.reminders || (state.reminders = await api.myReminders().catch(() => [])),   /* null: setup file 62 not run yet */
+    reminders: async () => state.reminders !== undefined ? state.reminders : (state.reminders = await api.myReminders().catch(() => [])),   /* null: setup file 62 not run yet */
     ride: async (force) => (state.ride = !force && state.ride || { parts: await api.rideParts().catch(() => null), name: await api.rideName().catch(() => '') })
 };
 
@@ -186,6 +186,15 @@ const STALE = new Error('stale screen');
 })();
 /* still on the screen that started loading? (for parts filled in after the first paint) */
 const stillHere = n => n === navN;
+/* smoothness: while the screen is being scrolled, the decorative animations (drifting background glows, Pookie's float,
+   the spinning tab ring) pause, so the phone spends every frame on the scroll itself */
+(() => {
+    let t = 0; const root = document.documentElement;
+    const on = () => { if (!t) root.classList.add('scrolling'); clearTimeout(t); t = setTimeout(() => { t = 0; root.classList.remove('scrolling'); }, 220); };
+    addEventListener('scroll', on, { passive: true, capture: true });
+    addEventListener('touchmove', on, { passive: true });
+    addEventListener('wheel', on, { passive: true });
+})();
 async function doRender() {
     if (!state.me) return;          /* signed out / not loaded yet: boot() shows the right screen */
     const gate = isFam() ? null : await gateFor(state.me);
@@ -1045,7 +1054,7 @@ async function viewHome() {
     const [services, fuel, bdays, news, listings, docs, evd, ride] = await Promise.all([load.services(), load.fuel(), load.bdays(), load.news(), load.listings().catch(() => []), load.docs(), loadEvents().catch(() => null), load.ride().catch(() => ({ parts: null, name: '' }))]);
     const nextEvt = evd ? evd.events.filter(e => e.status === 'live' && !evtPast(e) && new Date(e.starts_at) - Date.now() < 14 * 864e5)[0] : null;
     const docWarn = docs.map(d => ({ d, st: docStatus(d) })).filter(x => x.st.level === 'bad' || x.st.level === 'warn').sort((a, b) => a.st.days - b.st.days)[0];
-    syncKmpl(fuel); syncReminders(services, fuel, ride);
+    syncKmpl(fuel); whenIdle(() => syncReminders(services, fuel, ride));
     const today = bdays.filter(b => b.day === todayISO());
     const fresh = listings.filter(l => l.status === 'live').slice(0, 8);
     firstNotifAsk();
@@ -1840,11 +1849,17 @@ function viewVideos() {
 
 /* =================== Calendar: everything with a date in one place ===================
    Events (past and coming), document renewals, next service, My Ride parts falling due, the member's own reminders,
-   Indian and West Bengal holidays, birthdays and fill-ups. Renewal, service and part dates also reach the phone as
+   Indian and West Bengal holidays and fill-ups. Renewal, service and part dates also reach the phone as
    notifications (setup file 62: the database sends them every morning at 8:30). */
+const CS = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const CAL_CATS = {
-    event: ['Events', '🏍️', 1], renew: ['Renewals', '📄', 1], service: ['Service', '🔧', 1], ride: ['My Ride', '⚙️', 1],
-    mine: ['My reminders', '⏰', 1], holiday: ['Holidays', '🎉', 1], bday: ['Birthdays', '🎂', 1], fuel: ['Fill-ups', '⛽', 0]
+    event: ['Events', CS('<path d="M5.5 21V4h11l-2 4 2 4h-11"/>'), 1],
+    renew: ['Renewals', CS('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h4"/>'), 1],
+    service: ['Service', CS('<path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8V21h3.2l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>'), 1],
+    ride: ['My Ride', CS('<path d="M12 2.8 20 7.4v9.2L12 21.2 4 16.6V7.4z"/><circle cx="12" cy="12" r="3"/>'), 1],
+    mine: ['Reminders', CS('<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.3 1.6M4.5 4 2.5 6M19.5 4l2 2"/>'), 1],
+    holiday: ['Holidays', CS('<path d="M12 3l2.3 5.4 5.7.5-4.3 3.8 1.3 5.6L12 15.4 7 18.3l1.3-5.6L4 8.9l5.7-.5z"/>'), 1],
+    fuel: ['Fill-ups', CS('<path d="M12 3.5s6 6.4 6 10.5a6 6 0 0 1-12 0c0-4.1 6-10.5 6-10.5z"/>'), 0]
 };
 const CAL_WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -1901,7 +1916,7 @@ function holidays(onFresh) {
             if (!Array.isArray(list) || !list.length) return;
             try { localStorage.setItem('rwb-holidays', JSON.stringify({ at: Date.now(), list })); } catch { /* ignore */ }
             state.holidays = mergeHolidays(list); onFresh?.();
-        }).catch(() => { /* offline or not set up: the built-in list is enough */ }).finally(() => { holiLoading = null; });
+        }).catch(() => { /* offline or not set up: the built-in list is enough; try again tomorrow */ try { localStorage.setItem('rwb-holidays', JSON.stringify({ at: Date.now() - 6 * 864e5, list: cache?.list || [] })); } catch { /* ignore */ } }).finally(() => { holiLoading = null; });
     }
     return state.holidays;
 }
@@ -1938,30 +1953,33 @@ function dueItems(services = [], fuel = [], rideParts = null) {
 }
 /* the database sends the morning reminders, so it needs these dates; sent only when something changed */
 function syncReminders(services, fuel, ride) {
-    if (!api?.syncReminders || isFam() || ride?.parts === null) return;
+    if (!api?.syncReminders || isFam() || ride?.parts === null || state.remSyncOff) return;
     const items = dueItems(services, fuel, ride?.parts).filter(i => i.date >= isoAdd(todayISO(), -1))
         .map(({ key, source, title, date, url, note }) => ({ key, source, title, due_date: date, url, note: note.slice(0, 300) }));
     const sig = JSON.stringify(items);
     try { if (localStorage.getItem('rwb-rem-sig') === sig) return; } catch { /* ignore */ }
+    state.remSyncOff = true;   /* at most once per app open; the next open tries again if something changed */
     api.syncReminders(items).then(r => { if (r !== null) try { localStorage.setItem('rwb-rem-sig', sig); } catch { /* ignore */ } }).catch(() => { /* next time */ });
 }
+/* run non-urgent work when the phone is idle, so screens open without a hitch */
+const whenIdle = f => (window.requestIdleCallback ? requestIdleCallback(() => f(), { timeout: 3000 }) : setTimeout(f, 400));
 
 /* every dated thing between two days (inclusive), as calendar items */
 function calItems(d, from, to) {
-    const out = [], inR = iso => iso >= from && iso <= to, me = state.me || {};
+    const out = [], inR = iso => iso >= from && iso <= to;
     for (const e of d.events) {
         const s = localDay(e.starts_at), end = e.ends_at ? localDay(e.ends_at) : s, mine = d.rsvp[e.id], past = evtPast(e);
         for (let x = s; x <= end && x <= to; x = isoAdd(x, 1)) if (inR(x)) out.push({ id: 'e' + e.id, date: x, cat: 'event', title: e.title, first: x === s,
             sub: [x === s ? evtTime(e.starts_at) : 'Continues', e.location, e.status === 'cancelled' ? 'Cancelled' : mine ? RSVP_TXT[mine.status] : past ? 'Past event' : ''].filter(Boolean).join(' · '),
-            off: e.status === 'cancelled', start: e.starts_at, end: e.ends_at, location: e.location, note: e.description, href: '#events/' + e.id, btn: 'Open event', tag: mine?.status === 'going' ? 'going' : '' });
+            off: e.status === 'cancelled', start: e.starts_at, end: e.ends_at, location: e.location, note: e.description, href: '#events/' + e.id, btn: 'Open event' });
     }
     for (const doc of d.docs) if (doc.expiry_date && inR(doc.expiry_date)) {
         const st = docStatus(doc);
-        out.push({ id: 'd' + doc.id, date: doc.expiry_date, cat: 'renew', title: `${docName(doc)} ${st.days < 0 ? 'expired' : 'expires'}`, sub: st.days < 0 ? 'Renew it and update My documents' : `Renew before this day`,
+        out.push({ id: 'd' + doc.id, date: doc.expiry_date, cat: 'renew', title: `${docName(doc)} ${st.days < 0 ? 'expired' : 'expires'}`, sub: st.days < 0 ? 'Renew it and update My documents' : 'Renew before this day',
             level: st.level === 'ok' ? '' : st.level, href: '#docs', btn: 'Open My documents', note: doc.doc_number ? `${DOC_KINDS[doc.kind].number.replace(' (if any)', '')}: ${doc.doc_number}` : '' });
     }
     for (const i of d.due) if (inR(i.date)) { const n = daysTo(i.date);
-        out.push({ id: i.key, date: i.date, cat: i.cat, title: i.title, sub: (i.est ? 'About this day' : 'Due') + (n < 0 ? ' · overdue' : ''), note: i.note, level: n <= 0 ? 'bad' : n <= 15 ? 'warn' : '', href: i.url, btn: i.cat === 'service' ? 'Open Service' : 'Open My Ride' }); }
+        out.push({ id: i.key, date: i.date, cat: i.cat, title: i.title, sub: (i.est ? 'Estimated date' : 'Due') + (n < 0 ? ' · overdue' : ''), note: i.note, level: n <= 0 ? 'bad' : n <= 15 ? 'warn' : '', href: i.url, btn: i.cat === 'service' ? 'Open Service' : 'Open My Ride' }); }
     for (const s of d.services) if (inR(s.service_date)) out.push({ id: 's' + s.id, date: s.service_date, cat: 'service', title: SERVICE_TYPES[s.service_type] || 'Service', sub: [km(s.odometer_km), s.cost ? rs(s.cost) : ''].filter(Boolean).join(' · '), href: '#service', btn: 'Open Service', done: 1 });
     for (const pt of d.parts || []) {
         if (pt.installed_on && inR(pt.installed_on)) out.push({ id: 'pf' + pt.id, date: pt.installed_on, cat: 'ride', title: `${partName(pt)} fitted`, sub: [pt.brand, pt.installed_km != null ? km(pt.installed_km) : ''].filter(Boolean).join(' · '), href: '#ride', btn: 'Open My Ride', done: 1 });
@@ -1971,27 +1989,20 @@ function calItems(d, from, to) {
     for (const r of d.mine || []) {
         let x = r.due_date, k = 0;
         while (x <= to && k++ < 400) {
-            if (inR(x)) out.push({ id: 'r' + r.id + x, date: x, cat: 'mine', title: r.title, sub: [r.repeat !== 'none' ? (r.repeat === 'monthly' ? 'Every month' : 'Every year') : '', r.notify_days ? `Notification ${r.notify_days === 1 ? '1 day' : r.notify_days + ' days'} before and on the day` : 'Notification on the day'].filter(Boolean).join(' · '),
+            if (inR(x)) out.push({ id: 'r' + r.id + x, date: x, cat: 'mine', title: r.title, sub: r.repeat === 'monthly' ? 'Every month' : r.repeat === 'yearly' ? 'Every year' : 'Reminder',
                 note: r.note, rec: r, level: daysTo(x) < 0 ? '' : daysTo(x) <= 1 ? 'warn' : '', recur: r.repeat });
             if (r.repeat === 'none') break;
-            x = r.repeat === 'monthly' ? addMonths(r.due_date, k) : addMonths(r.due_date, 12 * k);
+            x = addMonths(r.due_date, r.repeat === 'monthly' ? k : 12 * k);
         }
     }
     for (const h of d.hol) if (inR(h.date)) out.push({ id: 'h' + h.date + h.name, date: h.date, cat: 'holiday', title: h.name, sub: HOLI_TYPE[h.type] || '', soft: h.type === 'obs', hol: h.type !== 'obs' });
-    /* birthdays: your own and your RWB anniversary every year; the team also sees members' birthdays for the next month */
-    const yearly = (md, f) => { for (let y = parts(from).y; y <= parts(to).y; y++) { const x = `${y}-${md}`; if (inR(x) && !(md === '02-29' && !/^\d{4}-02-29$/.test(isoAdd(`${y}-02-28`, 1)))) out.push(f(x, y)); } };
-    const dob = me.dob ? String(me.dob).slice(0, 10) : '';
-    if (dob) yearly(dob.slice(5), x => ({ id: 'me-bd' + x, date: x, cat: 'bday', title: 'Your birthday 🎂', sub: 'Happy riding!', recur: 'yearly' }));
-    const jd = me.joined_at ? localDay(me.joined_at) : '';
-    if (jd) yearly(jd.slice(5), (x, y) => y > parts(jd).y ? { id: 'me-rwb' + x, date: x, cat: 'bday', title: `${y - parts(jd).y} year${y - parts(jd).y > 1 ? 's' : ''} with RWB 🧡`, sub: `You joined on ${fmtDate(jd)}` } : null);
-    for (const b of d.bdays) if (inR(b.day)) out.push({ id: 'b' + b.member_id + b.day, date: b.day, cat: 'bday', title: `${b.full_name}'s birthday`, sub: 'RWB team only', bday: b });
-    const order = { renew: 0, service: 1, ride: 2, mine: 3, event: 4, bday: 5, holiday: 6, fuel: 7 };
-    return out.filter(Boolean).filter(i => !d.off.has(i.cat)).sort((a, b) => a.date.localeCompare(b.date) || (a.done || 0) - (b.done || 0) || order[a.cat] - order[b.cat] || String(a.start || '').localeCompare(String(b.start || '')));
+    const order = { renew: 0, service: 1, ride: 2, mine: 3, event: 4, holiday: 5, fuel: 6 };
+    return out.filter(i => !d.off.has(i.cat)).sort((a, b) => a.date.localeCompare(b.date) || (a.done || 0) - (b.done || 0) || order[a.cat] - order[b.cat] || String(a.start || '').localeCompare(String(b.start || '')));
 }
 const calAlert = () => docsAlert() || !!state.calSoon;
 /* Google Calendar "add this" link (opens the Google Calendar app or website) */
 function calGcalUrl(it) {
-    const p = new URLSearchParams({ action: 'TEMPLATE', text: it.title.replace(/ 🎂| 🧡/g, ''), details: [it.sub, it.note, 'From the RWB App: https://roninwb.in/app/'].filter(Boolean).join('\n') });
+    const p = new URLSearchParams({ action: 'TEMPLATE', text: it.title, details: [it.sub, it.note, 'From the RWB App: https://roninwb.in/app/'].filter(Boolean).join('\n') });
     const f = t => new Date(t).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
     if (it.start) p.set('dates', `${f(it.start)}/${f(it.end || new Date(Date.parse(it.start) + 2 * 36e5).toISOString())}`);
     else p.set('dates', `${it.date.replace(/-/g, '')}/${isoAdd(it.date, 1).replace(/-/g, '')}`);
@@ -2000,79 +2011,96 @@ function calGcalUrl(it) {
     return 'https://calendar.google.com/calendar/render?' + p;
 }
 
+/* loads once when the Calendar opens; tapping days, months and filters only redraws (no network) */
 async function viewCalendar() {
     const n = navN;
-    const [services, fuel, docs, ride, evd, mine, bdays] = await Promise.all([load.services(), load.fuel(), load.docs(), load.ride().catch(() => ({ parts: null })),
-        loadEvents().catch(() => ({ events: [], mine: {} })), load.reminders(), isMod() ? (state.calBdays ??= await api.birthdays(31).catch(() => [])) : []]);
-    syncReminders(services, fuel, ride);
-    const data = { events: evd.events || [], rsvp: evd.mine || {}, docs, services, fuel, parts: ride.parts || [], due: dueItems(services, fuel, ride.parts), mine: mine || [], bdays: bdays || [],
-        hol: holidays(() => { if (stillHere(n)) render(); }), off: calOff() };
-    const today = todayISO();
+    const [services, fuel, docs, ride, evd, mine] = await Promise.all([load.services(), load.fuel(), load.docs(), load.ride().catch(() => ({ parts: null })),
+        loadEvents().catch(() => ({ events: [], mine: {} })), load.reminders()]);
+    if (!stillHere(n)) return;
+    state.calData = { events: evd.events || [], rsvp: evd.mine || {}, docs, services, fuel, parts: ride.parts || [], due: dueItems(services, fuel, ride.parts), mine };
+    holidays(() => { if (stillHere(n)) drawCal(); });
+    drawCal();
+    whenIdle(() => syncReminders(services, fuel, ride));
+}
+const CAL_CHEV = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+const CAL_FILTER = CS('<path d="M4 6h16M7 12h10M10 18h4"/>');
+function drawCal() {
+    const D = state.calData; if (!D) return;
+    const today = todayISO(), off = calOff(), data = { ...D, hol: state.holidays || [], off };
     const month = state.calMonth || today.slice(0, 7), sel = state.calDay || today;
     const [Y, M] = month.split('-').map(Number);
     const first = `${month}-01`, startPad = new Date(first + 'T00:00:00Z').getUTCDay(), gridFrom = isoAdd(first, -startPad);
     const daysIn = new Date(Date.UTC(Y, M, 0)).getUTCDate(), cells = Math.ceil((startPad + daysIn) / 7) * 7, gridTo = isoAdd(gridFrom, cells - 1);
-    const all = calItems(data, gridFrom < today ? gridFrom : today, isoAdd(gridTo > today ? gridTo : today, 60));
+    const all = calItems(data, gridFrom < today ? gridFrom : today, isoAdd(gridTo > today ? gridTo : today, 45));
     const byDay = new Map(); all.forEach(i => (byDay.get(i.date) || byDay.set(i.date, []).get(i.date)).push(i));
-    /* needs attention: renewals, service and parts that are overdue or due in the next 15 days, and your own reminders this week */
-    const attn = calItems({ ...data, off: new Set() }, isoAdd(today, -60), isoAdd(today, 30)).filter(i => !i.done && ((['renew', 'service', 'ride'].includes(i.cat) && i.level) || (i.cat === 'mine' && daysTo(i.date) >= 0 && daysTo(i.date) <= 7)));
-    state.calSoon = attn.some(i => daysTo(i.date) <= 7);
-    const dayList = byDay.get(sel) || [];
-    const upcoming = all.filter(i => i.date > today && i.date <= isoAdd(today, 60) && !i.done && i.cat !== 'fuel' && (i.cat !== 'event' || i.first)).slice(0, 14);
-    const row = (i, showDate = false) => `<button class="cal-it c-${i.cat}${i.off ? ' off' : ''}${i.soft ? ' soft' : ''}${i.level ? ' ' + i.level : ''}" data-act="cal-it" data-id="${esc(i.id)}" data-d="${i.date}">
-        <span class="cal-ico">${CAL_CATS[i.cat][1]}</span><span class="grow"><b>${esc(i.title)}</b><span class="small muted">${showDate ? `${esc(longDay(i.date))} · ${inDays(daysTo(i.date))}${i.sub ? ' · ' : ''}` : ''}${esc(i.sub || '')}</span></span>${i.tag === 'going' ? '<span class="evt-me going">Going</span>' : ''}${ICON.chev}</button>`;
+    /* overdue renewals, service and parts first, then what's coming in the next 45 days */
+    const overdue = calItems({ ...data, off: new Set(['event', 'holiday', 'fuel', 'mine']) }, isoAdd(today, -60), isoAdd(today, -1)).filter(i => !i.done && i.level);
+    const soon = all.filter(i => i.date >= today && i.date <= isoAdd(today, 45) && !i.done && i.cat !== 'fuel' && !i.soft && (i.cat !== 'event' || i.first) && !(i.date === today && i.cat === 'holiday'));
+    state.calSoon = [...overdue, ...soon].some(i => ['renew', 'service', 'ride', 'mine'].includes(i.cat) && daysTo(i.date) <= 7);
+    const upcoming = [...overdue, ...soon.filter(i => i.date > today || (sel !== today && i.cat !== 'event'))], showAll = state.calAll;
+    const short = iso => { const n = daysTo(iso); return n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n < 0 ? `${-n}d late` : `${parts(iso).d} ${MONTHS[parts(iso).m - 1]}`; };
+    const row = (i, when) => `<button class="cal-it c-${i.cat}${i.off ? ' off' : ''}${i.soft ? ' soft' : ''}${i.level ? ' ' + i.level : ''}" data-act="cal-it" data-id="${esc(i.id)}" data-d="${i.date}">
+        <span class="cal-ico">${CAL_CATS[i.cat][1]}</span><span class="grow"><b>${esc(i.title)}</b>${i.sub ? `<small>${esc(i.sub)}</small>` : ''}</span>${when ? `<span class="cal-when">${short(i.date)}</span>` : ''}</button>`;
+    const dayHtml = x => { const its = byDay.get(x) || [];
+        return `<h2>${x === today ? 'Today' : esc(longDay(x))}</h2>${its.length ? `<div class="cal-list">${its.map(i => row(i)).join('')}</div>` : `<p class="cal-none">${x < today ? 'Nothing on this day.' : 'Nothing planned. Tap ＋ to add a reminder.'}</p>`}`; };
     const cell = k => {
-        const x = isoAdd(gridFrom, k), its = byDay.get(x) || [], p = parts(x), other = p.m !== M;
-        const hol = its.some(i => i.hol), cats = [...new Set(its.filter(i => !i.hol).map(i => i.cat))].slice(0, 4);
-        return `<button class="cd${other ? ' other' : ''}${x === today ? ' today' : ''}${x === sel ? ' sel' : ''}${hol ? ' hol' : ''}${new Date(x + 'T00:00:00Z').getUTCDay() === 0 ? ' sun' : ''}" data-act="cal-day" data-d="${x}" aria-label="${esc(longDay(x))}${its.length ? `, ${its.length} item${its.length > 1 ? 's' : ''}` : ''}">
-            <b>${p.d}</b><span class="cdots">${cats.map(c => `<i class="c-${c}"></i>`).join('')}</span></button>`;
+        const x = isoAdd(gridFrom, k), its = byDay.get(x) || [], p = parts(x);
+        const cats = [...new Set(its.filter(i => !i.hol && !i.soft).map(i => i.cat))], ic = cats.length > 3 ? [...cats.slice(0, 2), '+'] : cats;
+        return `<button class="cd${p.m !== M ? ' other' : ''}${x === today ? ' today' : ''}${x === sel ? ' sel' : ''}${its.some(i => i.hol) ? ' hol' : ''}" data-act="cal-day" data-d="${x}" aria-label="${esc(longDay(x))}${its.length ? `, ${its.length} item${its.length > 1 ? 's' : ''}` : ''}">
+            <b>${p.d}</b><span class="cdi">${ic.map(c => c === '+' ? '<i class="more">+</i>' : `<i class="c-${c}">${CAL_CATS[c][1]}</i>`).join('')}</span></button>`;
     };
+    const list = showAll ? upcoming.slice(0, 30) : upcoming.slice(0, 5);
     app.innerHTML = top('Calendar') + `
-        <section class="card cal-card">
-            <div class="cal-head"><button class="icon-btn" data-act="cal-mv" data-n="-1" aria-label="Previous month">‹</button>
-                <h2>${MONTHS_LONG[M - 1]} <span class="muted">${Y}</span></h2>
-                <button class="icon-btn" data-act="cal-mv" data-n="1" aria-label="Next month">›</button>
-                ${month !== today.slice(0, 7) || sel !== today ? '<button class="btn sm ghost cal-today" data-act="cal-today">Today</button>' : ''}</div>
+        <section class="cal-card">
+            <div class="cal-head">
+                <h2>${MONTHS_LONG[M - 1]} <span>${Y}</span></h2>
+                ${month !== today.slice(0, 7) ? '<button class="cal-today" data-act="cal-today">Today</button>' : ''}
+                <button class="cal-nav" data-act="cal-f-open" aria-label="Show or hide kinds" aria-expanded="${!!state.calFilt}">${CAL_FILTER}</button>
+                <button class="cal-nav" data-act="cal-mv" data-n="-1" aria-label="Previous month">${CAL_CHEV('M15 6l-6 6 6 6')}</button>
+                <button class="cal-nav" data-act="cal-mv" data-n="1" aria-label="Next month">${CAL_CHEV('M9 6l6 6-6 6')}</button></div>
+            ${state.calFilt ? `<div class="cal-filters" role="group" aria-label="Show on the calendar">${Object.entries(CAL_CATS).map(([k, [name, svg]]) => `<button class="c-${k}" data-act="cal-f" data-k="${k}" aria-pressed="${!off.has(k)}">${svg}${name}</button>`).join('')}</div>` : ''}
             <div class="cal-grid" id="cal-grid">${CAL_WD.map(w => `<span class="cw">${w[0]}</span>`).join('')}${Array.from({ length: cells }, (_, k) => cell(k)).join('')}</div>
-            <div class="chips cal-filters" role="group" aria-label="Show on the calendar">${Object.entries(CAL_CATS).map(([k, [name, ico]]) => `<button class="chip c-${k}" data-act="cal-f" data-k="${k}" aria-pressed="${!data.off.has(k)}"><i></i>${ico} ${name}</button>`).join('')}</div>
         </section>
-        ${attn.length ? `<section class="section cal-attn"><h2>Needs attention</h2><div class="list">${attn.slice(0, 5).map(i => row(i, true)).join('')}</div></section>` : ''}
-        <section class="section"><h2>${sel === today ? 'Today' : esc(longDay(sel))}</h2>
-            ${dayList.length ? `<div class="list">${dayList.map(i => row(i)).join('')}</div>` : `<div class="card empty small">${sel < today ? 'Nothing on this day.' : 'Nothing on this day yet. Tap ＋ Reminder to add one.'}</div>`}</section>
-        <section class="section"><h2>Coming up</h2>${upcoming.length ? `<div class="list">${upcoming.map(i => row(i, true)).join('')}</div>` : '<div class="card empty small">Nothing in the next 60 days.</div>'}</section>
-        ${mine === null ? (isAdmin() ? '<div class="card empty small"><b>My reminders aren\'t set up yet</b>An admin needs to run setup file 62 (calendar.sql) in Supabase.</div>' : '') : ''}
-        <p class="small muted cal-foot">🔔 Notifications at about 8:30 AM: 30, 7 and 1 day before a document expires, 7 and 1 day before service and parts fall due, for your own reminders, and on the day itself. Turn them off in Me → Notifications. Dates for km-based items are guessed from how much you ride. Holidays: West Bengal Government list, plus festivals across India from the internet.</p>
-        <button class="btn fab" data-act="cal-add">＋ Reminder</button>`;
-    const find = el => all.find(i => i.id === el.dataset.id && i.date === el.dataset.d) || attn.find(i => i.id === el.dataset.id);
+        <section class="section cal-day" id="cal-day">${dayHtml(sel)}</section>
+        ${upcoming.length ? `<section class="section"><h2>Coming up</h2><div class="cal-list">${list.map(i => row(i, 1)).join('')}</div>
+            ${upcoming.length > 5 ? `<button class="cal-more" data-act="cal-all">${showAll ? 'Show less' : `Show all ${Math.min(upcoming.length, 30)}`}</button>` : ''}</section>` : ''}
+        ${data.mine === null && isAdmin() ? '<p class="cal-none">Own reminders need setup file 62 (calendar.sql).</p>' : ''}
+        <button class="btn fab" data-act="cal-add" aria-label="Add a reminder">＋ Reminder</button>`;
+    const pool = [...all, ...overdue], find = el => pool.find(i => i.id === el.dataset.id && i.date === el.dataset.d);
     actions = {
-        'cal-day': el => { state.calDay = el.dataset.d; if (el.dataset.d.slice(0, 7) !== month) state.calMonth = el.dataset.d.slice(0, 7); viewCalendar(); },
-        'cal-mv': el => { const d = addMonths(first, Number(el.dataset.n)); state.calMonth = d.slice(0, 7); state.calDay = d.slice(0, 7) === today.slice(0, 7) ? today : d; viewCalendar(); },
-        'cal-today': () => { state.calMonth = null; state.calDay = null; viewCalendar(); },
-        'cal-f': el => { const off = calOff(); off.has(el.dataset.k) ? off.delete(el.dataset.k) : off.add(el.dataset.k); try { localStorage.setItem('rwb-cal-off', JSON.stringify([...off])); } catch { /* ignore */ } viewCalendar(); },
+        'cal-day': el => {
+            const x = el.dataset.d; state.calDay = x;
+            if (x.slice(0, 7) !== month) { state.calMonth = x.slice(0, 7); return drawCal(); }
+            app.querySelector('.cd.sel')?.classList.remove('sel'); el.classList.add('sel');
+            $('#cal-day').innerHTML = dayHtml(x);
+        },
+        'cal-mv': el => { const d = addMonths(first, Number(el.dataset.n)); state.calMonth = d.slice(0, 7); state.calDay = d.slice(0, 7) === today.slice(0, 7) ? today : d; drawCal(); },
+        'cal-today': () => { state.calMonth = null; state.calDay = null; drawCal(); },
+        'cal-f-open': () => { state.calFilt = !state.calFilt; drawCal(); },
+        'cal-f': el => { off.has(el.dataset.k) ? off.delete(el.dataset.k) : off.add(el.dataset.k); try { localStorage.setItem('rwb-cal-off', JSON.stringify([...off])); } catch { /* ignore */ } drawCal(); },
+        'cal-all': () => { state.calAll = !state.calAll; drawCal(); },
         'cal-it': el => { const i = find(el); if (i) calItemSheet(i); },
-        'cal-add': () => mine === null ? toast('Reminders aren\'t set up yet. Ask an RWB admin.', true) : reminderForm({ due_date: sel >= today ? sel : today })
+        'cal-add': () => data.mine === null ? toast('Reminders aren\'t set up yet. Ask an RWB admin.', true) : reminderForm({ due_date: sel >= today ? sel : today })
     };
     /* swipe the month left or right */
     const g = $('#cal-grid'); let x0 = null, y0 = 0;
-    g.addEventListener('pointerdown', e => { x0 = e.clientX; y0 = e.clientY; });
+    g.addEventListener('pointerdown', e => { x0 = e.clientX; y0 = e.clientY; }, { passive: true });
     g.addEventListener('pointerup', e => { if (x0 == null) return; const dx = e.clientX - x0, dy = e.clientY - y0; x0 = null;
-        if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) { g.dataset.swiped = '1'; setTimeout(() => delete g.dataset.swiped, 300); actions['cal-mv']({ dataset: { n: dx < 0 ? 1 : -1 } }); } });
+        if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) { g.dataset.swiped = '1'; setTimeout(() => delete g.dataset.swiped, 300); actions['cal-mv']({ dataset: { n: dx < 0 ? 1 : -1 } }); } }, { passive: true });
     g.addEventListener('click', e => { if (g.dataset.swiped) { e.preventDefault(); e.stopPropagation(); } }, true);
 }
 function calItemSheet(i) {
     const n = daysTo(i.date), r = i.rec;
-    openSheet(i.title, `<p class="cal-sh-when"><span class="cal-ico c-${i.cat}">${CAL_CATS[i.cat][1]}</span><span><b>${esc(i.start ? evtWhen({ starts_at: i.start, ends_at: i.end }) : longDay(i.date))}</b><span class="small muted">${CAL_CATS[i.cat][0]} · ${inDays(n)}</span></span></p>
-        ${i.sub ? `<p class="small" style="margin:8px 0">${esc(i.sub)}</p>` : ''}
-        ${i.note ? `<p class="small muted" style="white-space:pre-line;margin-bottom:10px">${esc(String(i.note).slice(0, 600))}</p>` : ''}
-        <div class="list" style="margin-top:12px">
+    openSheet(i.title, `<p class="cal-sh-when c-${i.cat}"><span class="cal-ico">${CAL_CATS[i.cat][1]}</span><span><b>${esc(i.start ? evtWhen({ starts_at: i.start, ends_at: i.end }) : longDay(i.date))}</b><small>${CAL_CATS[i.cat][0]} · ${inDays(n)}</small></span></p>
+        ${i.sub ? `<p class="small" style="margin:12px 0 4px">${esc(i.sub)}</p>` : ''}
+        ${i.note ? `<p class="small muted" style="white-space:pre-line;margin-bottom:6px">${esc(String(i.note).slice(0, 600))}</p>` : ''}
+        <div class="list" style="margin-top:14px">
             ${i.href ? `<a class="btn block" href="${esc(i.href)}">${esc(i.btn || 'Open')}</a>` : ''}
-            ${i.bday ? '<button class="btn wa block" data-x="wish">Wish on WhatsApp</button>' : ''}
             ${r ? '<button class="btn block" data-x="edit">Edit reminder</button>' : ''}
             ${!i.done && n >= -1 ? `<a class="btn ghost block" href="${esc(calGcalUrl(i))}" target="_blank" rel="noopener">Add to Google Calendar</a>` : ''}
             ${r ? '<button class="btn ghost block danger" data-x="del">Delete reminder</button>' : ''}</div>`, body => {
-        body.querySelector('[data-x=wish]')?.addEventListener('click', () => wishSheet([i.bday]));
         body.querySelector('[data-x=edit]')?.addEventListener('click', () => reminderForm(r));
-        body.querySelector('[data-x=del]')?.addEventListener('click', e => { if (confirmBox(`Delete “${r.title}”?`)) busy(e.target, async () => { await api.deleteReminder(r.id); state.reminders = null; closeSheet(); toast('Deleted'); render(); }); });
+        body.querySelector('[data-x=del]')?.addEventListener('click', e => { if (confirmBox(`Delete “${r.title}”?`)) busy(e.target, async () => { await api.deleteReminder(r.id); state.reminders = undefined; closeSheet(); toast('Deleted'); viewCalendar(); }); });
     });
 }
 const REM_IDEAS = ['FASTag recharge', 'Chain clean & lube', 'Tyre pressure check', 'Bike loan EMI', 'Wash the bike', 'Helmet visor change', 'Road tax', 'Ride permit'];
@@ -2092,7 +2120,7 @@ function reminderForm(r = {}) {
         f.onsubmit = e => {
             e.preventDefault(); const v = Object.fromEntries(new FormData(f));
             const rec = { ...(r.id ? { id: r.id } : {}), title: v.title.trim(), due_date: v.due_date, repeat: v.repeat, notify_days: Number(v.notify_days), note: v.note.trim() || null };
-            busy(e.submitter, async () => { await api.saveReminder(rec); state.reminders = null; state.calMonth = rec.due_date.slice(0, 7); state.calDay = rec.due_date; closeSheet(); toast(editing ? 'Saved' : 'Reminder added'); location.hash === '#calendar' ? render() : (location.hash = '#calendar'); });
+            busy(e.submitter, async () => { await api.saveReminder(rec); state.reminders = undefined; state.calMonth = rec.due_date.slice(0, 7); state.calDay = rec.due_date; closeSheet(); toast(editing ? 'Saved' : 'Reminder added'); location.hash === '#calendar' ? viewCalendar() : (location.hash = '#calendar'); });
         };
     });
 }

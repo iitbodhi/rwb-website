@@ -118,9 +118,9 @@ values ('admin', 'feature-calendar', 'The Calendar in the RWB App',
   'RWB admins: The RWB App has a Calendar. Tap the calendar button at the top of any screen (just left of the How-to videos button). '
   || 'It shows, month by month: RWB events (past and coming, with your RSVP), when your documents expire (DL, RC, PUC, insurance and others from My documents), '
   || 'your next service, when My Ride parts fall due (engine oil, chain, tyres, brake pads…; km-based dates are guessed from how much you ride), '
-  || 'the services, parts and fill-ups you logged, your own reminders (tap + Reminder: e.g. FASTag recharge or loan EMI, can repeat every month or year), '
-  || 'Indian holidays (West Bengal Government list plus festivals across India), your birthday and your RWB anniversary. Admins and coordinators also see members'' birthdays for the next month. '
-  || 'Tap the coloured chips to show or hide each kind. Tap any item to open it or add it to Google Calendar. '
+  || 'the services, parts and fill-ups you logged, your own reminders (tap ＋ Reminder: e.g. FASTag recharge or loan EMI, can repeat every month or year), '
+  || 'and Indian holidays (West Bengal Government list plus festivals across India). '
+  || 'Tap the filter button next to the month to show or hide each kind. Tap any item to open it or add it to Google Calendar. '
   || 'You get a notification at about 8:30 AM: 30, 7 and 1 day before a document expires and on the day; 7 and 1 day before service and parts are due and on the day; and for your own reminders. '
   || 'Turn these off in Me → Notifications → "Renewal, service and my reminders". Only you can see your reminders.')
 on conflict (source, ref) do update set title = excluded.title, content = excluded.content, active = true, updated_at = now();
