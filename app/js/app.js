@@ -317,6 +317,8 @@ function joinFields(v = {}, mode = 'join') {
         L('dob', 'Date of Birth', `<input type="date" name="dob" max="${todayISO()}"${rq('dob')} value="${esc(dob)}">`, v.dob && !dob && mode === 'me' ? 'Only your birthday was saved so far. Please add the year too.' : ''),
         L('phone', 'WhatsApp No.', tel('phone', '10-digit number'), mode === 'join' ? 'The number you\'re in the RWB WhatsApp group with' : APPROVE),
         L('alt_phone', 'Mobile No. (alternative)', tel('alt_phone', 'Optional')),
+        mode === 'admin' ? L('email', 'Email', `<input type="email" name="email" inputmode="email" autocomplete="off" autocapitalize="none" spellcheck="false" value="${val('email')}">`,
+            v.user_id ? 'The Google account they sign in to the app with. If you change it, their app moves to the new email the next time they sign in with it, and their records come along. Until then their old account keeps working.' : 'They sign in to the app with this Google account') : '',
         L('bike', 'Do you own a Ronin bike?', sel('bike', RONIN, v.bike || (mode === 'join' ? 'TVS Ronin 225' : ''))),
         L('vrn', 'VRN please', `<input name="vrn" autocapitalize="characters" placeholder="WB 02 AB 1234"${rq('vrn')} value="${val('vrn')}">`, mode === 'me' ? 'Your main bike. ' + APPROVE : 'Your Ronin\'s registration number'),
         L('blood_group', 'Blood group', sel('blood_group', BLOOD.map(b => [b, b]), normBlood(v.blood_group))),
@@ -358,6 +360,7 @@ function joinCheck(d, mode, ownPhone) {
     if (d.emergency_phone && own && n(d.emergency_phone).slice(-10) === own) return 'The emergency contact should be someone else\'s number';
     if (d.vrn && d.vrn.replace(/[^A-Z0-9]/g, '').length < 6) return 'Please check the VRN (for example WB 02 AB 1234)';
     if (d.dob && (d.dob > todayISO() || d.dob < '1930-01-01')) return 'Please check the Date of Birth';
+    if (d.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email)) return 'Please check the email';
     return '';
 }
 
@@ -3185,7 +3188,7 @@ function memberSheet(m) {
     openSheet(m.full_name, `
         ${m.avatar_url ? `<img class="member-photo" src="${esc(m.avatar_url)}" alt="">` : ''}<div class="tags" style="margin:0 0 10px">${m.user_id ? '<span class="badge ok">On the app</span>' : '<span class="badge">Not on the app yet</span>'}${roleBadge(m)}${isNewMember(m) ? '<span class="badge new-tag">New Member</span>' : ''}</div>
         <dl class="facts">
-            <dt>WhatsApp</dt><dd>${esc(m.phone || '–')}</dd><dt>Email</dt><dd>${esc(m.email || '–')}</dd>
+            <dt>WhatsApp</dt><dd>${esc(m.phone || '–')}</dd><dt>Email</dt><dd>${esc(m.email || '–')}${m.email_moving ? '<br><span class="small muted">New email: their app moves here when they sign in with it</span>' : ''}</dd>
             <dt>Birthday</dt><dd>${m.dob ? fmtDayMonth(m.dob) : '–'}</dd>
             <dt>Blood group</dt><dd>${esc(m.blood_group || '–')}</dd><dt>Locality</dt><dd>${esc(m.locality || '–')}</dd>
             <dt>Hometown</dt><dd>${esc(m.hideout || '–')}</dd><dt>Emergency</dt><dd>${esc(m.emergency_phone || '–')}</dd>
@@ -3257,7 +3260,18 @@ function memberEdit(m) {
             const d = joinData(e.target), err = joinCheck(d, 'admin');
             if (err) return toast(err, true);
             if (!d.dob && m.dob?.startsWith('1904')) delete d.dob;   /* keep a "year unknown" birthday */
-            busy(e.submitter, async () => { await api.admin.update(m.id, d); Object.assign(m, d, { phone: d.phone.replace(/\D/g, '').slice(-10), dob: d.dob || null }); toast('Saved'); memberSheet(m); adminMembers(); });
+            if ('email' in d) {
+                d.email = d.email.replace(/\s/g, '').toLowerCase();
+                if (!d.email && m.user_id) return toast('They\'re on the app, so they need an email', true);
+            }
+            const emailChanged = 'email' in d && d.email !== String(m.email || '').toLowerCase();
+            if (emailChanged && m.user_id && !confirmBox(`Change ${firstName(m)}'s email to ${d.email}?\n\nTheir app moves to this Google account the next time they sign in with it. Their records come along.`)) return;
+            busy(e.submitter, async () => {
+                const r = await api.admin.update(m.id, d);
+                Object.assign(m, d, { phone: d.phone.replace(/\D/g, '').slice(-10), dob: d.dob || null, email: d.email || null });
+                if (r === 'moving') m.email_moving = true;
+                toast(r === 'moving' ? `Saved. Ask ${firstName(m)} to sign in with ${d.email}` : 'Saved'); state.dir = null; memberSheet(m); adminMembers();
+            });
         };
     });
 }
