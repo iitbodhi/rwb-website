@@ -2164,23 +2164,18 @@ html.nav-wait #app > *:not(.top):not(.demo-bar){animation:none;opacity:.45;trans
 .gd-skel .sk-doc{height:72px;border-radius:var(--r)}
 html.lite .skel i,html.lite .gd-skel i{animation:none}
 /* pictures fade in when they arrive */
-.gd-cover img,.gd-pic img,.mm-img img,.gd-ath img,.mm-s-img img,.vid-thumb img{opacity:0;transition:opacity .3s ease}
+.gd-cover img,.gd-pic img,.mm-img img,.gd-ath img,.mm-s-img img,.vid-thumb img{opacity:0;transition:opacity .15s ease-out}
 .gd-cover img.in,.gd-pic img.in,.mm-img img.in,.gd-ath img.in,.mm-s-img img.in,.vid-thumb img.in{opacity:1}
 @media (prefers-reduced-motion:reduce){#nav-bar{display:none}html.nav-wait #app > *{opacity:1}.skel i,.gd-skel i{animation:none}}
-/* swipe between tabs: the screen follows the finger, then the next one glides in from the side it came from */
-#app.sw-drag > *:not(.top):not(.demo-bar):not(.fab):not(.mm-fabs):not(.promo):not(.sos-alarm){transform:translate3d(var(--sx,0),0,0);opacity:var(--so,1);animation:none!important;will-change:transform,opacity}
-#app.sw-drag > :is(.fab,.mm-fabs){opacity:var(--so,1);animation:none!important}
-#app.sw-out > *:not(.top):not(.demo-bar){transition:transform .15s cubic-bezier(.4,0,1,1),opacity .13s linear}
-#app.sw-back > *:not(.top):not(.demo-bar){transition:transform .36s cubic-bezier(.18,1.25,.4,1),opacity .25s ease-out}
-html.nav-wait #app.sw-drag > *{opacity:var(--so,1)}
-#app[data-slide=next] > *:not(.top):not(.demo-bar):not(.fab):not(.mm-fabs){animation:swipe-in-l .34s cubic-bezier(.16,1,.3,1) both}
-#app[data-slide=prev] > *:not(.top):not(.demo-bar):not(.fab):not(.mm-fabs){animation:swipe-in-r .34s cubic-bezier(.16,1,.3,1) both}
-#app[data-slide] > :is(.fab,.mm-fabs){animation:swipe-fade .3s ease-out both}
+/* tab changes (swipe or tap): a barely-there slide from the side you're going to. The new screen is visible
+   from its first frame (starts at 70% opacity) and settles in 0.14 s, so it never slows the app down. */
+#app[data-slide=next] > *:not(.top):not(.demo-bar):not(.fab):not(.mm-fabs){animation:tab-in-l .14s ease-out both}
+#app[data-slide=prev] > *:not(.top):not(.demo-bar):not(.fab):not(.mm-fabs){animation:tab-in-r .14s ease-out both}
 #app.same[data-slide] > *{animation:none!important}
-@keyframes swipe-in-l{from{opacity:0;transform:translate3d(56px,0,0)}to{opacity:1;transform:none}}
-@keyframes swipe-in-r{from{opacity:0;transform:translate3d(-56px,0,0)}to{opacity:1;transform:none}}
+@keyframes tab-in-l{from{opacity:.7;transform:translate3d(14px,0,0)}to{opacity:1;transform:none}}
+@keyframes tab-in-r{from{opacity:.7;transform:translate3d(-14px,0,0)}to{opacity:1;transform:none}}
 @keyframes swipe-fade{from{opacity:0}to{opacity:1}}
-@media (prefers-reduced-motion:reduce){#app[data-slide] > *,#app.sw-drag > *{animation:none!important;transform:none!important}}
+@media (prefers-reduced-motion:reduce){#app[data-slide] > *{animation:none!important}}
 #app.same > #board.slide-l{animation:board-in-l .28s ease!important}#app.same > #board.slide-r{animation:board-in-r .28s ease!important}
 /* You vs RWB: keeps its space while the comparison loads, then fades in (nothing below it jumps) */
 .card.vs:has(> .skel){min-height:176px}

@@ -197,12 +197,12 @@ const navUI = (() => {
             if (on) { on = false; bar.className = 'done'; setTimeout(() => { if (bar.className === 'done') bar.className = ''; }, 450); } }
     };
 })();
-let onPaint = () => {}, paintedN = -1;          /* set by the swipe handler below */
+let paintedN = -1;
 const STALE = new Error('stale screen');
 (() => {
     const d = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
     Object.defineProperty(app, 'innerHTML', { configurable: true, get() { return d.get.call(this); },
-        set(v) { if (paintN >= 0 && paintN !== navN) throw STALE; onPaint();
+        set(v) { if (paintN >= 0 && paintN !== navN) throw STALE;
             /* the entrance plays once per screen visit: a refresh moments later (fresh data, or real content after the
                placeholders) swaps in quietly instead of replaying it, so nothing flickers */
             if (paintN >= 0) { if (paintedN === navN) this.classList.add('same'); else paintedN = navN; }
@@ -265,79 +265,45 @@ window.addEventListener('hashchange', () => {
     closeSheet(); closeMmSearch(); gdClose(true); render();
 });
 /* Swipe left / right on a main screen to move to the next / previous tab (the tab buttons still work).
-   The screen follows the finger; let go past a third of the way (or flick) and it slides off while the next one
-   glides in from the other side. Not far enough: it springs back. Track is left out (tap its button), and parts
-   of a screen that already swipe sideways keep their own swipe: pagers, the leaderboard, the calendar month,
-   alerts, maps, chip rows and text boxes. */
+   Kept as light as possible so it never slows scrolling: the app only looks at the finger when it lifts
+   (no work while it moves), then opens the next screen at once with a barely-there slide.
+   Track is left out (tap its button). Parts that already swipe sideways keep their own swipe: pagers,
+   the calendar month, alerts, maps, chip rows and text boxes; the leaderboard flips boards first and
+   hands over to the tab swipe from its first / last board. */
 (() => {
     const OWN = '#cal-pager,[data-swipe],.leaflet-container,input,textarea,select,[contenteditable],[data-noswipe],.sos-hold,.blocker';
     const SKIP = ['track'];
-    const scrollsSideways = el => {
-        for (; el && el !== app; el = el.parentElement)
-            if (el.scrollWidth > el.clientWidth + 2) { const o = getComputedStyle(el).overflowX; if (o === 'auto' || o === 'scroll') return true; }
-        return false;
-    };
-    const tabs = () => [...tabbar.querySelectorAll('a[data-tab]')].filter(a => !SKIP.includes(a.dataset.tab) && a.offsetParent !== null);
-    let g = null, raf = 0, moved = false, pending = false, busy = false;
-    const set = (x, o) => { app.style.setProperty('--sx', x.toFixed(1) + 'px'); app.style.setProperty('--so', o.toFixed(3)); };
-    const clear = () => { cancelAnimationFrame(raf); app.classList.remove('sw-drag', 'sw-out', 'sw-back'); app.style.removeProperty('--sx'); app.style.removeProperty('--so'); };
+    let s0 = null, pending = false;
     document.addEventListener('touchstart', e => {
-        g = null;
-        const tg = e.target; if (!(app.contains(tg) || tg === document.body || tg === document.documentElement || tg.closest?.('.bg'))) return;
-        if (busy || e.touches.length !== 1 || tabbar.hidden || sheet.open || document.querySelector('.gd-viewer,.promo,.mm-search')) return;
-        const t = e.touches[0];
-        if (t.clientX < 18 || t.clientX > innerWidth - 18) return;        /* the phone's own back gesture lives at the edges */
-        if (e.target.closest(OWN) || scrollsSideways(e.target)) return;
-        /* the leaderboard flips boards first; from the first / last board the swipe carries on to the next tab */
+        s0 = null;
+        if (e.touches.length !== 1) return;
+        const t = e.touches[0], tg = e.target;
         let board = null;
-        if (e.target.closest('#board')) { const d = [...app.querySelectorAll('.board-dots i')], k = d.findIndex(x => x.classList.contains('on')); board = { first: k <= 0, last: k >= d.length - 1 }; }
-        const list = tabs(), i = list.findIndex(a => a.dataset.tab === document.body.dataset.route);
-        if (i < 0) return;
-        g = { board, x: t.clientX, y: t.clientY, t: performance.now(), lock: null, dx: 0, list, i, pts: [[t.clientX, performance.now()]] };
+        if (tg.closest?.('#board')) { const d = app.querySelectorAll('.board-dots i'), on = app.querySelector('.board-dots i.on'); const k = [...d].indexOf(on); board = { first: k <= 0, last: k >= d.length - 1 }; }
+        s0 = { x: t.clientX, y: t.clientY, t: e.timeStamp, tg, board };
     }, { passive: true });
-    document.addEventListener('touchmove', e => {
-        if (!g) return;
-        const t = e.touches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
-        if (!g.lock) {
-            if (Math.abs(dx) < 9 && Math.abs(dy) < 9) return;
-            g.lock = Math.abs(dx) > Math.abs(dy) * 1.25 ? 'x' : 'y';
-            if (g.lock === 'y') { g = null; return; }
-            if (g.board && !(dx < 0 ? g.board.last : g.board.first)) { g = null; return; }
-            g.x = t.clientX; app.classList.remove('sw-back'); app.classList.add('same', 'sw-drag'); delete app.dataset.slide;   /* the entrance never replays after a spring-back */   /* start from here: no jump */
-        }
-        if (e.cancelable) e.preventDefault();                                /* sideways now: the page doesn't scroll */
-        const now = performance.now(), d = t.clientX - g.x;
-        g.pts.push([t.clientX, now]); if (g.pts.length > 8) g.pts.shift(); g.dx = d;
-        const edge = !g.list[g.i + (d < 0 ? 1 : -1)];
-        const x = edge ? d * 0.18 : d * 0.92;                                 /* first / last tab: a little rubber-band give */
-        const o = 1 - Math.min(0.5, Math.abs(x) / innerWidth * 0.9);
-        cancelAnimationFrame(raf); raf = requestAnimationFrame(() => set(x, o));
-    }, { passive: false });
-    const end = () => {
-        if (!g) return; const { lock, dx, pts, list, i } = g; g = null;
-        /* finger speed over the last 100 ms (px per ms), so a quick flick counts even when it's short */
-        const now = performance.now(), last = pts[pts.length - 1], ref = pts.find(p => now - p[1] <= 100) || last;
-        const r0 = ref === last && pts.length > 1 ? pts[pts.length - 2] : ref;
-        const v = now - last[1] > 100 ? 0 : (last[0] - r0[0]) / Math.max(16, last[1] - r0[1]);
-        if (lock !== 'x') return;
-        moved = true; setTimeout(() => moved = false, 350);
-        const dir = dx < 0 ? 1 : -1, next = list[i + dir];
-        const go = next && !getSelection()?.toString() && (Math.abs(dx) > innerWidth * 0.3 || (Math.abs(v) > 0.3 && Math.sign(v) === Math.sign(dx) && Math.abs(dx) > 24));
-        cancelAnimationFrame(raf);
-        if (!go) { app.classList.add('sw-back'); requestAnimationFrame(() => set(0, 1)); setTimeout(() => { if (!g) clear(); }, 380); return; }
-        busy = true;
-        app.classList.add('sw-out'); requestAnimationFrame(() => set(-dir * innerWidth * 0.32, 0));
-        try { navigator.vibrate?.(6); } catch { /* ignore */ }
-        setTimeout(() => {                                                    /* the old screen is gone: open the next one */
-            busy = false; pending = true; app.dataset.slide = dir > 0 ? 'next' : 'prev';
-            location.hash = next.getAttribute('href');
-        }, 130);
-    };
-    document.addEventListener('touchend', end, { passive: true });
-    document.addEventListener('touchcancel', end, { passive: true });
-    /* a swipe that ends on a button or link doesn't also tap it */
-    app.addEventListener('click', e => { if (moved) { e.preventDefault(); e.stopPropagation(); } }, true);
-    /* tapping a tab slides the same way: a tab to the right comes in from the right, one to the left from the left */
+    document.addEventListener('touchend', e => {
+        const s = s0; s0 = null;
+        if (!s || e.touches.length) return;
+        const t = e.changedTouches[0], dx = t.clientX - s.x, dy = t.clientY - s.y;
+        /* a clear sideways swipe: far enough, mostly sideways, not a slow drag */
+        if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.8 || (e.timeStamp - s.t > 700 && Math.abs(dx) < innerWidth * 0.4)) return;
+        if (s.x < 18 || s.x > innerWidth - 18) return;                      /* the phone's own back gesture */
+        const tg = s.tg;
+        if (!(app.contains(tg) || tg === document.body || tg === document.documentElement)) return;
+        if (tabbar.hidden || sheet.open || document.querySelector('.gd-viewer,.promo,.mm-search')) return;
+        if (tg.closest(OWN) || getSelection()?.toString()) return;
+        if (s.board && !(dx < 0 ? s.board.last : s.board.first)) return;
+        for (let el = tg; el && el !== app; el = el.parentElement)          /* inside a sideways-scrolling row */
+            if (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return;
+        const list = [...tabbar.querySelectorAll('a[data-tab]')].filter(a => !SKIP.includes(a.dataset.tab) && a.offsetParent !== null);
+        const i = list.findIndex(a => a.dataset.tab === document.body.dataset.route), next = i < 0 ? null : list[i + (dx < 0 ? 1 : -1)];
+        if (!next) return;
+        pending = true; app.dataset.slide = dx < 0 ? 'next' : 'prev';
+        location.hash = next.getAttribute('href');
+    }, { passive: true });
+    document.addEventListener('touchcancel', () => { s0 = null; }, { passive: true });
+    /* tapping a tab slides the same gentle way */
     tabbar.addEventListener('click', e => {
         const a = e.target.closest('a[data-tab]'), all = [...tabbar.querySelectorAll('a[data-tab]')];
         const from = all.findIndex(x => x.dataset.tab === document.body.dataset.route), to = all.indexOf(a);
@@ -345,8 +311,6 @@ window.addEventListener('hashchange', () => {
         pending = true; app.dataset.slide = to > from ? 'next' : 'prev';
     });
     addEventListener('hashchange', () => { if (!pending) delete app.dataset.slide; pending = false; });
-    /* called the moment the next screen paints, in the same frame, so the old one never flashes back */
-    onPaint = clear;
 })();
 
 const demoBar = () => api?.demo ? `<div class="demo-bar">Demo mode: sample data, saved only on this device. <button data-act="reset-demo">Reset</button></div>` : '';
@@ -4184,13 +4148,23 @@ async function sweepSold(all) {
     if (old.length) state.listings = null;
 }
 
+let mmFreshAt = 0;
 async function viewMotoMart() {
     state.myId ??= await api.myId();
     const p = state.param;
     if (p === 'review') { if (isMod()) Object.assign(mmState, { review: true, mine: false }); }
     else if (['new', 'used', 'merch'].includes(p)) Object.assign(mmState, { branch: p, cat: 'all', review: false, mine: false });
     if (['review', 'new', 'used', 'merch'].includes(p)) { state.param = null; history.replaceState(null, '', '#motomart'); }
-    const all = await load.listings(true);
+    /* cache-first: show the saved list at once, fetch the newest in the background and redraw only if it changed */
+    const had = state.listings, all = had || await load.listings(true);
+    if (had && Date.now() - mmFreshAt > 15000) {
+        mmFreshAt = Date.now();
+        api.listings().then(fresh => {
+            if (JSON.stringify(fresh) === JSON.stringify(state.listings)) return;
+            state.listings = fresh;
+            if (document.body.dataset.route === 'motomart' && !sheet.open && !document.querySelector('.mm-search')) render();
+        }).catch(() => {});
+    } else if (!had) mmFreshAt = Date.now();
     sweepSold(all);
     const mod = isMod(), waiting = mod ? all.filter(l => l.status === 'pending' && (isAdmin() || !mine(l))) : [];
     if (!mod || !waiting.length) mmState.review = false;
