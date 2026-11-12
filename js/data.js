@@ -10,14 +10,11 @@ const CONFIG = {
     INSTAGRAM_URL: 'https://www.instagram.com/ronin_warriors_bengal',
     /* Opens a direct message to RWB on Instagram (used by "Contact to order") */
     INSTAGRAM_DM_URL: 'https://ig.me/m/ronin_warriors_bengal',
-    /* Marketplace products come from a Google Sheet. Paste its CSV link here (see setup guide) */
-    MARKET_SHEET_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSjkJgFnwlNkbq9W1L_IZwC2lnYkMDkjdT8MgwmPRiHPiow9989pJvP4e0uDaA0k4kK31q4S6X_dqT7/pub?gid=2137982980&single=true&output=csv',
+    /* RWB Merch and Ronin Accessories come from MotoMart in the RWB App (setup file 65) */
     /* Ronin Maintenance: Apps Script web app link that lists the PDFs in your Drive folder */
     MAINTENANCE_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbz4v89tStt7dg7p6wgvFdCJL3WqRjAFCMc6oRiR3SnDRsxrnY6SNpLGpDJaSDpZQw0aRw/exec',
-    /* Ronin Accessories: Google Sheet published as CSV (columns: name, category, score, link, price) */
     /* RWB App for Android (.apk). Leave empty until the file is in the repo; then "Download Now" downloads it */
-    APK_URL: 'download/RWB-App.apk',
-    ACCESSORIES_SHEET_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT9sKAmhlfRFrwFZ78rlobXVHMogYUz4PR7gu5HuoFQTuZnk30c6e7K3df61_BEpRhzdY_ivB0hVaqH/pub?gid=111766051&single=true&output=csv'
+    APK_URL: 'download/RWB-App.apk'
 };
 
 /* Team — role: admin | coadmin | coordinator. Photos live in assets/warriors/ */

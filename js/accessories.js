@@ -1,6 +1,5 @@
 /* RWB — Ronin Accessories page.
-   Listed by admins and coordinators in the RWB App (MotoMart → New). The old Google Sheet is only a backup
-   (columns: name | category | link | price | image). */
+   Listed by admins and coordinators in the RWB App (MotoMart → New). */
 const list = $('#acc-list'), toolbar = $('#acc-toolbar'), countEl = $('#acc-count');
 let items = [];
 const view = { category: 'all', sort: 'price-asc' };
@@ -16,9 +15,8 @@ function priceNum(p) {
     return m ? parseFloat(m[0].replace(/,/g, '')) : null;
 }
 function sortItems(arr) {
-    const sign = view.sort === 'price-asc' ? 1 : -1, sold = i => /sold/i.test(i.status || '');
+    const sign = view.sort === 'price-asc' ? 1 : -1;
     return [...arr].sort((a, b) => {
-        if (sold(a) !== sold(b)) return sold(a) ? 1 : -1;   /* sold out always last */
         const x = priceNum(a.price), y = priceNum(b.price);
         if (x === null && y === null) return 0;
         if (x === null) return 1;
@@ -53,14 +51,14 @@ function setThumb(box, src) {
     const im = new Image();
     im.alt = ''; im.referrerPolicy = 'no-referrer'; im.decoding = 'async';
     im.onload = () => { box.replaceChildren(im); box.classList.add('has-img'); };
-    im.onerror = () => box.remove();
+    im.onerror = () => box.classList.add('no-img');
     im.src = src;
 }
 const thumbObs = new IntersectionObserver(entries => entries.forEach(async e => {
     if (!e.isIntersecting) return;
     thumbObs.unobserve(e.target);
     const box = e.target, src = await getPreview(box.dataset.link);
-    src ? setThumb(box, src) : box.remove();
+    src ? setThumb(box, src) : box.classList.add('no-img');
 }), { rootMargin: '200px' });
 
 /* ---------- drawing ---------- */
@@ -69,16 +67,14 @@ function draw() {
     const shown = sortItems(filtered);
     countEl.textContent = items.length ? `Showing ${shown.length} of ${items.length} products` : '';
     list.innerHTML = shown.length ? shown.map(i => {
-        const link = safeLink(i.link), price = typeof i.price === 'number' ? inr(i.price) : rupees(i.price), own = i.image ? driveImg(i.image) : '', sold = /sold/i.test(i.status || '');
-        const thumb = own ? `<div class="acc-img" data-src="${esc(own)}"></div>` : link ? `<div class="acc-img" data-link="${esc(link)}"></div>` : '';
-        return `<article class="acc${sold ? ' sold' : ''}">${thumb}
+        const link = safeLink(i.link), price = typeof i.price === 'number' ? inr(i.price) : rupees(i.price), own = i.image ? driveImg(i.image) : '';
+        const thumb = own ? `<div class="acc-img" data-src="${esc(own)}"></div>` : link ? `<div class="acc-img" data-link="${esc(link)}"></div>` : '<div class="acc-img no-img"></div>';
+        return `<article class="acc">${thumb}
             <div class="acc-body">
                 ${i.category ? `<span class="acc-cat">${esc(i.category)}</span>` : ''}
                 <h3>${esc(i.name)}</h3>
-                <div class="acc-row">
-                    ${price ? `<b class="price">${esc(price)}</b>` : ''}${sold ? '<span class="acc-score">Sold out</span>' : ''}
-                </div>
-                ${link && !sold ? `<a class="btn btn-sm" href="${esc(link)}" target="_blank" rel="noopener noreferrer">Check product</a>` : ''}
+                ${price ? `<b class="price">${esc(price)}</b>` : ''}
+                ${link ? `<a class="btn btn-sm" href="${esc(link)}" target="_blank" rel="noopener noreferrer">Check product</a>` : ''}
             </div></article>`;
     }).join('') : `<p class="muted">${items.length ? 'No products in this category.' : 'Accessories will be listed here soon.'}</p>`;
     $$('#acc-list .acc-img').forEach(box => box.dataset.src ? setThumb(box, box.dataset.src) : thumbObs.observe(box));
@@ -132,8 +128,5 @@ $('#acc-clear').addEventListener('click', () => { view.category = 'all'; view.so
         const used = $('#acc-used');
         if (used && d.used) { used.innerHTML = `<b>${d.used}</b> used item${d.used === 1 ? '' : 's'} for sale by members right now in <a href="app/#motomart/used">MotoMart in the RWB App</a>.`; used.hidden = false; }
         show(); return;
-    } catch { /* the app can't be reached: use the old sheet */ }
-    if (!CONFIG.ACCESSORIES_SHEET_URL) { draw(); return; }
-    try { items = parseCSV(await fetchCSV(CONFIG.ACCESSORIES_SHEET_URL)).filter(r => r.name); show(); }
-    catch { list.innerHTML = '<p class="muted">Accessories could not be loaded. Please try again later.</p>'; }
+    } catch { list.innerHTML = '<p class="muted">Accessories could not be loaded. Please try again later.</p>'; }
 })();

@@ -73,13 +73,14 @@ Bottom tabs: Home, Service, Mileage, Track (middle), MotoMart, Warriors, Events.
 - Track: live location on group rides and SOS to the RWB team.
 - MotoMart: one shop with tabs All, New, Used and RWB Merch, round category buttons, a search icon (top right) and sort
   (price low to high by default). Used = members sell their own gear: "+ Sell something", live after an admin or coordinator
-  approves it, buyers message the seller on WhatsApp; mark it sold and it greys out, then it's deleted after 15 days.
+  approves it (an admin's own post goes live at once), buyers message the seller on WhatsApp; mark it sold and it greys out, then it's deleted after 15 days.
   WhatsApp shares hide the seller's name and number (contact only inside the app). New = new accessories listed by admins
-  and coordinators ("+ List accessory"); "Check product" opens the store page; RWB doesn't sell them. RWB Merch = official
+  and coordinators ("+ List accessory"; a coordinator's listing is approved by an admin or another coordinator); "Check product" opens the store page; RWB doesn't sell them. RWB Merch = official
   RWB jerseys, stickers etc., listed by the team; "Order on WhatsApp". New accessories and merch also show on roninwb.in.
 - Warriors: members and leaderboards. Events: rides, RSVPs and shared expenses.
 - Me: profile, bikes (up to 3), notifications, what other members can see, sign out.
-- Teach Pookie: answer Pookie's questions, earn XP; admins check answers before Pookie uses them.
+- Teach Pookie: answer Pookie's questions, earn XP; admins or coordinators check answers before Pookie uses them.
+- Coordinators have a Coordinator panel (Home → Coordinator): approve MotoMart posts and Teach Pookie answers, and handle reports.
 - Sign-in trouble: use the Google account from the RWB join form, or send the short request form for an admin to approve.`;
 
 const DONT_KNOW = (name: string) =>
@@ -122,34 +123,26 @@ async function siteRows(): Promise<K[]> {
     const url = (k: string) => js.match(new RegExp(k + ":\\s*'([^']+)'"))?.[1];
     const team = [...js.matchAll(/name:\s*'([^']+)',\s*nickname:\s*'([^']*)',\s*role:\s*'(\w+)',\s*roleLabel:\s*'([^']+)'/g)].map((m) => `${m[1]} ("${m[2]}"): ${m[4]}`);
     if (team.length) rows.push(prep({ title: "RWB team: admins, co-admins, coordinators, who runs RWB", content: team.join("; "), source: "site" }));
-    const mUrl = url("MAINTENANCE_SCRIPT_URL"), aUrl = url("ACCESSORIES_SHEET_URL");
-    const [guides, gear] = await Promise.allSettled([mUrl ? get(mUrl).then((r) => r.json()) : Promise.resolve([]), aUrl ? get(aUrl).then((r) => r.text()) : Promise.resolve("")]);
+    const mUrl = url("MAINTENANCE_SCRIPT_URL");
+    const [guides] = await Promise.allSettled([mUrl ? get(mUrl).then((r) => r.json()) : Promise.resolve([])]);
     if (guides.status === "fulfilled" && Array.isArray(guides.value)) {
       guideList = (guides.value as { id: string; name: string }[]).filter((p) => /^[\w-]+$/.test(String(p.id)));
       if (guideList.length) rows.push(prep({ title: "RWB maintenance guides list (Home → Explore → Maintenance guides)", source: "site",
         content: guideList.slice(0, 60).map((p) => pdfTitle(p.name) + (p.description ? `: ${p.description}` : "")).join("; ") }));
     }
-    /* MotoMart's new accessories and merch (setup file 65); the old gear sheet is only the backup */
-    let shop = false;
+    /* MotoMart's new accessories and merch (setup file 65); read from the database */
     try {
       const r = await fetch(`${SB_URL}/rest/v1/rpc/public_motomart`, { method: "POST", signal: AbortSignal.timeout(3500),
         headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, "Content-Type": "application/json" }, body: "{}" });
       if (r.ok) {
-        const d = await r.json(); shop = true;
+        const d = await r.json();
         for (const i of (d.items || []).slice(0, 150)) {
           const what = i.kind === "merch" ? "RWB merch" : "New accessory in MotoMart (picked by the RWB team)";
           rows.push(prep({ title: `${what}: ${i.name} (${i.category || "-"})`, source: "gear",
             content: `${what}: ${i.name}, category ${i.category || "-"}, price ₹${i.price}${i.status === "sold" ? " (sold out)" : ""}. In the app: MotoMart → ${i.kind === "merch" ? "RWB Merch" : "New"}${i.link ? ", store link " + i.link : ""}.` }));
         }
       }
-    } catch (_) { /* use the sheet */ }
-    if (!shop && gear.status === "fulfilled" && gear.value) {
-      for (const line of String(gear.value).split(/\r?\n/).slice(1).filter(Boolean).slice(0, 150)) {
-        const c = line.split(",");
-        rows.push(prep({ title: `RWB recommended gear: ${c[0]} (${c[1] || "accessory"})`, source: "gear",
-          content: `RWB tested and recommends ${c[0]}, category ${c[1] || "-"}, RWB score ${c[2] || "-"}/5${c[4] ? ", price " + c[4] : ""}${c[3] ? ", link " + c[3] : ""}.` }));
-      }
-    }
+    } catch (_) { /* Pookie still works without them */ }
   } catch (_) { /* Pookie still works without these */ }
   site = { at: Date.now(), ttl: ok ? 6 * 3600e3 : 600e3, rows };
   return rows;

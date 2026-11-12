@@ -207,7 +207,7 @@ async function doRender() {
     state.param = param || null;
     if (isFam() && !FAM_ROUTES.includes(name)) { location.hash = '#home'; return; }
     const view = isFam() ? famView(name) : ROUTES[name] || viewHome;
-    if (name === 'admin' && !isAdmin()) { location.hash = '#home'; return; }
+    if (name === 'admin' && !isMod()) { location.hash = '#home'; return; }   /* coordinators get their own smaller panel */
     if (name === 'admin' && param) state.adminTab = param;
     tabbar.hidden = false;
     if (name !== 'chat') state.cameFrom = name;
@@ -1085,7 +1085,13 @@ async function viewHome() {
                 <a href="#admin" data-adtab="members"><span class="ad-ico">${ICON.members}</span>Members</a>
                 <a href="#admin" data-adtab="motomart"><span class="ad-ico">${ICON.cart}</span>MotoMart<i class="ad-n" id="ad-mm" hidden></i></a>
                 <a href="#admin" data-adtab="bdays"><span class="ad-ico">${ICON.cake}</span>Birthdays</a>
-            </div><a class="ad-dupes" href="#admin" data-adtab="dupes" id="ad-dupes" hidden></a><a class="ad-dupes" href="#admin" data-adtab="ai" id="ad-pookie" hidden></a></section>` : isMod() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
+            </div><a class="ad-dupes" href="#admin" data-adtab="dupes" id="ad-dupes" hidden></a><a class="ad-dupes" href="#admin" data-adtab="ai" id="ad-pookie" hidden></a></section>` : isMod() ? `<section class="admin-dock coord-dock" aria-label="Coordinator">
+            <div class="ad-head"><b>${ICON.shield} Coordinator</b><span class="small muted" id="ad-sum"></span><a href="#admin" data-adtab="motomart" class="ad-all">Open ›</a></div>
+            <div class="ad-grid">
+                <a href="#admin" data-adtab="motomart"><span class="ad-ico">${ICON.cart}</span>MotoMart<i class="ad-n" id="ad-mm" hidden></i></a>
+                <a href="#admin" data-adtab="ai"><span class="ad-ico">${ICON.chat}</span>Pookie<i class="ad-n" id="ad-ai" hidden></i></a>
+                <a href="#admin" data-adtab="reports"><span class="ad-ico">${ICON.alert}</span>Reports<i class="ad-n" id="ad-rep" hidden></i></a>
+            </div></section>` : ''}
         ${profileTodo(state.me)}
         ${docWarn ? `<a class="banner doc-warn ${docWarn.st.level}" href="#docs"><span class="b-ico">${ICON.file}</span><span class="grow"><b>${esc(docName(docWarn.d))}</b> ${docWarn.st.days < 0 ? `expired on ${fmtDate(docWarn.d.expiry_date)}` : docWarn.st.days === 0 ? 'expires today' : `expires in ${docWarn.st.days} day${docWarn.st.days === 1 ? '' : 's'}`}. Renew it and update My documents.</span>${ICON.chev}</a>` : ''}
         ${nextEvt ? `<div class="home-evt">${eventCard(nextEvt, evd)}</div>` : ''}
@@ -1112,10 +1118,7 @@ async function viewHome() {
         listing: el => location.hash = '#motomart/' + el.dataset.id
     };
     app.querySelectorAll('[data-guide]').forEach(a => a.addEventListener('click', () => state.guideTab = 'maint'));
-    if (isMod() && !isAdmin()) {   /* coordinators: MotoMart posts to check */
-        const mm = listings.filter(l => l.status === 'pending').length, b = $('#admin-banner');
-        if (b && mm) { b.innerHTML = `<span class="b-ico">${ICON.tag}</span><span class="grow">${mm} MotoMart post${mm > 1 ? 's' : ''} waiting for approval</span>${ICON.chev}`; b.href = '#motomart/review'; b.hidden = false; }
-    }
+    if (isMod() && !isAdmin()) coordDock(listings);
     if (isAdmin()) {
         app.querySelectorAll('[data-adtab]').forEach(a => a.addEventListener('click', () => { state.adminTab = a.dataset.adtab; }));
         api.admin.dupes().then(g => { state.dupes = g; const a = $('#ad-dupes'); if (!a || !g.length) return;
@@ -2603,6 +2606,7 @@ async function squarePhoto(file) {
 
 /* =================== Admin =================== */
 async function viewAdmin() {
+    if (!isAdmin()) return viewCoord();
     const s = await api.admin.stats();
     const tab = state.adminTab;
     app.innerHTML = top('Admin', '<a class="btn sm ghost" href="#home">Done</a>') + `
@@ -2637,6 +2641,35 @@ async function viewAdmin() {
     api.admin.pookiePending?.().then(n => { pookieBadge(n); const c = $('#ai-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
     api.admin.reports?.().then(rs => { const n = (rs || []).filter(r => r.status === 'open').length; const c = $('#rep-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
     try { await ({ requests: adminRequests, motomart: adminMotoMart, dupes: adminDupes, members: adminMembers, bdays: adminBdays, reports: adminReports, ai: adminAI })[tab](); }
+    catch (e) { $('#admin-body').innerHTML = `<div class="card empty"><b>Could not load</b>${esc(e.message)}</div>`; }
+}
+/* Coordinators' panel (setup file 65): MotoMart posts, Teach Pookie answers and reports. They check other people's
+   posts and answers; their own are checked by an admin or another coordinator. */
+const COORD_TABS = { motomart: ['MotoMart', () => adminMotoMart()], ai: ['Pookie', () => adminAI()], reports: ['Reports', () => adminReports()] };
+async function coordCounts() {
+    state.myId ??= await api.myId();
+    const [ls, ai, rs] = await Promise.all([load.listings(true).catch(() => []), api.admin.pookiePending?.().catch(() => 0), api.admin.reports?.().catch(() => [])]);
+    return { motomart: ls.filter(l => l.status === 'pending' && !mine(l)).length, ai: ai || 0, reports: (rs || []).filter(r => r.status === 'open').length };
+}
+function coordDock() {
+    app.querySelectorAll('[data-adtab]').forEach(a => a.addEventListener('click', () => { state.adminTab = a.dataset.adtab; }));
+    coordCounts().then(n => {
+        const set = (id, v) => { const el = $('#' + id); if (el) { el.textContent = v; el.hidden = !v; } };
+        set('ad-mm', n.motomart); set('ad-ai', n.ai); set('ad-rep', n.reports);
+        const all = n.motomart + n.ai + n.reports, sum = $('#ad-sum'); if (sum) sum.textContent = all ? `${all} waiting for you` : 'all clear 👍';
+        app.querySelector('.coord-dock')?.classList.toggle('busy', !!all);
+    }).catch(() => {});
+}
+async function viewCoord() {
+    if (!COORD_TABS[state.adminTab]) state.adminTab = 'motomart';
+    const tab = state.adminTab;
+    app.innerHTML = top('Panel') + `
+        <div class="coord-hero"><span class="ad-ico">${ICON.shield}</span><div><b>Your coordinator panel</b><p class="small muted">Approve MotoMart posts and Pookie answers, and handle members' reports. Your own posts and answers go to an admin or another coordinator.</p></div></div>
+        <div class="seg section" role="tablist">${Object.entries(COORD_TABS).map(([k, [label]]) => `<button role="tab" aria-selected="${tab === k}" data-act="tab" data-tab="${k}">${label}<span id="c-${k}"></span></button>`).join('')}</div>
+        <div id="admin-body"><p class="muted">Loading…</p></div>`;
+    actions = { tab: el => { state.adminTab = el.dataset.tab; viewAdmin(); } };
+    coordCounts().then(n => Object.entries(n).forEach(([k, v]) => { const c = $('#c-' + k); if (c) c.textContent = v ? ` (${v})` : ''; if (k === 'ai') pookieBadge(v); })).catch(() => {});
+    try { await COORD_TABS[tab][1](); }
     catch (e) { $('#admin-body').innerHTML = `<div class="card empty"><b>Could not load</b>${esc(e.message)}</div>`; }
 }
 /* which copy of the app this is, noted once a day so admins can see who is on the Play test */
@@ -3430,7 +3463,7 @@ async function viewMotoMart() {
     if (['review', 'new', 'used', 'merch'].includes(p)) { state.param = null; history.replaceState(null, '', '#motomart'); }
     const all = await load.listings(true);
     sweepSold(all);
-    const mod = isMod(), waiting = mod ? all.filter(l => l.status === 'pending') : [];
+    const mod = isMod(), waiting = mod ? all.filter(l => l.status === 'pending' && (isAdmin() || !mine(l))) : [];
     if (!mod || !waiting.length) mmState.review = false;
     const base = mmVisible(all).filter(l => mmState.branch === 'all' || kindOf(l) === mmState.branch);
     const cats = [...new Set(base.filter(l => l.status !== 'pending' && l.status !== 'rejected').map(catGroup))]
@@ -3453,7 +3486,6 @@ async function viewMotoMart() {
         </div>
         ${mmState.review ? '<p class="small muted" style="margin:-2px 0 12px">Check photos, price and details, then approve or reject. Members are notified when a post goes live.</p>' : ''}
         ${shown.length ? `<div class="mm-grid">${shown.map(listingCard).join('')}</div>` : `<div class="card empty"><b>${base.length ? 'Nothing matches' : mmState.branch === 'merch' ? 'No merch yet' : mmState.branch === 'new' ? 'No accessories yet' : 'Nothing for sale yet'}</b>${mmState.mine ? 'You haven’t posted anything yet.' : q ? 'Try another word, or clear the search.' : mmState.branch === 'used' || mmState.branch === 'all' ? 'Selling old gear? Be the first to post it.' : 'The RWB team will add them here soon.'}</div>`}
-        ${isAdmin() ? '<button class="btn ghost block" data-act="mm-import" style="margin-top:18px">⇩ Import from the old Google Sheets</button>' : ''}
         <div class="mm-fabs">${mod ? `<button class="btn fab-2" data-act="list">＋ ${fabLabel}</button>` : ''}<button class="btn fab-1" data-act="sell">＋ Sell something</button></div>`;
     watchPreviews(app);
     actions = {
@@ -3465,7 +3497,6 @@ async function viewMotoMart() {
         'q-clear': () => { mmState.q = ''; viewMotoMart(); },
         sell: () => listingForm(),
         list: () => teamForm(null, mmState.branch === 'merch' ? 'merch' : 'new'),
-        'mm-import': () => importSheetListings(),
         listing: el => listingDetail(all.find(l => String(l.id) === el.dataset.id))
     };
     const s = $('#mms'); if (s) s.onchange = e => { mmState.sort = e.target.value; viewMotoMart(); };
@@ -3525,7 +3556,7 @@ async function shareListing(l) {
 
 function listingDetail(l) {
     if (!l) return toast('That post is no longer available', true);
-    const own = mine(l), adm = isMod(), k = kindOf(l), sold = l.status === 'sold', team = k !== 'used';
+    const own = mine(l), adm = isMod(), judge = isAdmin() || (adm && !own), k = kindOf(l), sold = l.status === 'sold', team = k !== 'used';
     const pics = allPhotos(l);
     const fact = (key, v) => v ? `<dt>${key}</dt><dd>${esc(v)}</dd>` : '';
     const contact = `Hi ${String(l.seller_name || '').split(' ')[0]}, I saw your ${l.product_name} (${price(l.price)}) on RWB MotoMart. Is it still available?`;
@@ -3539,7 +3570,7 @@ function listingDetail(l) {
         <div class="mm-d-head"><b class="mm-price">${price(l.price)}</b><span class="badge ${l.status === 'live' ? 'ok' : sold ? '' : 'orange'}">${statusTxt}</span></div>
         <p class="mm-d-cat">${esc(catGroup(l))}${k === 'new' && l.link ? ` · from <b>${esc(hostOf(l.link))}</b>` : ''}</p>
         ${l.status === 'rejected' && l.reject_reason ? `<p class="warn" style="margin:8px 0">Admin note: ${esc(l.reject_reason)}. Edit the post to send it again.</p>` : ''}
-        ${l.status === 'pending' && own && !adm ? '<p class="warn" style="margin:8px 0">An admin will check and publish your post, usually within 24 hours.</p>' : ''}
+        ${l.status === 'pending' && own && !isAdmin() ? `<p class="warn" style="margin:8px 0">${adm ? 'An admin or another coordinator' : 'An admin or coordinator'} will check and publish your post, usually within 24 hours.</p>` : ''}
         ${sold && k === 'used' ? `<p class="mm-note">This item is sold. The post and its photos are deleted on ${fmtDate(goneOn(l).toISOString().slice(0, 10))}.</p>` : ''}
         ${k === 'used' ? `<dl class="facts">${fact('Size', l.size)}${fact('Age', l.age)}${fact('Condition', l.condition)}${fact('Reason', l.reason)}${fact('Seller', l.seller_name)}${fact('Posted', l.published_at ? fmtDate(String(l.published_at).slice(0, 10)) : '')}</dl>` : ''}
         ${l.details ? `<p style="margin:10px 0 16px">${linkify(l.details)}</p>` : ''}
@@ -3547,9 +3578,9 @@ function listingDetail(l) {
             ${k === 'new' && l.link && !sold ? `<a class="btn block mm-cta" href="${esc(l.link)}" target="_blank" rel="noopener noreferrer">Check product ↗</a><p class="small muted" style="text-align:center;margin-top:-4px">Sold by ${esc(hostOf(l.link) || 'the store')}, not by RWB. Price and stock can change.</p>` : ''}
             ${k === 'merch' && !sold ? (l.seller_phone ? `<a class="btn wa block" href="${waTo(l.seller_phone, merchMsg)}" target="_blank" rel="noopener">Order on WhatsApp</a>` : l.link ? `<a class="btn block mm-cta" href="${esc(l.link)}" target="_blank" rel="noopener noreferrer">Order now ↗</a>` : `<a class="btn block mm-cta" href="${esc(SITE.INSTAGRAM_DM_URL || 'https://ig.me/m/ronin_warriors_bengal')}" target="_blank" rel="noopener">Order on Instagram</a>`) : ''}
             ${k === 'used' && !own && l.status === 'live' ? `<a class="btn wa block" href="${waTo(l.seller_phone, contact)}" target="_blank" rel="noopener">Message seller on WhatsApp</a>` : ''}
-            ${adm && l.status === 'pending' ? `<div class="btns"><button class="btn ghost" data-x="reject">Reject</button><button class="btn" data-x="approve">Approve</button></div>` : ''}
+            ${judge && l.status === 'pending' ? `<div class="btns"><button class="btn ghost" data-x="reject">Reject</button><button class="btn" data-x="approve">Approve</button></div>` : ''}
             ${l.status === 'live' ? '<button class="btn ghost block" data-x="share">Share to WhatsApp</button>' : ''}
-            ${(own && k === 'used' || adm && team) && ['live', 'sold'].includes(l.status) ? `<button class="btn ${l.status === 'live' ? '' : 'ghost'} block" data-x="toggle">${l.status === 'live' ? (team ? 'Mark as sold out' : 'Mark as sold') : (team ? 'Back in stock' : 'Put back on sale')}</button>` : ''}
+            ${(own && k === 'used' || adm && k === 'merch') && ['live', 'sold'].includes(l.status) ? `<button class="btn ${l.status === 'live' ? '' : 'ghost'} block" data-x="toggle">${l.status === 'live' ? (team ? 'Mark as sold out' : 'Mark as sold') : (team ? 'Back in stock' : 'Put back on sale')}</button>` : ''}
             ${own && k === 'used' || adm && team ? '<button class="btn ghost block" data-x="edit">Edit</button>' : ''}
             ${!own && k === 'used' && l.status === 'live' ? `<button class="linkish" data-report="listing" data-ref="${l.id}" data-label="${esc(l.product_name + ' · ' + (l.seller_name || ''))}" style="margin:6px auto 0;display:block;color:var(--muted)">🚩 Report this post</button>` : ''}
             ${own || adm ? '<button class="btn danger block" data-x="del">Delete</button>' : ''}
@@ -3594,24 +3625,36 @@ function photoPicker(body, kept, removed, added, MAX, onChange = () => {}) {
         draw();
     };
     body.querySelector('#pics').onchange = async e => {
-        const files = [...e.target.files].slice(0, MAX - kept.length - added.length); e.target.value = '';
-        for (const f of files) {
-            try { const c = await compressImage(f); added.push({ file: c, url: URL.createObjectURL(c) }); draw(); }
+        const all = [...e.target.files]; e.target.value = '';
+        if (all.length > MAX - kept.length - added.length) toast(`Up to ${MAX} photo${MAX === 1 ? '' : 's'}: the first ${Math.max(0, MAX - kept.length - added.length)} are added`);
+        for (const f of all.slice(0, MAX - kept.length - added.length)) {
+            try { const c = await mmPhoto(f); added.push({ file: c, url: URL.createObjectURL(c) }); draw(); }
             catch (err) { toast(err.message, true); }
         }
     };
     draw();
 }
+/* MotoMart photos: only real pictures (JPG, PNG, WebP, HEIC), under 15 MB, shrunk on the phone to a ~200 KB JPEG.
+   The database also refuses anything that isn't a small JPEG/WebP in the poster's own folder (setup file 65). */
+const MM_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif';
+async function mmPhoto(f) {
+    const okType = /^image\/(jpe?g|png|webp|heic|heif)$/i.test(f.type) || (!f.type && /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name));
+    if (!okType) throw new Error('Please choose a photo (JPG, PNG, WebP or HEIC). Other files can’t be added.');
+    if (f.size > 15 * 1024 * 1024) throw new Error('That photo is over 15 MB. Please choose a smaller one or take a screenshot.');
+    const c = await compressImage(f, 1400, 200e3);
+    if (c.size > 400 * 1024) throw new Error('That photo couldn’t be made small enough. Try a screenshot of it.');
+    return c;
+}
 
 function listingForm(l = null) {
     const r = l ? { ...l } : { seller_name: state.me.full_name, seller_phone: state.me.phone || '', photos: [] };
     const kept = [...(r.photos || [])], removed = [], added = [];
-    const MAX = 5, cur = l ? catGroup(l.category) : '';
+    const MAX = 4, cur = l ? catGroup(l.category) : '';
     openSheet(l ? 'Edit post' : 'Sell on MotoMart', `<form id="lf">
-        ${l ? '' : '<p class="small muted">Your post goes live after an admin or coordinator approves it, usually within 24 hours. Members can then message you on WhatsApp. Once you mark it sold, it’s removed after 15 days.</p>'}
-        <fieldset><legend>Photos <span class="hint muted small">(1 to ${MAX}, clear and well lit)</span></legend>
+        ${l ? '' : `<p class="small muted">${isAdmin() ? 'As an admin, your post goes live at once.' : 'Your post goes live after an admin or coordinator approves it, usually within 24 hours.'} Members can then message you on WhatsApp. Once you mark it sold, it’s removed after 15 days.</p>`}
+        <fieldset><legend>Photos <span class="hint muted small">(1 to ${MAX}, clear and well lit · JPG, PNG or HEIC)</span></legend>
             <div class="thumbs" id="thumbs"></div>
-            <label class="file-pick"><input type="file" accept="image/*,.heic,.heif" multiple id="pics"><span>📷 Add photos</span></label></fieldset>
+            <label class="file-pick"><input type="file" accept="${MM_ACCEPT}" multiple id="pics"><span>📷 Add photos</span></label></fieldset>
         <label>Product name<input name="product_name" required maxlength="120" placeholder="e.g. Axor Apex helmet, matte black" value="${esc(r.product_name || '')}"></label>
         ${catField(MM_CATS, MM_CATS.includes(cur) ? cur : l?.category || '')}
         <div class="grid2">
@@ -3627,7 +3670,7 @@ function listingForm(l = null) {
             <label>Seller WhatsApp<input name="seller_phone" required inputmode="tel" value="${esc(r.seller_phone || '')}"></label>
         </div>
         <p class="small muted">Shared on WhatsApp, your name and number are hidden (like A•••• S•• · 98••••••10). Members see them only inside the app.</p>
-        <button class="btn block">${l ? (l.status === 'rejected' ? 'Save and send for approval' : 'Save changes') : 'Send for approval'}</button>
+        <button class="btn block">${l ? (l.status === 'rejected' ? 'Save and send for approval' : 'Save changes') : isAdmin() ? 'Publish' : 'Send for approval'}</button>
     </form>`, body => {
         photoPicker(body, kept, removed, added, MAX);
         bindCatField(body);
@@ -3645,7 +3688,7 @@ function listingForm(l = null) {
                 added.forEach(a => URL.revokeObjectURL(a.url));
                 await load.listings(true); closeSheet();
                 if (location.hash.startsWith('#motomart')) render(); else location.hash = '#motomart';
-                toast(l && l.status !== 'rejected' ? 'Saved' : 'Sent for approval 👍');
+                toast(l && l.status !== 'rejected' ? 'Saved' : isAdmin() ? 'Live on MotoMart 👍' : 'Sent for approval 👍');
             });
         };
     });
@@ -3680,8 +3723,8 @@ function teamForm(l = null, kind = 'new') {
             <label>Their WhatsApp<input name="seller_phone" inputmode="tel" value="${esc(l ? l.seller_phone || '' : state.me.phone || '')}"></label></div></div>
         <fieldset><legend>Photo <span class="hint muted small" id="ph-hint"></span></legend>
             <div class="thumbs" id="thumbs"></div>
-            <label class="file-pick"><input type="file" accept="image/*,.heic,.heif" multiple id="pics"><span>📷 Add photo or screenshot</span></label></fieldset>
-        <button class="btn block">${l ? 'Save changes' : 'Publish'}</button>
+            <label class="file-pick"><input type="file" accept="${MM_ACCEPT}" multiple id="pics"><span>📷 Add photo or screenshot</span></label></fieldset>
+        <button class="btn block">${l ? 'Save changes' : isAdmin() ? 'Publish' : 'Send for approval'}</button>
     </form>`, body => {
         const f = body.querySelector('#tf'), pvBox = body.querySelector('#tf-pv'), link = f.link;
         const needPhoto = () => !image_url && kept.length + added.length === 0;
@@ -3705,8 +3748,9 @@ function teamForm(l = null, kind = 'new') {
         const setKind = nk => {
             k = nk;
             body.querySelectorAll('.seg [data-k]').forEach(b => b.setAttribute('aria-selected', b.dataset.k === k));
-            body.querySelector('#tf-help').textContent = k === 'new' ? 'A new accessory from a store. It goes live at once on the app and roninwb.in. Members tap “Check product” to open the store page.'
-                : 'RWB merch. It goes live at once on the app and roninwb.in, and members get a notification.';
+            const when = isAdmin() ? 'It goes live at once' : 'An admin or another coordinator approves it, then it goes live';
+            body.querySelector('#tf-help').textContent = k === 'new' ? `A new accessory from a store. ${when} on the app and roninwb.in. Members tap “Check product” to open the store page.`
+                : `RWB merch. ${when} on the app and roninwb.in, and members get a notification.`;
             body.querySelector('#link-l').innerHTML = k === 'new' ? 'Product link <span class="hint">the store page</span>' : 'Order or website link <span class="hint">optional</span>';
             link.required = k === 'new';
             body.querySelector('.tf-merch').hidden = k !== 'merch';
@@ -3738,44 +3782,17 @@ function teamForm(l = null, kind = 'new') {
                 await load.listings(true); closeSheet();
                 mmState.branch = k; mmState.cat = 'all';
                 if (location.hash.startsWith('#motomart')) render(); else location.hash = '#motomart';
-                toast(l ? 'Saved' : `Live on MotoMart${k === 'merch' ? ' · members are notified' : ''} 👍`);
+                toast(l ? 'Saved' : isAdmin() ? `Live on MotoMart${k === 'merch' ? ' · members are notified' : ''} 👍` : 'Sent for approval 👍');
             });
         };
     });
 }
 
-/* One-time move: the website's old Accessories sheet and RWB Marketplace sheet → MotoMart (no notifications). Rows already moved are skipped. */
-async function importSheetListings() {
-    const accUrl = SITE.ACCESSORIES_SHEET_URL, merchUrl = SITE.MARKET_SHEET_URL;
-    if (!accUrl && !merchUrl) return toast('The sheet links were not found', true);
-    toast('Reading the two sheets…');
-    let acc = [], merch = [];
-    try { [acc, merch] = await Promise.all([accUrl ? fetchCSV(accUrl).then(parseCSV) : [], merchUrl ? fetchCSV(merchUrl).then(parseCSV) : []]); }
-    catch { return toast('Could not read the sheets. Check your internet and try again.', true); }
-    const img = u => { const d = u ? driveImg(u) : ''; return /^https:\/\//i.test(d) ? d : ''; };
-    const rows = [
-        ...acc.filter(r => r.name).map(r => ({ kind: 'new', product_name: r.name, category: r.category || 'Other', price: r.price, link: safeLink(r.link), image_url: img(r.image), source_key: 'sheet-acc:' + r.name.trim().toLowerCase() + '|' + (r.link || '').trim() })),
-        ...merch.filter(r => r.name).map(r => ({ kind: 'merch', product_name: r.name, category: r.category || 'Other', price: r.price, details: r.description || '', image_url: img(r.image), status: /sold/i.test(r.status || '') ? 'sold' : 'live', source_key: 'sheet-merch:' + r.name.trim().toLowerCase() }))];
-    const nA = rows.filter(r => r.kind === 'new').length, nM = rows.length - nA;
-    openSheet('Import from the sheets', `<p class="small muted" style="margin-bottom:10px">Found <b>${nA}</b> accessor${nA === 1 ? 'y' : 'ies'} and <b>${nM}</b> merch item${nM === 1 ? '' : 's'}. They’re added to MotoMart quietly (no notifications). The RWB score is dropped. Rows already imported are skipped, so it’s safe to tap again.</p>
-        <p class="small muted" style="margin-bottom:14px">Pictures are read from each product link now. Items without a picture show a category icon; edit them to add a photo.</p>
-        ${rows.length ? '<button class="btn block" data-x="go">Import</button>' : '<button class="btn ghost block" data-x="ok">Nothing to import</button>'}`, body => {
-        const ok = body.querySelector('[data-x=ok]'); if (ok) ok.onclick = closeSheet;
-        const go = body.querySelector('[data-x=go]');
-        if (go) go.onclick = () => busy(go, async () => {
-            for (const r of rows) if (!r.image_url && r.link) r.image_url = (await linkPreview(r.link)).image || '';
-            const n = await api.importListings(rows);
-            await load.listings(true); closeSheet(); mmState.branch = 'all'; render();
-            toast(n ? `${n} item${n === 1 ? '' : 's'} added to MotoMart` : 'Already imported');
-        });
-    });
-}
-
 async function adminMotoMart() {
-    const pend = (await load.listings(true)).filter(l => l.status === 'pending');
+    state.myId ??= await api.myId();
+    const pend = (await load.listings(true)).filter(l => l.status === 'pending' && (isAdmin() || !mine(l)));   /* coordinators don't approve their own */
     $('#admin-body').innerHTML = pend.length ? `<p class="small muted" style="margin-bottom:10px">Check photos, price and details, then approve. Members are notified when a post goes live. You can then share it to the WhatsApp group from the post.</p><div class="mm-grid">${pend.map(listingCard).join('')}</div>`
         : '<div class="card empty"><b>All clear</b>No MotoMart posts waiting for approval.</div>';
-    state.myId ??= await api.myId();
     actions.listing = el => listingDetail(pend.find(l => String(l.id) === el.dataset.id));
 }
 
@@ -3948,6 +3965,24 @@ async function viewTeach() {
             toast(s2.live ? 'Pookie knows it now 🎓 (admin answers go live at once)' : 'Thanks! An admin will check it, then Pookie learns it 🎓');
             setTimeout(render, 900); }); };
 }
+/* coordinators: just the Teach Pookie answers to check (not their own) */
+async function coordAI() {
+    const queue = await api.admin.teachQueue();
+    const body = $('#admin-body'); if (!body) return;
+    const draw = () => {
+        const left = body.querySelectorAll('.tq-review').length; pookieBadge(left);
+        const c = $('#c-ai'); if (c) c.textContent = left ? ` (${left})` : '';
+        if (!left) body.querySelector('.tq-list').innerHTML = '<p class="muted">Nothing waiting 👍</p>';
+    };
+    body.innerHTML = `<div class="card"><h3>Answers to check${queue.length ? ` (${queue.length})` : ''}</h3>
+        <p class="small muted" style="margin:4px 0 10px">From Teach Pookie. Approve what's right (fix the wording first if needed), reject what's wrong. Pookie uses approved answers from the next question.</p>
+        <div class="tq-list">${queue.length ? queue.map(a => `<div class="tq-review" data-id="${a.id}"><p class="small muted">${esc(a.category || '')} · ${esc(a.member_name || 'member')} · ${timeAgo(a.created_at)}</p>
+            <b>${esc(a.question)}</b><textarea rows="3" maxlength="1500">${esc(a.answer)}</textarea>
+            <div class="btns"><button class="btn ghost sm" data-x="no">Reject</button><button class="btn sm" data-x="ok">Approve</button></div></div>`).join('') : '<p class="muted">Nothing waiting 👍</p>'}</div></div>`;
+    body.querySelectorAll('.tq-review').forEach(r => r.querySelectorAll('[data-x]').forEach(b => b.onclick = () => busy(b, async () => {
+        const ok = b.dataset.x === 'ok'; await api.admin.teachReview(Number(r.dataset.id), ok, r.querySelector('textarea').value.trim());
+        r.remove(); toast(ok ? 'Approved. Pookie knows it now 🎓' : 'Rejected'); draw(); })));
+}
 /* the little number on the floating Pookie bubble: answers waiting for an admin */
 function pookieBadge(n) {
     const fab = document.getElementById('pookie-fab'); if (!fab) return;
@@ -3955,6 +3990,7 @@ function pookieBadge(n) {
     b.textContent = n > 99 ? '99+' : n || ''; b.hidden = !n; fab.setAttribute('aria-label', n ? `Ask Pookie (${n} answer${n > 1 ? 's' : ''} waiting for admins)` : 'Ask Pookie, the RWB AI');
 }
 async function adminAI() {
+    if (!isAdmin()) return coordAI();
     const [queue, know] = await Promise.all([api.admin.teachQueue?.().catch(() => null), api.admin.pookieKnowledge?.().catch(() => null)]);
     const ready = queue !== null && know !== null;
     const nAns = (know || []).filter(k => k.source === 'answer').length, nGuide = (know || []).filter(k => k.source === 'guide').length, nAdm = (know || []).filter(k => k.source === 'admin').length;

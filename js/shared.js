@@ -72,8 +72,7 @@ function driveImg(u) {
     return m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w800` : u;
 }
 
-/* MotoMart (the RWB App's shop): new accessories and RWB merch listed by the RWB team. No seller details are public.
-   Falls back to the old Google Sheets if the app can't be reached. */
+/* MotoMart (the RWB App's shop): new accessories and RWB merch listed by the RWB team. No seller details are public. */
 let mmJob = null;
 function loadMotomart() {
     if (!CONFIG.APP_SUPABASE_URL) return Promise.reject(new Error('no app'));

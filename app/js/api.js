@@ -277,7 +277,6 @@ async function supabaseApi(url, key) {
             } catch (e) { if (added.length) await sb.storage.from(PHOTO_BUCKET).remove(added); throw e; }
         },
         setListingStatus: async (id, status, reason = null) => must(await sb.from('listings').update({ status, reject_reason: reason }).eq('id', id).select().single()),
-        importListings: async rows => must(await sb.rpc('admin_import_listings', { p_rows: rows })),
         async deleteListing(rec) {
             must(await sb.from('listings').delete().eq('id', rec.id));
             if (rec.photos?.length) await sb.storage.from(PHOTO_BUCKET).remove(rec.photos);
@@ -697,14 +696,13 @@ function demoApi() {
         async saveListing(rec, newFiles = [], removed = []) {
             const added = await Promise.all(newFiles.map(f => new Promise(r => { const fr = new FileReader(); fr.onload = () => r('demo:' + fr.result); fr.readAsDataURL(f); })));
             const photos = [...(rec.photos || []).filter(p => !removed.includes(p)), ...added];
-            const team = rec.kind === 'new' || rec.kind === 'merch', now = new Date().toISOString();
+            const live = ['admin', 'superadmin'].includes(me().role), now = new Date().toISOString();   /* admins: live at once; members and coordinators: approval */
             if (rec.id) { const l = db.listings.find(x => x.id === rec.id); Object.assign(l, rec, { photos, kind: l.kind || 'used' }); if (l.status === 'rejected') l.status = 'pending'; }
-            else db.listings.push({ ...rec, kind: rec.kind || 'used', photos, id: nid(), user_id: 'me', status: team ? 'live' : 'pending', created_at: now, published_at: team ? now : null });
+            else db.listings.push({ ...rec, kind: rec.kind || 'used', photos, id: nid(), user_id: 'me', status: live ? 'live' : 'pending', created_at: now, published_at: live ? now : null });
             save(); return wait(rec);
         },
         async setListingStatus(id, status, reason = null) { const l = db.listings.find(x => x.id === id); if (status === 'live' && !l.published_at) l.published_at = new Date().toISOString(); Object.assign(l, { status, reject_reason: reason, sold_at: status === 'sold' ? (l.sold_at || new Date().toISOString()) : null }); save(); return wait(l); },
         async deleteListing(rec) { db.listings = db.listings.filter(l => l.id !== rec.id); save(); },
-        importListings: rows => { let n = 0; rows.forEach(r => { if (db.listings.some(l => l.source_key === r.source_key)) return; db.listings.push({ ...r, price: Number(String(r.price).replace(/[^0-9]/g, '')) || 0, photos: [], id: nid(), user_id: 'me', status: r.status === 'sold' ? 'sold' : 'live', created_at: new Date().toISOString(), published_at: new Date().toISOString(), sold_at: r.status === 'sold' ? new Date().toISOString() : null }); n++; }); save(); return wait(n); },
         news: () => wait([...db.news].sort((a, b) => b.created_at.localeCompare(a.created_at))),
         async announce(title, body) { db.news.push({ id: nid(), kind: 'announcement', title, body, url: '#news', audience: 'all', created_at: new Date().toISOString() }); save(); },
         async deleteNews(id) { db.news = db.news.filter(n => n.id !== id); save(); },

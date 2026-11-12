@@ -208,7 +208,7 @@ loadAppEvents()
     .then(renderEvents)
     .catch(() => { $('#events-list').innerHTML = '<p class="muted">Events will be listed here soon.</p>'; });
 
-/* RWB Merch: listed by admins and coordinators in the RWB App (MotoMart → RWB Merch). The old Google Sheet is the backup.
+/* RWB Merch: listed by admins and coordinators in the RWB App (MotoMart → RWB Merch).
    Rows: name | description | price | image | category | status   (status "sold" greys out the button) */
 function renderMarket(rows) {
     const track = $('#market-track');
@@ -225,7 +225,6 @@ function renderMarket(rows) {
     }).join('');
 }
 loadMotomart().then(d => d.items.filter(i => i.kind === 'merch'))
-    .catch(() => CONFIG.MARKET_SHEET_URL ? fetchCSV(CONFIG.MARKET_SHEET_URL).then(parseCSV) : [])   /* backup: the old sheet */
     .then(renderMarket)
     .catch(() => { $('#market-track').innerHTML = '<p class="muted">Products will be listed here soon.</p>'; });
 
