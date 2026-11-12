@@ -2886,8 +2886,8 @@ async function adminGuides() {
         <div class="card gd-store">
             <div class="row"><span class="gd-store-ico">${HELP_ICON}</span><div class="grow"><b>Guides library</b><p class="small muted">${cats.map(c => GD_CATS[c][0]).join(', ')}: you can add ${cats.length > 1 ? 'to these' : 'here'}.${isAdmin() ? '' : ' You can change or delete your own items.'}</p></div></div>
             <div class="gd-meter" aria-label="Storage used"><i style="width:${pct.toFixed(1)}%"></i></div>
-            <p class="small muted">${mb(used)} of ${mb(budget)} used · ${g.db.length} item${g.db.length === 1 ? '' : 's'} · free on GitHub (${esc(st.repo || 'rwb-media')}) via jsDelivr</p>
-            ${st.ready === false ? `<p class="small gd-warn">${esc(st.why || 'Uploads aren\'t switched on yet.')}</p>` : ''}
+            <p class="small muted">${mb(used)} of ${mb(budget)} used · ${g.db.length} item${g.db.length === 1 ? '' : 's'}</p>
+            ${st.ready === false ? `<p class="small gd-warn">${state.me?.role === 'superadmin' && st.why ? esc(st.why) : 'Uploads are being set up. Please try again later.'}</p>` : ''}
         </div>
         <button class="btn block gd-up" data-act="gup">${GD_ICO.upload} Add to Guides</button>
         ${cats.length > 1 ? `<div class="seg section gd-pseg" role="tablist">${cats.map(c => `<button role="tab" aria-selected="${c === cat}" data-act="gpcat" data-c="${c}">${GD_CATS[c][0]} <span class="muted">${g.db.filter(i => i.cat === c).length}</span></button>`).join('')}</div>` : `<h3 class="gd-ptitle section">${GD_ICO[cat]} ${GD_CATS[cat][0]}</h3>`}

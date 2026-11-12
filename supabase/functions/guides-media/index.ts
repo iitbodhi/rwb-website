@@ -75,11 +75,10 @@ async function putFile(path: string, bytes: Uint8Array, message: string): Promis
     if (r.ok) { const d = await r.json(); return { sha: d.content.sha, commit: d.commit.sha }; }
     if (r.status === 409 || r.status === 502 || r.status === 503) { await new Promise((ok) => setTimeout(ok, 700 * (attempt + 1))); continue; }   // someone else saved at the same moment
     const t = await r.text();
-    if (r.status === 401 || r.status === 403) throw new Error("GitHub refused the upload. The GITHUB_TOKEN may have expired or can't write to " + GH_REPO + ".");
-    if (r.status === 404) throw new Error("GitHub can't find " + GH_REPO + ". Check the repository name and that the token can reach it.");
-    throw new Error(`GitHub said ${r.status}: ${t.slice(0, 160)}`);
+    console.error("github", r.status, t.slice(0, 300));
+    throw new Error(r.status === 401 || r.status === 403 || r.status === 404 ? "Uploads are paused for a moment. Please tell an admin." : "Couldn't save the file right now. Please try again in a minute.");
   }
-  throw new Error("GitHub is busy. Please try again in a minute.");
+  throw new Error("Couldn't save the file right now. Please try again in a minute.");
 }
 async function deleteFile(path: string | null, sha: string | null) {
   if (!path || !sha) return;
@@ -112,11 +111,11 @@ Deno.serve(async (req) => {
 
   if (op === "status") {
     const use = await asUser.rpc("guide_usage");
-    if (use.error) return json({ ready: false, why: "Run setup file 66 (guides.sql) in Supabase. " + use.error.message });
+    if (use.error) return json({ ready: false, why: "Run setup file 66 (guides.sql) in Supabase." });
     return json({ ready: !!GH_TOKEN, why: GH_TOKEN ? "" : "Add the GITHUB_TOKEN secret in Supabase → Edge Functions → Secrets.", repo: GH_REPO, ...use.data, budget: BUDGET });
   }
 
-  if (!GH_TOKEN) return fail("Guides uploads aren't switched on yet: the GITHUB_TOKEN secret is missing in Supabase.", 503);
+  if (!GH_TOKEN) return fail("Uploads are being set up. Please try again later.", 503);
 
   /* ---------- delete ---------- */
   if (op === "delete") {
@@ -168,7 +167,7 @@ Deno.serve(async (req) => {
   if (!use.error) {
     const limit = role === "superadmin" ? Infinity : role === "admin" ? PER_DAY.admin : PER_DAY.coordinator;
     if (use.data.today >= limit) return fail(`You've added ${use.data.today} items in the last 24 hours. Please add more tomorrow.`, 429);
-    if (use.data.bytes + bytes.length > BUDGET) return fail("Guides storage is full (about 900 MB). Ask Bodhi to delete old videos first.", 507);
+    if (use.data.bytes + bytes.length > BUDGET) return fail("The Guides library is full. Please ask an admin to remove some older videos first.", 507);
   }
 
   const month = new Date().toISOString().slice(0, 7);

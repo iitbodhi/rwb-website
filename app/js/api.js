@@ -354,7 +354,7 @@ async function supabaseApi(url, key) {
             const token = (await sb.auth.getSession()).data.session?.access_token;
             const r = await fetch(url + '/functions/v1/guides-media', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: key, Authorization: 'Bearer ' + token }, body: JSON.stringify({ op, ...extra }) })
                 .catch(() => { throw new Error('No internet connection. Please try again.'); });
-            const b = await r.json().catch(() => ({ error: r.status === 404 ? 'The guides-media function isn\'t deployed yet.' : `The guides-media function answered HTTP ${r.status}.` }));
+            const b = await r.json().catch(() => ({ error: r.status === 404 ? 'Uploads are being set up. Please try again later.' : `Something went wrong. Please try again in a minute.` }));
             if (b.error) throw new Error(b.error); return b;
         },
         guideStatus() { return this.guideOp('status'); },
@@ -372,7 +372,7 @@ async function supabaseApi(url, key) {
                 x.upload.onload = () => onProgress?.(1);
                 x.onload = () => { let b = {}; try { b = JSON.parse(x.responseText); } catch { /* below */ }
                     if (x.status >= 200 && x.status < 300 && b.item) resolve(b.item);
-                    else reject(new Error(b.error || (x.status === 404 ? 'The guides-media function isn\'t deployed yet.' : x.status === 413 ? 'That file is too big to send.' : `Upload failed (HTTP ${x.status}). Please try again.`))); };
+                    else reject(new Error(b.error || (x.status === 404 ? 'Uploads are being set up. Please try again later.' : x.status === 413 ? 'That file is too big to send.' : `Upload failed (HTTP ${x.status}). Please try again.`))); };
                 x.onerror = () => reject(new Error('The upload stopped. Check your internet and try again.'));
                 x.ontimeout = () => reject(new Error('The upload took too long. Try again on Wi-Fi.'));
                 x.timeout = 10 * 60e3;
