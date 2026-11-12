@@ -256,7 +256,7 @@ async function supabaseApi(url, key) {
         },
         deleteFuel: async rec => must(await sb.from('fuel_logs').delete().eq('id', rec.id)),
 
-        /* ---- Motomart ---- */
+        /* ---- MotoMart ---- */
         myId: uid,
         listings: async () => must(await sb.from('listings').select('*').order('published_at', { ascending: false, nullsFirst: true }).order('created_at', { ascending: false })),
         photoUrl: path => sb.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl,
@@ -277,6 +277,7 @@ async function supabaseApi(url, key) {
             } catch (e) { if (added.length) await sb.storage.from(PHOTO_BUCKET).remove(added); throw e; }
         },
         setListingStatus: async (id, status, reason = null) => must(await sb.from('listings').update({ status, reject_reason: reason }).eq('id', id).select().single()),
+        importListings: async rows => must(await sb.rpc('admin_import_listings', { p_rows: rows })),
         async deleteListing(rec) {
             must(await sb.from('listings').delete().eq('id', rec.id));
             if (rec.photos?.length) await sb.storage.from(PHOTO_BUCKET).remove(rec.photos);
@@ -362,7 +363,7 @@ async function supabaseApi(url, key) {
         chatNotes: async () => must(await sb.rpc('admin_get_chat_notes')),
         saveChatNotes: async notes => must(await sb.rpc('admin_set_chat_notes', { p_notes: notes })),
 
-        /* report a Motomart post or a member's profile to the RWB team / Grievance Officer (setup file 55) */
+        /* report a MotoMart post or a member's profile to the RWB team / Grievance Officer (setup file 55) */
         async report(kind, ref, label, reason, details) {
             const r = await sb.rpc('report_content', { p_kind: kind, p_ref: String(ref ?? ''), p_label: label || '', p_reason: reason, p_details: details || null });
             if (r.error && /could not find|function/i.test(r.error.message || '')) throw new Error('Reporting isn\'t set up yet. Please message an admin or email ronin.warriors.bengal@gmail.com.');
@@ -477,11 +478,17 @@ function demoApi() {
             L(1, { product_name: 'Axor Apex helmet', category: 'Helmet', size: 'L', age: '8 months', condition: 'Like new', reason: 'Upgraded to a modular', price: 4500, photos: [pic('#3d5a80', 'HELMET'), pic('#293241', 'SIDE')] }),
             L(2, { product_name: 'Rynox Stealth Evo jacket', category: 'Riding jacket', size: 'XL', age: '1 year', condition: 'Good', reason: 'Size does not fit anymore', price: 6200, photos: [pic('#6d597a', 'JACKET')], user_id: 'me', seller_name: 'Demo Rider', seller_phone: '9000000001' }),
             L(3, { product_name: 'Ronin 225 crash guard', category: 'Bike protection', age: '6 months', condition: 'Good', reason: 'Sold the bike', price: 1800, photos: [pic('#b56576', 'GUARD')], status: 'sold' }),
-            L(4, { product_name: 'Phone mount with charger', category: 'Electronics', age: '3 months', condition: 'Like new', reason: 'Got a new one as a gift', price: 900, photos: [pic('#e56b6f', 'MOUNT')], status: 'pending', published_at: null, user_id: 'u4', seller_name: 'Rahul Ghosh', seller_phone: '9000000004' })
+            L(4, { product_name: 'Phone mount with charger', category: 'Electronics', age: '3 months', condition: 'Like new', reason: 'Got a new one as a gift', price: 900, photos: [pic('#e56b6f', 'MOUNT')], status: 'pending', published_at: null, user_id: 'u4', seller_name: 'Rahul Ghosh', seller_phone: '9000000004' }),
+            L(5, { product_name: 'Rynox gloves, size M', category: 'Gloves', age: '1 month', condition: 'Like new', reason: 'Wrong size', price: 1400, photos: [pic('#5c677d', 'GLOVES')], status: 'sold', sold_at: daysAgo(3) }),
+            ...[['Mototorque crash guard for Ronin', 'Protection', 4700, '#1d3557', 'GUARD'], ['Bobo phone mount with charger', 'Navigation', 2199, '#2a9d8f', 'MOUNT'], ['Mototorque bash plate', 'Protection', 1300, '#264653', 'BASH'],
+                ['Mototorque rear rack', 'Luggage Option', 4900, '#6c584c', 'RACK'], ['Mototorque saddle stays', 'Luggage Option', 4000, '#7f5539', 'STAYS'], ['Mototorque side stand extender', 'Protection', 450, '#3a5a40', 'STAND']]
+                .map(([n, c, p, bg, t], i) => L(10 + i, { kind: 'new', product_name: n, category: c, price: p, link: 'https://mototorque.in/', photos: [pic(bg, t)], user_id: 'me', seller_name: null, seller_phone: null, condition: null })),
+            L(20, { kind: 'merch', product_name: 'RWB Jersey (Wanderer)', category: 'Clothing', price: 999, details: 'Essence of Light tone with silhouette adventure print.', photos: [pic('#d4501a', 'JERSEY')], user_id: 'me', seller_name: 'Demo Rider', seller_phone: '9000000001', condition: null }),
+            L(21, { kind: 'merch', product_name: 'RWB Sticker (Special Edition)', category: 'Stickers', price: 50, details: '3D embossed matte & glossy waterproof.', photos: [pic('#111111', 'STICKER')], user_id: 'me', seller_name: null, seller_phone: null, condition: null, status: 'sold', sold_at: daysAgo(30) })
         ];
         const news = [
             { id: 1, kind: 'announcement', title: 'Sunday breakfast ride ☕', body: 'Meet at Nicco Park gate, 6:00 AM sharp. Route to Kolaghat. Full tank please!', url: '#news', audience: 'all', created_at: new Date(Date.now() - 36e5 * 5).toISOString() },
-            { id: 2, kind: 'motomart', title: 'New on RWB Motomart', body: 'Axor Apex helmet · ₹4,500', url: '#motomart/1', audience: 'all', created_at: new Date(Date.now() - 36e5 * 26).toISOString() },
+            { id: 2, kind: 'motomart', title: 'New on RWB MotoMart', body: 'Axor Apex helmet · ₹4,500', url: '#motomart/1', audience: 'all', created_at: new Date(Date.now() - 36e5 * 26).toISOString() },
             { id: 3, kind: 'member', title: 'A new Ronin joined the app 🏍️', body: 'Say hello to Rahul Ghosh!', url: '#home', audience: 'all', created_at: new Date(Date.now() - 36e5 * 50).toISOString() }
         ];
         return { signedIn: false, members, services, fuel, requests, listings, news, nextId: 100 };
@@ -690,12 +697,14 @@ function demoApi() {
         async saveListing(rec, newFiles = [], removed = []) {
             const added = await Promise.all(newFiles.map(f => new Promise(r => { const fr = new FileReader(); fr.onload = () => r('demo:' + fr.result); fr.readAsDataURL(f); })));
             const photos = [...(rec.photos || []).filter(p => !removed.includes(p)), ...added];
-            if (rec.id) { const l = db.listings.find(x => x.id === rec.id); Object.assign(l, rec, { photos }); if (l.status === 'rejected') l.status = 'pending'; }
-            else db.listings.push({ ...rec, photos, id: nid(), user_id: 'me', status: 'pending', created_at: new Date().toISOString(), published_at: null });
+            const team = rec.kind === 'new' || rec.kind === 'merch', now = new Date().toISOString();
+            if (rec.id) { const l = db.listings.find(x => x.id === rec.id); Object.assign(l, rec, { photos, kind: l.kind || 'used' }); if (l.status === 'rejected') l.status = 'pending'; }
+            else db.listings.push({ ...rec, kind: rec.kind || 'used', photos, id: nid(), user_id: 'me', status: team ? 'live' : 'pending', created_at: now, published_at: team ? now : null });
             save(); return wait(rec);
         },
-        async setListingStatus(id, status, reason = null) { const l = db.listings.find(x => x.id === id); if (status === 'live' && !l.published_at) l.published_at = new Date().toISOString(); Object.assign(l, { status, reject_reason: reason }); save(); return wait(l); },
+        async setListingStatus(id, status, reason = null) { const l = db.listings.find(x => x.id === id); if (status === 'live' && !l.published_at) l.published_at = new Date().toISOString(); Object.assign(l, { status, reject_reason: reason, sold_at: status === 'sold' ? (l.sold_at || new Date().toISOString()) : null }); save(); return wait(l); },
         async deleteListing(rec) { db.listings = db.listings.filter(l => l.id !== rec.id); save(); },
+        importListings: rows => { let n = 0; rows.forEach(r => { if (db.listings.some(l => l.source_key === r.source_key)) return; db.listings.push({ ...r, price: Number(String(r.price).replace(/[^0-9]/g, '')) || 0, photos: [], id: nid(), user_id: 'me', status: r.status === 'sold' ? 'sold' : 'live', created_at: new Date().toISOString(), published_at: new Date().toISOString(), sold_at: r.status === 'sold' ? new Date().toISOString() : null }); n++; }); save(); return wait(n); },
         news: () => wait([...db.news].sort((a, b) => b.created_at.localeCompare(a.created_at))),
         async announce(title, body) { db.news.push({ id: nid(), kind: 'announcement', title, body, url: '#news', audience: 'all', created_at: new Date().toISOString() }); save(); },
         async deleteNews(id) { db.news = db.news.filter(n => n.id !== id); save(); },

@@ -208,24 +208,26 @@ loadAppEvents()
     .then(renderEvents)
     .catch(() => { $('#events-list').innerHTML = '<p class="muted">Events will be listed here soon.</p>'; });
 
-/* Marketplace (rows come from a Google Sheet)
-   Columns: name | description | price | image | category | status   (status "sold" greys out the button) */
-function renderMarket(csvText) {
-    const track = $('#market-track'), rows = parseCSV(csvText).filter(r => r.name);
+/* RWB Merch: listed by admins and coordinators in the RWB App (MotoMart → RWB Merch). The old Google Sheet is the backup.
+   Rows: name | description | price | image | category | status   (status "sold" greys out the button) */
+function renderMarket(rows) {
+    const track = $('#market-track');
+    rows = rows.filter(r => r.name);
     if (!rows.length) { track.innerHTML = '<p class="muted">New products are on the way. Check back soon.</p>'; return; }
     track.innerHTML = rows.map(r => {
-        const sold = /sold/i.test(r.status || ''), price = rupees(r.price);
+        const sold = /sold/i.test(r.status || ''), price = typeof r.price === 'number' ? inr(r.price) : rupees(r.price);
         const img = r.image ? `<img src="${esc(driveImg(r.image))}" alt="${esc(r.name)}" loading="lazy" referrerpolicy="no-referrer">`
                             : `<img class="ph" src="assets/logo.png" alt="">`;
-        return `<article class="prod"><div class="prod-img">${img}${r.category ? `<em>${esc(r.category)}</em>` : ''}</div>
-            <div class="prod-body"><h3>${esc(r.name)}</h3><p>${esc(r.description)}</p>
+        return `<article class="prod${sold ? ' sold' : ''}"><div class="prod-img">${img}${r.category ? `<em>${esc(r.category)}</em>` : ''}</div>
+            <div class="prod-body"><h3>${esc(r.name)}</h3><p>${esc(r.description || '')}</p>
             ${price ? `<div class="price">${esc(price)}</div>` : ''}
             <a class="btn ${sold ? 'off' : ''}" href="${CONFIG.INSTAGRAM_DM_URL}" target="_blank" rel="noopener">${sold ? 'Sold out' : 'Contact to order'}</a></div></article>`;
     }).join('');
 }
-if (CONFIG.MARKET_SHEET_URL) fetchCSV(CONFIG.MARKET_SHEET_URL).then(renderMarket)
+loadMotomart().then(d => d.items.filter(i => i.kind === 'merch'))
+    .catch(() => CONFIG.MARKET_SHEET_URL ? fetchCSV(CONFIG.MARKET_SHEET_URL).then(parseCSV) : [])   /* backup: the old sheet */
+    .then(renderMarket)
     .catch(() => { $('#market-track').innerHTML = '<p class="muted">Products will be listed here soon.</p>'; });
-else $('#market-track').innerHTML = '<p class="muted">New products are on the way. Check back soon.</p>';
 
 /* The RWB App section: the right buttons for this phone, and the promo video (plays muted when on screen; tap for sound) */
 (function appSection() {

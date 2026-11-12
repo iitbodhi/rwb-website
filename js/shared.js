@@ -72,6 +72,18 @@ function driveImg(u) {
     return m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w800` : u;
 }
 
+/* MotoMart (the RWB App's shop): new accessories and RWB merch listed by the RWB team. No seller details are public.
+   Falls back to the old Google Sheets if the app can't be reached. */
+let mmJob = null;
+function loadMotomart() {
+    if (!CONFIG.APP_SUPABASE_URL) return Promise.reject(new Error('no app'));
+    return mmJob ||= fetch(CONFIG.APP_SUPABASE_URL + '/rest/v1/rpc/public_motomart', { method: 'POST', headers: { apikey: CONFIG.APP_SUPABASE_KEY, Authorization: 'Bearer ' + CONFIG.APP_SUPABASE_KEY, 'Content-Type': 'application/json' }, body: '{}' })
+        .then(r => { if (!r.ok) throw new Error('app'); return r.json(); })
+        .then(d => ({ used: d.used_count || 0, items: (d.items || []).map(i => ({ ...i,
+            image: i.photo ? `${CONFIG.APP_SUPABASE_URL}/storage/v1/object/public/motomart/${i.photo}` : i.image_url || '' })) }));
+}
+const inr = n => '₹' + Number(n).toLocaleString('en-IN');
+
 /* ===== Motion: scroll reveals, split headings, nav and scroll progress ===== */
 (function motion() {
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;

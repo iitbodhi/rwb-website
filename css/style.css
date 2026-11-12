@@ -607,3 +607,10 @@ body{background:transparent}
 .ax-head{margin-bottom:1.8rem}
 .ax-title{font-size:clamp(3rem,9vw,6rem)}
 @media (max-width:820px){.ax-grid article{padding:.8rem .75rem}.ax-grid b{font-size:1.05rem}.ax-grid p{font-size:.78rem}}
+/* Ronin Accessories from MotoMart (Nov 2026) */
+.acc.sold{opacity:.6}
+.acc.sold .acc-img img{filter:grayscale(1)}
+.acc.sold .price{text-decoration:line-through;color:var(--muted)}
+.acc-used{margin-top:.8rem;font-size:.95rem;color:var(--stone)}
+.acc-used a{color:var(--orange);font-weight:600}
+.prod.sold .prod-img img{filter:grayscale(1);opacity:.7}

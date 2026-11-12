@@ -6,7 +6,7 @@ window.RWB_TNC = {
 
     ['About RWB and these Terms', [
         'Ronin Warriors of Bengal (“RWB”, “we”, “us”) is a free, non-profit, volunteer-run community of TVS Ronin owners in West Bengal. RWB is not a company and is not affiliated with, endorsed by or sponsored by TVS Motor Company.',
-        'These Terms & Conditions (“Terms”) apply to everyone who joins or takes part in RWB: the RWB WhatsApp groups and channel, rides and events, the RWB App (roninwb.in/app), the website roninwb.in and RWB Motomart.',
+        'These Terms & Conditions (“Terms”) apply to everyone who joins or takes part in RWB: the RWB WhatsApp groups and channel, rides and events, the RWB App (roninwb.in/app), the website roninwb.in and RWB MotoMart.',
         'By submitting the RWB join form (choosing “Understood & agreed”), agreeing in the RWB App, or continuing as a member, you confirm that you have read, understood and agree to these Terms and to the RWB Privacy Policy (roninwb.in/privacy.html). If you do not agree, please do not join, or leave RWB.'
     ]],
     ['Eligibility and membership', [
@@ -27,7 +27,7 @@ window.RWB_TNC = {
     ]],
     ['RWB FAM (family of members)', [
         'An RWB member may invite up to three family members (“RWB FAM”) to a limited, read-only version of the RWB App, using their personal invite link or code. RWB FAM users are not RWB members and have no membership rights.',
-        'RWB FAM users can see their inviting member’s odometer and live location while that member shares it on Track (and riders on the same event ride), RWB events, important RWB announcements, the member list as a member sees it, and the VRN check. They cannot RSVP, see or add expenses, share their own location, send SOS, or use Motomart, Service, Mileage or Pookie.',
+        'RWB FAM users can see their inviting member’s odometer and live location while that member shares it on Track (and riders on the same event ride), RWB events, important RWB announcements, the member list as a member sees it, and the VRN check. They cannot RSVP, see or add expenses, share their own location, send SOS, or use MotoMart, Service, Mileage or Pookie.',
         'A member must invite only family who agree to it, and is responsible for what they share. RWB FAM users must keep what they see private and use it only to stay informed about their family member’s safety.',
         'RWB FAM users sign in with a Google account of their choice and must remember it; RWB cannot recover it for them, only the inviting member can help. They can turn RWB FAM off at any time in Me (nothing is shared with them while it is off) and can alert the RWB admins if they were added without consent.',
         'The inviting member and RWB admins can remove an RWB FAM user at any time. When a member leaves or is removed from RWB, their RWB FAM users lose access too.'
@@ -54,14 +54,14 @@ window.RWB_TNC = {
         'Never use your phone or the RWB App while riding. Start Track before you set off; it keeps sharing on its own. Pull over safely before you check the map, reply to messages or send an SOS.',
         'Track and SOS help the RWB team and your family find you, but they are not an emergency service and depend on your phone, battery, GPS and mobile network. In an emergency, always call 112 first.'
     ]],
-    ['RWB App, website and Motomart', [
+    ['RWB App, website and MotoMart', [
         'The RWB App and website are provided free, “as is” and “as available”, by volunteers. We do our best to keep them accurate and running, but we cannot promise they will always be available, error-free or secure.',
-        'Mileage, service reminders, calendar reminders and dates (renewals, service and parts due), maintenance guides, gear scores and answers from Pookie (the AI assistant) are for general guidance only. Always follow your bike\'s owner manual and a qualified mechanic, and check important information yourself. Reminders can arrive late or not at all (for example with notifications turned off or no internet), so you remain responsible for renewing your documents and servicing your bike on time.',
-        'Motomart is a notice board for members. Every sale is directly between the buyer and the seller: RWB does not handle money, check items or guarantee any transaction. Inspect items yourself, never pay in advance to people you don\'t know, and report suspicious posts to an admin.',
+        'Mileage, service reminders, calendar reminders and dates (renewals, service and parts due), maintenance guides, accessory picks and answers from Pookie (the AI assistant) are for general guidance only. Always follow your bike\'s owner manual and a qualified mechanic, and check important information yourself. Reminders can arrive late or not at all (for example with notifications turned off or no internet), so you remain responsible for renewing your documents and servicing your bike on time.',
+        'MotoMart is a notice board for members. New accessories listed by the RWB team are suggestions with links to outside stores: RWB does not sell them, and you buy them from the store on its own terms, price and warranty. For used gear, every sale is directly between the buyer and the seller: RWB does not handle money, check items or guarantee any transaction. Inspect items yourself, never pay in advance to people you don\'t know, and report suspicious posts to an admin.',
         'Sellers must own what they sell, describe it honestly, and must not list stolen, counterfeit, illegal or unsafe items. RWB coordinators may approve, edit or remove posts.',
         'Shared expense records in Events are a convenience only. Settling payments is between the members involved.',
         'Documents you save in the app (such as your licence or RC) are visible only to you. You are responsible for keeping copies of anything important.',
-        'Things you add for other members to see (such as Motomart posts and photos, and answers in Teach Pookie) must be your own, true to the best of your knowledge, and lawful. You allow RWB to show, store, edit and use them free of charge within the RWB App and website for the community; for Teach Pookie, approved answers become part of what Pookie (the AI assistant) uses to answer members. You can ask an admin to remove what you added.',
+        'Things you add for other members to see (such as MotoMart posts and photos, and answers in Teach Pookie) must be your own, true to the best of your knowledge, and lawful. You allow RWB to show, store, edit and use them free of charge within the RWB App and website for the community; for Teach Pookie, approved answers become part of what Pookie (the AI assistant) uses to answer members. You can ask an admin to remove what you added.',
         'Warriorboards (leaderboards), XP and ranks are for fun and have no money value. RWB admins may correct or remove scores, or remove someone from a board, if they look wrong or were gained unfairly (for example fake rides, fake readings or copied answers).'
     ]],
     ['Photos, videos and social media', [
@@ -70,7 +70,7 @@ window.RWB_TNC = {
         'Do not use the RWB name or logo for any commercial purpose, or to speak on behalf of RWB, without written permission from the RWB admins.'
     ]],
     ['Limitation of liability', [
-        'To the fullest extent permitted by law, RWB, its admins, coordinators, ride leads and volunteers are not liable for any accident, injury, death, loss, theft, damage, fine or penalty arising from rides, events, meet-ups, Motomart transactions, or your use of the RWB App and website.',
+        'To the fullest extent permitted by law, RWB, its admins, coordinators, ride leads and volunteers are not liable for any accident, injury, death, loss, theft, damage, fine or penalty arising from rides, events, meet-ups, MotoMart transactions, or your use of the RWB App and website.',
         'Nothing in these Terms limits any liability that cannot be limited under the law of India.',
         'You agree to take responsibility for your own actions, and for any claim, loss or damage caused by your breach of these Terms or of the law.'
     ]],
@@ -85,7 +85,7 @@ window.RWB_TNC = {
         'Members will be told about important changes in the RWB App or the WhatsApp groups, and may be asked to agree again. Continuing as a member after a change means you accept the updated Terms.'
     ]],
     ['Reporting content and complaints (Grievance Officer)', [
-        'If you see anything in the RWB App or website that is unlawful, harmful, abusive, misleading, a scam, an impersonation, or that shares someone\'s private details or images without consent, report it: tap Report on the Motomart post or chat message, or write to the Grievance Officer.',
+        'If you see anything in the RWB App or website that is unlawful, harmful, abusive, misleading, a scam, an impersonation, or that shares someone\'s private details or images without consent, report it: tap Report on the MotoMart post or chat message, or write to the Grievance Officer.',
         'Grievance Officer: Sayantan Sarkar, Ronin Warriors of Bengal, Kolkata, West Bengal. Email: ronin.warriors.bengal@gmail.com (subject “Grievance”). We acknowledge every complaint within 24 hours and resolve it within 7 days.',
         'Content that shows nudity or sexual acts, impersonates someone, or is a morphed or fake image of a person is removed within 2 hours of a complaint by that person or someone on their behalf. Content we are told to remove by a court order or an authorised government officer is removed within the time the law sets.',
         'Admins may remove content, and suspend or remove members, who break these Terms or the law. Where the law requires, we keep the relevant records and share them with the authorities.'

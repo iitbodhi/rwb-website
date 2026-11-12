@@ -1,14 +1,12 @@
 /* RWB — Ronin Accessories page.
-   Sheet columns: name | category | score | link | price | image (optional) */
+   Listed by admins and coordinators in the RWB App (MotoMart → New). The old Google Sheet is only a backup
+   (columns: name | category | link | price | image). */
 const list = $('#acc-list'), toolbar = $('#acc-toolbar'), countEl = $('#acc-count');
 let items = [];
-const view = { category: 'all', sort: 'default' };
+const view = { category: 'all', sort: 'price-asc' };
 const SORTS = {
-    default: 'Default order',
     'price-asc': 'Price, low to high',
-    'price-desc': 'Price, high to low',
-    'rating-desc': 'Rating, high to low',
-    'rating-asc': 'Rating, low to high'
+    'price-desc': 'Price, high to low'
 };
 const safeLink = u => /^https?:\/\//i.test(u) ? u : '';
 
@@ -17,14 +15,11 @@ function priceNum(p) {
     const m = String(p || '').match(/\d[\d,]*(?:\.\d+)?/);
     return m ? parseFloat(m[0].replace(/,/g, '')) : null;
 }
-function scoreNum(s) { const n = parseFloat(s); return isNaN(n) ? null : Math.max(0, Math.min(5, n)); }
 function sortItems(arr) {
-    const [key, dir] = view.sort.split('-');
-    if (!dir) return arr;
-    const val = i => key === 'price' ? priceNum(i.price) : scoreNum(i.score);
-    const sign = dir === 'asc' ? 1 : -1;
+    const sign = view.sort === 'price-asc' ? 1 : -1, sold = i => /sold/i.test(i.status || '');
     return [...arr].sort((a, b) => {
-        const x = val(a), y = val(b);
+        if (sold(a) !== sold(b)) return sold(a) ? 1 : -1;   /* sold out always last */
+        const x = priceNum(a.price), y = priceNum(b.price);
         if (x === null && y === null) return 0;
         if (x === null) return 1;
         if (y === null) return -1;
@@ -33,7 +28,7 @@ function sortItems(arr) {
 }
 
 /* ---------- website preview image ----------
-   1) the optional "image" column in the sheet wins (direct image link or Google Drive share link)
+   1) the picture saved with the listing wins
    2) otherwise the product link is read by a free link-preview service (microlink.io) to find its picture */
 const previewJobs = new Map();
 function getPreview(url) {
@@ -74,19 +69,18 @@ function draw() {
     const shown = sortItems(filtered);
     countEl.textContent = items.length ? `Showing ${shown.length} of ${items.length} products` : '';
     list.innerHTML = shown.length ? shown.map(i => {
-        const score = scoreNum(i.score) ?? 0, link = safeLink(i.link), price = rupees(i.price), own = i.image ? driveImg(i.image) : '';
+        const link = safeLink(i.link), price = typeof i.price === 'number' ? inr(i.price) : rupees(i.price), own = i.image ? driveImg(i.image) : '', sold = /sold/i.test(i.status || '');
         const thumb = own ? `<div class="acc-img" data-src="${esc(own)}"></div>` : link ? `<div class="acc-img" data-link="${esc(link)}"></div>` : '';
-        return `<article class="acc">${thumb}
+        return `<article class="acc${sold ? ' sold' : ''}">${thumb}
             <div class="acc-body">
                 ${i.category ? `<span class="acc-cat">${esc(i.category)}</span>` : ''}
                 <h3>${esc(i.name)}</h3>
                 <div class="acc-row">
-                    <div><span class="stars" style="--s:${score}" role="img" aria-label="RWB score ${score} out of 5">★★★★★</span><span class="acc-score">RWB score ${score}/5</span></div>
-                    ${price ? `<b class="price">${esc(price)}</b>` : ''}
+                    ${price ? `<b class="price">${esc(price)}</b>` : ''}${sold ? '<span class="acc-score">Sold out</span>' : ''}
                 </div>
-                ${link ? `<a class="btn btn-sm" href="${esc(link)}" target="_blank" rel="noopener noreferrer">View product</a>` : ''}
+                ${link && !sold ? `<a class="btn btn-sm" href="${esc(link)}" target="_blank" rel="noopener noreferrer">Check product</a>` : ''}
             </div></article>`;
-    }).join('') : `<p class="muted">${items.length ? 'No products in this category.' : 'Recommended gear will be listed here soon.'}</p>`;
+    }).join('') : `<p class="muted">${items.length ? 'No products in this category.' : 'Accessories will be listed here soon.'}</p>`;
     $$('#acc-list .acc-img').forEach(box => box.dataset.src ? setThumb(box, box.dataset.src) : thumbObs.observe(box));
 }
 
@@ -106,10 +100,10 @@ function refreshToolbar() {
     buildMenu('sort', Object.entries(SORTS), view.sort);
     const fBtn = menus.filter.querySelector('.chip'), sBtn = menus.sort.querySelector('.chip');
     fBtn.textContent = view.category === 'all' ? 'Filter' : 'Filter: ' + view.category;
-    sBtn.textContent = view.sort === 'default' ? 'Sort' : 'Sort: ' + SORTS[view.sort];
+    sBtn.textContent = 'Sort: ' + SORTS[view.sort];
     fBtn.classList.toggle('on', view.category !== 'all');
-    sBtn.classList.toggle('on', view.sort !== 'default');
-    $('#acc-clear').hidden = view.category === 'all' && view.sort === 'default';
+    sBtn.classList.toggle('on', view.sort !== 'price-asc');
+    $('#acc-clear').hidden = view.category === 'all' && view.sort === 'price-asc';
     menus.filter.hidden = cats.length < 2;
 }
 Object.entries(menus).forEach(([name, m]) => {
@@ -128,13 +122,18 @@ Object.entries(menus).forEach(([name, m]) => {
 });
 document.addEventListener('click', () => closeMenus());
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenus(); });
-$('#acc-clear').addEventListener('click', () => { view.category = 'all'; view.sort = 'default'; refreshToolbar(); draw(); });
+$('#acc-clear').addEventListener('click', () => { view.category = 'all'; view.sort = 'price-asc'; refreshToolbar(); draw(); });
 
 (async () => {
-    if (!CONFIG.ACCESSORIES_SHEET_URL) { draw(); return; }
+    const show = () => { if (items.length) { toolbar.hidden = false; refreshToolbar(); } draw(); };
     try {
-        items = parseCSV(await fetchCSV(CONFIG.ACCESSORIES_SHEET_URL)).filter(r => r.name);
-        if (items.length) { toolbar.hidden = false; refreshToolbar(); }
-        draw();
-    } catch { list.innerHTML = '<p class="muted">Recommendations could not be loaded. Please try again later.</p>'; }
+        const d = await loadMotomart();
+        items = d.items.filter(i => i.kind === 'new');
+        const used = $('#acc-used');
+        if (used && d.used) { used.innerHTML = `<b>${d.used}</b> used item${d.used === 1 ? '' : 's'} for sale by members right now in <a href="app/#motomart/used">MotoMart in the RWB App</a>.`; used.hidden = false; }
+        show(); return;
+    } catch { /* the app can't be reached: use the old sheet */ }
+    if (!CONFIG.ACCESSORIES_SHEET_URL) { draw(); return; }
+    try { items = parseCSV(await fetchCSV(CONFIG.ACCESSORIES_SHEET_URL)).filter(r => r.name); show(); }
+    catch { list.innerHTML = '<p class="muted">Accessories could not be loaded. Please try again later.</p>'; }
 })();

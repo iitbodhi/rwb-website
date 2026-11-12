@@ -64,14 +64,19 @@ Battery 12 V 6 Ah maintenance-free. Running-in: under about 50 km/h for the firs
 750 to 1,000 km. A warning lamp (engine MIL, ABS, ISG) that stays ON means a fault: get it checked. TVS customer care 1800-258-7111.
 
 THE RWB APP
-Bottom tabs: Home, Service, Mileage, Track (middle), Motomart, Warriors, Events. Top right: bell = News, photo = Me.
-- Home: birthdays, quick buttons (Sell gear, Documents, FAM), latest news, fresh Motomart items, Explore: Teach Pookie,
-  Maintenance guides (PDFs), Recommended gear (scored by RWB).
+Bottom tabs: Home, Service, Mileage, Track (middle), MotoMart, Warriors, Events. Top right: bell = News, photo = Me.
+- Home: birthdays, quick buttons (Sell gear, Documents, FAM), latest news, fresh MotoMart items, Explore: Teach Pookie,
+  Maintenance guides (PDFs), New accessories (opens MotoMart → New).
 - Service: log each service (date, km, type, work done, cost, next due, bill photo/PDF).
 - Mileage: "+ Add fuel" after each fill. Fill to full and reset Trip A; next time fill to full, enter litres and Trip A km.
   Top-ups: turn "Full tank" off and don't reset Trip A.
 - Track: live location on group rides and SOS to the RWB team.
-- Motomart: buy and sell used gear inside RWB; posts go live after admin approval; buyers message the seller on WhatsApp.
+- MotoMart: one shop with tabs All, New, Used and RWB Merch, round category buttons, a search icon (top right) and sort
+  (price low to high by default). Used = members sell their own gear: "+ Sell something", live after an admin or coordinator
+  approves it, buyers message the seller on WhatsApp; mark it sold and it greys out, then it's deleted after 15 days.
+  WhatsApp shares hide the seller's name and number (contact only inside the app). New = new accessories listed by admins
+  and coordinators ("+ List accessory"); "Check product" opens the store page; RWB doesn't sell them. RWB Merch = official
+  RWB jerseys, stickers etc., listed by the team; "Order on WhatsApp". New accessories and merch also show on roninwb.in.
 - Warriors: members and leaderboards. Events: rides, RSVPs and shared expenses.
 - Me: profile, bikes (up to 3), notifications, what other members can see, sign out.
 - Teach Pookie: answer Pookie's questions, earn XP; admins check answers before Pookie uses them.
@@ -124,7 +129,21 @@ async function siteRows(): Promise<K[]> {
       if (guideList.length) rows.push(prep({ title: "RWB maintenance guides list (Home → Explore → Maintenance guides)", source: "site",
         content: guideList.slice(0, 60).map((p) => pdfTitle(p.name) + (p.description ? `: ${p.description}` : "")).join("; ") }));
     }
-    if (gear.status === "fulfilled" && gear.value) {
+    /* MotoMart's new accessories and merch (setup file 65); the old gear sheet is only the backup */
+    let shop = false;
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/rpc/public_motomart`, { method: "POST", signal: AbortSignal.timeout(3500),
+        headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, "Content-Type": "application/json" }, body: "{}" });
+      if (r.ok) {
+        const d = await r.json(); shop = true;
+        for (const i of (d.items || []).slice(0, 150)) {
+          const what = i.kind === "merch" ? "RWB merch" : "New accessory in MotoMart (picked by the RWB team)";
+          rows.push(prep({ title: `${what}: ${i.name} (${i.category || "-"})`, source: "gear",
+            content: `${what}: ${i.name}, category ${i.category || "-"}, price ₹${i.price}${i.status === "sold" ? " (sold out)" : ""}. In the app: MotoMart → ${i.kind === "merch" ? "RWB Merch" : "New"}${i.link ? ", store link " + i.link : ""}.` }));
+        }
+      }
+    } catch (_) { /* use the sheet */ }
+    if (!shop && gear.status === "fulfilled" && gear.value) {
       for (const line of String(gear.value).split(/\r?\n/).slice(1).filter(Boolean).slice(0, 150)) {
         const c = line.split(",");
         rows.push(prep({ title: `RWB recommended gear: ${c[0]} (${c[1] || "accessory"})`, source: "gear",

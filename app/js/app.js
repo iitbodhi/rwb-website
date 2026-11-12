@@ -11,7 +11,7 @@ const app = $('#app'), tabbar = $('#tabbar'), sheet = $('#sheet');
 let api;
 const state = { me: null, services: null, fuel: null, bdays: null, guides: null, acc: null, guideTab: 'maint', accCat: 'all', accSort: 'default', adminTab: 'requests', adminMembers: null, adminSearch: '' };
 const isAdmin = () => ['admin', 'superadmin'].includes(state.me?.role);
-const isMod = () => ['coordinator', 'admin', 'superadmin'].includes(state.me?.role);   /* Motomart moderators */
+const isMod = () => ['coordinator', 'admin', 'superadmin'].includes(state.me?.role);   /* MotoMart moderators */
 const ROLE = { superadmin: 'Admin', admin: 'Admin', coordinator: 'Coordinator', member: 'Member' };
 const TEAM_ORDER = { superadmin: 0, admin: 1, coordinator: 2 };
 const isTeam = m => m.role in TEAM_ORDER;
@@ -159,7 +159,7 @@ function mileageStats(logs) {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { calendar: viewCalendar, videos: viewVideos, docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotomart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, teach: viewTeach, ride: viewRide, crew: viewCrew, members: viewMembers, events: viewEvents, terms: viewTerms, track: viewTrack };
+const ROUTES = { calendar: viewCalendar, videos: viewVideos, docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotoMart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, teach: viewTeach, ride: viewRide, crew: viewCrew, members: viewMembers, events: viewEvents, terms: viewTerms, track: viewTrack };
 /* roninwb.in/app/#terms: Me screen with the Terms & Conditions open, ready to agree */
 function viewTerms() {
     history.replaceState(null, '', '#me'); document.body.dataset.route = 'me';
@@ -1067,7 +1067,7 @@ async function viewHome() {
     firstNotifAsk();
     let pushAsk = false; try { pushAsk = NATIVE ? !localStorage.getItem(FCM_KEY) && !localStorage.getItem('rwb-push-dismissed') : pushSupported() && Notification.permission === 'default' && !localStorage.getItem('rwb-push-dismissed'); } catch { /* ignore */ }
     const names = today.map(b => b.full_name.split(' ')[0]);
-    /* "Clear" hides birthdays, Motomart and member updates on this phone; admin announcements stay until an admin deletes them */
+    /* "Clear" hides birthdays, MotoMart and member updates on this phone; admin announcements stay until an admin deletes them */
     const feed = visibleNews(news);
     app.innerHTML = top(`Hi, ${firstName(state.me)}`) + `
         ${rideWidget(services, fuel, ride)}
@@ -1083,26 +1083,26 @@ async function viewHome() {
             <div class="ad-grid">
                 <a href="#admin" data-adtab="requests"><span class="ad-ico">${ICON.approve}</span>Approvals<i class="ad-n" id="ad-req" hidden></i></a>
                 <a href="#admin" data-adtab="members"><span class="ad-ico">${ICON.members}</span>Members</a>
-                <a href="#admin" data-adtab="motomart"><span class="ad-ico">${ICON.cart}</span>Motomart<i class="ad-n" id="ad-mm" hidden></i></a>
+                <a href="#admin" data-adtab="motomart"><span class="ad-ico">${ICON.cart}</span>MotoMart<i class="ad-n" id="ad-mm" hidden></i></a>
                 <a href="#admin" data-adtab="bdays"><span class="ad-ico">${ICON.cake}</span>Birthdays</a>
             </div><a class="ad-dupes" href="#admin" data-adtab="dupes" id="ad-dupes" hidden></a><a class="ad-dupes" href="#admin" data-adtab="ai" id="ad-pookie" hidden></a></section>` : isMod() ? '<a class="banner admin" href="#admin" id="admin-banner" hidden></a>' : ''}
         ${profileTodo(state.me)}
         ${docWarn ? `<a class="banner doc-warn ${docWarn.st.level}" href="#docs"><span class="b-ico">${ICON.file}</span><span class="grow"><b>${esc(docName(docWarn.d))}</b> ${docWarn.st.days < 0 ? `expired on ${fmtDate(docWarn.d.expiry_date)}` : docWarn.st.days === 0 ? 'expires today' : `expires in ${docWarn.st.days} day${docWarn.st.days === 1 ? '' : 's'}`}. Renew it and update My documents.</span>${ICON.chev}</a>` : ''}
         ${nextEvt ? `<div class="home-evt">${eventCard(nextEvt, evd)}</div>` : ''}
         ${today.length ? `<div class="banner bday"><span class="b-ico">${ICON.cake}</span><span class="grow"><b>${esc(names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : names[0])}</b> ${names.length > 1 ? 'have' : 'has'} a birthday today</span><button class="btn sm wa" data-act="wish">Wish</button></div>` : ''}
-        ${pushAsk ? `<div class="banner"><span class="b-ico">${ICON.bell}</span><span class="grow">${isMod() ? 'Get birthdays, Motomart posts and ride news as notifications' : 'Get ride news, events and Motomart posts as notifications'}</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
+        ${pushAsk ? `<div class="banner"><span class="b-ico">${ICON.bell}</span><span class="grow">${isMod() ? 'Get birthdays, MotoMart posts and ride news as notifications' : 'Get ride news, events and MotoMart posts as notifications'}</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
         ${vrnCheckCard()}
         ${feed.length ? `<section class="section"><h2>Latest from RWB <span class="h-acts"><button data-act="clear-feed">Clear</button><a href="#news">See all</a></span></h2><div class="group news-mini">${feed.slice(0, 3).map(n => newsRow(n, false, true)).join('')}</div></section>` : ''}
-        <section class="section"><h2>Fresh on Motomart <a href="#motomart">See all</a></h2>
+        <section class="section"><h2>Fresh on MotoMart <a href="#motomart">See all</a></h2>
             ${fresh.length ? `<div class="strip">${fresh.map(listingCard).join('')}</div>` : `<a class="group-row-card" href="#motomart"><span class="g-ico">${ICON.tag}</span><span class="grow"><b>Nothing for sale yet</b><span class="small muted">Selling old gear? Post it here for fellow riders.</span></span>${ICON.chev}</a>`}</section>
         <section class="section"><h2>Explore</h2><div class="group">
             <a href="#teach"><span class="g-ico">${ICON.chat}</span><span class="grow"><b>Teach Pookie</b><span class="small muted" id="teach-sub">Answer Pookie's Ronin questions, earn XP and help every rider</span></span>${ICON.chev}</a>
             <a href="#guides" data-guide="maint"><span class="g-ico">${ICON.book}</span><span class="grow"><b>Maintenance guides</b><span class="small muted">How-tos and checklists from our coordinators</span></span>${ICON.chev}</a>
-            <a href="#guides" data-guide="acc"><span class="g-ico">${ICON.helmet}</span><span class="grow"><b>Recommended gear</b><span class="small muted">Accessories tested and scored by RWB</span></span>${ICON.chev}</a>
+            <a href="#motomart/new"><span class="g-ico">${ICON.helmet}</span><span class="grow"><b>New accessories</b><span class="small muted">Picked by the RWB team, in MotoMart</span></span>${ICON.chev}</a>
             <a href="https://roninwb.in" target="_blank" rel="noopener"><span class="g-ico">${ICON.globe}</span><span class="grow"><b>roninwb.in</b><span class="small muted">Rides, events, gallery and the team</span></span>${ICON.out}</a>
         </div></section>`;
     swipeToDismiss(app, () => { if (!app.querySelector('.news-mini [data-swipe]')) render(); });
-    bindVrnCheck(); bindRideWidget(); teachUrgent('#teach-sub');
+    bindVrnCheck(); bindRideWidget(); teachUrgent('#teach-sub'); watchPreviews(app);
     actions = {
         evt: el => location.hash = '#events/' + el.dataset.id,
         'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); render(); }),
@@ -1111,10 +1111,10 @@ async function viewHome() {
         'clear-feed': () => clearNews(news),
         listing: el => location.hash = '#motomart/' + el.dataset.id
     };
-    app.querySelectorAll('[data-guide]').forEach(a => a.addEventListener('click', () => state.guideTab = a.dataset.guide));
-    if (isMod() && !isAdmin()) {   /* coordinators: Motomart posts to check */
+    app.querySelectorAll('[data-guide]').forEach(a => a.addEventListener('click', () => state.guideTab = 'maint'));
+    if (isMod() && !isAdmin()) {   /* coordinators: MotoMart posts to check */
         const mm = listings.filter(l => l.status === 'pending').length, b = $('#admin-banner');
-        if (b && mm) { b.innerHTML = `<span class="b-ico">${ICON.tag}</span><span class="grow">${mm} Motomart post${mm > 1 ? 's' : ''} waiting for approval</span>${ICON.chev}`; b.href = '#motomart/review'; b.hidden = false; }
+        if (b && mm) { b.innerHTML = `<span class="b-ico">${ICON.tag}</span><span class="grow">${mm} MotoMart post${mm > 1 ? 's' : ''} waiting for approval</span>${ICON.chev}`; b.href = '#motomart/review'; b.hidden = false; }
     }
     if (isAdmin()) {
         app.querySelectorAll('[data-adtab]').forEach(a => a.addEventListener('click', () => { state.adminTab = a.dataset.adtab; }));
@@ -1826,7 +1826,7 @@ const VIDEOS = [   /* [file, title, what it covers, seconds, who]; who: undefine
     ['track', 'Track & SOS', 'Share your live location on rides, and SOS', 28],
     ['service', 'Service', 'Log services, bills and reminders', 43],
     ['mileage', 'Mileage', 'Your real km per litre with Trip A', 44],
-    ['motomart', 'Motomart', 'Buy and sell used riding gear', 43],
+    ['motomart', 'MotoMart', 'Buy and sell used riding gear', 43],
     ['guides', 'Guides & Pookie', 'Guides, the RWB AI and Teach Pookie', 23],
     ['events', 'Events', 'Rides, meet-ups and shared costs', 40],
     ['warriorboards', 'Warriorboards', 'Rankings, members and the RWB team', 27],
@@ -2314,14 +2314,12 @@ function markWords(html, query) {
 const pdfTitle = n => n.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 async function viewGuides() {
-    const tab = state.guideTab;
-    app.innerHTML = top('Guides') + `<div class="seg" role="tablist">
-            <button role="tab" aria-selected="${tab === 'maint'}" data-act="tab" data-tab="maint">Maintenance</button>
-            <button role="tab" aria-selected="${tab === 'acc'}" data-act="tab" data-tab="acc">Accessories</button></div>
-        <div id="guide-body"><p class="muted">Loading…</p></div>
+    /* Accessories moved to MotoMart → New (setup file 65) */
+    app.innerHTML = top('Guides') + `<div id="guide-body"><p class="muted">Loading…</p></div>
+        <a class="card tap row" href="#motomart/new" style="text-decoration:none;display:flex;margin-top:12px"><span class="ai-badge sm">${ICON.helmet}</span><div class="grow"><h3>Looking for accessories?</h3><p class="small muted">They’re in MotoMart → New</p></div><span class="kmpl">›</span></a>
         <a class="card tap row ai-card section" href="#chat" style="text-decoration:none;display:flex"><span class="ai-badge sm">${AI_ICON}</span><div class="grow"><h3>Can't find it?</h3><p class="small muted">Ask Pookie</p></div><span class="kmpl">›</span></a>`;
-    actions = { tab: el => { state.guideTab = el.dataset.tab; viewGuides(); } };
-    tab === 'maint' ? drawMaint() : drawAcc();
+    actions = {};
+    drawMaint();
 }
 async function drawMaint() {
     const box = $('#guide-body');
@@ -2341,10 +2339,8 @@ async function drawMaint() {
     $('#gq').oninput = draw; draw();
     actions.pdf = el => { const p = state.guides.find(g => g.id === el.dataset.id); openSheet(pdfTitle(p.name), `<iframe class="pdf" src="https://drive.google.com/file/d/${esc(p.id)}/preview" title="${esc(pdfTitle(p.name))}"></iframe><a class="btn ghost block" style="margin-top:12px" href="https://drive.google.com/file/d/${esc(p.id)}/view" target="_blank" rel="noopener">Open in Google Drive</a>`); };
 }
-/* Product pictures: the sheet's "image" column wins; otherwise the store page's preview picture is looked up
+/* MotoMart product pictures that weren't saved with a post: the store page's preview picture is looked up
    (free link-preview service, same as roninwb.in) and remembered on the phone for a week. */
-const ACC_ICON = { helmet: '⛑️', jacket: '🧥', glove: '🧤', boot: '🥾', light: '💡', lamp: '💡', fog: '💡', phone: '📱', mount: '📱', lock: '🔒', cover: '🛡️', guard: '🛡️', bag: '🎒', luggage: '🎒', intercom: '🎧', camera: '📷', tyre: '🛞', tire: '🛞', oil: '🛢️', chain: '⛓️', clean: '🧽', care: '🧽' };
-const accIcon = c => { const k = String(c || '').toLowerCase(); return Object.entries(ACC_ICON).find(([w]) => k.includes(w))?.[1] || '🏍️'; };
 const accJobs = new Map();
 function accPreview(url) {
     const key = 'rwb-pv:' + url;
@@ -2363,32 +2359,6 @@ const accObs = 'IntersectionObserver' in window ? new IntersectionObserver(es =>
     const im = new Image(); im.alt = ''; im.referrerPolicy = 'no-referrer'; im.decoding = 'async';
     im.onload = () => { box.prepend(im); box.classList.add('has-img'); }; im.src = src;
 }), { rootMargin: '200px' }) : { observe() {} };
-async function drawAcc() {
-    const box = $('#guide-body');
-    if (!state.acc) {
-        try { state.acc = SITE.ACCESSORIES_SHEET_URL ? parseCSV(await fetchCSV(SITE.ACCESSORIES_SHEET_URL)).filter(r => r.name) : []; }
-        catch { box.innerHTML = '<div class="card empty"><b>Could not load gear</b>Check your internet and try again.</div>'; return; }
-    }
-    const cats = [...new Set(state.acc.map(i => i.category).filter(Boolean))];
-    const sorts = { default: 'Default order', 'price-asc': 'Price: low to high', 'price-desc': 'Price: high to low', 'rating-desc': 'Rating: high to low' };
-    let list = state.acc.filter(i => state.accCat === 'all' || i.category === state.accCat);
-    const [key, dir] = state.accSort.split('-');
-    if (dir) { const v = i => key === 'price' ? priceNum(i.price) : parseFloat(i.score); const s = dir === 'asc' ? 1 : -1; list = [...list].sort((a, b) => { const x = v(a), y = v(b); return x == null || isNaN(x) ? 1 : y == null || isNaN(y) ? -1 : (x - y) * s; }); }
-    box.innerHTML = `${cats.length > 1 ? `<div class="chips" style="margin-bottom:10px">${['all', ...cats].map(c => `<button class="chip" data-act="cat" data-cat="${esc(c)}" aria-pressed="${state.accCat === c}">${c === 'all' ? 'All' : esc(c)}</button>`).join('')}</div>` : ''}
-        <select class="search" id="asort" aria-label="Sort">${Object.entries(sorts).map(([k, v]) => `<option value="${k}"${k === state.accSort ? ' selected' : ''}>${v}</option>`).join('')}</select>
-        <div class="list">${list.length ? list.map(i => {
-            const sc = Math.max(0, Math.min(5, parseFloat(i.score) || 0)), link = safeLink(i.link), img = i.image ? driveImg(i.image) : '';
-            const price = i.price ? (/^[\d,.]+$/.test(i.price) ? '₹' + i.price : i.price) : '';
-            return `<article class="card guide acc"><div class="thumb acc-thumb"${!img && link ? ` data-link="${esc(link)}"` : ''}>${img ? `<img src="${esc(img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span class="acc-ph">${accIcon(i.category)}</span></div>
-                <div style="min-width:0">${i.category ? `<span class="badge">${esc(i.category)}</span>` : ''}<h3 style="margin-top:4px">${esc(i.name)}</h3>
-                <p class="small"><span class="stars" style="--s:${sc}" aria-label="RWB score ${sc} of 5">★★★★★</span> <span class="muted">${sc}/5</span>${price ? ` · <b>${esc(price)}</b>` : ''}</p>
-                ${link ? `<a class="btn sm ghost" style="margin-top:8px" href="${esc(link)}" target="_blank" rel="noopener noreferrer">View product ↗</a>` : ''}</div></article>`;
-        }).join('') : '<div class="card empty"><b>Coming soon</b>Recommended gear will be listed here.</div>'}</div>`;
-    box.querySelectorAll('.acc-thumb[data-link]').forEach(t => accObs.observe(t));
-    $('#asort').onchange = e => { state.accSort = e.target.value; drawAcc(); };
-    actions.cat = el => { state.accCat = el.dataset.cat; drawAcc(); };
-}
-
 /* =================== Me =================== */
 let installEvt = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; });
@@ -2456,7 +2426,7 @@ function tncGate() {
     app.innerHTML = gateTop('RWB') + `<section class="gate card">
         <p class="gate-kicker">${withdrew ? 'Your app access is paused' : updated ? 'We\'ve updated our Terms' : 'One step before you continue'}</p>
         <h2>RWB Terms &amp; Conditions</h2>
-        <p class="small muted" style="margin-bottom:12px">${withdrew ? 'You said you no longer agree to the RWB Terms & Conditions. Agree again to keep using the RWB App, talk to an admin, or leave RWB.' : updated ? 'RWB has new, clearer Terms & Conditions, covering privacy, safety, Motomart and more. Please read them and agree once to keep using the RWB App.' : 'Every RWB member agrees to these. Please read them and agree to keep using the RWB App.'}</p>
+        <p class="small muted" style="margin-bottom:12px">${withdrew ? 'You said you no longer agree to the RWB Terms & Conditions. Agree again to keep using the RWB App, talk to an admin, or leave RWB.' : updated ? 'RWB has new, clearer Terms & Conditions, covering privacy, safety, MotoMart and more. Please read them and agree once to keep using the RWB App.' : 'Every RWB member agrees to these. Please read them and agree to keep using the RWB App.'}</p>
         <div class="gate-doc">${tncDoc()}</div>
         <p class="small muted" style="margin-top:8px">How we handle your data: <a href="../privacy.html" target="_blank" rel="noopener">RWB Privacy Policy ↗</a></p>
         <button class="btn block" data-act="g-agree" style="margin-top:14px">I agree to the RWB Terms &amp; Conditions</button>
@@ -2522,7 +2492,7 @@ function bikeSheet(slot, b, done) {
 }
 
 function viewMe() {
-    const m = state.me, role = (ROLE[m.role] || 'Member') + (m.role === 'coordinator' ? ' (Motomart)' : '');
+    const m = state.me, role = (ROLE[m.role] || 'Member') + (m.role === 'coordinator' ? ' (MotoMart)' : '');
     const row = (k, v) => `<div><span class="muted">${k}</span><span class="rt">${esc(v || '–')}</span></div>`;
     const theme = getTheme();
     app.innerHTML = top('Me') + `
@@ -2554,7 +2524,7 @@ function viewMe() {
         <h2 class="group-title">Notifications</h2>
         <div class="card" id="notif-card"><p id="push-state">Checking…</p><div id="push-btn" style="margin-top:10px"></div></div>
         <div class="group" style="margin-top:10px">
-            ${[...(isMod() ? [['birthday', 'Birthdays']] : []), ['reminder', 'Renewal, service and my reminders'], ['motomart', 'New Motomart posts'], ['member', 'New members on the app']].map(([k, l]) => `<label class="toggle-row"><span class="grow">${l}</span><span class="switch-only"><input type="checkbox" data-pref="${k}"${(m.notify || {})[k] !== false ? ' checked' : ''}></span></label>`).join('')}
+            ${[...(isMod() ? [['birthday', 'Birthdays']] : []), ['reminder', 'Renewal, service and my reminders'], ['motomart', 'New MotoMart posts'], ['member', 'New members on the app']].map(([k, l]) => `<label class="toggle-row"><span class="grow">${l}</span><span class="switch-only"><input type="checkbox" data-pref="${k}"${(m.notify || {})[k] !== false ? ' checked' : ''}></span></label>`).join('')}
         </div>
         <p class="small muted" style="margin:8px 4px 0">RWB announcements always come through.</p>
 
@@ -2644,7 +2614,7 @@ async function viewAdmin() {
         <div class="sync-row" id="sync-row" hidden><span class="grow small" id="sync-txt"></span><button class="btn sm ghost" data-act="sheet-sync">Sync sheet now</button></div>
         <div class="seg section scroll" role="tablist">
             <button role="tab" aria-selected="${tab === 'requests'}" data-act="tab" data-tab="requests">Approvals${s.pending ? ` (${s.pending})` : ''}</button>
-            <button role="tab" aria-selected="${tab === 'motomart'}" data-act="tab" data-tab="motomart">Motomart<span id="mm-count"></span></button>
+            <button role="tab" aria-selected="${tab === 'motomart'}" data-act="tab" data-tab="motomart">MotoMart<span id="mm-count"></span></button>
             <button role="tab" aria-selected="${tab === 'dupes'}" data-act="tab" data-tab="dupes">Duplicates<span id="dupe-count"></span></button>
             <button role="tab" aria-selected="${tab === 'members'}" data-act="tab" data-tab="members">Members</button>
             <button role="tab" aria-selected="${tab === 'bdays'}" data-act="tab" data-tab="bdays">Birthdays</button>
@@ -2666,7 +2636,7 @@ async function viewAdmin() {
     });
     api.admin.pookiePending?.().then(n => { pookieBadge(n); const c = $('#ai-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
     api.admin.reports?.().then(rs => { const n = (rs || []).filter(r => r.status === 'open').length; const c = $('#rep-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
-    try { await ({ requests: adminRequests, motomart: adminMotomart, dupes: adminDupes, members: adminMembers, bdays: adminBdays, reports: adminReports, ai: adminAI })[tab](); }
+    try { await ({ requests: adminRequests, motomart: adminMotoMart, dupes: adminDupes, members: adminMembers, bdays: adminBdays, reports: adminReports, ai: adminAI })[tab](); }
     catch (e) { $('#admin-body').innerHTML = `<div class="card empty"><b>Could not load</b>${esc(e.message)}</div>`; }
 }
 /* which copy of the app this is, noted once a day so admins can see who is on the Play test */
@@ -2719,7 +2689,7 @@ async function adminReports() {
     const open = rs.filter(r => r.status === 'open').sort((a, b) => urgent(b) - urgent(a)), done = rs.filter(r => r.status !== 'open');
     const card = r => `<div class="card" style="margin-bottom:10px${r.status === 'open' && urgent(r) ? ';border:2px solid var(--danger,#c0392b)' : ''}">
         <div class="row" style="justify-content:space-between;gap:8px"><b>${urgent(r) ? '🚨 ' : '🚩 '}${esc(r.reason)}</b><span class="small muted">${timeAgo(r.created_at)}</span></div>
-        <p class="small" style="margin:4px 0">${r.kind === 'listing' ? 'Motomart post' : 'Report'}${r.label ? ': <b>' + esc(r.label) + '</b>' : ''}</p>
+        <p class="small" style="margin:4px 0">${r.kind === 'listing' ? 'MotoMart post' : 'Report'}${r.label ? ': <b>' + esc(r.label) + '</b>' : ''}</p>
         ${r.details ? `<p class="small" style="margin:4px 0;white-space:pre-wrap">${esc(r.details)}</p>` : ''}
         <p class="small muted">From ${esc(r.reporter_name || 'a member')}${r.status === 'open' ? ' · ' + due(r) : ` · ✅ ${esc(r.outcome || 'Handled')} (${esc(r.handled_by || '')}, ${timeAgo(r.handled_at)})`}</p>
         ${r.status === 'open' ? `<div class="btns" style="margin-top:8px">${r.kind === 'listing' && r.ref ? `<button class="btn ghost sm" data-act="rep-open" data-ref="${esc(r.ref)}">Open post</button>` : ''}<button class="btn sm" data-act="rep-done" data-id="${r.id}">Mark resolved</button></div>` : ''}</div>`;
@@ -2836,13 +2806,13 @@ function waMsg(kind, x = {}) {
     const first = firstName(x) || 'Warrior', me = firstName(state.me) || 'RWB';
     const T = {
         welcome: `Hi ${first}! 🎉\n\nWelcome to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nMeanwhile, get the RWB App: https://${APP_LINK}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}. Your details are already there.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
-        existing: `Hi Warrior ${first}! 👋\n\nYou're already in our RWB WhatsApp group, so nothing to worry about. Your RWB App account is ready: just open the app and explore.\n\n📍 Track: live location on rides, SOS to the RWB team\n🔧 Service: records, bills and next-service reminders\n⛽ Mileage: your real km/l and fuel spends\n🛒 Motomart: buy and sell used riding gear\n📘 Guides: maintenance help and tested gear\n📅 Events: rides, RSVPs and shared expenses\n🗓️ Calendar: events plus renewal, service and parts due dates, with reminders\n🏍️ RWB: members and leaderboards\n🤖 Pookie: our AI for any bike question\n\nPlease also update your details in the Me tab (you can set your bike model and add up to 3 bikes).\n\n${APP_LINK}\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
+        existing: `Hi Warrior ${first}! 👋\n\nYou're already in our RWB WhatsApp group, so nothing to worry about. Your RWB App account is ready: just open the app and explore.\n\n📍 Track: live location on rides, SOS to the RWB team\n🔧 Service: records, bills and next-service reminders\n⛽ Mileage: your real km/l and fuel spends\n🛒 MotoMart: buy and sell used riding gear\n📘 Guides: maintenance help and tested gear\n📅 Events: rides, RSVPs and shared expenses\n🗓️ Calendar: events plus renewal, service and parts due dates, with reminders\n🏍️ RWB: members and leaderboards\n🤖 Pookie: our AI for any bike question\n\nPlease also update your details in the Me tab (you can set your bike model and add up to 3 bikes).\n\n${APP_LINK}\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
         returning: `Hi ${first}! 🎉\n\nWelcome back to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nThe RWB App: https://${APP_LINK}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
         rejected: `Hi ${first},\n\nThank you for your interest in Ronin Warriors of Bengal. We're sorry, we couldn't approve your registration this time${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'}\n\nIf you think this is a mistake, or things change, just reply here and we'll be happy to help.\n\nRide safe! 🙏\n– ${me}, RWB`,
         change_ok: `Hi ${first}! ✅ Your ${x.what || 'profile'} update in the RWB App is approved. Thanks for keeping your details up to date.\n– ${me}, RWB`,
         change_no: `Hi ${first}, we couldn't approve your ${x.what || 'profile'} update in the RWB App${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'} Just reply here if you'd like help with it. 🙏\n– ${me}, RWB`,
         ask: `Hi ${first}! 👋\n\nThanks for registering with Ronin Warriors of Bengal. Before we approve you, could you please help us with:\n${(x.asks || []).map(a => '• ' + a).join('\n') || '• '}\n${(x.asks || []).some(a => /terms/i.test(a)) ? `\n📜 RWB Terms & Conditions: ${TNC_URL}\nIf you agree, just reply “I agree” here.\n` : ''}\n${x.on_app ? 'You can update your details in the RWB App (open it and tap Edit my details), or just reply here.' : 'You can edit your join form response (use the same email), or just reply here.'}\n\nThank you!\n– ${me}, RWB`,
-        invite: `Hi ${first}! 👋\n\nRWB now has its own free app for members: service records and reminders, a calendar that reminds you of renewals and service dates, mileage tracker, Motomart for used gear, events, guides and more.\n\n📲 Get it here: https://${APP_LINK}\nSign in with Google using the email you gave on the RWB join form. Don't remember it? The app will help: on the “No Account Found” screen, enter your WhatsApp number and VRN.\n\n🎥 How to install:\nAndroid: ${INSTALL_ANDROID}\niPhone: ${INSTALL_IPHONE}\n\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
+        invite: `Hi ${first}! 👋\n\nRWB now has its own free app for members: service records and reminders, a calendar that reminds you of renewals and service dates, mileage tracker, MotoMart for used gear, events, guides and more.\n\n📲 Get it here: https://${APP_LINK}\nSign in with Google using the email you gave on the RWB join form. Don't remember it? The app will help: on the “No Account Found” screen, enter your WhatsApp number and VRN.\n\n🎥 How to install:\nAndroid: ${INSTALL_ANDROID}\niPhone: ${INSTALL_IPHONE}\n\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
         sticker: `Hi ${first}! 👋\n\nIf you haven't got your RWB sticker yet, you can collect it at our next meet-up or ride. 🏍️\n\nIf you already have one, kindly update it in the RWB App → Me → More from RWB: https://roninwb.in/app/#me\n\nThank you!\n– ${me}, RWB`,
         comeback: `Hi ${first}! 👋\n\nIt's ${me} from Ronin Warriors of Bengal. We miss you on the road! If you'd like to come back to RWB, just reply here or fill the join form again at roninwb.in.\n\nRide safe! 🏍️`,
         remind: `Hi ${first}! 👋\n\nA quick one from the RWB team: please complete your RWB profile.${x.rules ? `\n\n📜 Please read and agree to the RWB Terms & Conditions: ${TNC_URL}\nAgree in the app (Me → Terms & Conditions → Read & agree), or just reply “I agree” here.` : ''}${x.missing?.length ? `\n\nMissing: ${x.missing.join(', ')}.` : ''}\n\nIt takes a minute in the RWB App: ${APP_LINK} → Me.${x.on_app ? '' : ' Sign in with Google using the email you gave on the join form.'}\n\nThank you! Explore. Evolve. Inspire.\n– ${me}, RWB`
@@ -3102,7 +3072,7 @@ async function adminMembers() {
     state.memberFilter ||= 'all'; state.memberSort ||= 'team';
     const SORTS = { team: 'Team, A–Z', new: 'Newest first', old: 'Oldest first' };
     $('#admin-body').innerHTML = `<div class="chips" style="margin-bottom:10px">${Object.entries(F).map(([k, v]) => `<button class="chip" data-act="mf" data-f="${k}" aria-pressed="${state.memberFilter === k}">${v}</button>`).join('')}<button class="chip fam-chip" data-act="fam-all">👨‍👩‍👧 RWB FAM${state.famAll?.length ? ` (${state.famAll.length})` : ''}</button></div>
-    ${state.memberFilter === 'admins' ? `<p class="small muted" style="margin-bottom:10px">Tap a person to ${state.me.role === 'superadmin' ? 'make them an admin or a coordinator' : 'make them a coordinator'} or change their role. Coordinators can approve Motomart posts.</p>` : ''}${state.memberFilter === 'gone' ? '<p class="small muted" style="margin-bottom:10px">Members who left or were removed, newest first. Their app account and data are deleted; this record stays so you know who left and when. Tap someone to <b>restore</b> them.</p>' : ''}${state.memberFilter === 'new' ? '<p class="small muted" style="margin-bottom:10px">Joined in the last 7 days, through the join form or the app. Add them to the RWB WhatsApp group; the <b>New Member</b> tag goes away after 7 days.</p>' : ''}
+    ${state.memberFilter === 'admins' ? `<p class="small muted" style="margin-bottom:10px">Tap a person to ${state.me.role === 'superadmin' ? 'make them an admin or a coordinator' : 'make them a coordinator'} or change their role. Coordinators can approve MotoMart posts.</p>` : ''}${state.memberFilter === 'gone' ? '<p class="small muted" style="margin-bottom:10px">Members who left or were removed, newest first. Their app account and data are deleted; this record stays so you know who left and when. Tap someone to <b>restore</b> them.</p>' : ''}${state.memberFilter === 'new' ? '<p class="small muted" style="margin-bottom:10px">Joined in the last 7 days, through the join form or the app. Add them to the RWB WhatsApp group; the <b>New Member</b> tag goes away after 7 days.</p>' : ''}
     <div class="row" style="gap:8px;margin-bottom:12px"><input class="search" type="search" id="mq" placeholder="Search name, number, bike no. or place" value="${esc(state.adminSearch)}" aria-label="Search members" style="margin:0;flex:1">
         <select id="msort" aria-label="Sort" style="width:auto;flex:none;max-width:44%">${Object.entries(SORTS).map(([k, v]) => `<option value="${k}"${state.memberSort === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>
     <p class="small muted" id="mcount" style="margin:-4px 0 10px"></p><div class="list" id="ml"></div><button class="btn ghost block section" id="more" hidden>Show more</button>`;
@@ -3154,7 +3124,7 @@ function memberSheet(m) {
         ${!self && m.role !== 'superadmin' && (m.role !== 'admin' || superA) ? `<div class="btns" style="margin-bottom:10px">
             ${m.role === 'admin' ? '' : `<button class="btn ghost" data-x="role" data-to="${m.role === 'coordinator' ? 'member' : 'coordinator'}">${m.role === 'coordinator' ? 'Remove coordinator' : 'Make coordinator'}</button>`}
             ${superA ? `<button class="btn ghost" data-x="role" data-to="${m.role === 'admin' ? 'member' : 'admin'}">${m.role === 'admin' ? 'Remove admin rights' : 'Make admin'}</button>` : ''}</div>
-            <p class="small muted" style="margin:-4px 0 12px">Coordinators can approve, reject and delete Motomart posts. They can't manage members.</p>` : ''}
+            <p class="small muted" style="margin:-4px 0 12px">Coordinators can approve, reject and delete MotoMart posts. They can't manage members.</p>` : ''}
         ${canRemove ? `<button class="btn danger block" data-x="remove">Remove from RWB</button><p class="small muted" style="margin-top:6px">Use when someone leaves the RWB WhatsApp community. Deletes their profile${m.user_id ? ', app account, service records, fuel log and bills' : ''}, and their row in the RWB contact sheet (a copy goes to its “Removed members” tab). This can't be undone in the app.</p>` : ''}`, body => {
         bindFamRemove(body, () => { closeSheet(); state.adminMembers && adminMembers(); });
         body.querySelector('[data-x=edit]').onclick = () => memberEdit(m);
@@ -3177,7 +3147,7 @@ function removeSheet(m) {
             <label class="wish-opt"><input type="radio" name="why" value="left" checked><span><b>Left the group</b><span class="wish-prev">They left the RWB WhatsApp group or asked to leave</span></span></label>
             <label class="wish-opt"><input type="radio" name="why" value="removed"><span><b>Removed by admin</b><span class="wish-prev">The RWB team removed them</span></span></label></fieldset>
         <label>Note <span class="hint">(optional, only admins see it)</span><input name="note" maxlength="200" placeholder="e.g. Moved to Bangalore"></label>
-        <div class="warn">${m.user_id ? 'Their app account, service records, bills, fuel log, documents and Motomart posts are <b>deleted</b>. ' : ''}Their row is removed from the RWB contact sheet (a copy goes to its “Removed members” tab). Their name stays here under <b>Left / removed</b>, and you can restore them any time.</div>
+        <div class="warn">${m.user_id ? 'Their app account, service records, bills, fuel log, documents and MotoMart posts are <b>deleted</b>. ' : ''}Their row is removed from the RWB contact sheet (a copy goes to its “Removed members” tab). Their name stays here under <b>Left / removed</b>, and you can restore them any time.</div>
         <label>Type <b>REMOVE</b> to confirm<input name="ok" autocomplete="off" autocapitalize="characters"></label>
         <button class="btn danger block">Remove ${esc(firstName(m))}</button></form>`, body => {
         const f = body.querySelector('#rmf');
@@ -3358,7 +3328,7 @@ async function viewNews() {
             <label>Message<textarea name="body" maxlength="1000" placeholder="Meeting point, time, anything members should know"></textarea></label>
             <p class="small muted">Goes to everyone's feed and as a notification to every phone that has them on.</p>
             <button class="btn block">Send to all members</button></form></details>` : ''}
-        <section class="section">${news.length ? `<div class="news-bar"><p class="small muted swipe-hint">Swipe an alert left or right to hide it.</p>${canClear ? '<button class="clear-all" data-act="clear-news">Clear all</button>' : ''}</div><div class="group">${news.map(n => newsRow(n, isAdmin())).join('')}</div>` : `<div class="card empty"><b>${all.length ? 'All caught up' : 'No news yet'}</b>${isFam() ? 'Important announcements from the RWB admins show up here.' : 'Announcements, birthdays and new Motomart posts show up here.'}</div>`}</section>`;
+        <section class="section">${news.length ? `<div class="news-bar"><p class="small muted swipe-hint">Swipe an alert left or right to hide it.</p>${canClear ? '<button class="clear-all" data-act="clear-news">Clear all</button>' : ''}</div><div class="group">${news.map(n => newsRow(n, isAdmin())).join('')}</div>` : `<div class="card empty"><b>${all.length ? 'All caught up' : 'No news yet'}</b>${isFam() ? 'Important announcements from the RWB admins show up here.' : 'Announcements, birthdays and new MotoMart posts show up here.'}</div>`}</section>`;
     swipeToDismiss(app, () => { if (!app.querySelector('[data-swipe]')) render(); });
     actions = {
         'clear-news': () => clearNews(all), 'del-news': b => { if (confirmBox('Delete this from the feed?')) busy(b, async () => { await api.deleteNews(Number(b.dataset.id)); render(); }); } };
@@ -3372,63 +3342,181 @@ async function viewNews() {
 
 const ICON_CLEAR = '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11M3 12h8M3 18h6"/><path d="m15 14 5 5m0-5-5 5"/></svg>';
 
-/* =================== Motomart =================== */
-const CATS = C.MOTOMART_CATEGORIES || ['Helmet', 'Riding jacket', 'Riding pants', 'Riding shoes / boots', 'Gloves', 'Bike protection', 'Bike accessories', 'Rider accessories', 'Luggage', 'Electronics', 'Spare parts', 'Other'];
+/* =================== MotoMart ===================
+   One shop, three kinds of post (setup file 65):
+   - used:  members sell their own gear; an admin or coordinator approves it; buyers WhatsApp the seller
+   - new:   new accessories listed by admins/coordinators with a link to the store ("Check product")
+   - merch: RWB merch listed by admins/coordinators
+   Sold used posts are greyed out and deleted (with photos) 15 days later. roninwb.in shows new accessories and merch. */
 const CONDITIONS = ['Brand new (unused)', 'Like new', 'Good', 'Fair', 'Needs repair'];
-const mmState = { cat: 'all', status: 'all', mine: false, q: '', review: false };
+const MM_CATS = ['Helmets', 'Riding gear', 'Protection', 'Luggage', 'Navigation & electronics', 'Lights', 'Bike accessories', 'Spare parts'];
+const MERCH_CATS = ['Clothing', 'Stickers', 'Accessories'];
+const MM_KIND = { used: 'Used', new: 'New', merch: 'RWB Merch' };
+const SOLD_DAYS = 15;
+const mmState = { branch: 'all', cat: 'all', sort: 'price-asc', q: '', mine: false, review: false, swept: false };
 const price = n => '₹' + Number(n).toLocaleString('en-IN');
-const photo = (l, i = 0) => l.photos?.[i] ? api.photoUrl(l.photos[i]) : '';
+const photo = (l, i = 0) => l.photos?.[i] ? api.photoUrl(l.photos[i]) : i === 0 && l.image_url ? l.image_url : '';
+const allPhotos = l => l.photos?.length ? l.photos.map(p => api.photoUrl(p)) : l.image_url ? [l.image_url] : [];
 const mine = l => l.user_id === state.myId;
+const kindOf = l => l.kind || 'used';
+const soldAt = l => new Date(l.sold_at || l.updated_at || l.published_at || l.created_at || Date.now());
+const goneOn = l => new Date(soldAt(l).getTime() + SOLD_DAYS * 864e5);
+const expired = l => kindOf(l) === 'used' && l.status === 'sold' && goneOn(l) < new Date();
+const hostOf = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+
+/* Old and new category names fold into a few simple groups, like big shops do. A team member's own new category stays as typed. */
+function catGroup(l) {
+    const c = String(typeof l === 'string' ? l : l.category || '').trim();
+    if (typeof l !== 'string' && kindOf(l) === 'merch') return c || 'Other';
+    const k = c.toLowerCase();
+    const hit = [[/helmet/, 'Helmets'], [/jacket|pant|boot|shoe|glove|riding gear|jersey|apparel|suit/, 'Riding gear'], [/protect|guard|bash|slider|crash|frame/, 'Protection'],
+        [/luggage|bag|rack|saddle|top ?box|pannier/, 'Luggage'], [/navig|electr|mount|phone|charg|intercom|camera|gps|usb/, 'Navigation & electronics'],
+        [/light|lamp|fog|aux/, 'Lights'], [/spare|part|tyre|tire|chain|brake|filter|oil/, 'Spare parts'], [/accessor/, 'Bike accessories']].find(([re]) => re.test(k));
+    return hit ? hit[1] : c || 'Other';
+}
+const S = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+const CAT_ICO = {
+    all: S('<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>'),
+    Helmets: S('<path d="M3.5 15.5a8.5 8.5 0 0 1 17 0v1.5h-17z"/><path d="M12 7v5.5h8.3M3.5 17l1 2.5h7"/>'),
+    'Riding gear': S('<path d="M8.5 3.5 12 6l3.5-2.5L20 6.5 18 11l-1.5-.8V20.5h-9V10.2L6 11 4 6.5z"/><path d="M12 6v14.5"/>'),
+    Protection: S('<path d="M12 3 5 6v5.5c0 4.4 3 8 7 9.5 4-1.5 7-5.1 7-9.5V6z"/><path d="m9 12 2 2 4-4"/>'),
+    Luggage: S('<rect x="4" y="7.5" width="16" height="12.5" rx="2"/><path d="M9 7.5V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5v2M4 12.5h16"/>'),
+    'Navigation & electronics': S('<rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="m10 11 4.5-2-2 4.5-.7-1.8z"/>'),
+    Lights: S('<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'),
+    'Bike accessories': S('<circle cx="6" cy="16.5" r="3.5"/><circle cx="18" cy="16.5" r="3.5"/><path d="M6 16.5 9.5 9h5l3.5 7.5M9.5 9 12 16.5h-6M14.5 9 16 6h2.5"/>'),
+    'Spare parts': S('<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>'),
+    Clothing: S('<path d="M8.5 3.5 12 5l3.5-1.5L21 7l-2 4-2-1v10.5H7V10l-2 1-2-4z"/>'),
+    Stickers: S('<path d="M20 12.5V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h7.5z"/><path d="M12.5 20c0-4.1 3.4-7.5 7.5-7.5"/>'),
+    other: S('<path d="M3.5 11.6V4.5a1 1 0 0 1 1-1h7.1l8.9 8.9-8.1 8.1z"/><circle cx="8" cy="8" r="1.5"/>')
+};
+const catIco = c => CAT_ICO[c] || CAT_ICO.other;
+const SEARCH_ICO = S('<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>');
 
 function listingCard(l) {
-    const img = photo(l);
-    return `<button class="mm-card tap" data-act="listing" data-id="${l.id}">
-        <div class="mm-img">${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : '<span>No photo</span>'}${l.status !== 'live' ? `<span class="mm-flag ${l.status}">${{ sold: 'Sold', pending: 'Waiting for approval', rejected: 'Not approved' }[l.status]}</span>` : ''}</div>
-        <div class="mm-body"><b class="mm-price">${price(l.price)}</b><span class="mm-name">${esc(l.product_name)}</span><span class="small muted">${esc([l.condition, l.size && 'Size ' + l.size].filter(Boolean).join(' · ') || l.category)}</span></div></button>`;
+    const img = photo(l), k = kindOf(l), sold = l.status === 'sold';
+    const sub = k === 'new' ? [catGroup(l), hostOf(l.link)].filter(Boolean).join(' · ') : k === 'merch' ? catGroup(l) : [l.condition, l.size && 'Size ' + l.size].filter(Boolean).join(' · ') || catGroup(l);
+    const flag = { pending: 'Waiting for approval', rejected: 'Not approved' }[l.status];
+    return `<button class="mm-card tap${sold ? ' is-sold' : ''}" data-act="listing" data-id="${l.id}">
+        <div class="mm-img"${!img && l.link ? ` data-link="${esc(l.link)}"` : ''}>${img ? `<img src="${esc(img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span class="mm-ph">${catIco(catGroup(l))}</span>
+            <span class="mm-kind k-${k}">${MM_KIND[k]}</span>${flag ? `<span class="mm-flag ${l.status}">${flag}</span>` : ''}${sold ? `<span class="mm-sold">${k === 'used' ? 'Sold' : 'Sold out'}</span>` : ''}</div>
+        <div class="mm-body"><b class="mm-price">${price(l.price)}</b><span class="mm-name">${esc(l.product_name)}</span><span class="mm-sub">${esc(sub)}</span></div></button>`;
+}
+/* store pictures that weren't saved with the post are looked up from the product link (same free preview service as before) */
+const watchPreviews = root => root.querySelectorAll('.mm-img[data-link]').forEach(b => accObs.observe(b));
+
+function mmVisible(all) {
+    return all.filter(l => !expired(l) && (['live', 'sold'].includes(l.status) || mine(l)));
+}
+function mmSort(list) {
+    const by = { 'price-asc': (a, b) => a.price - b.price, 'price-desc': (a, b) => b.price - a.price,
+        newest: (a, b) => String(b.published_at || b.created_at).localeCompare(String(a.published_at || a.created_at)) }[mmState.sort];
+    return [...list].sort((a, b) => (a.status === 'sold') - (b.status === 'sold') || by(a, b));   /* sold always last */
+}
+const mmText = l => [l.product_name, l.category, catGroup(l), MM_KIND[kindOf(l)], l.details, l.condition, hostOf(l.link)].filter(Boolean).join(' ');
+
+/* sold used posts are removed for good after 15 days: the team (or the seller) deletes them, with their photos, when they open MotoMart */
+async function sweepSold(all) {
+    if (mmState.swept) return; mmState.swept = true;
+    const old = all.filter(l => expired(l) && (isMod() || mine(l)));
+    for (const l of old) { try { await api.deleteListing(l); } catch { /* try again next time */ } }
+    if (old.length) state.listings = null;
 }
 
-async function viewMotomart() {
+async function viewMotoMart() {
     state.myId ??= await api.myId();
-    if (state.param === 'review') { if (isMod()) Object.assign(mmState, { review: true, mine: false, status: 'all' }); state.param = null; history.replaceState(null, '', '#motomart'); }
+    const p = state.param;
+    if (p === 'review') { if (isMod()) Object.assign(mmState, { review: true, mine: false }); }
+    else if (['new', 'used', 'merch'].includes(p)) Object.assign(mmState, { branch: p, cat: 'all', review: false, mine: false });
+    if (['review', 'new', 'used', 'merch'].includes(p)) { state.param = null; history.replaceState(null, '', '#motomart'); }
     const all = await load.listings(true);
+    sweepSold(all);
     const mod = isMod(), waiting = mod ? all.filter(l => l.status === 'pending') : [];
     if (!mod || !waiting.length) mmState.review = false;
-    const q = mmState.q.trim().toLowerCase();
-    const shown = mmState.review ? waiting : all.filter(l => (mmState.mine ? mine(l) : (['live', 'sold'].includes(l.status) || mine(l))) &&
-        (mmState.cat === 'all' || l.category === mmState.cat) && (mmState.status === 'all' || l.status === mmState.status) &&
-        (!q || (l.product_name + ' ' + l.category + ' ' + (l.details || '')).toLowerCase().includes(q)));
-    const cats = CATS.filter(c => all.some(l => l.category === c));
-    app.innerHTML = top('Motomart') + `
-        <p class="muted small mm-intro">Used gear from fellow Ronins. Tap an item to see photos and message the seller on WhatsApp.</p>
-        <input class="search" type="search" id="mmq" placeholder="Search helmets, jackets, guards…" value="${esc(mmState.q)}" aria-label="Search Motomart">
-        <div class="chips hscroll" style="margin-bottom:10px">${['all', ...cats].map(c => `<button class="chip" data-act="cat" data-cat="${esc(c)}" aria-pressed="${mmState.cat === c}">${c === 'all' ? 'All' : esc(c)}</button>`).join('')}</div>
-        <div class="row" style="margin-bottom:14px;gap:8px">
-            <select id="mms" aria-label="Show" style="flex:1"><option value="all">Live and sold</option><option value="live"${mmState.status === 'live' ? ' selected' : ''}>Only available</option><option value="sold"${mmState.status === 'sold' ? ' selected' : ''}>Only sold</option></select>
-            <button class="chip" data-act="mine" aria-pressed="${mmState.mine}">My posts</button>${waiting.length ? `<button class="chip warn-chip" data-act="review" aria-pressed="${mmState.review}">To approve (${waiting.length})</button>` : ''}</div>
-        ${mmState.review ? '<p class="small muted" style="margin:-4px 0 12px">Check photos, price and details, then approve or reject. Members are notified when a post goes live.</p>' : ''}
-        ${shown.length ? `<div class="mm-grid">${shown.map(listingCard).join('')}</div>` : `<div class="card empty"><b>${all.length ? 'Nothing matches' : 'Nothing for sale yet'}</b>${mmState.mine ? 'You haven’t posted anything yet.' : 'Be the first to sell something.'}</div>`}
-        <button class="btn fab" data-act="sell">＋ Sell something</button>`;
+    const base = mmVisible(all).filter(l => mmState.branch === 'all' || kindOf(l) === mmState.branch);
+    const cats = [...new Set(base.filter(l => l.status !== 'pending' && l.status !== 'rejected').map(catGroup))]
+        .sort((a, b) => (MM_CATS.concat(MERCH_CATS).indexOf(a) + 1 || 99) - (MM_CATS.concat(MERCH_CATS).indexOf(b) + 1 || 99) || a.localeCompare(b));
+    if (mmState.cat !== 'all' && !cats.includes(mmState.cat)) mmState.cat = 'all';
+    const q = mmState.q.trim();
+    const shown = mmState.review ? waiting : mmSort(base.filter(l => (!mmState.mine || mine(l)) && (mmState.cat === 'all' || catGroup(l) === mmState.cat) && searchMatch(q, mmText(l))));
+    const branchBtn = (k, label) => `<button role="tab" aria-selected="${mmState.branch === k}" data-act="branch" data-b="${k}">${label}</button>`;
+    const fabLabel = mmState.branch === 'merch' ? 'List merch' : 'List accessory';
+    app.innerHTML = top('MotoMart') + `
+        <div class="mm-head">
+            <div class="mm-branches" role="tablist" aria-label="Shop">${branchBtn('all', 'All')}${branchBtn('new', 'New')}${branchBtn('used', 'Used')}${branchBtn('merch', 'RWB Merch')}</div>
+            <button class="mm-search-btn" data-act="search" aria-label="Search MotoMart">${SEARCH_ICO}</button>
+        </div>
+        ${cats.length > 1 && !mmState.review ? `<div class="mm-cats" role="list">${['all', ...cats].map(c => `<button class="mm-cat" role="listitem" data-act="cat" data-cat="${esc(c)}" aria-pressed="${mmState.cat === c}"><span class="mm-cat-ico">${catIco(c)}</span><span>${c === 'all' ? 'All' : esc(c.replace(' & electronics', ''))}</span></button>`).join('')}</div>` : ''}
+        ${q ? `<div class="mm-qbar"><span>${shown.length} result${shown.length === 1 ? '' : 's'} for <b>“${esc(q)}”</b></span><button class="linkish" data-act="q-clear">Clear ✕</button></div>` : ''}
+        <div class="mm-tools">
+            ${mmState.review ? '' : `<label class="mm-sort"><span class="sr-only">Sort</span><select id="mms">${[['price-asc', 'Price: low to high'], ['price-desc', 'Price: high to low'], ['newest', 'Newest first']].map(([k, v]) => `<option value="${k}"${mmState.sort === k ? ' selected' : ''}>${v}</option>`).join('')}</select></label>`}
+            <button class="chip" data-act="mine" aria-pressed="${mmState.mine}">My posts</button>${waiting.length ? `<button class="chip warn-chip" data-act="review" aria-pressed="${mmState.review}">To approve (${waiting.length})</button>` : ''}
+        </div>
+        ${mmState.review ? '<p class="small muted" style="margin:-2px 0 12px">Check photos, price and details, then approve or reject. Members are notified when a post goes live.</p>' : ''}
+        ${shown.length ? `<div class="mm-grid">${shown.map(listingCard).join('')}</div>` : `<div class="card empty"><b>${base.length ? 'Nothing matches' : mmState.branch === 'merch' ? 'No merch yet' : mmState.branch === 'new' ? 'No accessories yet' : 'Nothing for sale yet'}</b>${mmState.mine ? 'You haven’t posted anything yet.' : q ? 'Try another word, or clear the search.' : mmState.branch === 'used' || mmState.branch === 'all' ? 'Selling old gear? Be the first to post it.' : 'The RWB team will add them here soon.'}</div>`}
+        ${isAdmin() ? '<button class="btn ghost block" data-act="mm-import" style="margin-top:18px">⇩ Import from the old Google Sheets</button>' : ''}
+        <div class="mm-fabs">${mod ? `<button class="btn fab-2" data-act="list">＋ ${fabLabel}</button>` : ''}<button class="btn fab-1" data-act="sell">＋ Sell something</button></div>`;
+    watchPreviews(app);
     actions = {
-        cat: el => { mmState.cat = el.dataset.cat; viewMotomart(); },
-        mine: () => { mmState.mine = !mmState.mine; mmState.review = false; mmState.status = 'all'; viewMotomart(); },
-        review: () => { mmState.review = !mmState.review; mmState.mine = false; viewMotomart(); },
+        branch: el => { mmState.branch = el.dataset.b; mmState.cat = 'all'; mmState.review = false; viewMotoMart(); },
+        cat: el => { mmState.cat = el.dataset.cat; viewMotoMart(); },
+        mine: () => { mmState.mine = !mmState.mine; mmState.review = false; viewMotoMart(); },
+        review: () => { mmState.review = !mmState.review; mmState.mine = false; viewMotoMart(); },
+        search: () => mmSearch(mmVisible(all)),
+        'q-clear': () => { mmState.q = ''; viewMotoMart(); },
         sell: () => listingForm(),
+        list: () => teamForm(null, mmState.branch === 'merch' ? 'merch' : 'new'),
+        'mm-import': () => importSheetListings(),
         listing: el => listingDetail(all.find(l => String(l.id) === el.dataset.id))
     };
-    $('#mms').onchange = e => { mmState.status = e.target.value; viewMotomart(); };
-    let t; $('#mmq').oninput = e => { clearTimeout(t); t = setTimeout(() => { mmState.q = e.target.value; viewMotomart().then(() => { const i = $('#mmq'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }); }, 300); };
-    /* a post opened by link (e.g. from Home): open it once, then forget it so filters don't reopen it */
-    if (state.param) { const id = state.param; state.param = null; history.replaceState(null, '', '#motomart'); const l = all.find(x => String(x.id) === id); if (l) listingDetail(l); else toast('That post is no longer available', true); }
+    const s = $('#mms'); if (s) s.onchange = e => { mmState.sort = e.target.value; viewMotoMart(); };
+    /* a post opened by link (e.g. from Home or a WhatsApp share): open it once, then forget it so filters don't reopen it */
+    if (state.param) { const id = state.param; state.param = null; history.replaceState(null, '', '#motomart'); const l = all.find(x => String(x.id) === id); if (l && !expired(l)) listingDetail(l); else toast('That post is no longer available', true); }
 }
 
+/* Search: a small bar that drops down over the shop, with live matches as you type */
+function mmSearch(items) {
+    document.querySelector('.mm-search')?.remove();
+    const box = document.createElement('div'); box.className = 'mm-search'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'Search MotoMart');
+    const popular = [...new Set(items.filter(l => l.status === 'live').map(catGroup))].slice(0, 6);
+    box.innerHTML = `<div class="mm-search-bar"><span class="mm-s-ico">${SEARCH_ICO}</span><input type="search" enterkeyhint="search" placeholder="Search helmets, guards, jerseys…" value="${esc(mmState.q)}" aria-label="Search"><button class="linkish" data-x="close">Cancel</button></div><div class="mm-sugg" role="listbox"></div>`;
+    document.body.append(box);
+    const input = box.querySelector('input'), list = box.querySelector('.mm-sugg');
+    const close = () => { box.classList.remove('on'); setTimeout(() => box.remove(), 180); };
+    const go = q => { mmState.q = q; mmState.review = false; close(); viewMotoMart(); };
+    const draw = () => {
+        const q = input.value.trim();
+        if (!q) { list.innerHTML = popular.length ? `<p class="mm-s-h">Popular</p><div class="chips">${popular.map(c => `<button class="chip" data-q="${esc(c)}">${esc(c)}</button>`).join('')}</div>` : ''; return; }
+        const hits = mmSort(items.filter(l => searchMatch(q, mmText(l))));
+        list.innerHTML = hits.length ? hits.slice(0, 6).map(l => { const img = photo(l); return `<button class="mm-s-row" data-id="${l.id}"><span class="mm-s-img">${img ? `<img src="${esc(img)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : catIco(catGroup(l))}</span>
+                <span class="grow"><b>${markWords(esc(l.product_name), q)}</b><small>${MM_KIND[kindOf(l)]} · ${esc(catGroup(l))}${l.status === 'sold' ? ' · sold' : ''}</small></span><b class="mm-s-price">${price(l.price)}</b></button>`; }).join('')
+            + `<button class="mm-s-all" data-all="1">See all ${hits.length} result${hits.length === 1 ? '' : 's'} for “${esc(q)}” ›</button>`
+            : `<p class="mm-s-none">Nothing matches “${esc(q)}” yet.</p>`;
+    };
+    input.oninput = draw;
+    input.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); go(input.value.trim()); } if (e.key === 'Escape') close(); };
+    box.onclick = e => {
+        if (e.target === box || e.target.closest('[data-x=close]')) return close();
+        const c = e.target.closest('[data-q]'); if (c) { input.value = c.dataset.q; draw(); input.focus(); return; }
+        if (e.target.closest('[data-all]')) return go(input.value.trim());
+        const r = e.target.closest('[data-id]'); if (r) { close(); listingDetail(items.find(l => String(l.id) === r.dataset.id)); }
+    };
+    draw(); requestAnimationFrame(() => { box.classList.add('on'); input.focus(); });
+}
+
+/* WhatsApp shares never carry the seller's full name or number: members open the app to contact them */
+const maskName = n => String(n || '').trim().split(/\s+/).filter(Boolean).map(w => w[0] + '•'.repeat(Math.min(Math.max(w.length - 1, 2), 5))).join(' ') || '–';
+const maskPhone = p => { const d = String(p || '').replace(/\D/g, '').slice(-10); return d.length === 10 ? `${d.slice(0, 2)}••••••${d.slice(-2)}` : '–'; };
 function sellPostText(l) {
-    return `📌 *RWB MOTOMART*\n\nProduct Name: ${l.product_name}\nSize: ${l.size || '–'}\nCategory: ${l.category}\nAge: ${l.age || '–'}\nCondition: ${l.condition || '–'}\nReason for Selling: ${l.reason || '–'}\nSelling Price: ${price(l.price)}\nSeller Name: ${l.seller_name}\nSeller Phone: ${l.seller_phone}${l.details ? `\n\n${l.details}` : ''}\n\n👉 Photos & contact in the RWB App: https://roninwb.in/app/#motomart/${l.id}`;
+    const url = `https://roninwb.in/app/#motomart/${l.id}`, k = kindOf(l);
+    if (k === 'new') return `🆕 *RWB MOTOMART · New accessory*\n\n${l.product_name}\nCategory: ${catGroup(l)}\nPrice: ${price(l.price)}${l.details ? `\n\n${l.details}` : ''}\n\n👉 See it and open the store page in the RWB App: ${url}`;
+    if (k === 'merch') return `🔥 *RWB MERCH*\n\n${l.product_name}\nPrice: ${price(l.price)}${l.details ? `\n${l.details}` : ''}\n\n👉 Order in the RWB App: ${url}`;
+    return `📌 *RWB MOTOMART · Used*\n\nProduct Name: ${l.product_name}\nSize: ${l.size || '–'}\nCategory: ${l.category}\nAge: ${l.age || '–'}\nCondition: ${l.condition || '–'}\nReason for Selling: ${l.reason || '–'}\nSelling Price: ${price(l.price)}\nSeller: ${maskName(l.seller_name)} · ${maskPhone(l.seller_phone)}${l.details ? `\n\n${l.details}` : ''}\n\n🔒 The seller's contact is in the RWB App only.\n👉 Photos & contact: ${url}`;
 }
 async function shareListing(l) {
-    const text = sellPostText(l);
+    const text = sellPostText(l), pics = allPhotos(l).slice(0, 4);
     try {   /* phones that can share photos straight into WhatsApp */
-        if (navigator.canShare && l.photos?.length) {
-            const files = await Promise.all(l.photos.slice(0, 4).map(async (p, i) => new File([await (await fetch(api.photoUrl(p))).blob()], `rwb-motomart-${l.id}-${i + 1}.jpg`, { type: 'image/jpeg' })));
+        if (navigator.canShare && pics.length) {
+            const files = await Promise.all(pics.map(async (u, i) => new File([await (await fetch(u)).blob()], `rwb-motomart-${l.id}-${i + 1}.jpg`, { type: 'image/jpeg' })));
             if (navigator.canShare({ files, text })) { await navigator.share({ files, text }); return; }
         }
     } catch (e) { if (e.name === 'AbortError') return; }
@@ -3436,55 +3524,101 @@ async function shareListing(l) {
 }
 
 function listingDetail(l) {
-    const own = mine(l), adm = isMod();
-    const contact = `Hi ${l.seller_name.split(' ')[0]}, I saw your ${l.product_name} (${price(l.price)}) on RWB Motomart. Is it still available?`;
-    const fact = (k, v) => v ? `<dt>${k}</dt><dd>${esc(v)}</dd>` : '';
-    openSheet(l.product_name, `
-        ${l.photos?.length ? `<div class="gallery">${l.photos.map((p, i) => `<img src="${esc(api.photoUrl(p))}" alt="Photo ${i + 1} of ${esc(l.product_name)}">`).join('')}</div>${l.photos.length > 1 ? `<p class="small muted" style="text-align:center;margin-top:4px">Swipe for ${l.photos.length} photos</p>` : ''}` : ''}
-        <div class="row" style="margin:12px 0 4px;justify-content:space-between"><b class="mm-price" style="font-size:1.9rem">${price(l.price)}</b>
-            <span class="badge ${l.status === 'live' ? 'ok' : l.status === 'sold' ? '' : 'orange'}">${{ live: 'Available', sold: 'Sold', pending: 'Waiting for approval', rejected: 'Not approved' }[l.status]}</span></div>
+    if (!l) return toast('That post is no longer available', true);
+    const own = mine(l), adm = isMod(), k = kindOf(l), sold = l.status === 'sold', team = k !== 'used';
+    const pics = allPhotos(l);
+    const fact = (key, v) => v ? `<dt>${key}</dt><dd>${esc(v)}</dd>` : '';
+    const contact = `Hi ${String(l.seller_name || '').split(' ')[0]}, I saw your ${l.product_name} (${price(l.price)}) on RWB MotoMart. Is it still available?`;
+    const merchMsg = `Hi, I'd like to order the ${l.product_name} (${price(l.price)}) from RWB Merch.`;
+    const statusTxt = { live: 'Available', sold: k === 'used' ? 'Sold' : 'Sold out', pending: 'Waiting for approval', rejected: 'Not approved' }[l.status];
+    openSheet(l.product_name, `<div class="mm-detail${sold ? ' is-sold' : ''}">
+        <div class="mm-gal">${pics.length ? `<div class="gallery">${pics.map((u, i) => `<img src="${esc(u)}" alt="Photo ${i + 1} of ${esc(l.product_name)}" referrerpolicy="no-referrer">`).join('')}</div>`
+            : `<div class="mm-gal-ph"${l.link ? ` data-link="${esc(l.link)}"` : ''}><span class="mm-ph">${catIco(catGroup(l))}</span></div>`}
+            <span class="mm-kind k-${k}">${MM_KIND[k]}</span>${sold ? `<span class="mm-sold">${statusTxt}</span>` : ''}</div>
+        ${pics.length > 1 ? `<p class="small muted" style="text-align:center;margin-top:4px">Swipe for ${pics.length} photos</p>` : ''}
+        <div class="mm-d-head"><b class="mm-price">${price(l.price)}</b><span class="badge ${l.status === 'live' ? 'ok' : sold ? '' : 'orange'}">${statusTxt}</span></div>
+        <p class="mm-d-cat">${esc(catGroup(l))}${k === 'new' && l.link ? ` · from <b>${esc(hostOf(l.link))}</b>` : ''}</p>
         ${l.status === 'rejected' && l.reject_reason ? `<p class="warn" style="margin:8px 0">Admin note: ${esc(l.reject_reason)}. Edit the post to send it again.</p>` : ''}
         ${l.status === 'pending' && own && !adm ? '<p class="warn" style="margin:8px 0">An admin will check and publish your post, usually within 24 hours.</p>' : ''}
-        <dl class="facts">${fact('Category', l.category)}${fact('Size', l.size)}${fact('Age', l.age)}${fact('Condition', l.condition)}${fact('Reason', l.reason)}${fact('Seller', l.seller_name)}${fact('Posted', l.published_at ? fmtDate(String(l.published_at).slice(0, 10)) : '')}</dl>
-        ${l.details ? `<p style="margin-bottom:16px">${linkify(l.details)}</p>` : ''}
+        ${sold && k === 'used' ? `<p class="mm-note">This item is sold. The post and its photos are deleted on ${fmtDate(goneOn(l).toISOString().slice(0, 10))}.</p>` : ''}
+        ${k === 'used' ? `<dl class="facts">${fact('Size', l.size)}${fact('Age', l.age)}${fact('Condition', l.condition)}${fact('Reason', l.reason)}${fact('Seller', l.seller_name)}${fact('Posted', l.published_at ? fmtDate(String(l.published_at).slice(0, 10)) : '')}</dl>` : ''}
+        ${l.details ? `<p style="margin:10px 0 16px">${linkify(l.details)}</p>` : ''}
         <div class="list">
-            ${!own && l.status === 'live' ? `<a class="btn wa block" href="${waTo(l.seller_phone, contact)}" target="_blank" rel="noopener">Message seller on WhatsApp</a>` : ''}
+            ${k === 'new' && l.link && !sold ? `<a class="btn block mm-cta" href="${esc(l.link)}" target="_blank" rel="noopener noreferrer">Check product ↗</a><p class="small muted" style="text-align:center;margin-top:-4px">Sold by ${esc(hostOf(l.link) || 'the store')}, not by RWB. Price and stock can change.</p>` : ''}
+            ${k === 'merch' && !sold ? (l.seller_phone ? `<a class="btn wa block" href="${waTo(l.seller_phone, merchMsg)}" target="_blank" rel="noopener">Order on WhatsApp</a>` : l.link ? `<a class="btn block mm-cta" href="${esc(l.link)}" target="_blank" rel="noopener noreferrer">Order now ↗</a>` : `<a class="btn block mm-cta" href="${esc(SITE.INSTAGRAM_DM_URL || 'https://ig.me/m/ronin_warriors_bengal')}" target="_blank" rel="noopener">Order on Instagram</a>`) : ''}
+            ${k === 'used' && !own && l.status === 'live' ? `<a class="btn wa block" href="${waTo(l.seller_phone, contact)}" target="_blank" rel="noopener">Message seller on WhatsApp</a>` : ''}
             ${adm && l.status === 'pending' ? `<div class="btns"><button class="btn ghost" data-x="reject">Reject</button><button class="btn" data-x="approve">Approve</button></div>` : ''}
-            ${own && ['live', 'sold'].includes(l.status) ? `<button class="btn ${l.status === 'live' ? '' : 'ghost'} block" data-x="toggle">${l.status === 'live' ? 'Mark as sold' : 'Put back on sale'}</button>` : ''}
-            ${(own || adm) && l.status !== 'rejected' ? '<button class="btn ghost block" data-x="share">Share to WhatsApp group</button>' : ''}
-            ${own ? '<button class="btn ghost block" data-x="edit">Edit post</button>' : ''}
-            ${!own && l.status === 'live' ? `<button class="linkish" data-report="listing" data-ref="${l.id}" data-label="${esc(l.product_name + ' · ' + l.seller_name)}" style="margin:6px auto 0;display:block;color:var(--muted)">🚩 Report this post</button>` : ''}
-            ${own || adm ? '<button class="btn danger block" data-x="del">Delete post</button>' : ''}
-        </div>`, body => {
+            ${l.status === 'live' ? '<button class="btn ghost block" data-x="share">Share to WhatsApp</button>' : ''}
+            ${(own && k === 'used' || adm && team) && ['live', 'sold'].includes(l.status) ? `<button class="btn ${l.status === 'live' ? '' : 'ghost'} block" data-x="toggle">${l.status === 'live' ? (team ? 'Mark as sold out' : 'Mark as sold') : (team ? 'Back in stock' : 'Put back on sale')}</button>` : ''}
+            ${own && k === 'used' || adm && team ? '<button class="btn ghost block" data-x="edit">Edit</button>' : ''}
+            ${!own && k === 'used' && l.status === 'live' ? `<button class="linkish" data-report="listing" data-ref="${l.id}" data-label="${esc(l.product_name + ' · ' + (l.seller_name || ''))}" style="margin:6px auto 0;display:block;color:var(--muted)">🚩 Report this post</button>` : ''}
+            ${own || adm ? '<button class="btn danger block" data-x="del">Delete</button>' : ''}
+        </div></div>`, body => {
+        const ph = body.querySelector('.mm-gal-ph[data-link]'); if (ph) accObs.observe(ph);
         const on = (x, fn) => { const b = body.querySelector(`[data-x=${x}]`); if (b) b.onclick = () => fn(b); };
         const after = async msg => { await load.listings(true); closeSheet(); render(); toast(msg); };
         on('approve', b => busy(b, async () => { await api.setListingStatus(l.id, 'live'); await after('Approved. It’s live and members are notified.'); }));
         on('reject', b => { const r = window.prompt('Reason (the seller will see this):', 'Please add clearer photos'); if (r === null) return; busy(b, async () => { await api.setListingStatus(l.id, 'rejected', r.trim() || null); await after('Rejected'); }); });
-        on('toggle', b => busy(b, async () => { await api.setListingStatus(l.id, l.status === 'live' ? 'sold' : 'live'); await after(l.status === 'live' ? 'Marked as sold 🎉' : 'Back on sale'); }));
+        on('toggle', b => busy(b, async () => { await api.setListingStatus(l.id, l.status === 'live' ? 'sold' : 'live'); await after(l.status === 'live' ? (team ? 'Marked as sold out' : `Marked as sold 🎉 It’s removed after ${SOLD_DAYS} days.`) : 'Back on sale'); }));
         on('share', b => busy(b, () => shareListing(l)));
-        on('edit', () => listingForm(l));
+        on('edit', () => team ? teamForm(l, k) : listingForm(l));
         on('del', b => { if (confirmBox('Delete this post and its photos?')) busy(b, async () => { await api.deleteListing(l); await after('Deleted'); }); });
     });
 }
 
+/* category picker: the simple groups, or "Other" to type a new one (it then shows up as its own category) */
+function catField(list, cur) {
+    const other = !!cur && !list.includes(cur);
+    return `<label>Category<select name="category" required><option value="">Choose…</option>${list.map(c => `<option${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('')}<option value="__other"${other ? ' selected' : ''}>Other (type a new one)</option></select></label>
+        <label class="cat-other"${other ? '' : ' hidden'}>New category<input name="category_other" maxlength="40" placeholder="e.g. Cleaning & care" value="${other ? esc(cur) : ''}"></label>`;
+}
+function bindCatField(body) {
+    const sel = body.querySelector('[name=category]'), box = body.querySelector('.cat-other');
+    sel.onchange = () => { box.hidden = sel.value !== '__other'; box.querySelector('input').required = !box.hidden; if (!box.hidden) box.querySelector('input').focus(); };
+}
+const catValue = d => d.category === '__other' ? String(d.category_other || '').trim().replace(/\s+/g, ' ').replace(/^./, c => c.toUpperCase()) : d.category;
+
+/* photos: up to MAX, shown as small tiles you can remove */
+function photoPicker(body, kept, removed, added, MAX, onChange = () => {}) {
+    const thumbs = body.querySelector('#thumbs');
+    const draw = () => {
+        thumbs.innerHTML = [...kept.map(p => ({ src: api.photoUrl(p), k: 'k:' + p })), ...added.map((f, i) => ({ src: f.url, k: 'a:' + i }))]
+            .map(t => `<div class="thumb"><img src="${esc(t.src)}" alt=""><button type="button" aria-label="Remove photo" data-k="${esc(t.k)}">✕</button></div>`).join('');
+        body.querySelector('.file-pick').hidden = kept.length + added.length >= MAX;
+        onChange();
+    };
+    thumbs.onclick = e => {
+        const k = e.target.closest('button')?.dataset.k; if (!k) return;
+        if (k.startsWith('k:')) { const p = k.slice(2); kept.splice(kept.indexOf(p), 1); removed.push(p); }
+        else { const i = Number(k.slice(2)); URL.revokeObjectURL(added[i].url); added.splice(i, 1); }
+        draw();
+    };
+    body.querySelector('#pics').onchange = async e => {
+        const files = [...e.target.files].slice(0, MAX - kept.length - added.length); e.target.value = '';
+        for (const f of files) {
+            try { const c = await compressImage(f); added.push({ file: c, url: URL.createObjectURL(c) }); draw(); }
+            catch (err) { toast(err.message, true); }
+        }
+    };
+    draw();
+}
+
 function listingForm(l = null) {
     const r = l ? { ...l } : { seller_name: state.me.full_name, seller_phone: state.me.phone || '', photos: [] };
-    let kept = [...(r.photos || [])], removed = [], added = [];
-    const MAX = 5;
-    openSheet(l ? 'Edit post' : 'Sell on Motomart', `<form id="lf">
-        ${l ? '' : '<p class="small muted">Your post goes live after an admin approves it, usually within 24 hours. Members can then message you on WhatsApp.</p>'}
+    const kept = [...(r.photos || [])], removed = [], added = [];
+    const MAX = 5, cur = l ? catGroup(l.category) : '';
+    openSheet(l ? 'Edit post' : 'Sell on MotoMart', `<form id="lf">
+        ${l ? '' : '<p class="small muted">Your post goes live after an admin or coordinator approves it, usually within 24 hours. Members can then message you on WhatsApp. Once you mark it sold, it’s removed after 15 days.</p>'}
         <fieldset><legend>Photos <span class="hint muted small">(1 to ${MAX}, clear and well lit)</span></legend>
             <div class="thumbs" id="thumbs"></div>
             <label class="file-pick"><input type="file" accept="image/*,.heic,.heif" multiple id="pics"><span>📷 Add photos</span></label></fieldset>
         <label>Product name<input name="product_name" required maxlength="120" placeholder="e.g. Axor Apex helmet, matte black" value="${esc(r.product_name || '')}"></label>
+        ${catField(MM_CATS, MM_CATS.includes(cur) ? cur : l?.category || '')}
         <div class="grid2">
-            <label>Category<select name="category" required><option value="">Choose…</option>${CATS.map(c => `<option${c === r.category ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
             <label>Size<input name="size" maxlength="60" placeholder="L / 42 / Free size" value="${esc(r.size || '')}"></label>
-        </div>
-        <div class="grid2">
             <label>Age<input name="age" maxlength="60" placeholder="e.g. 8 months" value="${esc(r.age || '')}"></label>
-            <label>Condition<select name="condition" required><option value="">Choose…</option>${CONDITIONS.map(c => `<option${c === r.condition ? ' selected' : ''}>${c}</option>`).join('')}</select></label>
         </div>
+        <label>Condition<select name="condition" required><option value="">Choose…</option>${CONDITIONS.map(c => `<option${c === r.condition ? ' selected' : ''}>${c}</option>`).join('')}</select></label>
         <label>Reason for selling<input name="reason" maxlength="300" value="${esc(r.reason || '')}"></label>
         <label>Selling price (₹)<input name="price" type="number" required min="0" step="1" inputmode="numeric" value="${esc(r.price ?? '')}"></label>
         <label>More details <span class="hint">optional</span><textarea name="details" maxlength="1000" placeholder="Bill available? Any scratches? Pickup area?">${esc(r.details || '')}</textarea></label>
@@ -3492,51 +3626,155 @@ function listingForm(l = null) {
             <label>Seller name<input name="seller_name" required maxlength="80" value="${esc(r.seller_name || '')}"></label>
             <label>Seller WhatsApp<input name="seller_phone" required inputmode="tel" value="${esc(r.seller_phone || '')}"></label>
         </div>
+        <p class="small muted">Shared on WhatsApp, your name and number are hidden (like A•••• S•• · 98••••••10). Members see them only inside the app.</p>
         <button class="btn block">${l ? (l.status === 'rejected' ? 'Save and send for approval' : 'Save changes') : 'Send for approval'}</button>
     </form>`, body => {
-        const thumbs = body.querySelector('#thumbs');
-        const draw = () => {
-            thumbs.innerHTML = [...kept.map(p => ({ src: api.photoUrl(p), k: 'k:' + p })), ...added.map((f, i) => ({ src: f.url, k: 'a:' + i }))]
-                .map(t => `<div class="thumb"><img src="${esc(t.src)}" alt=""><button type="button" aria-label="Remove photo" data-k="${esc(t.k)}">✕</button></div>`).join('');
-            body.querySelector('.file-pick').hidden = kept.length + added.length >= MAX;
-        };
-        thumbs.onclick = e => {
-            const k = e.target.closest('button')?.dataset.k; if (!k) return;
-            if (k.startsWith('k:')) { const p = k.slice(2); kept = kept.filter(x => x !== p); removed.push(p); }
-            else { const i = Number(k.slice(2)); URL.revokeObjectURL(added[i].url); added.splice(i, 1); }
-            draw();
-        };
-        body.querySelector('#pics').onchange = async e => {
-            const files = [...e.target.files].slice(0, MAX - kept.length - added.length); e.target.value = '';
-            for (const f of files) {
-                try { const c = await compressImage(f); added.push({ file: c, url: URL.createObjectURL(c) }); draw(); }
-                catch (err) { toast(err.message, true); }
-            }
-        };
-        draw();
+        photoPicker(body, kept, removed, added, MAX);
+        bindCatField(body);
         body.querySelector('#lf').onsubmit = e => {
             e.preventDefault();
             if (kept.length + added.length === 0) return toast('Please add at least one photo', true);
             const d = Object.fromEntries(new FormData(e.target));
             const phone = d.seller_phone.replace(/\D/g, '').slice(-10);
             if (phone.length !== 10) return toast('Seller WhatsApp needs 10 digits', true);
-            const rec = { id: l?.id, photos: kept.concat(removed), product_name: d.product_name.trim(), category: d.category, size: d.size.trim() || null, age: d.age.trim() || null,
+            const category = catValue(d); if (!category) return toast('Type the new category', true);
+            const rec = { id: l?.id, kind: 'used', photos: kept.concat(removed), product_name: d.product_name.trim(), category, size: d.size.trim() || null, age: d.age.trim() || null,
                 condition: d.condition, reason: d.reason.trim() || null, price: Number(d.price), details: d.details.trim() || null, seller_name: d.seller_name.trim(), seller_phone: phone };
             busy(e.submitter, async () => {
                 await api.saveListing(rec, added.map(a => a.file), removed);
                 added.forEach(a => URL.revokeObjectURL(a.url));
                 await load.listings(true); closeSheet();
                 if (location.hash.startsWith('#motomart')) render(); else location.hash = '#motomart';
-                toast(l && l.status !== 'rejected' ? 'Saved' : 'Sent to admins for approval 👍');
+                toast(l && l.status !== 'rejected' ? 'Saved' : 'Sent for approval 👍');
             });
         };
     });
 }
 
-async function adminMotomart() {
+/* Read a product page's title and picture (free preview service). Returns {title, image}; blank when the store blocks it. */
+async function linkPreview(url) {
+    try {
+        const j = await (await fetch('https://api.microlink.io/?url=' + encodeURIComponent(url), { signal: AbortSignal.timeout?.(9000) })).json();
+        const image = j?.data?.image?.url || '';
+        return { title: String(j?.data?.title || '').trim(), image: /^https:\/\//i.test(image) ? image : '' };
+    } catch { return { title: '', image: '' }; }
+}
+
+/* Admins and coordinators: list a new accessory or RWB merch. Goes live at once. */
+function teamForm(l = null, kind = 'new') {
+    if (!isMod()) return;
+    let k = l ? kindOf(l) : kind, image_url = l?.image_url || '', pv = 0;
+    const kept = [...(l?.photos || [])], removed = [], added = [];
+    openSheet(l ? 'Edit listing' : 'List on MotoMart', `<form id="tf">
+        ${l ? '' : `<div class="seg" role="tablist"><button type="button" role="tab" data-k="new" aria-selected="${k === 'new'}">New accessory</button><button type="button" role="tab" data-k="merch" aria-selected="${k === 'merch'}">RWB Merch</button></div>`}
+        <p class="small muted" id="tf-help"></p>
+        <label><span id="link-l"></span><input name="link" type="url" inputmode="url" maxlength="1000" placeholder="https://…" value="${esc(l?.link || '')}"></label>
+        <div class="tf-pv" id="tf-pv" hidden></div>
+        <label>Product name<input name="product_name" required maxlength="120" placeholder="e.g. Mototorque crash guard for Ronin" value="${esc(l?.product_name || '')}"></label>
+        <div id="tf-cat"></div>
+        <label>Price (₹)<input name="price" type="number" required min="0" step="1" inputmode="numeric" value="${esc(l?.price ?? '')}"></label>
+        <label>Description <span class="hint">optional</span><textarea name="details" maxlength="1000" placeholder="Fits Ronin 225? Colour, sizes, offer…">${esc(l?.details || '')}</textarea></label>
+        <div class="tf-merch">
+            <p class="small muted" style="margin:4px 0 6px">Who takes orders? Members tap “Order on WhatsApp” to message this person. Leave the number blank to send them to RWB’s Instagram instead.</p>
+            <div class="grid2"><label>Order contact name<input name="seller_name" maxlength="80" value="${esc(l ? l.seller_name || '' : state.me.full_name || '')}"></label>
+            <label>Their WhatsApp<input name="seller_phone" inputmode="tel" value="${esc(l ? l.seller_phone || '' : state.me.phone || '')}"></label></div></div>
+        <fieldset><legend>Photo <span class="hint muted small" id="ph-hint"></span></legend>
+            <div class="thumbs" id="thumbs"></div>
+            <label class="file-pick"><input type="file" accept="image/*,.heic,.heif" multiple id="pics"><span>📷 Add photo or screenshot</span></label></fieldset>
+        <button class="btn block">${l ? 'Save changes' : 'Publish'}</button>
+    </form>`, body => {
+        const f = body.querySelector('#tf'), pvBox = body.querySelector('#tf-pv'), link = f.link;
+        const needPhoto = () => !image_url && kept.length + added.length === 0;
+        const drawPv = (state_, msg = '') => {
+            pvBox.hidden = !state_;
+            pvBox.className = 'tf-pv ' + (state_ || '');
+            pvBox.innerHTML = state_ === 'busy' ? '<span class="spin"></span> Getting the picture from the website…'
+                : state_ === 'ok' ? `<img src="${esc(image_url)}" alt="" referrerpolicy="no-referrer"><span class="grow"><b>✓ Picture found on the website</b><small>${kept.length + added.length ? 'Your own photo is shown first.' : 'This is shown on MotoMart. Add your own photo below to use that instead.'}</small></span><button type="button" class="linkish" data-x="pv-off">Remove</button>`
+                : state_ === 'none' ? `<span class="grow"><b>Couldn’t get a picture from this website</b><small>${msg || 'Please add one photo or a screenshot of the product below.'}</small></span>` : '';
+            const off = pvBox.querySelector('[data-x=pv-off]'); if (off) off.onclick = () => { image_url = ''; drawPv('none', 'Add one photo or a screenshot below.'); hint(); };
+        };
+        const hint = () => { const h = body.querySelector('#ph-hint'); if (h) h.textContent = needPhoto() ? '(needed: 1 photo or screenshot)' : '(optional)'; };
+        const fetchPv = async () => {
+            const u = link.value.trim(); if (!/^https?:\/\//i.test(u)) return;
+            const my = ++pv; drawPv('busy');
+            const r = await linkPreview(u); if (my !== pv || !f.isConnected) return;
+            if (r.image) { image_url = r.image; drawPv('ok'); } else { image_url = ''; drawPv('none'); }
+            if (r.title && !f.product_name.value.trim()) f.product_name.value = r.title.replace(/\s*[|–-]\s*[^|–-]*$/, '').slice(0, 120);
+            hint();
+        };
+        const setKind = nk => {
+            k = nk;
+            body.querySelectorAll('.seg [data-k]').forEach(b => b.setAttribute('aria-selected', b.dataset.k === k));
+            body.querySelector('#tf-help').textContent = k === 'new' ? 'A new accessory from a store. It goes live at once on the app and roninwb.in. Members tap “Check product” to open the store page.'
+                : 'RWB merch. It goes live at once on the app and roninwb.in, and members get a notification.';
+            body.querySelector('#link-l').innerHTML = k === 'new' ? 'Product link <span class="hint">the store page</span>' : 'Order or website link <span class="hint">optional</span>';
+            link.required = k === 'new';
+            body.querySelector('.tf-merch').hidden = k !== 'merch';
+            const cur = l?.category || ''; const list = k === 'merch' ? MERCH_CATS : MM_CATS;
+            body.querySelector('#tf-cat').innerHTML = catField(list, l ? (k === 'merch' ? cur : (MM_CATS.includes(catGroup(cur)) ? catGroup(cur) : cur)) : '');
+            bindCatField(body);
+        };
+        body.querySelectorAll('.seg [data-k]').forEach(b => b.onclick = () => setKind(b.dataset.k));
+        setKind(k);
+        photoPicker(body, kept, removed, added, 3, () => { hint(); if (image_url && !pvBox.hidden) drawPv('ok'); });
+        if (image_url) drawPv('ok');
+        link.addEventListener('change', fetchPv);
+        link.addEventListener('paste', () => setTimeout(fetchPv, 50));
+        f.onsubmit = e => {
+            e.preventDefault();
+            const d = Object.fromEntries(new FormData(f));
+            if (pvBox.classList.contains('busy')) return toast('One moment, still reading the website…');
+            if (needPhoto()) return toast('Add one photo or a screenshot of the product', true);
+            const category = catValue(d); if (!category) return toast('Type the new category', true);
+            let phone = String(d.seller_phone || '').replace(/\D/g, '').slice(-10);
+            if (k === 'merch' && phone && phone.length !== 10) return toast('WhatsApp number needs 10 digits', true);
+            const rec = { id: l?.id, kind: k, photos: kept.concat(removed), product_name: d.product_name.trim(), category, price: Number(d.price),
+                details: d.details.trim() || null, link: d.link.trim() || null, image_url: image_url || null,
+                seller_name: k === 'merch' && phone ? (d.seller_name || '').trim() || null : null, seller_phone: k === 'merch' && phone ? phone : null,
+                size: null, age: null, condition: null, reason: null };
+            busy(e.submitter, async () => {
+                await api.saveListing(rec, added.map(a => a.file), removed);
+                added.forEach(a => URL.revokeObjectURL(a.url));
+                await load.listings(true); closeSheet();
+                mmState.branch = k; mmState.cat = 'all';
+                if (location.hash.startsWith('#motomart')) render(); else location.hash = '#motomart';
+                toast(l ? 'Saved' : `Live on MotoMart${k === 'merch' ? ' · members are notified' : ''} 👍`);
+            });
+        };
+    });
+}
+
+/* One-time move: the website's old Accessories sheet and RWB Marketplace sheet → MotoMart (no notifications). Rows already moved are skipped. */
+async function importSheetListings() {
+    const accUrl = SITE.ACCESSORIES_SHEET_URL, merchUrl = SITE.MARKET_SHEET_URL;
+    if (!accUrl && !merchUrl) return toast('The sheet links were not found', true);
+    toast('Reading the two sheets…');
+    let acc = [], merch = [];
+    try { [acc, merch] = await Promise.all([accUrl ? fetchCSV(accUrl).then(parseCSV) : [], merchUrl ? fetchCSV(merchUrl).then(parseCSV) : []]); }
+    catch { return toast('Could not read the sheets. Check your internet and try again.', true); }
+    const img = u => { const d = u ? driveImg(u) : ''; return /^https:\/\//i.test(d) ? d : ''; };
+    const rows = [
+        ...acc.filter(r => r.name).map(r => ({ kind: 'new', product_name: r.name, category: r.category || 'Other', price: r.price, link: safeLink(r.link), image_url: img(r.image), source_key: 'sheet-acc:' + r.name.trim().toLowerCase() + '|' + (r.link || '').trim() })),
+        ...merch.filter(r => r.name).map(r => ({ kind: 'merch', product_name: r.name, category: r.category || 'Other', price: r.price, details: r.description || '', image_url: img(r.image), status: /sold/i.test(r.status || '') ? 'sold' : 'live', source_key: 'sheet-merch:' + r.name.trim().toLowerCase() }))];
+    const nA = rows.filter(r => r.kind === 'new').length, nM = rows.length - nA;
+    openSheet('Import from the sheets', `<p class="small muted" style="margin-bottom:10px">Found <b>${nA}</b> accessor${nA === 1 ? 'y' : 'ies'} and <b>${nM}</b> merch item${nM === 1 ? '' : 's'}. They’re added to MotoMart quietly (no notifications). The RWB score is dropped. Rows already imported are skipped, so it’s safe to tap again.</p>
+        <p class="small muted" style="margin-bottom:14px">Pictures are read from each product link now. Items without a picture show a category icon; edit them to add a photo.</p>
+        ${rows.length ? '<button class="btn block" data-x="go">Import</button>' : '<button class="btn ghost block" data-x="ok">Nothing to import</button>'}`, body => {
+        const ok = body.querySelector('[data-x=ok]'); if (ok) ok.onclick = closeSheet;
+        const go = body.querySelector('[data-x=go]');
+        if (go) go.onclick = () => busy(go, async () => {
+            for (const r of rows) if (!r.image_url && r.link) r.image_url = (await linkPreview(r.link)).image || '';
+            const n = await api.importListings(rows);
+            await load.listings(true); closeSheet(); mmState.branch = 'all'; render();
+            toast(n ? `${n} item${n === 1 ? '' : 's'} added to MotoMart` : 'Already imported');
+        });
+    });
+}
+
+async function adminMotoMart() {
     const pend = (await load.listings(true)).filter(l => l.status === 'pending');
     $('#admin-body').innerHTML = pend.length ? `<p class="small muted" style="margin-bottom:10px">Check photos, price and details, then approve. Members are notified when a post goes live. You can then share it to the WhatsApp group from the post.</p><div class="mm-grid">${pend.map(listingCard).join('')}</div>`
-        : '<div class="card empty"><b>All clear</b>No Motomart posts waiting for approval.</div>';
+        : '<div class="card empty"><b>All clear</b>No MotoMart posts waiting for approval.</div>';
     state.myId ??= await api.myId();
     actions.listing = el => listingDetail(pend.find(l => String(l.id) === el.dataset.id));
 }
@@ -3546,7 +3784,7 @@ const CHAT_KEY = () => 'rwb-chat-' + (state.me?.id || 'x');
 const chat = { msgs: null, busy: false, image: null, left: null };
 const loadChat = () => { if (chat.msgs) return; try { chat.msgs = JSON.parse(localStorage.getItem(CHAT_KEY())) || []; } catch { chat.msgs = []; } };
 const saveChat = () => { try { localStorage.setItem(CHAT_KEY(), JSON.stringify(chat.msgs.slice(-40))); } catch { /* ignore */ } };
-const SUGGEST = ['Which chain lube works in monsoon?', 'What tyre pressure do RWB riders use?', 'Which engine oil for the Ronin 225?', 'How do I track mileage with Trip A?', 'How do I sell my old helmet on Motomart?', 'Tips for a ride to the hills'];
+const SUGGEST = ['Which chain lube works in monsoon?', 'What tyre pressure do RWB riders use?', 'Which engine oil for the Ronin 225?', 'How do I track mileage with Trip A?', 'How do I sell my old helmet on MotoMart?', 'Tips for a ride to the hills'];
 const AI_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/><path d="M9 10h.01M12 10h.01M15 10h.01"/></svg>';
 
 /* tiny, safe markdown: **bold**, *italic*, lists, links, paragraphs */
@@ -4269,7 +4507,7 @@ async function svcHealth() {
     actions['trk-report'] = () => trackReport();
     if (!st.running) svcCheck();
 }
-/* Report a Motomart post, or anything else, to the RWB team (the Grievance Officer's queue, setup file 55) */
+/* Report a MotoMart post, or anything else, to the RWB team (the Grievance Officer's queue, setup file 55) */
 const REPORT_REASONS = {
     listing: ['Scam or fraud', 'Stolen, fake or illegal item', 'Wrong or misleading details', 'Abusive or offensive', 'Nudity or sexual content', 'Someone else\'s photos or details', 'Other'],
     other: ['Abuse, threats or harassment', 'Impersonation or fake profile', 'Nudity or sexual content', 'Morphed or fake photo of a person', 'My private details shared without consent', 'Scam or fraud', 'Something isn\'t working', 'Other']
@@ -4279,7 +4517,7 @@ function reportSheet(kind, ref = '', label = '') {
     openSheet(kind === 'listing' ? 'Report this post' : 'Report a problem', `<form id="rpf">
         ${label ? `<p class="small muted" style="margin-bottom:10px">${esc(label)}</p>` : ''}
         <fieldset><legend>What's wrong?</legend>${rs.map((r, i) => `<label class="check-row"><input type="radio" name="reason" value="${esc(r)}"${i ? '' : ' required'}><span>${esc(r)}</span></label>`).join('')}</fieldset>
-        <label>Details <span class="muted small">${kind === 'listing' ? '(optional)' : '(who or what, where in the app, when)'}</span><textarea name="details" rows="3" maxlength="1000" placeholder="${kind === 'listing' ? 'Anything that helps the admins check' : 'e.g. a member\'s profile photo, a Track note, a Motomart post'}"></textarea></label>
+        <label>Details <span class="muted small">${kind === 'listing' ? '(optional)' : '(who or what, where in the app, when)'}</span><textarea name="details" rows="3" maxlength="1000" placeholder="${kind === 'listing' ? 'Anything that helps the admins check' : 'e.g. a member\'s profile photo, a Track note, a MotoMart post'}"></textarea></label>
         <p class="small muted">Only the RWB team sees your report and your name. We reply within 24 hours and sort it out within 7 days; nudity, sexual content, impersonation or a morphed photo is removed within 2 hours. Grievance Officer: Sayantan Sarkar, <a href="mailto:ronin.warriors.bengal@gmail.com?subject=Grievance">ronin.warriors.bengal@gmail.com</a>. In danger? Call <a href="tel:112"><b>112</b></a>.</p>
         <button class="btn block">Send report</button></form>`, body => {
         const f = body.querySelector('#rpf');
@@ -4860,7 +5098,7 @@ async function famSheet() {
     const list = d.fam || [], max = d.max || FAM_MAX, full = list.length >= max, me = state.me;
     const msg = `Hi! 🧡 I've added you to my RWB FAM in the RWB App (Ronin Warriors of Bengal).\n\nYou'll see where I am when I share my live location on rides, my bike's odometer, RWB events and important updates.\n\n1️⃣ Open ${famLink(d.code)}\n2️⃣ Sign in with any Google account (remember which one!)\n3️⃣ Enter my code: *${d.code}*\n\n– ${firstName(me)}`;
     openSheet('RWB FAM', `<div class="fam-intro"><span class="fam-intro-ico">${FAM_ICON}</span><p><b>Keep your family in the loop.</b> Invite up to ${max} family members. On the RWB App they see your live location when you share it on Track (and riders on the same event ride), your odometer, RWB events and important announcements.</p></div>
-        <p class="small muted" style="margin:10px 0">They can't see expenses, RSVPs, Motomart, Service, Mileage or anyone's phone numbers, and they can't share or send SOS.</p>
+        <p class="small muted" style="margin:10px 0">They can't see expenses, RSVPs, MotoMart, Service, Mileage or anyone's phone numbers, and they can't share or send SOS.</p>
         <h3 class="group-title" style="margin-top:6px">Your FAM <span class="small muted" style="text-transform:none;letter-spacing:0">${list.length} of ${max}</span></h3>
         <div class="group" id="fam-list">${list.length ? list.map(x => `<div class="bike-row">${face(x, 'avatar sm')}<span class="grow"><b>${esc(x.full_name)}</b><span class="small muted">${x.phone ? esc(x.phone.replace(/(\d{5})(\d{5})/, '$1 $2')) + ' · ' : ''}joined ${fmtDate(String(x.created_at).slice(0, 10))}${x.approved === false ? ' · <b class="warn">turned off by them</b>' : ''}</span></span>
             <button class="btn sm ghost" data-rm="${x.id}" data-n="${esc(x.full_name)}">Remove</button></div>`).join('') : '<p class="small muted" style="padding:14px">No one yet. Share your invite below.</p>'}</div>
@@ -4953,7 +5191,7 @@ async function nativePushOn(ask = true) {
     let st = await P.checkPermissions();
     if (st.receive !== 'granted' && ask) st = await P.requestPermissions();
     if (st.receive !== 'granted') { if (ask) throw new Error('Notifications are off for the RWB app: Settings → Apps → RWB → Notifications → Allow.'); return false; }
-    await P.createChannel({ id: 'rwb', name: 'RWB updates', description: 'Events, announcements, Motomart and more', importance: 4, visibility: 1, vibration: true }).catch(() => {});
+    await P.createChannel({ id: 'rwb', name: 'RWB updates', description: 'Events, announcements, MotoMart and more', importance: 4, visibility: 1, vibration: true }).catch(() => {});
     await P.createChannel({ id: 'sos', name: 'SOS alerts', description: 'A rider needs help (10-second siren)', importance: 5, visibility: 1, vibration: true, sound: 'sos.wav', lights: true, lightColor: '#FF0000' }).catch(() => {});
     await P.register();
     return true;
