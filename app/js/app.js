@@ -178,11 +178,30 @@ function render() {
 /* A screen that is still loading when the rider moves on never paints over the new one:
    its next write to the page stops it (navN changes on every navigation). */
 let navN = 0, paintN = -1, lastRoute = '';
+/* Screen changes: if the next screen takes a moment, the old one gently dims (and can't be tapped) and a thin
+   line at the top shows progress. Fast screens (most, they're cache-first) show neither: they just glide in. */
+/* pictures fade in once loaded (CSS hides the listed thumbnails until then; already-cached ones show at once) */
+addEventListener('load', e => { const t = e.target; if (t.tagName === 'IMG') t.classList.add('in'); }, true);
+new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.querySelectorAll) n.querySelectorAll('img').forEach(i => { if (i.complete && i.naturalWidth) i.classList.add('in'); }); })
+    .observe(document.getElementById('app'), { childList: true, subtree: true });
+const navUI = (() => {
+    const root = document.documentElement, bar = document.createElement('div'); bar.id = 'nav-bar'; bar.setAttribute('aria-hidden', 'true');
+    document.body.append(bar);
+    let dimT = 0, barT = 0, on = false;
+    return {
+        start(change) { clearTimeout(dimT); clearTimeout(barT);
+            if (change) dimT = setTimeout(() => root.classList.add('nav-wait'), 90);
+            barT = setTimeout(() => { on = true; bar.className = ''; void bar.offsetWidth; bar.className = 'go'; }, 160); },
+        painted() { clearTimeout(dimT); root.classList.remove('nav-wait'); },
+        done() { clearTimeout(dimT); clearTimeout(barT); root.classList.remove('nav-wait');
+            if (on) { on = false; bar.className = 'done'; setTimeout(() => { if (bar.className === 'done') bar.className = ''; }, 450); } }
+    };
+})();
 const STALE = new Error('stale screen');
 (() => {
     const d = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
     Object.defineProperty(app, 'innerHTML', { configurable: true, get() { return d.get.call(this); },
-        set(v) { if (paintN >= 0 && paintN !== navN) throw STALE; d.set.call(this, v); } });
+        set(v) { if (paintN >= 0 && paintN !== navN) throw STALE; d.set.call(this, v); navUI.painted(); } });
 })();
 /* still on the screen that started loading? (for parts filled in after the first paint) */
 const stillHere = n => n === navN;
@@ -221,9 +240,10 @@ async function doRender() {
     const route = name + '/' + (param || '');
     app.classList.toggle('same', route === lastRoute); lastRoute = route;
     paintN = navN;
+    navUI.start(route !== app.dataset.shown); app.dataset.shown = route;
     pingCopy().catch(() => {});
     try { await view(); } catch (e) { if (e === STALE) return; paintN = -1; app.innerHTML = top('Oops') + `<div class="card empty"><b>Could not load</b>${esc(e.message)}<p style="margin-top:12px"><button class="btn sm" onclick="location.reload()">Try again</button></p></div>`; }
-    finally { paintN = -1; }
+    finally { paintN = -1; navUI.done(); }
     const y = navScroll; navScroll = null;
     if (y != null) requestAnimationFrame(() => window.scrollTo(0, y));
 }
@@ -253,6 +273,8 @@ const CAL_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" st
 const docsAlert = () => (state.docs || []).some(d => docStatus(d).level !== 'ok' && docStatus(d).level !== 'none');
 /* Android in the browser (not the RWB Android app): a small pulsing "Get app" button; never shown on iPhone */
 const getAppBtn = () => !NATIVE && /android/i.test(navigator.userAgent) ? `<a class="get-app" href="${apkUrl()}" download="RWB-App.apk" aria-label="Download the RWB Android app"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span>App</span></a>` : '';
+/* quiet shimmer bars instead of a "Loading…" line */
+const SKEL = (n = 3) => `<div class="skel" aria-hidden="true">${'<i></i>'.repeat(n)}</div><span class="sr-only">Loading</span>`;
 const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1>${right}${getAppBtn()}
     ${isFam() ? '' : `<a class="icon-btn bell cal-btn" href="#calendar" aria-label="Calendar${calAlert() ? ' (something due soon)' : ''}">${CAL_ICON}${calAlert() ? '<i class="dot"></i>' : ''}</a>`}
     <a class="icon-btn bell guide-btn" href="#guides" aria-label="Guides and how-to videos">${HELP_ICON}</a>
@@ -1591,8 +1613,8 @@ async function eventPage(e) {
             <div class="btns evt-actions">${fam ? '' : '<button class="btn sm ghost" data-act="evt-share">Share</button>'}${live && !past ? `<a class="btn sm ghost" href="${esc(gcalUrl(e))}" target="_blank" rel="noopener">Add to calendar</a>` : ''}</div>
         </section>
         ${rideLive(e)}
-        ${fam ? '' : `<section class="section"><h2>Who's coming</h2><div class="card">${!cached ? '<p class="muted small">Loading…</p>' : people.length ? ppl(going, 'Going') + ppl(maybe, 'Maybe') + ppl(no, "Can't go") : '<p class="muted small">No responses yet.</p>'}</div></section>
-        <section class="section" id="exp-sec"><h2>Expenses</h2><div id="exp-body">${inGroup || mod ? '<p class="muted small">Loading…</p>' : `<div class="card empty"><b>Split costs with the group</b>Respond Going or Maybe to see and add shared expenses for this event.</div>`}</div></section>`}
+        ${fam ? '' : `<section class="section"><h2>Who's coming</h2><div class="card">${!cached ? SKEL(2) : people.length ? ppl(going, 'Going') + ppl(maybe, 'Maybe') + ppl(no, "Can't go") : '<p class="muted small">No responses yet.</p>'}</div></section>
+        <section class="section" id="exp-sec"><h2>Expenses</h2><div id="exp-body">${inGroup || mod ? SKEL(2) : `<div class="card empty"><b>Split costs with the group</b>Respond Going or Maybe to see and add shared expenses for this event.</div>`}</div></section>`}
         ${mod ? `<section class="section"><h2>Organiser</h2><div class="btns">${live ? '<button class="btn ghost" data-act="evt-edit">Edit</button><button class="btn ghost" data-act="evt-cancel">Cancel event</button>' : ''}<button class="btn danger" data-act="evt-del">Delete</button></div></section>` : ''}`;
     actions = {
         rsvp: b => busy(b, async () => { await api.rsvp(e.id, b.dataset.s, b.dataset.s === 'going' ? (me?.guests || 0) : 0); await loadEvents(true); toast(b.dataset.s === 'going' ? "You're going 🏍️" : b.dataset.s === 'maybe' ? 'Marked as maybe' : 'Marked as can\'t go'); render(); }),
@@ -2380,17 +2402,32 @@ async function driveGuides() {
     return list.filter(p => /^[\w-]+$/.test(p.id)).map(p => ({ id: 'd-' + p.id, drive: p.id, cat: 'maint', kind: 'pdf', title: pdfTitle(p.name), description: p.description || '',
         thumb_url: `https://drive.google.com/thumbnail?id=${p.id}&sz=w200`, created_at: p.date ? String(p.date).slice(0, 10) : '', uploader: 'RWB' }));
 }
+/* The old Drive PDF list is slow (a Google script), so Guides never waits for it: it joins in when it arrives.
+   The last list is also kept on the phone, so Guides opens instantly next time and refreshes in the background. */
+const GD_KEY = 'rwb-gd-v1';
+const gdBuild = (db, drive, cats, setup = true) => ({ db, drive, setup, cats, all: [...db, ...drive, ...builtinGuides()] });
+function gdFromPhone() {
+    if (state.gd || isFam()) return state.gd;
+    try { const c = JSON.parse(localStorage.getItem(GD_KEY)); if (c?.me === state.me?.id) state.gd = gdBuild(c.db || [], c.drive || [], c.cats || [], c.setup !== false); } catch { /* ignore */ }
+    return state.gd;
+}
+let gdDriveJob = null;
 async function loadGuides(force = false) {
     if (state.gd && !force) return state.gd;
-    const [db, drive, cats] = await Promise.all([
+    const [db, cats] = await Promise.all([
         isFam() ? Promise.resolve([]) : api.guideItems().catch(e => { if (!state.gd) throw e; return state.gd.db; }),
-        isFam() ? Promise.resolve([]) : driveGuides().catch(() => state.gd?.drive || []),
         isMod() ? api.guideCats().catch(() => []) : Promise.resolve([])
     ]);
     state.myId ??= await api.myId().catch(() => null);
-    const all = [...(db || []), ...drive, ...builtinGuides()];
-    return (state.gd = { db: db || [], drive, setup: db !== null, cats, all });
+    state.gd = gdBuild(db || [], state.gd?.drive || [], cats, db !== null);
+    if (!isFam()) gdDriveJob ??= driveGuides().then(drive => {
+        state.gd = gdBuild(state.gd.db, drive, state.gd.cats, state.gd.setup); gdSave();
+        if (location.hash.startsWith('#guides')) drawGuides();
+    }).catch(() => {}).finally(() => { gdDriveJob = null; });
+    gdSave();
+    return state.gd;
 }
+function gdSave() { if (isFam() || !state.gd) return; try { localStorage.setItem(GD_KEY, JSON.stringify({ me: state.me?.id, db: state.gd.db, drive: state.gd.drive, cats: state.gd.cats, setup: state.gd.setup })); } catch { /* full or blocked */ } }
 const gdCanPost = cat => !!state.gd?.cats?.includes(cat);
 const gdCanManage = it => !it.builtin && !it.drive && gdCanPost(it.cat) && (isAdmin() || it.user_id === state.myId);
 const gdText = it => [it.title, it.description, it.tags, GD_CATS[it.cat]?.[0], GD_KIND[it.kind], it.uploader].filter(Boolean).join(' ');
@@ -2425,7 +2462,7 @@ async function viewGuides() {
         ${cats.length > 1 ? `<div class="gd-head">
             <div class="gd-cats" role="tablist" aria-label="Guides">${cats.map(c => `<button role="tab" aria-selected="${c === gState.cat}" data-act="gcat" data-c="${c}">${GD_ICO[c]}<span>${GD_CATS[c][0]}</span><i class="gd-qn" hidden></i></button>`).join('')}</div>
             <button class="mm-search-btn gd-sbtn" data-act="gsearch" aria-label="Search guides">${SEARCH_ICO}</button></div>` : ''}
-        <div id="gd-body">${state.gd ? '' : '<div class="gd-skel"><i></i><i></i><i></i><i></i></div>'}</div><div class="mm-fabs" id="gd-fab" hidden></div>`;
+        <div id="gd-body">${gdFromPhone() ? '' : GD_SKEL}</div><div class="mm-fabs" id="gd-fab" hidden></div>`;
     actions = {
         gcat: el => { const c = el.dataset.c; if (c === gState.cat) return; gState.cat = c; gState.type = 'all'; gdPill(); drawGuides(true); },
         gtype: el => { gState.type = el.dataset.t; drawGuides(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
@@ -2440,6 +2477,9 @@ async function viewGuides() {
     try { await loadGuides(); } catch (e) { if (stillHere(n)) $('#gd-body').innerHTML = `<div class="card empty"><b>Could not load Guides</b>${esc(e.message)}<p style="margin-top:12px"><button class="btn sm" onclick="location.reload()">Try again</button></p></div>`; return; }
     if (stillHere(n)) drawGuides();
 }
+/* while the very first list loads: a quiet placeholder in the shape of the real screen */
+const GD_SKEL = `<div class="gd-skel" aria-hidden="true"><i class="sk-line"></i><div class="sk-row"><i class="sk-pill"></i><i class="sk-pill"></i><i class="sk-pill"></i></div>
+    <i class="sk-h"></i><div class="sk-row"><i class="sk-short"></i><i class="sk-short"></i><i class="sk-short"></i></div><i class="sk-h"></i><i class="sk-doc"></i><i class="sk-doc"></i></div><span class="sr-only">Loading</span>`;
 /* the white pill slides under the chosen category, sized to its label */
 function gdPill() {
     const bar = app.querySelector('.gd-cats'); if (!bar) return;
@@ -3222,7 +3262,7 @@ async function viewAdmin() {
             <button role="tab" aria-selected="${tab === 'reports'}" data-act="tab" data-tab="reports">Reports<span id="rep-count"></span></button>
             <button role="tab" aria-selected="${tab === 'ai'}" data-act="tab" data-tab="ai">Pookie<span id="ai-count"></span></button>
             <button role="tab" aria-selected="${tab === 'guides'}" data-act="tab" data-tab="guides">Guides</button></div>
-        <div id="admin-body"><p class="muted">Loading…</p></div>`;
+        <div id="admin-body">${SKEL(4)}</div>`;
     actions = { tab: el => { state.adminTab = el.dataset.tab; viewAdmin(); }, mfilter: el => { state.adminTab = 'members'; state.memberFilter = el.dataset.f; state.adminSearch = ''; viewAdmin(); } };
     load.listings(true).then(ls => { const n = ls.filter(l => l.status === 'pending').length; const c = $('#mm-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
     api.admin.dupes().then(g => { state.dupes = g; const c = $('#dupe-count'); if (c && g.length) c.textContent = ` (${g.length})`; }).catch(() => {});
@@ -3264,7 +3304,7 @@ async function viewCoord() {
     app.innerHTML = top('Panel') + `
         <div class="coord-hero"><span class="ad-ico">${ICON.shield}</span><div><b>Your coordinator panel</b><p class="small muted">Approve MotoMart posts and Pookie answers, handle members' reports and add Ride guides. Your own posts and answers go to an admin or another coordinator.</p></div></div>
         <div class="seg section scroll" role="tablist">${Object.entries(COORD_TABS).map(([k, [label]]) => `<button role="tab" aria-selected="${tab === k}" data-act="tab" data-tab="${k}">${label}<span id="c-${k}"></span></button>`).join('')}</div>
-        <div id="admin-body"><p class="muted">Loading…</p></div>`;
+        <div id="admin-body">${SKEL(4)}</div>`;
     actions = { tab: el => { state.adminTab = el.dataset.tab; viewAdmin(); } };
     coordCounts().then(n => Object.entries(n).forEach(([k, v]) => { const c = $('#c-' + k); if (c) c.textContent = v ? ` (${v})` : ''; if (k === 'ai') pookieBadge(v); })).catch(() => {});
     try { await COORD_TABS[tab][1](); }
@@ -4733,7 +4773,7 @@ async function viewCrew() {
 /* =================== RWB members (directory; admins get their member tools) =================== */
 async function viewMembers() {
     app.innerHTML = top('RWB') + `<a class="back-link" href="#crew">‹ Warriorboards</a><h2 class="mem-title">RWB Members</h2>
-        <p class="small muted" style="margin:-2px 0 12px">Find riders and reach the RWB team for help</p><div id="crew-body"><p class="muted">Loading…</p></div>`;
+        <p class="small muted" style="margin:-2px 0 12px">Find riders and reach the RWB team for help</p><div id="crew-body">${SKEL(5)}</div>`;
     actions = {};
     if (isMod() && !isAdmin()) $('#crew-body').insertAdjacentHTML('beforebegin', '<button class="btn ghost block" data-act="fam-all" style="margin-bottom:12px">👨‍👩‍👧 RWB FAM members</button>');
     if (isAdmin()) {   /* admins get their full member tools here too */

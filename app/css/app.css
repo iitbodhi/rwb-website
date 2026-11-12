@@ -2134,3 +2134,36 @@ html.lite .gd-cats{background:color-mix(in srgb,var(--paper-2) 92%,transparent)}
 .cal-fade,#app > #cal-below.cal-fade{animation:cal-fade .28s ease-out both}
 @keyframes cal-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 #app.same > #cal-below.cal-fade{animation:cal-fade .28s ease-out both!important}
+
+/* =====================================================================
+   Screen changes (Nov 2026): screens glide in; a slow screen dims the old one and shows a thin progress line;
+   shimmer placeholders instead of "Loading…"; pictures fade in instead of popping.
+   ===================================================================== */
+#app > *:not(.top):not(.demo-bar){animation:rise .26s cubic-bezier(.22,.8,.24,1) both}
+@keyframes rise{from{opacity:0;transform:translate3d(0,6px,0)}to{opacity:1;transform:none}}
+html.nav-wait #app > *:not(.top):not(.demo-bar){animation:none;opacity:.45;transition:opacity .2s ease;pointer-events:none}
+#nav-bar{position:fixed;left:0;right:0;top:max(env(safe-area-inset-top),var(--safe-area-inset-top,0px));z-index:300;height:2.5px;pointer-events:none;
+  transform-origin:0 50%;transform:scaleX(0);opacity:0;border-radius:0 3px 3px 0;
+  background:linear-gradient(90deg,var(--orange),#f5a06a);box-shadow:0 0 10px color-mix(in srgb,var(--orange) 60%,transparent)}
+#nav-bar.go{opacity:1;transform:scaleX(.85);transition:transform 2.6s cubic-bezier(.08,.65,.2,1),opacity .15s}
+#nav-bar.done{opacity:0;transform:scaleX(1);transition:transform .22s ease-out,opacity .3s ease .18s}
+.skel{display:grid;gap:10px;padding:4px 0}
+.skel i,.gd-skel i{display:block;border-radius:14px;background:linear-gradient(100deg,color-mix(in srgb,var(--paper-2) 80%,transparent) 30%,color-mix(in srgb,var(--paper-2) 35%,var(--card)) 50%,color-mix(in srgb,var(--paper-2) 80%,transparent) 70%);
+  background-size:300% 100%;animation:skel 1.3s linear infinite}
+.skel i{height:58px}
+.skel i:nth-child(2n){opacity:.8}.skel i:nth-child(3n){opacity:.65}
+.card .skel i{height:16px;border-radius:8px}.card .skel i:last-child{width:60%}
+@keyframes skel{from{background-position:150% 0}to{background-position:-150% 0}}
+.gd-skel{display:grid;gap:12px;grid-template-columns:none}
+.gd-skel i{aspect-ratio:auto}
+.gd-skel .sk-line{height:14px;width:78%;border-radius:7px}
+.gd-skel .sk-row{display:flex;gap:8px;overflow:hidden}
+.gd-skel .sk-pill{flex:none;width:88px;height:34px;border-radius:999px}
+.gd-skel .sk-h{height:11px;width:90px;border-radius:6px;margin-top:8px}
+.gd-skel .sk-short{flex:none;width:132px;aspect-ratio:9/16;border-radius:16px}
+.gd-skel .sk-doc{height:72px;border-radius:var(--r)}
+html.lite .skel i,html.lite .gd-skel i{animation:none}
+/* pictures fade in when they arrive */
+.gd-cover img,.gd-pic img,.mm-img img,.gd-ath img,.mm-s-img img,.vid-thumb img{opacity:0;transition:opacity .3s ease}
+.gd-cover img.in,.gd-pic img.in,.mm-img img.in,.gd-ath img.in,.mm-s-img img.in,.vid-thumb img.in{opacity:1}
+@media (prefers-reduced-motion:reduce){#nav-bar{display:none}html.nav-wait #app > *{opacity:1}.skel i,.gd-skel i{animation:none}}
