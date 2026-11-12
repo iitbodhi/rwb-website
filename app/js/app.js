@@ -181,7 +181,7 @@ let navN = 0, paintN = -1, lastRoute = '';
 /* Screen changes: if the next screen takes a moment, the old one gently dims (and can't be tapped) and a thin
    line at the top shows progress. Fast screens (most, they're cache-first) show neither: they just glide in. */
 /* pictures fade in once loaded (CSS hides the listed thumbnails until then; already-cached ones show at once) */
-addEventListener('load', e => { const t = e.target; if (t.tagName === 'IMG') t.classList.add('in'); }, true);
+document.addEventListener('load', e => { const t = e.target; if (t.tagName === 'IMG') t.classList.add('in'); }, true);   /* on document: a picture's load never reaches window */
 new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.querySelectorAll) n.querySelectorAll('img').forEach(i => { if (i.complete && i.naturalWidth) i.classList.add('in'); }); })
     .observe(document.getElementById('app'), { childList: true, subtree: true });
 const navUI = (() => {
