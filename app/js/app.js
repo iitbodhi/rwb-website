@@ -234,7 +234,7 @@ window.addEventListener('hashchange', () => {
     const idx = history.state?.rwbNav;
     if (idx != null) { navIdx = idx; navScroll = navPos[idx] || 0; }       /* back / forward to a screen seen before */
     else { navIdx = ++navMax; try { history.replaceState({ ...(history.state || {}), rwbNav: navIdx }, ''); } catch { /* ignore */ } navScroll = 0; }
-    closeSheet(); render();
+    closeSheet(); closeMmSearch(); render();
 });
 
 const demoBar = () => api?.demo ? `<div class="demo-bar">Demo mode: sample data, saved only on this device. <button data-act="reset-demo">Reset</button></div>` : '';
@@ -3504,7 +3504,9 @@ async function viewMotoMart() {
     if (state.param) { const id = state.param; state.param = null; history.replaceState(null, '', '#motomart'); const l = all.find(x => String(x.id) === id); if (l && !expired(l)) listingDetail(l); else toast('That post is no longer available', true); }
 }
 
-/* Search: a small bar that drops down over the shop, with live matches as you type */
+/* Search: a small bar that drops down over the shop, with live matches as you type.
+   Back (button or swipe) and leaving MotoMart close it. */
+const closeMmSearch = () => document.querySelectorAll('.mm-search').forEach(b => { b.classList.remove('on'); setTimeout(() => b.remove(), 180); });
 function mmSearch(items) {
     document.querySelector('.mm-search')?.remove();
     const box = document.createElement('div'); box.className = 'mm-search'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'Search MotoMart');
@@ -3512,7 +3514,7 @@ function mmSearch(items) {
     box.innerHTML = `<div class="mm-search-bar"><span class="mm-s-ico">${SEARCH_ICO}</span><input type="search" enterkeyhint="search" placeholder="Search helmets, guards, jerseys…" value="${esc(mmState.q)}" aria-label="Search"><button class="linkish" data-x="close">Cancel</button></div><div class="mm-sugg" role="listbox"></div>`;
     document.body.append(box);
     const input = box.querySelector('input'), list = box.querySelector('.mm-sugg');
-    const close = () => { box.classList.remove('on'); setTimeout(() => box.remove(), 180); };
+    const close = closeMmSearch;
     const go = q => { mmState.q = q; mmState.review = false; close(); viewMotoMart(); };
     const draw = () => {
         const q = input.value.trim();
@@ -5253,6 +5255,7 @@ if (NATIVE) try {
     App.addListener('backButton', ({ canGoBack }) => {
         if (document.body.classList.contains('blocked')) return App.minimizeApp();
         if (document.querySelector('dialog#sheet[open]')) return closeSheet();
+        if (document.querySelector('.mm-search')) return closeMmSearch();   /* MotoMart search open: back closes it */
         if (document.querySelector('.sos-alarm')) return document.querySelector('.sos-alarm').remove();
         const h = location.hash.slice(1).split('/')[0];
         if (h && h !== 'home') { if (canGoBack) history.back(); else location.hash = '#home'; } else App.minimizeApp();
