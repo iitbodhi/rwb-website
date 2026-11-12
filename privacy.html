@@ -64,6 +64,7 @@
     <li><b>Calendar and reminders:</b> only you see your calendar's personal dates: your reminders, document expiry dates, next service and My Ride parts due. To send you reminder notifications, the app keeps your next service and part due dates and your reminders in the database, visible only to you; RWB admins cannot see them. You can turn these notifications off in Me → Notifications. RWB events in the Calendar are the same for everyone.</li>
     <li><b>Events:</b> members see who responded to an event. Shared expenses are visible only to the people going and to the RWB team.</li>
     <li><b>MotoMart:</b> what you post (photos, price, description) and your name and WhatsApp number on that post are visible to members, so buyers can contact you. When a post is shared to WhatsApp, your name and number are hidden (only the first letters and last two digits show), so people outside the app can't see them. Once you mark an item sold, the post and its photos are deleted 15 days later. New accessories and RWB merch listed by the RWB team are also shown on roninwb.in, without anyone's phone number.</li>
+    <li><b>Guides:</b> the videos, PDFs and pictures that RWB admins and coordinators add to Guides (the ? button) are visible to all members, with the name or nickname of the person who added them. These files are kept on public file hosting (see GitHub and jsDelivr below), so anyone who has a file's link can open it. Members can only view Guides; nothing about you is collected when you do.</li>
   </ul>
 
   <h2>Services we use</h2>
@@ -72,13 +73,14 @@
     <li><b>Supabase</b> stores the app's data, with access rules that enforce the limits above.</li>
     <li><b>Google</b> provides sign-in, the join form and RWB's member sheet.</li>
     <li><b>GitHub Pages</b> hosts the website and the app.</li>
+    <li><b>GitHub</b> and <b>jsDelivr</b> store and deliver the Guides videos, PDFs and pictures added by the RWB team.</li>
     <li><b>Your browser's notification service</b> and <b>Google Firebase Cloud Messaging</b> deliver app notifications (and, in the Android app, Track's wake-up messages) if you turn them on.</li>
     <li><b>Google Play</b> delivers and updates the Android app if you install it from the Play Store.</li>
     <li><b>Vehicle-registration lookup services</b> (such as VAHAN, CarInfo or Motorpedia) may be used by admins to check that a VRN is valid. Only the VRN is entered.</li>
     <li><b>Groq or Google Gemini</b> answer questions asked to Pookie (see below).</li>
     <li><b>Google Calendar:</b> “Add to Google Calendar” in the Calendar opens Google Calendar with that one item filled in, only when you tap it.</li>
   </ul>
-  <p><b>Where your data is stored:</b> the app's database is in India (Supabase, Mumbai). Some of the other services above, such as Google, GitHub and the AI services, may process data on servers outside India. Indian law allows this, and the same protections in this policy apply wherever your data is kept.</p>
+  <p><b>Where your data is stored:</b> the app's database is in South Korea (Supabase, Seoul). Some of the other services above, such as Google, GitHub, jsDelivr and the AI services, may also process data on servers outside India. Indian law allows this, and the same protections in this policy apply wherever your data is kept.</p>
 
   <h2>Pookie (the AI assistant)</h2>
   <p>Questions you ask Pookie, any photo you attach, your first name or nickname (so Pookie can greet you), and a short summary of your own bike data (bike model, odometer, last service, average mileage) are sent to an AI service, Groq or Google Gemini, to get an answer. These services may use it to improve their products. Pookie does not see other members' details. Please don't type personal details such as phone numbers or addresses into the chat. Your chat history stays on your phone.</p>

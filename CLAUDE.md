@@ -7,7 +7,7 @@
 - The app: `app/` folder. The Android app (package `in.roninwb.twa`, built with Capacitor) loads its screens from roninwb.in/app. So **web changes reach every installed copy without a new build**.
 - A new Android build is needed only for native changes: icon, the Track background service, notifications, Google sign-in sheet, permissions. Those live in `android-app/`.
 - Any change under `android-app/**` triggers `.github/workflows/android.yml`. Build N gets versionCode 100+N and version 2.0.N. The build makes the RWB-Play-N .aab (Bodhi uploads it to Play Console → Closed testing) and also updates `download/RWB-App.apk`.
-- Backend: Supabase (Mumbai), free plan. Watch the egress usage.
+- Backend: Supabase (project region ap-northeast-2, Seoul), free plan. Watch the egress usage.
 - Member sheet: the RWB_Contact Google Sheet, synced every 12 hours by `tools/form-sync.gs` (Apps Script).
 
 ## Where things are

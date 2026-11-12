@@ -61,7 +61,7 @@ window.RWB_TNC = {
         'Sellers must own what they sell, describe it honestly, and must not list stolen, counterfeit, illegal or unsafe items. RWB coordinators may approve, edit or remove posts.',
         'Shared expense records in Events are a convenience only. Settling payments is between the members involved.',
         'Documents you save in the app (such as your licence or RC) are visible only to you. You are responsible for keeping copies of anything important.',
-        'Things you add for other members to see (such as MotoMart posts and photos, and answers in Teach Pookie) must be your own, true to the best of your knowledge, and lawful. You allow RWB to show, store, edit and use them free of charge within the RWB App and website for the community; for Teach Pookie, approved answers become part of what Pookie (the AI assistant) uses to answer members. You can ask an admin to remove what you added.',
+        'Things you add for other members to see (such as MotoMart posts and photos, answers in Teach Pookie, and videos, PDFs and pictures in Guides) must be your own or used with permission, true to the best of your knowledge, and lawful. You allow RWB to show, store, edit and use them free of charge within the RWB App and website for the community; for Teach Pookie, approved answers become part of what Pookie (the AI assistant) uses to answer members. You can ask an admin to remove what you added.',
         'Warriorboards (leaderboards), XP and ranks are for fun and have no money value. RWB admins may correct or remove scores, or remove someone from a board, if they look wrong or were gained unfairly (for example fake rides, fake readings or copied answers).'
     ]],
     ['Photos, videos and social media', [
