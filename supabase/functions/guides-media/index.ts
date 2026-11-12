@@ -17,7 +17,8 @@
 //        name "RWB Guides", expiry 1 year (set a reminder), Repository access: Only select repositories → rwb-media,
 //        Permissions → Repository permissions → Contents: Read and write. Generate, copy the token.
 //   3. Supabase → Edge Functions → Secrets: add GITHUB_TOKEN = the token. (Optional: GITHUB_REPO, default iitbodhi/rwb-media.)
-//   4. Supabase → Edge Functions → Deploy a new function → name guides-media → paste this file → Deploy.
+//   4. Deploy this function as guides-media with "Verify JWT" off (it checks the signed-in member itself).
+//   Health check: GET https://<project>.supabase.co/functions/v1/guides-media → { ok: true } when uploads work.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { encodeBase64 } from "jsr:@std/encoding@1/base64";
 
@@ -38,7 +39,7 @@ const BUDGET = 900_000_000;   // GitHub asks for repositories under about 1 GB; 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
@@ -93,6 +94,13 @@ async function deleteFile(path: string | null, sha: string | null) {
 /* ---------- Request ---------- */
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  /* health check (no sign-in, answers only yes/no): can the server still save to the library? */
+  if (req.method === "GET") {
+    let ok = false;
+    if (GH_TOKEN) { const r = await fetch(`https://api.github.com/repos/${GH_REPO}`, { headers: { Authorization: `Bearer ${GH_TOKEN}`, "User-Agent": "rwb-guides" } }).catch(() => null);
+      ok = !!r?.ok && !!(await r.json().catch(() => ({})))?.permissions?.push; }
+    return json({ ok });
+  }
   if (req.method !== "POST") return fail("POST only", 405);
   const asUser = createClient(SB_URL, ANON, { global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } }, auth: { persistSession: false } });
   const server = createClient(SB_URL, SERVICE, { auth: { persistSession: false } });
