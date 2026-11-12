@@ -9,7 +9,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const app = $('#app'), tabbar = $('#tabbar'), sheet = $('#sheet');
 
 let api;
-const state = { me: null, services: null, fuel: null, bdays: null, guides: null, acc: null, guideTab: 'maint', accCat: 'all', accSort: 'default', adminTab: 'requests', adminMembers: null, adminSearch: '' };
+const state = { me: null, services: null, fuel: null, bdays: null, acc: null, accCat: 'all', accSort: 'default', adminTab: 'requests', adminMembers: null, adminSearch: '' };
 const isAdmin = () => ['admin', 'superadmin'].includes(state.me?.role);
 const isMod = () => ['coordinator', 'admin', 'superadmin'].includes(state.me?.role);   /* MotoMart moderators */
 const ROLE = { superadmin: 'Admin', admin: 'Admin', coordinator: 'Coordinator', member: 'Member' };
@@ -159,7 +159,7 @@ function mileageStats(logs) {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { calendar: viewCalendar, videos: viewVideos, docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotoMart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, teach: viewTeach, ride: viewRide, crew: viewCrew, members: viewMembers, events: viewEvents, terms: viewTerms, track: viewTrack };
+const ROUTES = { calendar: viewCalendar, docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotoMart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, teach: viewTeach, ride: viewRide, crew: viewCrew, members: viewMembers, events: viewEvents, terms: viewTerms, track: viewTrack };
 /* roninwb.in/app/#terms: Me screen with the Terms & Conditions open, ready to agree */
 function viewTerms() {
     history.replaceState(null, '', '#me'); document.body.dataset.route = 'me';
@@ -205,6 +205,7 @@ async function doRender() {
     if (gate) { tabbar.hidden = true; document.body.dataset.route = 'gate'; return gate === 'tnc' ? tncGate() : profileGate(); }
     const [name, param] = (location.hash.slice(1) || 'home').split('?')[0].split('/');
     state.param = param || null;
+    if (name === 'videos') { history.replaceState(null, '', '#guides/app'); return void render(); }   /* old How-to videos link */
     if (isFam() && !FAM_ROUTES.includes(name)) { location.hash = '#home'; return; }
     const view = isFam() ? famView(name) : ROUTES[name] || viewHome;
     if (name === 'admin' && !isMod()) { location.hash = '#home'; return; }   /* coordinators get their own smaller panel */
@@ -212,6 +213,7 @@ async function doRender() {
     tabbar.hidden = false;
     if (name !== 'chat') state.cameFrom = name;
     if (name === 'motomart' && document.body.dataset.route !== 'motomart') Object.assign(mmState, { branch: 'all', cat: 'all', q: '', mine: false, review: false });   /* MotoMart always opens on All */
+    if (name === 'guides' && document.body.dataset.route !== 'guides') Object.assign(gState, { cat: isFam() ? 'app' : 'maint', type: 'all', q: '' });   /* Guides always opens on Maintenance */
     document.body.dataset.route = name;
     tabbar.querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.tab === (name === 'members' ? 'crew' : name)));
     tabbar.querySelectorAll('a[aria-current]').forEach(a => a.setAttribute('aria-current', 'page'));
@@ -235,7 +237,7 @@ window.addEventListener('hashchange', () => {
     const idx = history.state?.rwbNav;
     if (idx != null) { navIdx = idx; navScroll = navPos[idx] || 0; }       /* back / forward to a screen seen before */
     else { navIdx = ++navMax; try { history.replaceState({ ...(history.state || {}), rwbNav: navIdx }, ''); } catch { /* ignore */ } navScroll = 0; }
-    closeSheet(); closeMmSearch(); render();
+    closeSheet(); closeMmSearch(); gdClose(true); render();
 });
 
 const demoBar = () => api?.demo ? `<div class="demo-bar">Demo mode: sample data, saved only on this device. <button data-act="reset-demo">Reset</button></div>` : '';
@@ -247,16 +249,13 @@ const initials = m => (m?.full_name || '?').split(/\s+/).slice(0, 2).map(w => w[
 const face = (m, cls = 'avatar') => `<span class="${cls}">${m?.avatar_url ? `<img src="${esc(m.avatar_url)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<i>${esc(initials(m))}</i></span>`;
 const CREW_F = all => { const n = all.filter(m => m.on_app).length; return { all: 'Everyone', app: `On app (${n})`, noapp: `Not on app (${all.length - n})` }; };
 const CREW_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19.5c.6-3.3 3-5 6-5s5.4 1.7 6 5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.4.2 4 1.7 4.5 4.4"/></svg>';
-const GUIDE_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.5v-15A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5zm0 0A1.5 1.5 0 0 0 6.5 21H19M9 3v15M12 7.5h4M12 10.5h3"/></svg>';
-const PLAY_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="4"/><path d="M10 9.2v5.6l4.8-2.8z" fill="currentColor"/></svg>';
 const CAL_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M7.8 14h.01M12 14h.01M16.2 14h.01M7.8 17.2h.01M12 17.2h.01" stroke-width="2.4"/></svg>';
 const docsAlert = () => (state.docs || []).some(d => docStatus(d).level !== 'ok' && docStatus(d).level !== 'none');
 /* Android in the browser (not the RWB Android app): a small pulsing "Get app" button; never shown on iPhone */
 const getAppBtn = () => !NATIVE && /android/i.test(navigator.userAgent) ? `<a class="get-app" href="${apkUrl()}" download="RWB-App.apk" aria-label="Download the RWB Android app"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span>App</span></a>` : '';
 const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1>${right}${getAppBtn()}
     ${isFam() ? '' : `<a class="icon-btn bell cal-btn" href="#calendar" aria-label="Calendar${calAlert() ? ' (something due soon)' : ''}">${CAL_ICON}${calAlert() ? '<i class="dot"></i>' : ''}</a>`}
-    <a class="icon-btn bell vid-btn" href="#videos" aria-label="How-to videos">${PLAY_ICON}</a>
-    ${isFam() ? '' : `<a class="icon-btn bell guide-btn" href="#guides" aria-label="Guides">${GUIDE_ICON}</a>`}
+    <a class="icon-btn bell guide-btn" href="#guides" aria-label="Guides and how-to videos">${HELP_ICON}</a>
     <a class="icon-btn bell" href="#news" aria-label="Announcements${unread() ? ' (new)' : ''}">${BELL}${unread() ? '<i class="dot"></i>' : ''}</a>
     <a href="#me" aria-label="My profile" class="avatar-link">${face(state.me)}</a></header>`;
 
@@ -641,6 +640,7 @@ const ICON = {
     bell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M6 16.5V11a6 6 0 0 1 12 0v5.5z"/><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0"/></svg>',
     file: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M13.5 3v4.5H18z"/><path d="M6.5 3h7L18 7.5V20a1 1 0 0 1-1 1H6.5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM13.5 3v4.5H18M8.5 12.5h7M8.5 16h5"/></svg>',
     terms: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M13.5 3v4.5H18z"/><path d="M6.5 3h7L18 7.5V20a1 1 0 0 1-1 1H6.5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM13.5 3v4.5H18M8.8 14.2l2 2 4-4.2"/></svg>',
+    help: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle class="ac" cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.3-2.5 3.9M12 17.2v.1"/></svg>',
     profile: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle class="ac" cx="9" cy="8" r="3.2"/><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5c.5-3.6 2.6-5.8 5.5-5.8 1.3 0 2.4.4 3.3 1.2M14.5 20l.4-2.4 4.6-4.6a1.3 1.3 0 0 1 1.9 1.9l-4.6 4.6z"/></svg>'
 };
 const DOC_ICON = ICON.folder;
@@ -1086,12 +1086,14 @@ async function viewHome() {
                 <a href="#admin" data-adtab="members"><span class="ad-ico">${ICON.members}</span>Members</a>
                 <a href="#admin" data-adtab="motomart"><span class="ad-ico">${ICON.cart}</span>MotoMart<i class="ad-n" id="ad-mm" hidden></i></a>
                 <a href="#admin" data-adtab="bdays"><span class="ad-ico">${ICON.cake}</span>Birthdays</a>
+                <a href="#admin" data-adtab="guides"><span class="ad-ico">${ICON.help}</span>Guides</a>
             </div><a class="ad-dupes" href="#admin" data-adtab="dupes" id="ad-dupes" hidden></a><a class="ad-dupes" href="#admin" data-adtab="ai" id="ad-pookie" hidden></a></section>` : isMod() ? `<section class="admin-dock coord-dock" aria-label="Coordinator">
             <div class="ad-head"><b>${ICON.shield} Coordinator</b><span class="small muted" id="ad-sum"></span><a href="#admin" data-adtab="motomart" class="ad-all">Open ›</a></div>
             <div class="ad-grid">
                 <a href="#admin" data-adtab="motomart"><span class="ad-ico">${ICON.cart}</span>MotoMart<i class="ad-n" id="ad-mm" hidden></i></a>
                 <a href="#admin" data-adtab="ai"><span class="ad-ico">${ICON.chat}</span>Pookie<i class="ad-n" id="ad-ai" hidden></i></a>
                 <a href="#admin" data-adtab="reports"><span class="ad-ico">${ICON.alert}</span>Reports<i class="ad-n" id="ad-rep" hidden></i></a>
+                <a href="#admin" data-adtab="guides"><span class="ad-ico">${ICON.help}</span>Guides</a>
             </div></section>` : ''}
         ${profileTodo(state.me)}
         ${docWarn ? `<a class="banner doc-warn ${docWarn.st.level}" href="#docs"><span class="b-ico">${ICON.file}</span><span class="grow"><b>${esc(docName(docWarn.d))}</b> ${docWarn.st.days < 0 ? `expired on ${fmtDate(docWarn.d.expiry_date)}` : docWarn.st.days === 0 ? 'expires today' : `expires in ${docWarn.st.days} day${docWarn.st.days === 1 ? '' : 's'}`}. Renew it and update My documents.</span>${ICON.chev}</a>` : ''}
@@ -1104,7 +1106,7 @@ async function viewHome() {
             ${fresh.length ? `<div class="strip">${fresh.map(listingCard).join('')}</div>` : `<a class="group-row-card" href="#motomart"><span class="g-ico">${ICON.tag}</span><span class="grow"><b>Nothing for sale yet</b><span class="small muted">Selling old gear? Post it here for fellow riders.</span></span>${ICON.chev}</a>`}</section>
         <section class="section"><h2>Explore</h2><div class="group">
             <a href="#teach"><span class="g-ico">${ICON.chat}</span><span class="grow"><b>Teach Pookie</b><span class="small muted" id="teach-sub">Answer Pookie's Ronin questions, earn XP and help every rider</span></span>${ICON.chev}</a>
-            <a href="#guides" data-guide="maint"><span class="g-ico">${ICON.book}</span><span class="grow"><b>Maintenance guides</b><span class="small muted">How-tos and checklists from our coordinators</span></span>${ICON.chev}</a>
+            <a href="#guides/maint"><span class="g-ico">${ICON.book}</span><span class="grow"><b>Maintenance guides</b><span class="small muted">Short videos, PDFs and pictures from the RWB team</span></span>${ICON.chev}</a>
             <a href="#motomart/new"><span class="g-ico">${ICON.helmet}</span><span class="grow"><b>New accessories</b><span class="small muted">Picked by the RWB team, in MotoMart</span></span>${ICON.chev}</a>
             <a href="https://roninwb.in" target="_blank" rel="noopener"><span class="g-ico">${ICON.globe}</span><span class="grow"><b>roninwb.in</b><span class="small muted">Rides, events, gallery and the team</span></span>${ICON.out}</a>
         </div></section>`;
@@ -1118,7 +1120,6 @@ async function viewHome() {
         'clear-feed': () => clearNews(news),
         listing: el => location.hash = '#motomart/' + el.dataset.id
     };
-    app.querySelectorAll('[data-guide]').forEach(a => a.addEventListener('click', () => state.guideTab = 'maint'));
     if (isMod() && !isAdmin()) coordDock(listings);
     if (isAdmin()) {
         app.querySelectorAll('[data-adtab]').forEach(a => a.addEventListener('click', () => { state.adminTab = a.dataset.adtab; }));
@@ -1824,7 +1825,7 @@ function docStatus(d) {
     if (days <= 30) return { level: 'warn', days, text: days === 0 ? 'Expires today' : `${days} day${days === 1 ? '' : 's'} left` };
     return { level: 'ok', days, text: 'Valid' };
 }
-/* =================== How-to videos (short guides, also posted as RWB Instagram stories) =================== */
+/* =================== Built-in how-to videos (app/videos, also posted as RWB Instagram stories): shown in Guides → App =================== */
 const VIDEOS = [   /* [file, title, what it covers, seconds, who]; who: undefined = members, 'team' = coordinators + admins, 'fam' = RWB FAM */
     ['home', 'Home & My Ride', 'Your bike, odometer, parts tracker and VRN check', 27],
     ['track', 'Track & SOS', 'Share your live location on rides, and SOS', 28],
@@ -1838,25 +1839,6 @@ const VIDEOS = [   /* [file, title, what it covers, seconds, who]; who: undefine
     ['coordinators-and-admins', 'Team tools', 'For coordinators and admins', 33, 'team'],
     ['fam-app', 'RWB FAM', 'Home, Track, events and settings for family', 23, 'fam']
 ];
-function viewVideos() {
-    const list = isFam() ? VIDEOS.filter(v => v[4] === 'fam') : VIDEOS.filter(v => v[4] !== 'fam' && (v[4] !== 'team' || isMod()));
-    app.innerHTML = `${top('Videos')}
-        <p class="muted" style="margin:-4px 0 16px">${isFam() ? 'Short guides to the RWB App for RWB FAM, with sound and subtitles.' : 'Short guides to every part of the app, with sound and subtitles.'}</p>
-        ${!list.length ? '<div class="card empty"><b>Coming soon</b>How-to videos for RWB FAM are on the way.</div>' : ''}
-        <div class="vid-list">${list.map(([id, title, sub, sec, who]) => `
-            <button class="vid-row" data-act="play" data-id="${id}" aria-label="Play: ${esc(title)}${sec ? `, ${sec} seconds` : ''}">
-                <span class="vid-thumb"><img src="videos/${id}.jpg" alt="" loading="lazy"><i class="vid-play">▶</i></span>
-                <span class="grow"><b>${esc(title)}${who === 'team' ? ' <span class="badge coord">Team</span>' : ''}</b><span class="small muted">${esc(sub)}</span>${sec ? `<span class="vid-len">${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}</span>` : ''}</span>
-            </button>`).join('')}</div>
-        <p class="small muted" style="text-align:center;margin:18px 0 8px">Also on the RWB Instagram highlights.</p>`;
-    actions = {
-        play: el => {
-            const v = VIDEOS.find(x => x[0] === el.dataset.id);
-            openSheet(v[1], `<video class="vid-player" src="videos/${v[0]}.mp4" poster="videos/${v[0]}.jpg" controls controlslist="nodownload noremoteplayback noplaybackrate" disablepictureinpicture disableremoteplayback oncontextmenu="return false" autoplay playsinline preload="auto"></video>
-                <p class="small muted" style="margin-top:10px;text-align:center">${esc(v[2])} · turn your sound on</p>`);
-        }
-    };
-}
 
 /* =================== Calendar: everything with a date in one place ===================
    RWB events (past and coming) plus vehicle dates: document renewals, next service, My Ride parts falling due,
@@ -2317,32 +2299,619 @@ function markWords(html, query) {
 }
 const pdfTitle = n => n.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
 
+/* =================== Guides (the ? button): App, Maintenance and Ride (setup file 66) ===================
+   One place for every how-to. Three categories at the top (Maintenance opens first), and inside each one
+   short videos ("shorts"), PDFs and pictures, with keyword search. App only has videos.
+   Who adds what: Bodhi (super admin) App + Maintenance + Ride, admins Maintenance + Ride, coordinators Ride.
+   Files don't use Supabase storage: the guides-media Edge Function keeps them in the free GitHub repo rwb-media and
+   phones load them from jsDelivr (free CDN). The old Drive maintenance PDFs and the built-in app videos still show. */
+const HELP_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><path d="M9.4 9.4a2.7 2.7 0 0 1 5.25.9c0 1.8-2.65 2.4-2.65 4.1"/><path d="M12 17.3h.01" stroke-width="2.4"/></svg>';
+const GS = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+const GD_ICO = {
+    app: GS('<rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.5 18.6h3"/><path d="M10.6 8.4v5.2l4.3-2.6z" fill="currentColor"/>'),
+    maint: GS('<path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8V21h3.2l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>'),
+    ride: GS('<path d="M8.5 3 4 21M15.5 3 20 21M12 4.2v2.6M12 10.4v3.2M12 17.4v3"/>'),
+    video: GS('<rect x="3" y="5" width="18" height="14" rx="3.5"/><path d="M10.2 9.3v5.4l4.6-2.7z" fill="currentColor"/>'),
+    pdf: GS('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h4"/>'),
+    image: GS('<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="m4 17.5 5-4.5 4 3.5 2.5-2 4.5 3.5"/>'),
+    all: GS('<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>'),
+    close: GS('<path d="M6 6l12 12M18 6 6 18"/>'),
+    sound: GS('<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>'),
+    mute: GS('<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="m16 9.5 5 5m0-5-5 5"/>'),
+    more: GS('<circle cx="5.5" cy="12" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="18.5" cy="12" r="1.2" fill="currentColor"/>'),
+    play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/><rect x="13.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/></svg>',
+    upload: GS('<path d="M12 16V4M7 9l5-5 5 5M5 20h14"/>')
+};
+const GD_CATS = {
+    app: ['App', 'Short videos on using every part of the RWB App.'],
+    maint: ['Maintenance', 'Keep your Ronin healthy. Videos, PDFs and pictures from the RWB team.'],
+    ride: ['Ride', 'Group riding, safety and touring tips from the RWB team.']
+};
+const GD_KIND = { video: 'Videos', pdf: 'PDFs', image: 'Pictures' };
+const GD_ONE = { video: 'Video', pdf: 'PDF', image: 'Picture' };
+const GD_SUGG = { app: ['Track', 'Service', 'Mileage', 'MotoMart', 'Events', 'Pookie'], maint: ['Chain', 'Oil', 'Brakes', 'Tyres', 'Battery', 'Monsoon', 'Service'], ride: ['Group ride', 'Signals', 'Rain', 'Night', 'Packing', 'Touring'] };
+/* limits: what fits jsDelivr (20 MB a file), GitHub's free repository size and a phone's data plan */
+const GD_LIM = { sec: 60, videoMB: 20, aimMB: 14, side: 1280, pdfMB: 10, imgInMB: 15 };
+const VIDEO_ACCEPT = 'video/mp4,video/quicktime,video/webm,video/x-m4v,.mp4,.mov,.m4v,.webm';
+const PDF_ACCEPT = 'application/pdf,.pdf';
+const gState = { cat: 'maint', type: 'all', q: '' };
+const mb = n => n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' KB';
+const mmss = s => s == null || !isFinite(s) ? '' : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+const gdDay = it => it.created_at ? fmtDayMonth(String(it.created_at).slice(0, 10)) : '';
+const gdCatsFor = () => isFam() ? ['app'] : ['app', 'maint', 'ride'];
+
+/* everything shown in Guides: uploads, the built-in app videos and the old Drive maintenance PDFs */
+function builtinGuides() {
+    const list = isFam() ? VIDEOS.filter(v => v[4] === 'fam') : VIDEOS.filter(v => v[4] !== 'fam' && (v[4] !== 'team' || isMod()));
+    return list.map(([id, title, sub, sec, who], i) => ({ id: 'b-' + id, builtin: true, cat: 'app', kind: 'video', title, description: sub, tags: who === 'team' ? 'team coordinators admins' : '',
+        url: `videos/${id}.mp4`, thumb_url: `videos/${id}.jpg`, duration_s: sec, team: who === 'team', uploader: 'RWB', order: i }));
+}
+async function driveGuides() {
+    if (!SITE.MAINTENANCE_SCRIPT_URL) return [];
+    const list = await (await fetch(SITE.MAINTENANCE_SCRIPT_URL)).json();
+    return list.filter(p => /^[\w-]+$/.test(p.id)).map(p => ({ id: 'd-' + p.id, drive: p.id, cat: 'maint', kind: 'pdf', title: pdfTitle(p.name), description: p.description || '',
+        thumb_url: `https://drive.google.com/thumbnail?id=${p.id}&sz=w200`, created_at: p.date ? String(p.date).slice(0, 10) : '', uploader: 'RWB' }));
+}
+async function loadGuides(force = false) {
+    if (state.gd && !force) return state.gd;
+    const [db, drive, cats] = await Promise.all([
+        isFam() ? Promise.resolve([]) : api.guideItems().catch(e => { if (!state.gd) throw e; return state.gd.db; }),
+        isFam() ? Promise.resolve([]) : driveGuides().catch(() => state.gd?.drive || []),
+        isMod() ? api.guideCats().catch(() => []) : Promise.resolve([])
+    ]);
+    state.myId ??= await api.myId().catch(() => null);
+    const all = [...(db || []), ...drive, ...builtinGuides()];
+    return (state.gd = { db: db || [], drive, setup: db !== null, cats, all });
+}
+const gdCanPost = cat => !!state.gd?.cats?.includes(cat);
+const gdCanManage = it => !it.builtin && !it.drive && gdCanPost(it.cat) && (isAdmin() || it.user_id === state.myId);
+const gdText = it => [it.title, it.description, it.tags, GD_CATS[it.cat]?.[0], GD_KIND[it.kind], it.uploader].filter(Boolean).join(' ');
+/* newest first, built-in app videos in their own order after uploads */
+const gdSort = list => [...list].sort((a, b) => (a.builtin - b.builtin) || (a.builtin ? a.order - b.order : String(b.created_at || '').localeCompare(String(a.created_at || ''))));
+const gdIn = (cat, q = gState.q) => gdSort((state.gd?.all || []).filter(it => it.cat === cat && searchMatch(q, gdText(it))));
+
+/* ---------- cards ---------- */
+function gdShort(it, rail = false) {
+    return `<button class="gd-short${rail ? ' in-rail' : ''}" data-act="gopen" data-id="${esc(it.id)}" aria-label="Play: ${esc(it.title)}">
+        <span class="gd-cover">${it.thumb_url ? `<img src="${esc(it.thumb_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : `<span class="gd-ph">${GD_ICO.video}</span>`}
+            ${it.duration_s ? `<i class="gd-dur">${mmss(it.duration_s)}</i>` : ''}<i class="gd-play">${GD_ICO.play}</i>${it.team ? '<i class="gd-team">Team</i>' : ''}${it.width && it.height && it.width > it.height ? '<i class="gd-land">Landscape</i>' : ''}</span>
+        <b class="gd-t">${markWords(esc(it.title), gState.q)}</b><span class="gd-s">${esc([it.builtin ? 'RWB App' : it.uploader, gdDay(it)].filter(Boolean).join(' · '))}</span></button>`;
+}
+function gdDoc(it) {
+    const meta = [it.pages ? `${it.pages} page${it.pages === 1 ? '' : 's'}` : '', it.bytes ? mb(it.bytes) : '', it.drive ? 'Google Drive' : it.uploader, gdDay(it)].filter(Boolean).join(' · ');
+    return `<button class="gd-doc" data-act="gopen" data-id="${esc(it.id)}"><span class="gd-doc-ico">${GD_ICO.pdf}<em>PDF</em></span>
+        <span class="grow"><b>${markWords(esc(it.title), gState.q)}</b>${it.description ? `<span class="gd-desc">${markWords(esc(it.description), gState.q)}</span>` : ''}<span class="gd-meta">${esc(meta)}</span></span>${ICON.chev}</button>`;
+}
+function gdPic(it) {
+    return `<button class="gd-pic" data-act="gopen" data-id="${esc(it.id)}" aria-label="${esc(it.title)}"><img src="${esc(it.thumb_url || it.url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"><span class="gd-pic-t">${esc(it.title)}</span></button>`;
+}
+const gdSection = (title, n, kind, body) => `<section class="section gd-sec"><h2>${title}${n > 0 ? ` <button data-act="gtype" data-t="${kind}">See all ${n} ›</button>` : ''}</h2>${body}</section>`;
+
+/* ---------- the screen ---------- */
 async function viewGuides() {
-    /* Accessories moved to MotoMart → New (setup file 65) */
-    app.innerHTML = top('Guides') + `<div id="guide-body"><p class="muted">Loading…</p></div>
-        <a class="card tap row" href="#motomart/new" style="text-decoration:none;display:flex;margin-top:12px"><span class="ai-badge sm">${ICON.helmet}</span><div class="grow"><h3>Looking for accessories?</h3><p class="small muted">They’re in MotoMart → New</p></div><span class="kmpl">›</span></a>
-        <a class="card tap row ai-card section" href="#chat" style="text-decoration:none;display:flex"><span class="ai-badge sm">${AI_ICON}</span><div class="grow"><h3>Can't find it?</h3><p class="small muted">Ask Pookie</p></div><span class="kmpl">›</span></a>`;
-    actions = {};
-    drawMaint();
-}
-async function drawMaint() {
-    const box = $('#guide-body');
-    if (!state.guides) {
-        try { state.guides = SITE.MAINTENANCE_SCRIPT_URL ? (await (await fetch(SITE.MAINTENANCE_SCRIPT_URL)).json()).filter(p => /^[\w-]+$/.test(p.id)).sort((a, b) => String(b.date).localeCompare(String(a.date))) : []; }
-        catch { box.innerHTML = '<div class="card empty"><b>Could not load guides</b>Check your internet and try again.</div>'; return; }
-    }
-    box.innerHTML = `<input class="search" type="search" placeholder="Search guides" aria-label="Search guides" id="gq"><div class="list" id="gl"></div>`;
-    const draw = () => {
-        const q = $('#gq').value.trim();
-        const shown = state.guides.filter(p => searchMatch(q, p.name + ' ' + pdfTitle(p.name) + ' ' + (p.description || '')));
-        $('#gl').innerHTML = shown.length ? shown.map(p => `<button class="card tap guide" data-act="pdf" data-id="${esc(p.id)}">
-            <div class="thumb">PDF<img src="https://drive.google.com/thumbnail?id=${esc(p.id)}&sz=w200" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></div>
-            <div><h3>${markWords(esc(pdfTitle(p.name)), q)}</h3>${p.description ? `<p class="small muted">${markWords(esc(p.description), q)}</p>` : ''}<p class="small muted">${p.date ? fmtDate(String(p.date).slice(0, 10)) : ''}</p></div></button>`).join('')
-            : `<div class="card empty">${state.guides.length ? 'No guides match your search.' : '<b>Coming soon</b>Guides will be posted here.'}</div>`;
+    const p = state.param;
+    if (p && gdCatsFor().includes(p)) { Object.assign(gState, { cat: p, type: 'all', q: '' }); history.replaceState(null, '', '#guides'); state.param = null; }
+    if (!gdCatsFor().includes(gState.cat)) gState.cat = gdCatsFor()[0];
+    const cats = gdCatsFor();
+    app.innerHTML = top('Guides') + `
+        ${cats.length > 1 ? `<div class="gd-head">
+            <div class="gd-cats" role="tablist" aria-label="Guides">${cats.map(c => `<button role="tab" aria-selected="${c === gState.cat}" data-act="gcat" data-c="${c}">${GD_ICO[c]}<span>${GD_CATS[c][0]}</span><i class="gd-qn" hidden></i></button>`).join('')}</div>
+            <button class="mm-search-btn gd-sbtn" data-act="gsearch" aria-label="Search guides">${SEARCH_ICO}</button></div>` : ''}
+        <div id="gd-body">${state.gd ? '' : '<div class="gd-skel"><i></i><i></i><i></i><i></i></div>'}</div><div class="mm-fabs" id="gd-fab" hidden></div>`;
+    actions = {
+        gcat: el => { const c = el.dataset.c; if (c === gState.cat) return; gState.cat = c; gState.type = 'all'; gdPill(); drawGuides(true); },
+        gtype: el => { gState.type = el.dataset.t; drawGuides(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
+        gsearch: () => gdSearch(),
+        'gq-clear': () => { gState.q = ''; drawGuides(); },
+        gopen: el => gdOpen(el.dataset.id),
+        gadd: () => gdForm({ cat: gState.cat, kind: gState.type !== 'all' ? gState.type : null }, () => { if (location.hash.startsWith('#guides')) viewGuides(); })
     };
-    $('#gq').oninput = draw; draw();
-    actions.pdf = el => { const p = state.guides.find(g => g.id === el.dataset.id); openSheet(pdfTitle(p.name), `<iframe class="pdf" src="https://drive.google.com/file/d/${esc(p.id)}/preview" title="${esc(pdfTitle(p.name))}"></iframe><a class="btn ghost block" style="margin-top:12px" href="https://drive.google.com/file/d/${esc(p.id)}/view" target="_blank" rel="noopener">Open in Google Drive</a>`); };
+    gdPill(); requestAnimationFrame(() => app.querySelector('.gd-cats')?.classList.add('ready'));
+    const n = navN;
+    if (state.gd) { drawGuides(); loadGuides(true).then(() => stillHere(n) && drawGuides()).catch(() => {}); return; }   /* cache first, fresh copy in the background */
+    try { await loadGuides(); } catch (e) { if (stillHere(n)) $('#gd-body').innerHTML = `<div class="card empty"><b>Could not load Guides</b>${esc(e.message)}<p style="margin-top:12px"><button class="btn sm" onclick="location.reload()">Try again</button></p></div>`; return; }
+    if (stillHere(n)) drawGuides();
 }
+/* the white pill slides under the chosen category, sized to its label */
+function gdPill() {
+    const bar = app.querySelector('.gd-cats'); if (!bar) return;
+    bar.querySelectorAll('button').forEach(b => b.setAttribute('aria-selected', b.dataset.c === gState.cat));
+    const b = bar.querySelector(`[data-c="${gState.cat}"]`); if (!b) return;
+    bar.style.setProperty('--x', b.offsetLeft + 'px'); bar.style.setProperty('--w', b.offsetWidth + 'px');
+}
+addEventListener('resize', () => gdPill());
+function drawGuides(fade = false) {
+    const box = $('#gd-body'); if (!box || !state.gd) return;
+    const cat = gState.cat, q = gState.q.trim(), list = gdIn(cat);
+    const by = k => list.filter(it => it.kind === k);
+    const v = by('video'), d = by('pdf'), im = by('image');
+    if (cat === 'app') gState.type = 'all';
+    /* while searching, each category tab shows how many matches it has */
+    app.querySelectorAll('.gd-cats button').forEach(b => { const c = b.querySelector('.gd-qn'), k = q ? gdIn(b.dataset.c).length : 0; c.hidden = !k; c.textContent = k; });
+    const types = cat === 'app' ? [] : ['all', 'video', 'pdf', 'image'].filter(k => k === 'all' || by(k).length);
+    if (!types.includes(gState.type)) gState.type = 'all';
+    const t = gState.type;
+    let body = '';
+    if (!list.length) {
+        body = `<div class="card empty gd-empty"><span class="gd-empty-ico">${GD_ICO[cat]}</span><b>${q ? `Nothing in ${GD_CATS[cat][0]} matches “${esc(q)}”` : 'Nothing here yet'}</b>${q ? 'Try another word, or another category above.' : gdCanPost(cat) ? 'Be the first: tap “＋ Add” below.' : 'The RWB team is adding guides here soon.'}</div>`;
+    } else if (cat === 'app' || t === 'video') {
+        body = `<div class="gd-shorts">${(cat === 'app' ? list : v).map(it => gdShort(it)).join('')}</div>`;
+    } else if (t === 'pdf') body = `<div class="group gd-docs">${d.map(gdDoc).join('')}</div>`;
+    else if (t === 'image') body = `<div class="gd-pics">${im.map(gdPic).join('')}</div>`;
+    else {
+        body = (v.length ? gdSection('Shorts', v.length > 2 ? v.length : 0, 'video', `<div class="gd-rail">${v.slice(0, 12).map(it => gdShort(it, true)).join('')}</div>`) : '')
+            + (d.length ? gdSection('PDF guides', d.length > 4 ? d.length : 0, 'pdf', `<div class="group gd-docs">${d.slice(0, 4).map(gdDoc).join('')}</div>`) : '')
+            + (im.length ? gdSection('Pictures', im.length > 6 ? im.length : 0, 'image', `<div class="gd-pics">${im.slice(0, 6).map(gdPic).join('')}</div>`) : '');
+    }
+    const count = list.length, setupNote = !state.gd.setup && isAdmin() && !isFam() ? '<p class="small muted gd-note">Uploads switch on after setup file 66 (guides.sql) is run in Supabase.</p>' : '';
+    box.innerHTML = `<div class="gd-pane${fade ? ' gd-in' : ''}">
+        <p class="gd-intro"><span>${GD_CATS[cat][1]}</span>${count ? `<b>${count} ${count === 1 ? 'item' : 'items'}</b>` : ''}</p>
+        ${types.length > 2 ? `<div class="gd-types" role="tablist">${types.map(k => `<button class="gd-type" role="tab" aria-selected="${t === k}" data-act="gtype" data-t="${k}">${GD_ICO[k]}<span>${k === 'all' ? 'All' : GD_KIND[k]}</span><i>${k === 'all' ? list.length : by(k).length}</i></button>`).join('')}</div>` : ''}
+        ${q ? `<div class="mm-qbar"><span>${list.length} result${list.length === 1 ? '' : 's'} for <b>“${esc(q)}”</b></span><button class="linkish" data-act="gq-clear">Clear ✕</button></div>` : ''}
+        ${body}${setupNote}
+        ${cat === 'maint' ? `<a class="card tap row gd-link" href="#motomart/new"><span class="ai-badge sm">${ICON.helmet}</span><div class="grow"><h3>Looking for accessories?</h3><p class="small muted">They’re in MotoMart → New</p></div><span class="kmpl">›</span></a>` : ''}
+        ${isFam() ? '' : `<a class="card tap row ai-card gd-link" href="#chat"><span class="ai-badge sm">${AI_ICON}</span><div class="grow"><h3>Can't find it?</h3><p class="small muted">Ask Pookie: it reads these guides too</p></div><span class="kmpl">›</span></a>`}
+        </div>`;
+    /* the add button sits outside the animated list, so it stays pinned above the tab bar */
+    const fab = $('#gd-fab'), canAdd = gdCanPost(cat) && state.gd.setup;
+    if (fab) { fab.hidden = !canAdd; fab.innerHTML = canAdd ? `<button class="btn fab-1" data-act="gadd">＋ Add to ${GD_CATS[cat][0]}</button>` : ''; }
+}
+
+/* ---------- search: drops down over Guides with live matches from every category ---------- */
+function gdSearch() {
+    document.querySelector('.mm-search')?.remove();
+    const box = document.createElement('div'); box.className = 'mm-search gd-search'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'Search Guides');
+    const items = state.gd?.all || [];
+    const sugg = (GD_SUGG[gState.cat] || []).filter(w => items.some(it => it.cat === gState.cat && searchMatch(w, gdText(it))));
+    box.innerHTML = `<div class="mm-search-bar"><span class="mm-s-ico">${SEARCH_ICO}</span><input type="search" enterkeyhint="search" placeholder="Search chain, brakes, group ride…" value="${esc(gState.q)}" aria-label="Search"><button class="linkish" data-x="close">Cancel</button></div><div class="mm-sugg" role="listbox"></div>`;
+    document.body.append(box);
+    const input = box.querySelector('input'), list = box.querySelector('.mm-sugg');
+    const go = q => { gState.q = q; gState.type = 'all';
+        if (q && !gdIn(gState.cat, q).length) { const c = gdCatsFor().find(k => gdIn(k, q).length); if (c) { gState.cat = c; gdPill(); } }
+        closeMmSearch(); drawGuides(); };
+    const row = it => `<button class="mm-s-row" data-id="${esc(it.id)}"><span class="mm-s-img gd-s-img">${it.thumb_url ? `<img src="${esc(it.thumb_url)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}${GD_ICO[it.kind]}</span>
+        <span class="grow"><b>${markWords(esc(it.title), input.value)}</b><small>${GD_CATS[it.cat][0]} · ${GD_ONE[it.kind]}${it.duration_s ? ' · ' + mmss(it.duration_s) : ''}</small></span></button>`;
+    const draw = () => {
+        const q = input.value.trim();
+        if (!q) {
+            const fresh = gdSort(items.filter(it => it.cat === gState.cat && !it.builtin)).slice(0, 4);
+            list.innerHTML = (sugg.length ? `<p class="mm-s-h">Try</p><div class="chips">${sugg.map(c => `<button class="chip" data-q="${esc(c)}">${esc(c)}</button>`).join('')}</div>` : '')
+                + (fresh.length ? `<p class="mm-s-h">New in ${GD_CATS[gState.cat][0]}</p>${fresh.map(row).join('')}` : '');
+            return;
+        }
+        const hits = gdSort(items.filter(it => searchMatch(q, gdText(it)))).sort((a, b) => (b.cat === gState.cat) - (a.cat === gState.cat));
+        list.innerHTML = hits.length ? hits.slice(0, 7).map(row).join('') + `<button class="mm-s-all" data-all="1">See all ${hits.length} result${hits.length === 1 ? '' : 's'} for “${esc(q)}” ›</button>`
+            : `<p class="mm-s-none">Nothing matches “${esc(q)}” yet. <a href="#chat">Ask Pookie</a></p>`;
+    };
+    input.oninput = draw;
+    input.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); go(input.value.trim()); } if (e.key === 'Escape') closeMmSearch(); };
+    box.onclick = e => {
+        if (e.target === box || e.target.closest('[data-x=close]')) return closeMmSearch();
+        const c = e.target.closest('[data-q]'); if (c) { input.value = c.dataset.q; draw(); input.focus(); return; }
+        if (e.target.closest('[data-all]')) return go(input.value.trim());
+        const r = e.target.closest('[data-id]'); if (r) { closeMmSearch(); gdOpen(r.dataset.id); }
+    };
+    draw(); requestAnimationFrame(() => { box.classList.add('on'); input.focus(); });
+}
+
+/* ---------- opening an item ---------- */
+function gdOpen(id) {
+    const it = state.gd?.all.find(x => String(x.id) === String(id)); if (!it) return;
+    /* videos and pictures open with their neighbours, so the rider can swipe through what's on screen */
+    const same = gdIn(it.cat).filter(x => x.kind === it.kind);
+    const list = same.some(x => x.id === it.id) ? same : [it];
+    if (it.kind === 'video') return gdPlayer(list, list.indexOf(it));
+    if (it.kind === 'image') return gdViewer(list, list.indexOf(it));
+    gdPdf(it);
+}
+function gdPdf(it) {
+    const src = it.drive ? `https://drive.google.com/file/d/${encodeURIComponent(it.drive)}/preview` : `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(it.url)}`;
+    const open = it.drive ? `https://drive.google.com/file/d/${encodeURIComponent(it.drive)}/view` : it.url;
+    const demo = api.demo && !it.drive;
+    openSheet(it.title, `${it.description ? `<p class="small muted" style="margin:-4px 0 10px">${esc(it.description)}</p>` : ''}
+        ${demo ? `<div class="card empty gd-empty"><span class="gd-empty-ico">${GD_ICO.pdf}</span><b>PDF preview</b>In the real app the PDF opens here.</div>` : `<iframe class="pdf" src="${esc(src)}" title="${esc(it.title)}"></iframe>`}
+        <p class="gd-meta" style="margin:10px 2px">${esc([it.pages ? it.pages + ' pages' : '', it.bytes ? mb(it.bytes) : '', it.uploader, gdDay(it)].filter(Boolean).join(' · '))}</p>
+        <div class="gd-sheet-acts"><a class="btn ghost" href="${esc(open)}" target="_blank" rel="noopener">Open full screen</a>${gdCanManage(it) ? `<button class="btn ghost" data-x="manage">${GD_ICO.more} Manage</button>` : ''}</div>`, body => {
+        body.querySelector('[data-x=manage]')?.addEventListener('click', () => gdManage(it));
+    });
+}
+
+/* full-screen overlays (video player, picture viewer) close with the phone's Back button too */
+let gdLayer = null;
+function gdOverlay(cls, label) {
+    gdClose(true);
+    const el = document.createElement('div'); el.className = cls; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', label);
+    document.body.append(el); document.documentElement.classList.add('gd-locked');
+    try { history.pushState({ ...(history.state || {}), gdLayer: 1 }, ''); } catch { /* ignore */ }
+    gdLayer = { el, pushed: true, cleanup: [] };
+    requestAnimationFrame(() => el.classList.add('on'));
+    return gdLayer;
+}
+function gdClose(silent = false) {
+    if (!gdLayer) return;
+    const L = gdLayer; gdLayer = null;
+    L.cleanup.forEach(f => { try { f(); } catch { /* ignore */ } });
+    L.el.querySelectorAll('video').forEach(v => { v.pause(); v.removeAttribute('src'); v.load(); });
+    L.el.classList.remove('on'); setTimeout(() => L.el.remove(), 200);
+    document.documentElement.classList.remove('gd-locked');
+    if (!silent && L.pushed && history.state?.gdLayer) history.back();
+}
+addEventListener('popstate', () => { if (gdLayer) { gdLayer.pushed = false; gdClose(true); } });
+addEventListener('keydown', e => { if (gdLayer && e.key === 'Escape') gdClose(); });
+
+let gdMuted = false;
+function gdPlayer(list, start = 0) {
+    const L = gdOverlay('gd-player', 'Video');
+    L.el.innerHTML = `<div class="gd-reel">${list.map((it, i) => `<section class="gd-slide" data-i="${i}">
+            <video playsinline preload="none" ${it.thumb_url ? `poster="${esc(it.thumb_url)}"` : ''} data-src="${esc(it.url)}" disablepictureinpicture disableremoteplayback oncontextmenu="return false"></video>
+            <div class="gd-shade"></div><span class="gd-paused">${GD_ICO.play}</span><span class="gd-spin"></span>
+            <div class="gd-info"><b>${esc(it.title)}</b>${it.description ? `<p>${esc(it.description)}</p>` : ''}<span>${esc([it.builtin ? 'RWB App' : it.uploader, gdDay(it), mmss(it.duration_s)].filter(Boolean).join(' · '))}</span></div>
+            <div class="gd-bar" role="slider" aria-label="Seek" aria-valuemin="0" aria-valuemax="100"><i></i></div></section>`).join('')}</div>
+        <div class="gd-ptop"><button class="gd-glass" data-x="close" aria-label="Close">${GD_ICO.close}</button>
+            ${list.length > 1 ? `<span class="gd-count"><b>${start + 1}</b> / ${list.length}</span>` : '<span></span>'}
+            <span class="gd-pr">${gdCanManage(list[start]) ? `<button class="gd-glass" data-x="manage" aria-label="Manage">${GD_ICO.more}</button>` : ''}<button class="gd-glass" data-x="mute" aria-label="${gdMuted ? 'Sound on' : 'Mute'}">${gdMuted ? GD_ICO.mute : GD_ICO.sound}</button></span></div>
+        ${list.length > 1 ? '<div class="gd-hint">Swipe up for the next one</div>' : ''}`;
+    const reel = L.el.querySelector('.gd-reel'), slides = [...L.el.querySelectorAll('.gd-slide')];
+    let cur = -1, raf = 0;
+    const vid = i => slides[i]?.querySelector('video');
+    const load = (i, pre) => { const v = vid(i); if (v && !v.src) { v.preload = pre; v.src = v.dataset.src; } };
+    const tick = () => { const v = vid(cur), bar = slides[cur]?.querySelector('.gd-bar i');
+        if (v && bar) { const d = isFinite(v.duration) && v.duration ? v.duration : list[cur].duration_s || 0; bar.style.width = d ? Math.min(100, v.currentTime / d * 100) + '%' : '0'; }
+        raf = requestAnimationFrame(tick); };
+    const play = async i => {
+        const v = vid(i); if (!v) return; v.muted = gdMuted;
+        try { await v.play(); }
+        catch { if (!gdMuted) { v.muted = true; try { await v.play(); toast('Tap 🔈 for sound'); } catch { slides[i].classList.add('paused'); } } else slides[i].classList.add('paused'); }
+    };
+    const activate = i => {
+        if (i === cur) return; cur = i;
+        slides.forEach((s, k) => { const v = vid(k); if (k !== i && v) { v.pause(); s.classList.remove('paused'); } });
+        load(i, 'auto'); load(i + 1, 'metadata');
+        const c = L.el.querySelector('.gd-count b'); if (c) c.textContent = i + 1;
+        const pr = L.el.querySelector('.gd-pr'), canM = gdCanManage(list[i]), mbtn = pr.querySelector('[data-x=manage]');
+        if (canM && !mbtn) pr.insertAdjacentHTML('afterbegin', `<button class="gd-glass" data-x="manage" aria-label="Manage">${GD_ICO.more}</button>`); else if (!canM && mbtn) mbtn.remove();
+        const v = vid(i); v.currentTime = 0; play(i);
+    };
+    slides.forEach((s, i) => {
+        const v = vid(i);
+        v.addEventListener('waiting', () => s.classList.add('wait')); v.addEventListener('playing', () => { s.classList.remove('wait', 'paused'); });
+        v.addEventListener('pause', () => { if (i === cur && !v.ended) s.classList.add('paused'); });
+        v.addEventListener('ended', () => { if (i < slides.length - 1) reel.scrollTo({ top: slides[i + 1].offsetTop, behavior: 'smooth' }); else { v.currentTime = 0; play(i); } });
+        v.addEventListener('error', () => { s.classList.remove('wait'); s.classList.add('broken'); });
+        s.addEventListener('click', e => {
+            if (e.target.closest('.gd-bar')) return;
+            if (v.paused) { s.classList.remove('paused'); play(i); } else v.pause();
+        });
+        const bar = s.querySelector('.gd-bar');
+        const seek = e => { const r = bar.getBoundingClientRect(), d = isFinite(v.duration) && v.duration ? v.duration : list[i].duration_s; if (d) v.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * d; };
+        bar.addEventListener('pointerdown', e => { seek(e); bar.setPointerCapture(e.pointerId); bar.onpointermove = seek; });
+        bar.addEventListener('pointerup', () => { bar.onpointermove = null; });
+    });
+    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting && e.intersectionRatio > .6) activate(Number(e.target.dataset.i)); }), { root: reel, threshold: [.6] });
+    slides.forEach(s => io.observe(s));
+    L.cleanup.push(() => io.disconnect(), () => cancelAnimationFrame(raf));
+    L.el.addEventListener('click', e => {
+        const x = e.target.closest('[data-x]'); if (!x) return; e.stopPropagation();
+        if (x.dataset.x === 'close') gdClose();
+        if (x.dataset.x === 'mute') { gdMuted = !gdMuted; const v = vid(cur); if (v) v.muted = gdMuted; x.innerHTML = gdMuted ? GD_ICO.mute : GD_ICO.sound; x.setAttribute('aria-label', gdMuted ? 'Sound on' : 'Mute'); }
+        if (x.dataset.x === 'manage') { const it = list[cur]; gdClose(); setTimeout(() => gdManage(it), 250); }
+    });
+    L.el.addEventListener('keydown', e => { if (e.key === 'ArrowDown' && cur < slides.length - 1) reel.scrollTo({ top: slides[cur + 1].offsetTop, behavior: 'smooth' }); if (e.key === 'ArrowUp' && cur > 0) reel.scrollTo({ top: slides[cur - 1].offsetTop, behavior: 'smooth' }); });
+    requestAnimationFrame(() => { reel.scrollTop = slides[start].offsetTop; activate(start); tick(); L.el.tabIndex = -1; L.el.focus(); });
+}
+function gdViewer(list, start = 0) {
+    const L = gdOverlay('gd-player gd-viewer', 'Picture');
+    L.el.innerHTML = `<div class="gd-hreel">${list.map((it, i) => `<figure class="gd-ph-slide" data-i="${i}"><div class="gd-zoom"><img src="${esc(it.url)}" alt="${esc(it.title)}" referrerpolicy="no-referrer" draggable="false"></div>
+            <figcaption class="gd-info"><b>${esc(it.title)}</b>${it.description ? `<p>${esc(it.description)}</p>` : ''}<span>${esc([it.uploader, gdDay(it)].filter(Boolean).join(' · '))} · double-tap to zoom</span></figcaption></figure>`).join('')}</div>
+        <div class="gd-ptop"><button class="gd-glass" data-x="close" aria-label="Close">${GD_ICO.close}</button>
+            ${list.length > 1 ? `<span class="gd-count"><b>${start + 1}</b> / ${list.length}</span>` : '<span></span>'}
+            <span class="gd-pr">${gdCanManage(list[start]) ? `<button class="gd-glass" data-x="manage" aria-label="Manage">${GD_ICO.more}</button>` : ''}</span></div>`;
+    const reel = L.el.querySelector('.gd-hreel'), slides = [...reel.children];
+    let cur = start;
+    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting && e.intersectionRatio > .6) { cur = Number(e.target.dataset.i); const c = L.el.querySelector('.gd-count b'); if (c) c.textContent = cur + 1;
+        const pr = L.el.querySelector('.gd-pr'); pr.innerHTML = gdCanManage(list[cur]) ? `<button class="gd-glass" data-x="manage" aria-label="Manage">${GD_ICO.more}</button>` : ''; } }), { root: reel, threshold: [.6] });
+    slides.forEach(s => io.observe(s)); L.cleanup.push(() => io.disconnect());
+    /* double-tap (or double-click) zooms into that spot; again zooms out */
+    let lastTap = 0;
+    reel.addEventListener('click', e => {
+        const z = e.target.closest('.gd-zoom'); if (!z) return;
+        const now = Date.now(); if (now - lastTap > 320) { lastTap = now; L.el.classList.toggle('chrome-off'); return; }
+        lastTap = 0; L.el.classList.remove('chrome-off');
+        const on = !z.classList.contains('zoomed'), img = z.querySelector('img'), r = img.getBoundingClientRect(), fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+        z.classList.toggle('zoomed', on); reel.style.overflowX = on ? 'hidden' : '';
+        if (on) requestAnimationFrame(() => { z.scrollLeft = fx * z.scrollWidth - z.clientWidth / 2; z.scrollTop = fy * z.scrollHeight - z.clientHeight / 2; });
+    });
+    L.el.addEventListener('click', e => {
+        const x = e.target.closest('[data-x]'); if (!x) return; e.stopPropagation();
+        if (x.dataset.x === 'close') gdClose();
+        if (x.dataset.x === 'manage') { const it = list[cur]; gdClose(); setTimeout(() => gdManage(it), 250); }
+    });
+    requestAnimationFrame(() => { reel.scrollLeft = slides[start].offsetLeft; });
+}
+
+/* ---------- edit / delete (the person who added it, or an admin) ---------- */
+function gdManage(it) {
+    openSheet('Manage', `<form id="gde">
+        <div class="gd-mhead"><span class="gd-ath">${it.thumb_url ? `<img src="${esc(it.thumb_url)}" alt="" referrerpolicy="no-referrer">` : GD_ICO[it.kind]}</span><span class="grow"><b>${GD_CATS[it.cat][0]} · ${GD_ONE[it.kind]}</b><span class="small muted">${esc([it.uploader, gdDay(it), it.bytes ? mb(it.bytes) : '', mmss(it.duration_s)].filter(Boolean).join(' · '))}</span></span></div>
+        <label>Title<input name="title" required minlength="2" maxlength="80" value="${esc(it.title)}"></label>
+        <label>Description <span class="hint">optional</span><textarea name="description" maxlength="400" rows="3">${esc(it.description || '')}</textarea></label>
+        <label>Search keywords <span class="hint">optional, helps people find it</span><input name="tags" maxlength="200" placeholder="chain, lube, kerosene" value="${esc(it.tags || '')}"></label>
+        <button class="btn block">Save changes</button>
+        <button type="button" class="btn danger block" data-x="del" style="margin-top:10px">Delete from Guides</button></form>`, body => {
+        body.querySelector('#gde').onsubmit = e => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); busy(e.submitter || e.target.querySelector('.btn'), async () => {
+            await api.guideEdit(it.id, f); await loadGuides(true); closeSheet(); toast('Saved'); gdRefresh(); }); };
+        body.querySelector('[data-x=del]').onclick = el => { if (!confirmBox(`Delete “${it.title}” from Guides? It's removed for everyone.`)) return;
+            busy(el.currentTarget || el.target, async () => { await api.guideDelete(it); await loadGuides(true); closeSheet(); toast('Deleted'); gdRefresh(); }); };
+    });
+}
+function gdRefresh() { if (location.hash.startsWith('#guides')) drawGuides(); else if (location.hash.startsWith('#admin') && state.adminTab === 'guides') adminGuides(); }
+
+/* ---------- adding: one sheet for videos, PDFs and pictures, with the rules shown up front ---------- */
+const GD_RULES = {
+    video: [['Hold the phone upright', 'Portrait (9:16) fills the screen; sideways videos show small on phones.'], [`${GD_LIM.sec} seconds or less`, 'Short and to the point. Trim it in your gallery first.'],
+        ['We make it small for you', `The app turns it into 720p (about ${GD_LIM.aimMB} MB or less) before sending. Keep this screen open while it works.`], ['MP4, MOV or WebM', 'Good light, steady hands, speak clearly. No music you don’t own.']],
+    pdf: [[`PDF only, up to ${GD_LIM.pdfMB} MB`, 'Bigger? Use a PDF compressor or split it.'], ['Typed text, not photos of pages', 'Pookie reads the text, so typed PDFs help him answer questions.'], ['A clear title', 'Like “Chain cleaning in 5 steps”.']],
+    image: [['JPG, PNG, WebP or HEIC', `Up to ${GD_LIM.imgInMB} MB. GIF, SVG and other files aren't allowed, for safety.`], ['We shrink it to about 300 KB', 'Still sharp on a phone, light on everyone’s data.'], ['Charts, diagrams, checklists', 'One idea per picture works best.']]
+};
+function gdForm(pre = {}, onDone) {
+    const cats = state.gd?.cats || [];
+    if (!cats.length) return toast('Only admins and coordinators can add to Guides', true);
+    const f = { cat: cats.includes(pre.cat) ? pre.cat : cats.includes('ride') && !cats.includes('maint') ? 'ride' : cats.includes('maint') ? 'maint' : cats[0], kind: pre.kind || 'video', file: null, out: null, thumb: null, meta: {}, ok: false, shrink: false, keep: false, job: null };
+    if (f.cat === 'app') f.kind = 'video';
+    const segCats = () => cats.length > 1 ? `<div class="seg gd-fseg" role="tablist">${cats.map(c => `<button type="button" role="tab" aria-selected="${f.cat === c}" data-cat="${c}">${GD_ICO[c]} ${GD_CATS[c][0]}</button>`).join('')}</div>`
+        : `<p class="gd-fixed">${GD_ICO[f.cat]} <b>${GD_CATS[f.cat][0]}</b> <span class="small muted">· ${f.cat === 'ride' && !isAdmin() ? 'coordinators add Ride guides' : ''}</span></p>`;
+    const kinds = () => f.cat === 'app' ? `<p class="small muted gd-applabel">${GD_ICO.video} App guides are short videos only.</p>`
+        : `<div class="gd-kinds">${['video', 'pdf', 'image'].map(k => `<button type="button" class="gd-kind" aria-pressed="${f.kind === k}" data-kind="${k}">${GD_ICO[k]}<b>${GD_ONE[k]}</b><small>${k === 'video' ? `≤ ${GD_LIM.sec} s` : k === 'pdf' ? `≤ ${GD_LIM.pdfMB} MB` : 'JPG · PNG · HEIC'}</small></button>`).join('')}</div>`;
+    const rules = () => `<ul class="gd-rules">${GD_RULES[f.kind].map(([b, s]) => `<li><i>✓</i><span><b>${b}</b> ${s}</span></li>`).join('')}
+        <li class="pub"><i>!</i><span><b>Everyone can see it.</b> Files are public on the internet. No member’s face without their OK, no number plates, phone numbers or bills.</span></li></ul>`;
+    const accept = () => f.kind === 'video' ? VIDEO_ACCEPT : f.kind === 'pdf' ? PDF_ACCEPT : MM_ACCEPT;
+    openSheet('Add to Guides', `<form id="gdf" novalidate>
+        <div id="gdf-top"></div>
+        <label class="gd-drop" id="gdf-drop"><input type="file" id="gdf-file" hidden><span class="gd-drop-ico">${GD_ICO.upload}</span><b id="gdf-pick">Choose a video</b><small class="muted" id="gdf-hint"></small></label>
+        <div id="gdf-prev"></div>
+        <label>Title<input name="title" required minlength="2" maxlength="80" placeholder="e.g. Chain clean & lube in 50 seconds"></label>
+        <label>Description <span class="hint">optional</span><textarea name="description" maxlength="400" rows="2" placeholder="One or two lines: what it shows, any part names or numbers"></textarea></label>
+        <label>Search keywords <span class="hint">optional</span><input name="tags" maxlength="200" placeholder="chain, lube, kerosene"></label>
+        <div class="gd-progress" id="gdf-prog" hidden><div class="row"><b id="gdf-step">Uploading</b><span class="grow"></span><span id="gdf-pct">0%</span></div><div class="bar"><i></i></div><small class="muted" id="gdf-sub"></small></div>
+        <button class="btn block" id="gdf-go" disabled>Add to ${GD_CATS[f.cat][0]}</button>
+        <button type="button" class="btn ghost block" id="gdf-stop" hidden style="margin-top:8px">Stop</button>
+    </form>`, body => {
+        const $b = s => body.querySelector(s), input = $b('#gdf-file');
+        const drawTop = () => { $b('#gdf-top').innerHTML = segCats() + kinds() + rules(); input.accept = accept(); $b('#gdf-pick').textContent = `Choose a ${GD_ONE[f.kind].toLowerCase()}`;
+            $b('#gdf-hint').textContent = f.kind === 'video' ? 'From your gallery or files' : f.kind === 'pdf' ? 'From your files' : 'From your gallery'; $b('#gdf-go').textContent = `Add to ${GD_CATS[f.cat][0]}`; };
+        const reset = () => { if (f.prevUrl) URL.revokeObjectURL(f.prevUrl); Object.assign(f, { file: null, out: null, thumb: null, meta: {}, ok: false, shrink: false, keep: false, prevUrl: null }); input.value = ''; $b('#gdf-prev').innerHTML = ''; $b('#gdf-drop').hidden = false; $b('#gdf-go').disabled = true; };
+        drawTop();
+        $b('#gdf-top').addEventListener('click', e => {
+            const c = e.target.closest('[data-cat]'), k = e.target.closest('[data-kind]');
+            if (c) { f.cat = c.dataset.cat; if (f.cat === 'app' && f.kind !== 'video') { f.kind = 'video'; reset(); } drawTop(); }
+            if (k && k.dataset.kind !== f.kind) { f.kind = k.dataset.kind; reset(); drawTop(); }
+        });
+        input.onchange = async () => {
+            const file = input.files[0]; if (!file) return;
+            /* picked a different kind of file than the tile says? switch to the right tile instead of refusing it */
+            const ext = (file.name || '').toLowerCase().split('.').pop();
+            const real = /^video\//.test(file.type) || /^(mp4|mov|m4v|webm)$/.test(ext) ? 'video' : file.type === 'application/pdf' || ext === 'pdf' ? 'pdf' : /^image\//.test(file.type) || /^(jpe?g|png|webp|heic|heif)$/.test(ext) ? 'image' : null;
+            if (real && real !== f.kind && (f.cat !== 'app' || real === 'video')) { f.kind = real; drawTop(); }
+            reset(); f.file = file; $b('#gdf-drop').hidden = true;
+            $b('#gdf-prev').innerHTML = `<div class="gd-preview"><span class="gd-pmedia">${GD_ICO[f.kind]}</span><div class="grow"><b>${esc(file.name || 'File')}</b><p class="small muted">Checking…</p></div></div>`;
+            try { await gdCheck(f); } catch (e) { f.checks = [['bad', 'Can’t use this file', e.message]]; f.ok = false; }
+            drawPrev();
+            const t = body.querySelector('[name=title]'); if (!t.value && f.ok) t.value = (file.name || '').replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').replace(/\b(VID|IMG|PXL|Screenshot)\s?\d[\d ]*/gi, '').trim().slice(0, 80);
+        };
+        const drawPrev = () => {
+            const m = f.meta, media = f.prevUrl ? (f.kind === 'video' ? `<video src="${f.prevUrl}" muted playsinline preload="metadata"${f.thumbUrl ? ` poster="${f.thumbUrl}"` : ''}></video>` : `<img src="${f.prevUrl}" alt="">`) : GD_ICO[f.kind];
+            $b('#gdf-prev').innerHTML = `<div class="gd-preview"><span class="gd-pmedia ${f.kind}">${media}</span><div class="grow"><b>${esc(f.file.name || GD_ONE[f.kind])}</b>
+                <p class="small muted">${esc([mb(f.file.size), m.duration_s ? mmss(m.duration_s) : '', m.width ? `${m.width}×${m.height}` : '', m.pages ? `${m.pages} pages` : ''].filter(Boolean).join(' · '))}</p>
+                <button type="button" class="linkish" data-x="again">Choose another</button></div></div>
+                <ul class="gd-checks">${f.checks.map(([lv, b, s]) => `<li class="${lv}"><i>${lv === 'ok' ? '✓' : lv === 'warn' ? '!' : '✕'}</i><span><b>${b}</b>${s ? ' ' + s : ''}</span></li>`).join('')}</ul>
+                ${f.shrink && f.file.size <= GD_LIM.videoMB * 1e6 ? `<label class="switch gd-keep"><span>Send the original instead <small class="muted">(bigger, uses more data for everyone)</small></span><input type="checkbox" id="gdf-keep"${f.keep ? ' checked' : ''}></label>` : ''}`;
+            $b('#gdf-go').disabled = !f.ok;
+            $b('[data-x=again]').onclick = () => { reset(); input.click(); };
+            const k = $b('#gdf-keep'); if (k) k.onchange = () => { f.keep = k.checked; };
+        };
+        const prog = (step, p, sub = '') => { const box = $b('#gdf-prog'); if (!box) return; box.hidden = false; $b('#gdf-step').textContent = step; $b('#gdf-pct').textContent = p == null ? '' : Math.round(p * 100) + '%';
+            box.querySelector('.bar i').style.width = p == null ? '100%' : Math.round(p * 100) + '%'; box.classList.toggle('busy', p == null); $b('#gdf-sub').textContent = sub; };
+        $b('#gdf').onsubmit = async e => {
+            e.preventDefault();
+            const form = Object.fromEntries(new FormData(e.target)), title = String(form.title || '').trim();
+            if (!f.ok) return toast('Choose a file first', true);
+            if (title.length < 2) { body.querySelector('[name=title]').focus(); return toast('Please add a title', true); }
+            const go = $b('#gdf-go'), stop = $b('#gdf-stop'); go.disabled = true; go.hidden = true;
+            body.querySelectorAll('#gdf-top button, [data-x=again]').forEach(b => b.disabled = true);
+            try {
+                let out = f.out || f.file;
+                if (f.kind === 'video' && f.shrink && !f.keep) {
+                    stop.hidden = false; f.job = { stop: false }; stop.onclick = () => { f.job.stop = true; };
+                    prog('Making it small', 0, 'Keep this screen open. It takes about as long as the video.');
+                    out = await shrinkVideo(f.file, f.meta, p => prog('Making it small', p, 'Keep this screen open. It takes about as long as the video.'), f.job);
+                    if (out.dims) Object.assign(f.meta, out.dims);
+                    stop.hidden = true;
+                    if (out.size > GD_LIM.videoMB * 1e6) throw new Error(`Even after shrinking it's ${mb(out.size)}. Please trim it shorter.`);
+                }
+                prog('Uploading', 0, `${mb(out.size)}${out.size > 5e6 ? ' · Wi-Fi is faster' : ''}`);
+                const meta = { cat: f.cat, kind: f.kind, title, description: form.description || '', tags: form.tags || '', ...f.meta };
+                await api.guideUpload(meta, out, f.thumb, p => p >= 1 ? prog('Publishing', null, 'Saving it to the RWB library…') : prog('Uploading', p, `${mb(out.size)}`));
+                await loadGuides(true);
+                closeSheet(); toast(`Added to ${GD_CATS[f.cat][0]} ✓`);
+                Object.assign(gState, { cat: f.cat, type: 'all', q: '' });
+                onDone?.();
+            } catch (err) {
+                $b('#gdf-prog') && ($b('#gdf-prog').hidden = true); stop.hidden = true; go.hidden = false; go.disabled = false;
+                body.querySelectorAll('#gdf-top button, [data-x=again]').forEach(b => b.disabled = false);
+                toast(err.message || 'Something went wrong', true);
+            }
+        };
+    });
+}
+/* Reads the chosen file and lists what's fine (✓), worth fixing (!) and blocking (✕). */
+async function gdCheck(f) {
+    const file = f.file, c = f.checks = [];
+    const ext = (file.name || '').toLowerCase().split('.').pop();
+    if (f.kind === 'pdf') {
+        if (!(file.type === 'application/pdf' || ext === 'pdf')) throw new Error('Please choose a PDF file.');
+        const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+        if (String.fromCharCode(...head) !== '%PDF-') throw new Error('This isn’t a real PDF (it may be renamed). Save it as PDF and try again.');
+        if (file.size > GD_LIM.pdfMB * 1e6) c.push(['bad', `${mb(file.size)}: too big.`, `The limit is ${GD_LIM.pdfMB} MB. Compress it (search “compress PDF”) or split it.`]);
+        else c.push(['ok', `${mb(file.size)}`, `under ${GD_LIM.pdfMB} MB`]);
+        try { const txt = new TextDecoder('latin1').decode(await file.arrayBuffer()); const n = (txt.match(/\/Type\s*\/Page[^s]/g) || []).length; if (n) { f.meta.pages = n; c.push(['ok', `${n} page${n === 1 ? '' : 's'}`, '']); }
+            if (n && !/\/Font\b/.test(txt)) c.push(['warn', 'Looks like scanned pages.', 'Pookie can’t read photos of text; a typed PDF works better.']); } catch { /* fine */ }
+        f.out = file; f.ok = !c.some(x => x[0] === 'bad'); return;
+    }
+    if (f.kind === 'image') {
+        const okType = /^image\/(jpe?g|png|webp|heic|heif)$/i.test(file.type) || /^(jpe?g|png|webp|heic|heif)$/.test(ext);
+        if (!okType) throw new Error('Please choose a JPG, PNG, WebP or HEIC picture. GIF, SVG and other files aren’t allowed.');
+        if (file.size > GD_LIM.imgInMB * 1e6) throw new Error(`That picture is ${mb(file.size)}. Please choose one under ${GD_LIM.imgInMB} MB, or take a screenshot of it.`);
+        f.out = await compressImage(file, 1600, 320e3);
+        f.thumb = await compressImage(file, 480, 45e3);
+        const img = await loadImage(f.out); f.meta.width = img.naturalWidth; f.meta.height = img.naturalHeight; URL.revokeObjectURL(img.src);
+        if (f.out.size > 1e6) throw new Error('That picture couldn’t be made small enough. Try a screenshot of it.');
+        f.prevUrl = URL.createObjectURL(f.out);
+        c.push(['ok', `${mb(file.size)} → ${mb(f.out.size)}`, 'shrunk to save space']);
+        c.push(['ok', `${f.meta.width}×${f.meta.height}`, 'sharp on any phone']);
+        f.ok = true; return;
+    }
+    /* video */
+    const okType = /^video\/(mp4|quicktime|webm|x-m4v)$/i.test(file.type) || /^(mp4|mov|m4v|webm)$/.test(ext);
+    if (!okType) throw new Error('Please choose an MP4, MOV or WebM video.');
+    if (file.size > 400e6) throw new Error(`That video is ${mb(file.size)}. Please trim it to ${GD_LIM.sec} seconds first.`);
+    const info = await probeVideo(file);
+    Object.assign(f.meta, { duration_s: Math.round(info.duration * 10) / 10, width: info.width, height: info.height });
+    f.prevUrl = URL.createObjectURL(file);
+    try { f.thumb = await videoFrame(f.prevUrl, Math.min(1.2, info.duration / 3)); f.thumbUrl = URL.createObjectURL(f.thumb); } catch { /* no preview picture; fine */ }
+    const long = Math.max(info.width, info.height), portrait = info.height >= info.width;
+    if (info.duration > GD_LIM.sec + .5) c.push(['bad', `${mmss(info.duration)}: too long.`, `Trim it to ${GD_LIM.sec} seconds or less in your gallery’s editor, then choose it again.`]);
+    else c.push(['ok', `${mmss(info.duration)} long`, `under ${GD_LIM.sec} s`]);
+    c.push(portrait ? ['ok', 'Portrait', 'fills a phone screen'] : ['warn', 'Sideways (landscape).', 'It will work, but shows small on phones. Portrait is better next time.']);
+    f.shrink = long > GD_LIM.side || file.size > GD_LIM.aimMB * 1e6;
+    const canShrink = !!(window.MediaRecorder && HTMLCanvasElement.prototype.captureStream);
+    if (f.shrink && !canShrink && file.size > GD_LIM.videoMB * 1e6) c.push(['bad', `${mb(file.size)}: too big,`, `and this phone can’t shrink videos. Export it at 720p in your gallery or video editor (under ${GD_LIM.videoMB} MB).`]);
+    else if (f.shrink && !canShrink) { f.shrink = false; c.push(['warn', `${mb(file.size)}`, 'This phone can’t shrink it, so it goes as it is.']); }
+    else if (f.shrink) c.push(['warn', `${info.width}×${info.height} · ${mb(file.size)}`, `We’ll make it 720p (about ${mb(Math.min(file.size, estSize(info.duration)))}) before sending.`]);
+    else c.push(['ok', `${info.width}×${info.height} · ${mb(file.size)}`, 'already small, sent as it is']);
+    f.ok = !c.some(x => x[0] === 'bad');
+}
+const estSize = sec => Math.round(sec * (videoBps(sec) + 96e3) / 8);
+const videoBps = sec => Math.max(900e3, Math.min(2.2e6, GD_LIM.aimMB * 8e6 / Math.max(sec, 1) - 128e3));
+function probeVideo(file) {
+    return new Promise((res, rej) => {
+        const v = document.createElement('video'), url = URL.createObjectURL(file); let done = false;
+        const end = (err, val) => { if (done) return; done = true; clearTimeout(t); URL.revokeObjectURL(url); v.removeAttribute('src'); v.load(); err ? rej(err) : res(val); };
+        const t = setTimeout(() => end(new Error('This phone couldn’t open that video. Try MP4, or share it to yourself on WhatsApp and pick that copy.')), 20000);
+        v.preload = 'metadata'; v.muted = true; v.playsInline = true;
+        v.onloadedmetadata = () => {
+            const finish = () => v.videoWidth ? end(null, { duration: v.duration, width: v.videoWidth, height: v.videoHeight }) : end(new Error('This phone can’t play that video (it may be HEVC/H.265). Record in “Most compatible” / H.264, or share it via WhatsApp first and pick that copy.'));
+            if (isFinite(v.duration) && v.duration > 0) return finish();
+            v.ondurationchange = () => { if (isFinite(v.duration) && v.duration > 0) { v.ondurationchange = null; v.currentTime = 0; finish(); } };   /* some WebM files only know their length at the end */
+            v.currentTime = 1e7;
+        };
+        v.onerror = () => end(new Error('This phone couldn’t open that video. Try an MP4.'));
+        v.src = url;
+    });
+}
+function videoFrame(src, at) {
+    return new Promise((res, rej) => {
+        const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = src;
+        const t = setTimeout(() => rej(new Error('no frame')), 12000);
+        v.onloadeddata = () => { v.currentTime = at; };
+        v.onseeked = () => {
+            const w = 360, h = Math.round(w * v.videoHeight / v.videoWidth) || 640, cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+            cv.getContext('2d').drawImage(v, 0, 0, w, h); clearTimeout(t);
+            cv.toBlob(b => b ? res(new File([b], 'thumb.jpg', { type: 'image/jpeg' })) : rej(new Error('no frame')), 'image/jpeg', .78);
+        };
+        v.onerror = () => { clearTimeout(t); rej(new Error('no frame')); };
+    });
+}
+/* Re-records the video at 720p on the phone itself (canvas + MediaRecorder), sound included. Free, no server:
+   the phone plays it once, silently, so it takes about as long as the video. */
+async function shrinkVideo(file, meta, onProgress, job) {
+    const mime = ['video/mp4;codecs=avc1.42E01F,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(t => MediaRecorder.isTypeSupported?.(t));
+    if (!mime) throw new Error('This phone can’t shrink videos. Export it at 720p in your gallery or video editor and choose it again.');
+    const scale = Math.min(1, GD_LIM.side / Math.max(meta.width, meta.height)), even = n => Math.max(2, Math.round(n / 2) * 2);
+    const W = even(meta.width * scale), H = even(meta.height * scale);
+    const v = document.createElement('video'), url = URL.createObjectURL(file);
+    v.src = url; v.playsInline = true; v.preload = 'auto'; v.crossOrigin = 'anonymous';
+    await new Promise((ok, no) => { v.onloadeddata = ok; v.onerror = () => no(new Error('Couldn’t read the video to shrink it.')); });
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const cx = cv.getContext('2d');
+    const stream = cv.captureStream(30);
+    let ac = null;
+    try { ac = new (window.AudioContext || window.webkitAudioContext)(); const src = ac.createMediaElementSource(v), dest = ac.createMediaStreamDestination(); src.connect(dest);   /* not to the speaker: silent while it works */
+        dest.stream.getAudioTracks().forEach(t => stream.addTrack(t)); await ac.resume(); }
+    catch { v.muted = true; ac = null; }
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: videoBps(meta.duration_s), audioBitsPerSecond: 96e3 });
+    const chunks = []; rec.ondataavailable = e => { if (e.data?.size) chunks.push(e.data); };
+    const stopped = new Promise(ok => { rec.onstop = ok; });
+    const total = meta.duration_s || v.duration || 1;
+    let alive = true;
+    const draw = () => { if (!alive) return; cx.drawImage(v, 0, 0, W, H); onProgress?.(Math.min(.99, v.currentTime / total));
+        if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(draw); else requestAnimationFrame(draw); };
+    try {
+        cx.drawImage(v, 0, 0, W, H);
+        rec.start(1000);
+        await v.play();
+        draw();
+        await new Promise((ok, no) => {
+            v.onended = ok; v.onerror = () => no(new Error('The video stopped while shrinking. Try again.'));
+            const watch = setInterval(() => { if (!alive) return clearInterval(watch); if (job?.stop) { clearInterval(watch); no(new Error('Stopped')); } else if (v.paused && !v.ended) v.play().catch(() => {}); }, 400);
+        });
+    } finally {
+        alive = false; v.pause();
+        if (rec.state !== 'inactive') rec.stop();
+        await stopped; stream.getTracks().forEach(t => t.stop()); ac?.close().catch(() => {}); URL.revokeObjectURL(url);
+    }
+    onProgress?.(1);
+    const type = mime.split(';')[0];
+    const out = new File([new Blob(chunks, { type })], 'video.' + (type === 'video/mp4' ? 'mp4' : 'webm'), { type });
+    out.dims = { width: W, height: H };
+    return out;
+}
+
+/* ---------- Admin / Coordinator panel → Guides: everything sorted into its branch ---------- */
+const gpState = { cat: null, type: 'all' };
+async function adminGuides() {
+    const body = $('#admin-body'); if (!body) return;
+    const [g, st] = await Promise.all([loadGuides(true), api.guideStatus().catch(e => ({ ready: false, why: e.message }))]);
+    if (!$('#admin-body')) return;
+    const cats = g.cats || [];
+    if (!g.setup) { body.innerHTML = '<div class="card empty"><b>Guides aren\'t set up yet</b>Run setup file 66 (guides.sql) in Supabase → SQL Editor, then deploy the guides-media function.</div>'; return; }
+    if (!cats.length) { body.innerHTML = '<div class="card empty"><b>Nothing to manage</b>Only admins and coordinators add to Guides.</div>'; return; }
+    if (!cats.includes(gpState.cat)) gpState.cat = cats.includes('maint') ? 'maint' : cats[0];
+    const cat = gpState.cat, mine = gdSort(g.db.filter(it => it.cat === cat));
+    const by = k => mine.filter(it => it.kind === k);
+    const types = cat === 'app' ? ['video'] : ['all', 'video', 'pdf', 'image'];
+    if (!types.includes(gpState.type)) gpState.type = types[0];
+    const shown = gpState.type === 'all' ? mine : by(gpState.type);
+    const used = st.bytes ?? g.db.reduce((s, it) => s + (it.bytes || 0), 0), budget = st.budget || 900e6, pct = Math.min(100, used / budget * 100);
+    body.innerHTML = `
+        <div class="card gd-store">
+            <div class="row"><span class="gd-store-ico">${HELP_ICON}</span><div class="grow"><b>Guides library</b><p class="small muted">${cats.map(c => GD_CATS[c][0]).join(', ')}: you can add ${cats.length > 1 ? 'to these' : 'here'}.${isAdmin() ? '' : ' You can change or delete your own items.'}</p></div></div>
+            <div class="gd-meter" aria-label="Storage used"><i style="width:${pct.toFixed(1)}%"></i></div>
+            <p class="small muted">${mb(used)} of ${mb(budget)} used · ${g.db.length} item${g.db.length === 1 ? '' : 's'} · free on GitHub (${esc(st.repo || 'rwb-media')}) via jsDelivr</p>
+            ${st.ready === false ? `<p class="small gd-warn">${esc(st.why || 'Uploads aren\'t switched on yet.')}</p>` : ''}
+        </div>
+        <button class="btn block gd-up" data-act="gup">${GD_ICO.upload} Add to Guides</button>
+        ${cats.length > 1 ? `<div class="seg section gd-pseg" role="tablist">${cats.map(c => `<button role="tab" aria-selected="${c === cat}" data-act="gpcat" data-c="${c}">${GD_CATS[c][0]} <span class="muted">${g.db.filter(i => i.cat === c).length}</span></button>`).join('')}</div>` : `<h3 class="gd-ptitle section">${GD_ICO[cat]} ${GD_CATS[cat][0]}</h3>`}
+        ${types.length > 1 ? `<div class="gd-types">${types.map(k => `<button class="gd-type" aria-selected="${gpState.type === k}" data-act="gptype" data-t="${k}">${GD_ICO[k]}<span>${k === 'all' ? 'All' : GD_KIND[k]}</span><i>${k === 'all' ? mine.length : by(k).length}</i></button>`).join('')}</div>` : ''}
+        ${shown.length ? `<div class="group gd-alist">${shown.map(it => `<div class="gd-arow">
+            <button class="gd-ath ${it.kind}" data-act="gpopen" data-id="${it.id}" aria-label="Open ${esc(it.title)}">${it.thumb_url ? `<img src="${esc(it.thumb_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}${GD_ICO[it.kind]}</button>
+            <span class="grow"><b>${esc(it.title)}</b><span class="small muted">${esc([GD_ONE[it.kind], it.duration_s ? mmss(it.duration_s) : it.pages ? it.pages + ' pages' : '', it.bytes ? mb(it.bytes) : '', it.uploader, gdDay(it)].filter(Boolean).join(' · '))}</span></span>
+            ${gdCanManage(it) ? `<button class="icon-btn" data-act="gpman" data-id="${it.id}" aria-label="Manage ${esc(it.title)}">${GD_ICO.more}</button>` : ''}</div>`).join('')}</div>`
+            : `<div class="card empty"><b>No ${gpState.type === 'all' ? 'items' : GD_KIND[gpState.type].toLowerCase()} in ${GD_CATS[cat][0]} yet</b>Tap “Add to Guides” to post the first one.</div>`}
+        <p class="small muted" style="text-align:center;margin:14px 8px 0">Members see these in Guides (the ? button at the top). ${cat === 'maint' ? 'The older Google Drive PDFs still show there too.' : ''}</p>`;
+    Object.assign(actions, {
+        gup: () => gdForm({ cat, kind: gpState.type === 'all' ? null : gpState.type }, () => { gpState.cat = gState.cat; adminGuides(); }),
+        gpcat: el => { gpState.cat = el.dataset.c; gpState.type = 'all'; adminGuides(); },
+        gptype: el => { gpState.type = el.dataset.t; adminGuides(); },
+        gpopen: el => gdOpenFrom(shown, el.dataset.id),
+        gpman: el => gdManage(g.db.find(it => String(it.id) === el.dataset.id))
+    });
+}
+function gdOpenFrom(list, id) {
+    const it = list.find(x => String(x.id) === String(id)); if (!it) return;
+    const same = list.filter(x => x.kind === it.kind);
+    if (it.kind === 'video') gdPlayer(same, same.indexOf(it)); else if (it.kind === 'image') gdViewer(same, same.indexOf(it)); else gdPdf(it);
+}
+
 /* MotoMart product pictures that weren't saved with a post: the store page's preview picture is looked up
    (free link-preview service, same as roninwb.in) and remembered on the phone for a week. */
 const accJobs = new Map();
@@ -2624,7 +3193,8 @@ async function viewAdmin() {
             <button role="tab" aria-selected="${tab === 'members'}" data-act="tab" data-tab="members">Members</button>
             <button role="tab" aria-selected="${tab === 'bdays'}" data-act="tab" data-tab="bdays">Birthdays</button>
             <button role="tab" aria-selected="${tab === 'reports'}" data-act="tab" data-tab="reports">Reports<span id="rep-count"></span></button>
-            <button role="tab" aria-selected="${tab === 'ai'}" data-act="tab" data-tab="ai">Pookie<span id="ai-count"></span></button></div>
+            <button role="tab" aria-selected="${tab === 'ai'}" data-act="tab" data-tab="ai">Pookie<span id="ai-count"></span></button>
+            <button role="tab" aria-selected="${tab === 'guides'}" data-act="tab" data-tab="guides">Guides</button></div>
         <div id="admin-body"><p class="muted">Loading…</p></div>`;
     actions = { tab: el => { state.adminTab = el.dataset.tab; viewAdmin(); }, mfilter: el => { state.adminTab = 'members'; state.memberFilter = el.dataset.f; state.adminSearch = ''; viewAdmin(); } };
     load.listings(true).then(ls => { const n = ls.filter(l => l.status === 'pending').length; const c = $('#mm-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
@@ -2641,12 +3211,12 @@ async function viewAdmin() {
     });
     api.admin.pookiePending?.().then(n => { pookieBadge(n); const c = $('#ai-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
     api.admin.reports?.().then(rs => { const n = (rs || []).filter(r => r.status === 'open').length; const c = $('#rep-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
-    try { await ({ requests: adminRequests, motomart: adminMotoMart, dupes: adminDupes, members: adminMembers, bdays: adminBdays, reports: adminReports, ai: adminAI })[tab](); }
+    try { await (({ requests: adminRequests, motomart: adminMotoMart, dupes: adminDupes, members: adminMembers, bdays: adminBdays, reports: adminReports, ai: adminAI, guides: adminGuides })[tab] || adminRequests)(); }
     catch (e) { $('#admin-body').innerHTML = `<div class="card empty"><b>Could not load</b>${esc(e.message)}</div>`; }
 }
 /* Coordinators' panel (setup file 65): MotoMart posts, Teach Pookie answers and reports. They check other people's
    posts and answers; their own are checked by an admin or another coordinator. */
-const COORD_TABS = { motomart: ['MotoMart', () => adminMotoMart()], ai: ['Pookie', () => adminAI()], reports: ['Reports', () => adminReports()] };
+const COORD_TABS = { motomart: ['MotoMart', () => adminMotoMart()], ai: ['Pookie', () => adminAI()], reports: ['Reports', () => adminReports()], guides: ['Guides', () => adminGuides()] };
 async function coordCounts() {
     state.myId ??= await api.myId();
     const [ls, ai, rs] = await Promise.all([load.listings(true).catch(() => []), api.admin.pookiePending?.().catch(() => 0), api.admin.reports?.().catch(() => [])]);
@@ -2665,8 +3235,8 @@ async function viewCoord() {
     if (!COORD_TABS[state.adminTab]) state.adminTab = 'motomart';
     const tab = state.adminTab;
     app.innerHTML = top('Panel') + `
-        <div class="coord-hero"><span class="ad-ico">${ICON.shield}</span><div><b>Your coordinator panel</b><p class="small muted">Approve MotoMart posts and Pookie answers, and handle members' reports. Your own posts and answers go to an admin or another coordinator.</p></div></div>
-        <div class="seg section" role="tablist">${Object.entries(COORD_TABS).map(([k, [label]]) => `<button role="tab" aria-selected="${tab === k}" data-act="tab" data-tab="${k}">${label}<span id="c-${k}"></span></button>`).join('')}</div>
+        <div class="coord-hero"><span class="ad-ico">${ICON.shield}</span><div><b>Your coordinator panel</b><p class="small muted">Approve MotoMart posts and Pookie answers, handle members' reports and add Ride guides. Your own posts and answers go to an admin or another coordinator.</p></div></div>
+        <div class="seg section scroll" role="tablist">${Object.entries(COORD_TABS).map(([k, [label]]) => `<button role="tab" aria-selected="${tab === k}" data-act="tab" data-tab="${k}">${label}<span id="c-${k}"></span></button>`).join('')}</div>
         <div id="admin-body"><p class="muted">Loading…</p></div>`;
     actions = { tab: el => { state.adminTab = el.dataset.tab; viewAdmin(); } };
     coordCounts().then(n => Object.entries(n).forEach(([k, v]) => { const c = $('#c-' + k); if (c) c.textContent = v ? ` (${v})` : ''; if (k === 'ai') pookieBadge(v); })).catch(() => {});
@@ -4957,7 +5527,7 @@ function rideLive(e) {
 const FAM_MAX = 3;
 const isFam = () => state.me?.role === 'fam';
 const famOn = () => isFam() && state.fam?.approved !== false && state.fam?.active !== false;
-const FAM_ROUTES = ['home', 'track', 'events', 'me', 'news', 'crew', 'members', 'videos'];
+const FAM_ROUTES = ['home', 'track', 'events', 'me', 'news', 'crew', 'members', 'videos', 'guides'];
 const FAM_CODE_KEY = 'rwb-fam-code';
 const FAM_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M12 21.2s-2.6-1.6-2.6-3.3a1.4 1.4 0 0 1 2.6-.7 1.4 1.4 0 0 1 2.6.7c0 1.7-2.6 3.3-2.6 3.3z"/><circle cx="8" cy="7.5" r="2.6"/><circle cx="16.5" cy="8.5" r="2.1"/><path d="M3.5 19c.4-3.4 2.2-5.6 4.5-5.6s4.1 2.2 4.5 5.6M13.4 14.6c.8-.9 1.8-1.4 3.1-1.4 2 0 3.5 1.7 3.9 4.6"/><path d="M12 21.2s-2.6-1.6-2.6-3.3a1.4 1.4 0 0 1 2.6-.7 1.4 1.4 0 0 1 2.6.7c0 1.7-2.6 3.3-2.6 3.3z"/></svg>';
 const famCodeNorm = c => { const t = String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return t ? 'RWB-' + t.replace(/^RWB/, '').slice(0, 8) : ''; };

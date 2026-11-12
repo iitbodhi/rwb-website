@@ -1,6 +1,6 @@
 /* RWB App service worker: keeps the app shell available offline and loads it fast.
    Bump VERSION whenever app files change so phones pick up the new version. */
-const VERSION = 'rwb-app-v164';
+const VERSION = 'rwb-app-v165';
 const SHELL = ['./', 'index.html', 'config.js', 'css/app.css', 'js/app.js', 'js/api.js', '../js/data.js', '../js/terms.js',
     'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
@@ -28,6 +28,17 @@ self.addEventListener('fetch', e => {
             if (r.ok) { const copy = r.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
             return r;
         }).catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('index.html'))));
+        return;
+    }
+    /* Guides files on GitHub (served by jsDelivr, setup file 66): videos and PDFs stream straight from the CDN
+       (range requests, too big to keep); preview pictures and images are kept with the other photos */
+    if (url.hostname === 'cdn.jsdelivr.net' && url.pathname.startsWith('/gh/')) {
+        if (!/\.(jpe?g|webp)$/i.test(url.pathname)) return;
+        const key = e.request.url;
+        e.respondWith(caches.open(IMG).then(c => c.match(key).then(hit => hit || fetch(key, { mode: 'cors', credentials: 'omit' }).then(res => {
+            if (res.ok) { c.put(key, res.clone()); trimImages(c); }
+            return res;
+        }).catch(() => fetch(e.request)))));
         return;
     }
     /* pinned library and fonts: cache first */

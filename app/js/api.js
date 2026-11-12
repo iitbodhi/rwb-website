@@ -342,6 +342,43 @@ async function supabaseApi(url, key) {
             answer: async (qid, text) => must(await sb.rpc('teach_answer', { p_qid: qid, p_answer: text })),
             stats: async () => must(await sb.rpc('teach_stats')),
         },
+        /* ---- Guides (setup file 66 + the guides-media function: files live on GitHub, served by jsDelivr) ---- */
+        async guideItems() {
+            const r = await sb.from('guide_items').select('*').order('created_at', { ascending: false }).limit(1000);
+            if (r.error) { if (/guide_items|does not exist|schema cache/i.test(r.error.message || '')) return null; throw friendly(r.error); }   /* null: file 66 not run yet */
+            return r.data;
+        },
+        guideCats: async () => { const r = await sb.rpc('guide_my_cats'); return r.error ? [] : r.data || []; },
+        guideEdit: async (id, f) => must(await sb.rpc('guide_edit', { p_id: id, p_title: f.title, p_description: f.description || null, p_tags: f.tags || null })),
+        async guideOp(op, extra = {}) {
+            const token = (await sb.auth.getSession()).data.session?.access_token;
+            const r = await fetch(url + '/functions/v1/guides-media', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: key, Authorization: 'Bearer ' + token }, body: JSON.stringify({ op, ...extra }) })
+                .catch(() => { throw new Error('No internet connection. Please try again.'); });
+            const b = await r.json().catch(() => ({ error: r.status === 404 ? 'The guides-media function isn\'t deployed yet.' : `The guides-media function answered HTTP ${r.status}.` }));
+            if (b.error) throw new Error(b.error); return b;
+        },
+        guideStatus() { return this.guideOp('status'); },
+        guideDelete(item) { return this.guideOp('delete', { id: item.id }); },
+        /* sends the file with a progress callback (fetch can't report upload progress) */
+        async guideUpload(meta, file, thumb, onProgress) {
+            const token = (await sb.auth.getSession()).data.session?.access_token;
+            const fd = new FormData(); fd.append('op', 'upload'); fd.append('meta', JSON.stringify(meta)); fd.append('file', file, file.name || 'file');
+            if (thumb) fd.append('thumb', thumb, 'thumb.jpg');
+            return await new Promise((resolve, reject) => {
+                const x = new XMLHttpRequest();
+                x.open('POST', url + '/functions/v1/guides-media');
+                x.setRequestHeader('apikey', key); x.setRequestHeader('Authorization', 'Bearer ' + token);
+                x.upload.onprogress = e => e.lengthComputable && onProgress?.(e.loaded / e.total);
+                x.upload.onload = () => onProgress?.(1);
+                x.onload = () => { let b = {}; try { b = JSON.parse(x.responseText); } catch { /* below */ }
+                    if (x.status >= 200 && x.status < 300 && b.item) resolve(b.item);
+                    else reject(new Error(b.error || (x.status === 404 ? 'The guides-media function isn\'t deployed yet.' : x.status === 413 ? 'That file is too big to send.' : `Upload failed (HTTP ${x.status}). Please try again.`))); };
+                x.onerror = () => reject(new Error('The upload stopped. Check your internet and try again.'));
+                x.ontimeout = () => reject(new Error('The upload took too long. Try again on Wi-Fi.'));
+                x.timeout = 10 * 60e3;
+                x.send(fd);
+            });
+        },
         async pookieOp(op, extra = {}) {
             const token = (await sb.auth.getSession()).data.session?.access_token;
             const r = await fetch(url + '/functions/v1/ask-ronin', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: key, Authorization: 'Bearer ' + token }, body: JSON.stringify({ op, ...extra }) });
@@ -507,6 +544,28 @@ function demoApi() {
         if (STAFF.includes(me().role) || src.user_id === 'me') return d;
         return { ...d, bike: sh('bike') ? d.bike : null, vrn: sh('vrn') ? d.vrn : null, vrn_verified: sh('vrn') ? d.vrn_verified : null, bikes: sh('vrn') ? d.bikes : null, locality: sh('locality') ? d.locality : null, avg_kmpl: sh('mileage') ? d.avg_kmpl : null }; };
 
+    /* sample Guides: picture covers drawn here, videos borrowed from the app's own how-to videos */
+    const cover = (a, b, label, w = 360, h = 640) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#g)"/><circle cx="${w * .8}" cy="${h * .18}" r="${w * .35}" fill="#fff" opacity=".07"/><text x="50%" y="${h * .5}" text-anchor="middle" font-family="sans-serif" font-size="${w / 9}" font-weight="800" fill="#fff" opacity=".92">${label}</text></svg>`);
+    const demoGuides = () => (db.guides ||= [
+        ['maint', 'video', 'Chain clean & lube in 50 seconds', 'Kerosene brush, wipe, lube on the inside of the chain, wait 10 minutes.', 'chain, lube, kerosene, motul', 'track', 50, '#3a2117', '#d4501a', 'CHAIN', 2],
+        ['maint', 'video', 'Check engine oil level the right way', 'Bike upright on flat ground, engine warm, read the window between the marks.', 'oil, level, window', 'service', 43, '#1d3557', '#457b9d', 'OIL', 6],
+        ['maint', 'video', 'Rear brake pad wear check', 'Look through the caliper: under 2 mm of pad means change them.', 'brake, pads', 'mileage', 44, '#2b2d42', '#8d99ae', 'BRAKES', 9],
+        ['maint', 'pdf', 'First free service checklist', 'What TVS checks at 750–1,000 km and what to ask for.', 'service, first, checklist', null, null, '#264653', '#2a9d8f', '', 3, 6],
+        ['maint', 'pdf', 'Monsoon care for the Ronin', 'Rust, electricals, brakes and chain after rain rides.', 'rain, monsoon, rust', null, null, '#1b4332', '#40916c', '', 12, 9],
+        ['maint', 'pdf', 'Tyre pressure & tread guide', 'Pressures for solo and pillion, and when to replace.', 'tyre, pressure, psi', null, null, '#3d405b', '#81b29a', '', 20, 4],
+        ['maint', 'image', 'Chain slack: 25–30 mm', 'Measure at the middle of the lower run, on the side stand.', 'chain, slack, adjust', null, null, '#6b2d16', '#e8662e', 'SLACK', 5],
+        ['maint', 'image', 'Fuse box map', 'Which fuse does what, under the seat.', 'fuse, electrical', null, null, '#212529', '#495057', 'FUSES', 15],
+        ['ride', 'video', 'Hand signals in a group ride', 'Left hand for turn, stop, single file and hazards.', 'group, hand signals', 'events', 40, '#3c1518', '#d4501a', 'SIGNALS', 1],
+        ['ride', 'video', 'Staggered formation explained', 'Leader on the right, keep 2 seconds to the rider ahead.', 'group, formation', 'warriorboards', 27, '#14213d', '#fca311', 'FORMATION', 4],
+        ['ride', 'pdf', 'RWB group ride rules', 'Briefing, sweep rider, fuel stops, what to carry.', 'rules, group, sweep', null, null, '#370617', '#9d0208', '', 4, 8],
+        ['ride', 'image', 'Packing list for a 2-day ride', 'Tick it off the night before.', 'packing, touring, list', null, null, '#023047', '#219ebc', 'PACKING', 7]
+    ].map(([cat, kind, title, description, tags, vid, sec, a, b, label, ago, pages], i) => ({
+        id: 9000 + i, cat, kind, title, description, tags, user_id: i % 3 ? 'u2' : 'me', uploader: i % 3 ? 'Sultan' : firstOf(me()),
+        url: kind === 'video' ? `videos/${vid}.mp4` : kind === 'image' ? cover(a, b, label, 1200, 1200) : 'demo.pdf',
+        thumb_url: kind === 'video' ? cover(a, b, label) : kind === 'image' ? cover(a, b, label, 480, 480) : null,
+        duration_s: sec, width: kind === 'video' ? 720 : null, height: kind === 'video' ? 1280 : null, pages: kind === 'pdf' ? pages : null,
+        bytes: kind === 'video' ? sec * 260e3 : kind === 'pdf' ? 1.2e6 : 280e3, created_at: daysAgo(ago)
+    })));
     const demoRem = () => (db.reminders ||= [{ id: 951, source: 'custom', title: 'FASTag recharge', due_date: daysAgo(-5), repeat: 'monthly', notify_days: 1, note: null }]);
     const wait = (v) => new Promise(r => setTimeout(() => r(clone(v)), 120));
     const authFns = [];
@@ -734,6 +793,20 @@ function demoApi() {
                 if (live) { (db.know ??= []).push({ id: nid(), source: 'answer', title: q?.question, content: text + ' (RWB rider ' + me().full_name.split(' ')[0] + ')', updated_at: new Date().toISOString() }); if (q) q.urgent = false; }
                 save(); return wait({ ...this._stats(), live }); },
             stats() { return wait(this._stats()); },
+        },
+        /* ---- Guides (demo: sample items; uploads stay on this phone until the page reloads) ---- */
+        guideItems: () => wait(demoGuides()),
+        guideCats: () => wait({ superadmin: ['app', 'maint', 'ride'], admin: ['maint', 'ride'], coordinator: ['ride'] }[me().role] || []),
+        guideStatus: () => wait({ ready: true, repo: 'iitbodhi/rwb-media', bytes: demoGuides().reduce((s, g) => s + (g.bytes || 0), 0), items: demoGuides().length, budget: 900e6, cats: [] }),
+        async guideEdit(id, f) { const g = demoGuides().find(x => x.id === id); Object.assign(g, { title: f.title, description: f.description || null, tags: f.tags || null }); save(); return wait(g); },
+        async guideDelete(item) { db.guides = demoGuides().filter(g => g.id !== item.id); save(); return wait({ deleted: item.id }); },
+        async guideUpload(meta, file, thumb, onProgress) {
+            for (let i = 1; i <= 10; i++) { await new Promise(r => setTimeout(r, 120)); onProgress?.(i / 10); }
+            const big = file.size > 400e3;   /* small pictures are kept as text so they survive a reload; big files only until it */
+            const src = big ? URL.createObjectURL(file) : await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); });
+            const th = thumb ? await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(thumb); }) : null;
+            const g = { id: nid(), ...meta, url: src, thumb_url: th, bytes: file.size, user_id: 'me', uploader: firstOf(me()), created_at: new Date().toISOString() };
+            demoGuides().unshift(g); save(); return wait(g);
         },
         async pookieOp(op) { await new Promise(r => setTimeout(r, 900)); return op === 'gen-questions' ? { added: 20 } : (db.gl = (db.gl || 0) + 1) > 3 ? { done: true, total: 3, learned: 3, failed: 0 } : { learned: ['Chain cleaning guide', 'First service checklist', 'Monsoon care'][db.gl - 1], left: 3 - db.gl, total: 3 }; },
         chatNotes: async () => db.chatNotes || '', async saveChatNotes(n) { db.chatNotes = n; save(); },

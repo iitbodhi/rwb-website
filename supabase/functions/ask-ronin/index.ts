@@ -64,9 +64,13 @@ Battery 12 V 6 Ah maintenance-free. Running-in: under about 50 km/h for the firs
 750 to 1,000 km. A warning lamp (engine MIL, ABS, ISG) that stays ON means a fault: get it checked. TVS customer care 1800-258-7111.
 
 THE RWB APP
-Bottom tabs: Home, Service, Mileage, Track (middle), MotoMart, Warriors, Events. Top right: bell = News, photo = Me.
+Bottom tabs: Home, Service, Mileage, Track (middle), MotoMart, Warriors, Events. Top right: calendar, ? = Guides, bell = News, photo = Me.
+- Guides (the ? button): three categories at the top, App, Maintenance (opens first) and Ride. Inside: short videos,
+  PDFs and pictures, filters (All, Videos, PDFs, Pictures) and a search icon. App has the how-to videos for the app.
+  Only the team adds guides: Bodhi (super admin) App, Maintenance and Ride; admins Maintenance and Ride; coordinators Ride
+  ("+ Add" in Guides, or Admin/Coordinator panel → Guides). Videos up to 60 s (the app shrinks them to 720p), PDFs up to 10 MB.
 - Home: birthdays, quick buttons (Sell gear, Documents, FAM), latest news, fresh MotoMart items, Explore: Teach Pookie,
-  Maintenance guides (PDFs), New accessories (opens MotoMart → New).
+  Maintenance guides (opens Guides), New accessories (opens MotoMart → New).
 - Service: log each service (date, km, type, work done, cost, next due, bill photo/PDF).
 - Mileage: "+ Add fuel" after each fill. Fill to full and reset Trip A; next time fill to full, enter litres and Trip A km.
   Top-ups: turn "Full tank" off and don't reset Trip A.
@@ -354,7 +358,7 @@ async function pdfText(bytes: Uint8Array): Promise<string> {
   return pages.join("\n\n").replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-const VERSION = "pookie-8";
+const VERSION = "pookie-9";
 const list = (s: unknown, dflt: string) => String(s || dflt).split(",").map((x) => x.trim()).filter(Boolean);
 
 /* ---------------- Request ---------------- */
@@ -397,20 +401,25 @@ Deno.serve(async (req) => {
     const c = (await server.rpc("chat_config")).data || {};
     if (input.op === "learn-guides") {
       site = null; await siteRows();
-      if (!guideList.length) return json({ error: "Couldn't get the list of guides from roninwb.in. Try again in a minute." }, 502);
+      /* PDFs added in the app's Guides (setup file 66), kept on GitHub and served by jsDelivr */
+      const up = await server.from("guide_items").select("id,title,description,url").eq("kind", "pdf").in("cat", ["maint", "ride"]);
+      const list: { id: string; name: string; description?: string; url?: string }[] = [...guideList,
+        ...((up.error ? [] : up.data) as { id: number; title: string; description: string; url: string }[]).map((g) => ({ id: "gi-" + g.id, name: g.title, description: g.description, url: g.url }))];
+      if (!list.length) return json({ error: "Couldn't get the list of guides from roninwb.in. Try again in a minute." }, 502);
       const have = await server.from("pookie_knowledge").select("ref,active,content").eq("source", "guide");
       if (have.error) return json({ error: "Run setup file 56 in Supabase first. " + have.error.message }, 400);
       const failed = new Set((have.data || []).filter((r: { active: boolean; content: string }) => !r.active && r.content.startsWith("FAILED")).map((r: { ref: string }) => r.ref));
       const done = new Set((have.data || []).map((r: { ref: string }) => r.ref).filter((r: string) => input.retry ? !failed.has(r) : true));
-      const todo = guideList.filter((p) => !done.has(p.id));
-      const learned = guideList.filter((p) => done.has(p.id) && !failed.has(p.id)).length;
-      if (!todo.length) return json({ done: true, total: guideList.length, learned, failed: input.retry ? 0 : failed.size });
+      const todo = list.filter((p) => !done.has(p.id));
+      const learned = list.filter((p) => done.has(p.id) && !failed.has(p.id)).length;
+      if (!todo.length) return json({ done: true, total: list.length, learned, failed: input.retry ? 0 : failed.size });
       const p = todo[0], title = pdfTitle(p.name);
       const save = (content: string, active: boolean) => server.from("pookie_knowledge").upsert({ source: "guide", ref: p.id, title, content, active, updated_at: new Date().toISOString() }, { onConflict: "source,ref" });
       // marked first, so if the server stops part-way the next run moves on instead of getting stuck on this PDF
       await save("FAILED: reading stopped part-way (the PDF may be too big or complex). Try a smaller PDF.", false);
       try {
-        const bytes = await downloadPdf(p.id);
+        const bytes = p.url ? new Uint8Array(await (await fetch(p.url, { signal: AbortSignal.timeout(25000) })).arrayBuffer()) : await downloadPdf(p.id);
+        if (String.fromCharCode(...bytes.subarray(0, 4)) !== "%PDF") throw new Error("couldn't download it as a PDF");
         if (bytes.length > 18e6) throw new Error("it is bigger than 18 MB");
         let text = "";
         try { text = await pdfText(bytes); log.push(`text: ${text.length} characters`); } catch (e) { log.push("text reader: " + String(e).slice(0, 100)); }
@@ -425,11 +434,11 @@ Deno.serve(async (req) => {
           if (!text || /^NO TEXT/i.test(text)) throw new Error("no readable text in it");
         }
         await save(text.slice(0, 20000), true); kcache = null;
-        return json({ learned: title, left: todo.length - 1, total: guideList.length });
+        return json({ learned: title, left: todo.length - 1, total: list.length });
       } catch (e) {
         const why = String((e as Error).message || e).replace(/No Gemini model answered/, "it has no text and Gemini is busy right now; try again later").slice(0, 300);
         await save("FAILED: " + why, false);
-        return json({ failed: title, reason: why, left: todo.length - 1, total: guideList.length });
+        return json({ failed: title, reason: why, left: todo.length - 1, total: list.length });
       }
     }
     /* gen-questions: 20 new questions for Teach Pookie */
