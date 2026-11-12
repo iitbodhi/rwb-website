@@ -1851,11 +1851,12 @@ function viewVideos() {
 }
 
 /* =================== Calendar: everything with a date in one place ===================
-   Vehicle dates only: document renewals, next service, My Ride parts falling due, the member's own reminders,
-   and logged services, parts and fill-ups. (Events and holidays were removed at Bodhi's request.) Renewal, service and part dates also reach the phone as
+   RWB events (past and coming) plus vehicle dates: document renewals, next service, My Ride parts falling due,
+   the member's own reminders, and logged services, parts and fill-ups. (No holidays or birthdays: Bodhi removed them.) Renewal, service and part dates also reach the phone as
    notifications (setup file 62: the database sends them every morning at 8:30). */
 const CS = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const CAL_CATS = {
+    event: ['Events', CS('<path d="M5.5 21V4h11l-2 4 2 4h-11"/>'), 1],
     renew: ['Renewals', CS('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h4"/>'), 1],
     service: ['Service', CS('<path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8V21h3.2l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>'), 1],
     ride: ['My Ride', CS('<path d="M12 2.8 20 7.4v9.2L12 21.2 4 16.6V7.4z"/><circle cx="12" cy="12" r="3"/>'), 1],
@@ -1919,6 +1920,12 @@ const whenIdle = f => (window.requestIdleCallback ? requestIdleCallback(() => f(
 /* every dated thing between two days (inclusive), as calendar items */
 function calItems(d, from, to) {
     const out = [], inR = iso => iso >= from && iso <= to;
+    for (const e of d.events) {
+        const s = localDay(e.starts_at), end = e.ends_at ? localDay(e.ends_at) : s, mine = d.rsvp[e.id], past = evtPast(e);
+        for (let x = s; x <= end && x <= to; x = isoAdd(x, 1)) if (inR(x)) out.push({ id: 'e' + e.id, date: x, cat: 'event', title: e.title, first: x === s,
+            sub: [x === s ? evtTime(e.starts_at) : 'Continues', e.location, e.status === 'cancelled' ? 'Cancelled' : mine ? RSVP_TXT[mine.status] : past ? 'Past event' : ''].filter(Boolean).join(' · '),
+            off: e.status === 'cancelled', start: e.starts_at, end: e.ends_at, location: e.location, note: e.description, href: '#events/' + e.id, btn: 'Open event' });
+    }
     for (const doc of d.docs) if (doc.expiry_date && inR(doc.expiry_date)) {
         const st = docStatus(doc);
         out.push({ id: 'd' + doc.id, date: doc.expiry_date, cat: 'renew', title: `${docName(doc)} ${st.days < 0 ? 'expired' : 'expires'}`, sub: st.days < 0 ? 'Renew it and update My documents' : 'Renew before this day',
@@ -1941,7 +1948,7 @@ function calItems(d, from, to) {
             x = addMonths(r.due_date, r.repeat === 'monthly' ? k : 12 * k);
         }
     }
-    const order = { renew: 0, service: 1, ride: 2, mine: 3, fuel: 4 };
+    const order = { renew: 0, service: 1, ride: 2, mine: 3, event: 4, fuel: 5 };
     return out.filter(i => !d.off.has(i.cat)).sort((a, b) => a.date.localeCompare(b.date) || (a.done || 0) - (b.done || 0) || order[a.cat] - order[b.cat] || String(a.start || '').localeCompare(String(b.start || '')));
 }
 const calAlert = () => docsAlert() || !!state.calSoon;
@@ -1959,9 +1966,10 @@ function calGcalUrl(it) {
 /* loads once when the Calendar opens; tapping days, months and filters only redraws (no network) */
 async function viewCalendar() {
     const n = navN;
-    const [services, fuel, docs, ride, mine] = await Promise.all([load.services(), load.fuel(), load.docs(), load.ride().catch(() => ({ parts: null })), load.reminders()]);
+    const [services, fuel, docs, ride, evd, mine] = await Promise.all([load.services(), load.fuel(), load.docs(), load.ride().catch(() => ({ parts: null })),
+        loadEvents().catch(() => ({ events: [], mine: {} })), load.reminders()]);
     if (!stillHere(n)) return;
-    state.calData = { docs, services, fuel, parts: ride.parts || [], due: dueItems(services, fuel, ride.parts), mine };
+    state.calData = { events: evd.events || [], rsvp: evd.mine || {}, docs, services, fuel, parts: ride.parts || [], due: dueItems(services, fuel, ride.parts), mine };
     drawCal();
     whenIdle(() => syncReminders(services, fuel, ride));
 }
@@ -1977,10 +1985,10 @@ function drawCal() {
     const all = calItems(data, gridFrom < today ? gridFrom : today, isoAdd(gridTo > today ? gridTo : today, 45));
     const byDay = new Map(); all.forEach(i => (byDay.get(i.date) || byDay.set(i.date, []).get(i.date)).push(i));
     /* overdue renewals, service and parts first, then what's coming in the next 45 days */
-    const overdue = calItems({ ...data, off: new Set(['fuel', 'mine']) }, isoAdd(today, -60), isoAdd(today, -1)).filter(i => !i.done && i.level);
-    const soon = all.filter(i => i.date >= today && i.date <= isoAdd(today, 45) && !i.done && i.cat !== 'fuel');
+    const overdue = calItems({ ...data, off: new Set(['event', 'fuel', 'mine']) }, isoAdd(today, -60), isoAdd(today, -1)).filter(i => !i.done && i.level);
+    const soon = all.filter(i => i.date >= today && i.date <= isoAdd(today, 45) && !i.done && i.cat !== 'fuel' && (i.cat !== 'event' || i.first));
     state.calSoon = [...overdue, ...soon].some(i => ['renew', 'service', 'ride', 'mine'].includes(i.cat) && daysTo(i.date) <= 7);
-    const upcoming = [...overdue, ...soon.filter(i => i.date > today || sel !== today)], showAll = state.calAll;
+    const upcoming = [...overdue, ...soon.filter(i => i.date > today || (sel !== today && i.cat !== 'event'))], showAll = state.calAll;
     const short = iso => { const n = daysTo(iso); return n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n < 0 ? `${-n}d late` : `${parts(iso).d} ${MONTHS[parts(iso).m - 1]}`; };
     const row = (i, when) => `<button class="cal-it c-${i.cat}${i.off ? ' off' : ''}${i.soft ? ' soft' : ''}${i.level ? ' ' + i.level : ''}" data-act="cal-it" data-id="${esc(i.id)}" data-d="${i.date}">
         <span class="cal-ico">${CAL_CATS[i.cat][1]}</span><span class="grow"><b>${esc(i.title)}</b>${i.sub ? `<small>${esc(i.sub)}</small>` : ''}</span>${when ? `<span class="cal-when">${short(i.date)}</span>` : ''}</button>`;
@@ -2824,7 +2832,7 @@ function waMsg(kind, x = {}) {
     const first = firstName(x) || 'Warrior', me = firstName(state.me) || 'RWB';
     const T = {
         welcome: `Hi ${first}! 🎉\n\nWelcome to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nMeanwhile, get the RWB App: https://${APP_LINK}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}. Your details are already there.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
-        existing: `Hi Warrior ${first}! 👋\n\nYou're already in our RWB WhatsApp group, so nothing to worry about. Your RWB App account is ready: just open the app and explore.\n\n📍 Track: live location on rides, SOS to the RWB team\n🔧 Service: records, bills and next-service reminders\n⛽ Mileage: your real km/l and fuel spends\n🛒 Motomart: buy and sell used riding gear\n📘 Guides: maintenance help and tested gear\n📅 Events: rides, RSVPs and shared expenses\n🗓️ Calendar: renewal, service and parts due dates, with reminders\n🏍️ RWB: members and leaderboards\n🤖 Pookie: our AI for any bike question\n\nPlease also update your details in the Me tab (you can set your bike model and add up to 3 bikes).\n\n${APP_LINK}\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
+        existing: `Hi Warrior ${first}! 👋\n\nYou're already in our RWB WhatsApp group, so nothing to worry about. Your RWB App account is ready: just open the app and explore.\n\n📍 Track: live location on rides, SOS to the RWB team\n🔧 Service: records, bills and next-service reminders\n⛽ Mileage: your real km/l and fuel spends\n🛒 Motomart: buy and sell used riding gear\n📘 Guides: maintenance help and tested gear\n📅 Events: rides, RSVPs and shared expenses\n🗓️ Calendar: events plus renewal, service and parts due dates, with reminders\n🏍️ RWB: members and leaderboards\n🤖 Pookie: our AI for any bike question\n\nPlease also update your details in the Me tab (you can set your bike model and add up to 3 bikes).\n\n${APP_LINK}\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
         returning: `Hi ${first}! 🎉\n\nWelcome back to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nThe RWB App: https://${APP_LINK}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
         rejected: `Hi ${first},\n\nThank you for your interest in Ronin Warriors of Bengal. We're sorry, we couldn't approve your registration this time${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'}\n\nIf you think this is a mistake, or things change, just reply here and we'll be happy to help.\n\nRide safe! 🙏\n– ${me}, RWB`,
         change_ok: `Hi ${first}! ✅ Your ${x.what || 'profile'} update in the RWB App is approved. Thanks for keeping your details up to date.\n– ${me}, RWB`,

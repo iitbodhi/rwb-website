@@ -1709,7 +1709,7 @@ button.rw-btn{padding:8px 14px}
 /* =================== Calendar (glass) =================== */
 .cal-btn svg{width:21px;height:21px}
 @media (max-width:400px){.top{gap:4px}.top .icon-btn{width:34px}}
-.c-renew{--cc:#d6453b} .c-service{--cc:#2f7fd8} .c-ride{--cc:#1f9a62} .c-mine{--cc:#8a5cd6} .c-fuel{--cc:#8c8781}
+.c-event{--cc:var(--orange)} .c-renew{--cc:#d6453b} .c-service{--cc:#2f7fd8} .c-ride{--cc:#1f9a62} .c-mine{--cc:#8a5cd6} .c-fuel{--cc:#8c8781}
 .cal-card{position:relative;margin-top:4px;padding:12px 10px 8px;border-radius:24px;border:1px solid var(--hair);
   background:linear-gradient(160deg,color-mix(in srgb,var(--card) 70%,transparent),color-mix(in srgb,var(--card) 42%,transparent));
   backdrop-filter:blur(18px) saturate(1.5);-webkit-backdrop-filter:blur(18px) saturate(1.5);box-shadow:var(--lift);contain:layout paint}
