@@ -197,16 +197,11 @@ const navUI = (() => {
             if (on) { on = false; bar.className = 'done'; setTimeout(() => { if (bar.className === 'done') bar.className = ''; }, 450); } }
     };
 })();
-let paintedN = -1;
 const STALE = new Error('stale screen');
 (() => {
     const d = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
     Object.defineProperty(app, 'innerHTML', { configurable: true, get() { return d.get.call(this); },
-        set(v) { if (paintN >= 0 && paintN !== navN) throw STALE;
-            /* the entrance plays once per screen visit: a refresh moments later (fresh data, or real content after the
-               placeholders) swaps in quietly instead of replaying it, so nothing flickers */
-            if (paintN >= 0) { if (paintedN === navN) this.classList.add('same'); else paintedN = navN; }
-            d.set.call(this, v); if (navScroll === 0 && window.scrollY) window.scrollTo(0, 0); navUI.painted(); } });
+        set(v) { if (paintN >= 0 && paintN !== navN) throw STALE; d.set.call(this, v); navUI.painted(); } });
 })();
 /* still on the screen that started loading? (for parts filled in after the first paint) */
 const stillHere = n => n === navN;
@@ -243,7 +238,7 @@ async function doRender() {
     tabbar.querySelectorAll('a[aria-current]').forEach(a => a.setAttribute('aria-current', 'page'));
     /* the entrance animation plays when the screen changes, not when the same screen refreshes */
     const route = name + '/' + (param || '');
-    app.classList.toggle('same', route === lastRoute); app.classList.remove('lb-play'); lastRoute = route;
+    app.classList.toggle('same', route === lastRoute); lastRoute = route;
     paintN = navN;
     navUI.start(route !== app.dataset.shown); app.dataset.shown = route;
     pingCopy().catch(() => {});
@@ -264,54 +259,6 @@ window.addEventListener('hashchange', () => {
     else { navIdx = ++navMax; try { history.replaceState({ ...(history.state || {}), rwbNav: navIdx }, ''); } catch { /* ignore */ } navScroll = 0; }
     closeSheet(); closeMmSearch(); gdClose(true); render();
 });
-/* Swipe left / right on a main screen to move to the next / previous tab (the tab buttons still work).
-   Kept as light as possible so it never slows scrolling: the app only looks at the finger when it lifts
-   (no work while it moves), then opens the next screen at once with a barely-there slide.
-   Track is left out (tap its button). Parts that already swipe sideways keep their own swipe: pagers,
-   the calendar month, alerts, maps, chip rows and text boxes; the leaderboard flips boards first and
-   hands over to the tab swipe from its first / last board. */
-(() => {
-    const OWN = '#cal-pager,[data-swipe],.leaflet-container,input,textarea,select,[contenteditable],[data-noswipe],.sos-hold,.blocker';
-    const SKIP = ['track'];
-    let s0 = null, pending = false;
-    document.addEventListener('touchstart', e => {
-        s0 = null;
-        if (e.touches.length !== 1) return;
-        const t = e.touches[0], tg = e.target;
-        let board = null;
-        if (tg.closest?.('#board')) { const d = app.querySelectorAll('.board-dots i'), on = app.querySelector('.board-dots i.on'); const k = [...d].indexOf(on); board = { first: k <= 0, last: k >= d.length - 1 }; }
-        s0 = { x: t.clientX, y: t.clientY, t: e.timeStamp, tg, board };
-    }, { passive: true });
-    document.addEventListener('touchend', e => {
-        const s = s0; s0 = null;
-        if (!s || e.touches.length) return;
-        const t = e.changedTouches[0], dx = t.clientX - s.x, dy = t.clientY - s.y;
-        /* a clear sideways swipe: far enough, mostly sideways, not a slow drag */
-        if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.8 || (e.timeStamp - s.t > 700 && Math.abs(dx) < innerWidth * 0.4)) return;
-        if (s.x < 18 || s.x > innerWidth - 18) return;                      /* the phone's own back gesture */
-        const tg = s.tg;
-        if (!(app.contains(tg) || tg === document.body || tg === document.documentElement)) return;
-        if (tabbar.hidden || sheet.open || document.querySelector('.gd-viewer,.promo,.mm-search')) return;
-        if (tg.closest(OWN) || getSelection()?.toString()) return;
-        if (s.board && !(dx < 0 ? s.board.last : s.board.first)) return;
-        for (let el = tg; el && el !== app; el = el.parentElement)          /* inside a sideways-scrolling row */
-            if (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return;
-        const list = [...tabbar.querySelectorAll('a[data-tab]')].filter(a => !SKIP.includes(a.dataset.tab) && a.offsetParent !== null);
-        const i = list.findIndex(a => a.dataset.tab === document.body.dataset.route), next = i < 0 ? null : list[i + (dx < 0 ? 1 : -1)];
-        if (!next) return;
-        pending = true; app.dataset.slide = dx < 0 ? 'next' : 'prev';
-        location.hash = next.getAttribute('href');
-    }, { passive: true });
-    document.addEventListener('touchcancel', () => { s0 = null; }, { passive: true });
-    /* tapping a tab slides the same gentle way */
-    tabbar.addEventListener('click', e => {
-        const a = e.target.closest('a[data-tab]'), all = [...tabbar.querySelectorAll('a[data-tab]')];
-        const from = all.findIndex(x => x.dataset.tab === document.body.dataset.route), to = all.indexOf(a);
-        if (!a || from < 0 || to === from) return;
-        pending = true; app.dataset.slide = to > from ? 'next' : 'prev';
-    });
-    addEventListener('hashchange', () => { if (!pending) delete app.dataset.slide; pending = false; });
-})();
 
 const demoBar = () => api?.demo ? `<div class="demo-bar">Demo mode: sample data, saved only on this device. <button data-act="reset-demo">Reset</button></div>` : '';
 const BELL = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>';
@@ -1445,9 +1392,7 @@ function bindCentrePicker(body) {
 /* ---------- how my mileage compares with other warriors ---------- */
 async function drawVs(el, mine) {
     if (!el) return;
-    const wait = !state.board;
     const rows = state.board ??= await api.boards().catch(() => []);
-    if (wait) el.classList.add('vs-in');   /* filled in after a wait: fade in, in the space kept for it */
     const others = rows.filter(r => !r.is_me && r.kmpl > 0).map(r => Number(r.kmpl));
     if (!mine) { el.innerHTML = '<p class="small muted">Add a full-tank fill-up with your Trip A reading to see how your mileage compares with other warriors.</p>'; return; }
     if (others.length < 2) { el.innerHTML = `<p class="small muted">Your average is <b>${kmplTxt(mine)}</b>. Comparison appears once a few more warriors log full-tank fill-ups.</p>`; return; }
@@ -2280,7 +2225,7 @@ async function viewMileage() {
             <div class="stat"><b>${f1(ms.best)}</b><span>Best tank</span></div>
             <div class="stat"><b>${ms.cpk ? '₹' + ms.cpk.toFixed(2) : '–'}</b><span>Fuel cost / km</span></div>
         </div></section>
-        <section class="section"><h2>You vs RWB</h2><div class="card vs" id="vs">${state.board ? '' : SKEL(4)}</div></section>
+        <section class="section"><h2>You vs RWB</h2><div class="card vs" id="vs"><p class="small muted">Comparing…</p></div></section>
         ${TIPS}
         ${logs.length || svcs.length ? `<section class="section"><h2>Spends and mileage</h2><div class="card trend" id="trend"></div></section>` : ''}
         <section class="section"><h2>Fill-ups</h2>${logs.length ? `<div class="list">${[...logs].reverse().map(f => fuelCard(f, byEnd.get(f.id))).join('')}</div>` :
@@ -4148,23 +4093,13 @@ async function sweepSold(all) {
     if (old.length) state.listings = null;
 }
 
-let mmFreshAt = 0;
 async function viewMotoMart() {
     state.myId ??= await api.myId();
     const p = state.param;
     if (p === 'review') { if (isMod()) Object.assign(mmState, { review: true, mine: false }); }
     else if (['new', 'used', 'merch'].includes(p)) Object.assign(mmState, { branch: p, cat: 'all', review: false, mine: false });
     if (['review', 'new', 'used', 'merch'].includes(p)) { state.param = null; history.replaceState(null, '', '#motomart'); }
-    /* cache-first: show the saved list at once, fetch the newest in the background and redraw only if it changed */
-    const had = state.listings, all = had || await load.listings(true);
-    if (had && Date.now() - mmFreshAt > 15000) {
-        mmFreshAt = Date.now();
-        api.listings().then(fresh => {
-            if (JSON.stringify(fresh) === JSON.stringify(state.listings)) return;
-            state.listings = fresh;
-            if (document.body.dataset.route === 'motomart' && !sheet.open && !document.querySelector('.mm-search')) render();
-        }).catch(() => {});
-    } else if (!had) mmFreshAt = Date.now();
+    const all = await load.listings(true);
     sweepSold(all);
     const mod = isMod(), waiting = mod ? all.filter(l => l.status === 'pending' && (isAdmin() || !mine(l))) : [];
     if (!mod || !waiting.length) mmState.review = false;
@@ -4818,7 +4753,7 @@ async function viewCrew() {
         <a class="mem-entry" href="#members"><span class="mem-faces">${[...new Map([...(state.gps || []), ...raw].filter(r => r.full_name).map(r => [r.full_name, r])).values()].slice(0, 4).map(r => face(r, 'avatar sm')).join('')}</span>
             <span class="grow"><b>RWB Members</b><span class="small muted">${state.dir ? `${state.dir.length} riders · ` : ''}Find a rider · RWB team contacts</span></span>${ICON.chev}</a>`;
     lbCount($('#board'));
-    const showBoard = (k, dir = 0) => { state.boardKey = k; const el = $('#board'); if (!el) return; app.classList.add('lb-play'); el.innerHTML = boardHtml(k, raw);
+    const showBoard = (k, dir = 0) => { state.boardKey = k; const el = $('#board'); if (!el) return; app.classList.remove('same'); el.innerHTML = boardHtml(k, raw);
         app.querySelectorAll('.lb-tabs [data-b]').forEach(b => b.setAttribute('aria-selected', b.dataset.b === k));
         app.querySelector(`.lb-tabs [data-b="${k}"]`)?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
         app.querySelectorAll('.board-dots i').forEach((d, i) => d.classList.toggle('on', keys[i] === k));
