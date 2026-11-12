@@ -138,3 +138,10 @@ Members removed by an admin are not re-added from old rows; if they fill the for
    `insert into private.config (key, value) values ('gemini_key', 'YOUR-KEY') on conflict (key) do update set value = excluded.value;`
 3. **Edge Functions → Deploy a new function → Via Editor** → name `ask-ronin` → paste `supabase/functions/ask-ronin/index.ts` → **Deploy**.
 4. Since setup file 61 (Pookie v2), Pookie answers **only** from what RWB taught it (approved Teach Pookie answers, admins' own Teach Pookie answers, the Guides PDFs, the team list and the gear sheet). Groq does the talking; Gemini is a backup and is needed only for photos and scanned PDFs. Questions it can't answer go to Teach Pookie as URGENT, and they don't use up the member's daily questions. Limits: 20 questions per member per day (admins 60), 500 in total per day; change `chat_daily_limit` / `chat_global_daily_limit` in `private.config`.
+
+---
+
+# Calendar (setup file 62)
+
+1. **SQL Editor → New query** → paste all of `supabase/calendar.sql` → **Run**. It adds members' own reminders, the 8:30 AM reminder notifications (renewals, service, My Ride parts) and teaches Pookie about the Calendar.
+2. **Edge Functions → Deploy a new function → Via Editor** → name it exactly `holidays` → paste `supabase/functions/holidays/index.ts` → **Deploy**. It gives the Calendar the Indian holidays list from Google's free public holiday calendar. Without it the Calendar still shows the West Bengal Government list built into the app.

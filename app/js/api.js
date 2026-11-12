@@ -235,6 +235,20 @@ async function supabaseApi(url, key) {
         },
         docUrl: async path => must(await sb.storage.from('docs').createSignedUrl(path, 900)).signedUrl,
 
+        /* Calendar (setup file 62): the member's own reminders, and the service / part due dates the database sends
+           morning notifications for. myReminders is null when that file isn't run yet. */
+        async myReminders() { const r = await sb.from('my_reminders').select('*').eq('source', 'custom').order('due_date'); if (r.error) { if (/relation|does not exist|schema cache/i.test(r.error.message || '')) return null; throw friendly(r.error); } return r.data; },
+        async saveReminder(rec) { const { id, ...v } = rec; v.updated_at = new Date().toISOString(); return must(id ? await sb.from('my_reminders').update(v).eq('id', id).select().single() : await sb.from('my_reminders').insert({ ...v, source: 'custom' }).select().single()); },
+        deleteReminder: async id => must(await sb.from('my_reminders').delete().eq('id', id)),
+        async syncReminders(items) { const r = await sb.rpc('sync_my_reminders', { p_items: items }); if (r.error) { if (/function|schema cache|does not exist/i.test(r.error.message || '')) return null; throw friendly(r.error); } return r.data; },
+        /* Indian holidays from the internet (the "holidays" Edge Function reads Google's public Indian holidays calendar) */
+        async holidays() {
+            const token = (await sb.auth.getSession()).data.session?.access_token || key;
+            const r = await fetch(url + '/functions/v1/holidays', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: key, Authorization: 'Bearer ' + token }, body: '{}' });
+            if (!r.ok) throw new Error('Holidays not available');
+            return (await r.json()).holidays || [];
+        },
+
         /* My Ride (setup file 57): parts and accessories; null when that file isn't run yet */
         async rideParts() { const r = await sb.from('ride_parts').select('*').order('installed_km', { ascending: false, nullsFirst: false }); if (r.error) { if (/relation|does not exist|schema cache/i.test(r.error.message || '')) return null; throw new Error(r.error.message); } return r.data; },
         async saveRidePart(rec) { const { id, ...v } = rec; v.updated_at = new Date().toISOString(); return must(id ? await sb.from('ride_parts').update(v).eq('id', id).select().single() : await sb.from('ride_parts').insert(v).select().single()); },
@@ -494,6 +508,7 @@ function demoApi() {
         if (STAFF.includes(me().role) || src.user_id === 'me') return d;
         return { ...d, bike: sh('bike') ? d.bike : null, vrn: sh('vrn') ? d.vrn : null, vrn_verified: sh('vrn') ? d.vrn_verified : null, bikes: sh('vrn') ? d.bikes : null, locality: sh('locality') ? d.locality : null, avg_kmpl: sh('mileage') ? d.avg_kmpl : null }; };
 
+    const demoRem = () => (db.reminders ||= [{ id: 951, source: 'custom', title: 'FASTag recharge', due_date: daysAgo(-5), repeat: 'monthly', notify_days: 1, note: null }]);
     const wait = (v) => new Promise(r => setTimeout(() => r(clone(v)), 120));
     const authFns = [];
     const isBirthday = (dob, d) => dob && dob.slice(5) === iso(d).slice(5);
@@ -655,6 +670,11 @@ function demoApi() {
         async saveExpense(rec) { db.expenses ||= []; if (rec.id) Object.assign(db.expenses.find(x => x.id === rec.id), rec); else db.expenses.push({ ...rec, id: nid(), created_by: 'me', created_at: new Date().toISOString() }); save(); return wait(rec); },
         async deleteExpense(id) { db.expenses = db.expenses.filter(x => x.id !== id); save(); },
 
+        myReminders: () => wait(demoRem().filter(r => r.source === 'custom')),
+        async saveReminder(rec) { db.reminders ||= []; if (rec.id) Object.assign(db.reminders.find(r => r.id === rec.id), rec); else db.reminders.push(rec = { ...rec, id: nid(), source: 'custom' }); save(); return wait(rec); },
+        async deleteReminder(id) { db.reminders = (db.reminders || []).filter(r => r.id !== id); save(); },
+        async syncReminders(items) { db.reminders = [...demoRem().filter(r => r.source === 'custom'), ...items.map((x, i) => ({ ...x, id: 990 + i }))]; save(); return wait(items.length); },
+        holidays: () => wait([]),   /* demo: the built-in holiday list only */
         docs: () => wait([...(db.docs ||= [])]),
         async saveDoc(rec, add = [], drop = []) {
             const files = (rec.files || []).filter(f => !drop.includes(f));
