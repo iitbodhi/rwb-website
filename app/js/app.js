@@ -318,7 +318,7 @@ function joinFields(v = {}, mode = 'join') {
         L('phone', 'WhatsApp No.', tel('phone', '10-digit number'), mode === 'join' ? 'The number you\'re in the RWB WhatsApp group with' : APPROVE),
         L('alt_phone', 'Mobile No. (alternative)', tel('alt_phone', 'Optional')),
         mode === 'admin' ? L('email', 'Email', `<input type="email" name="email" inputmode="email" autocomplete="off" autocapitalize="none" spellcheck="false" value="${val('email')}">`,
-            v.user_id ? 'The Google account they sign in to the app with. If you change it, their app moves to the new email the next time they sign in with it, and their records come along. Until then their old account keeps working.' : 'They sign in to the app with this Google account') : '',
+            v.user_id ? 'The Google account they sign in to the app with. If you change it, they\'re signed out of the app at once and must sign in with the new email. Their records and role come along.' : v.move_from ? 'Waiting for them to sign in with this email. Their records come along when they do.' : 'They sign in to the app with this Google account') : '',
         L('bike', 'Do you own a Ronin bike?', sel('bike', RONIN, v.bike || (mode === 'join' ? 'TVS Ronin 225' : ''))),
         L('vrn', 'VRN please', `<input name="vrn" autocapitalize="characters" placeholder="WB 02 AB 1234"${rq('vrn')} value="${val('vrn')}">`, mode === 'me' ? 'Your main bike. ' + APPROVE : 'Your Ronin\'s registration number'),
         L('blood_group', 'Blood group', sel('blood_group', BLOOD.map(b => [b, b]), normBlood(v.blood_group))),
@@ -3188,7 +3188,7 @@ function memberSheet(m) {
     openSheet(m.full_name, `
         ${m.avatar_url ? `<img class="member-photo" src="${esc(m.avatar_url)}" alt="">` : ''}<div class="tags" style="margin:0 0 10px">${m.user_id ? '<span class="badge ok">On the app</span>' : '<span class="badge">Not on the app yet</span>'}${roleBadge(m)}${isNewMember(m) ? '<span class="badge new-tag">New Member</span>' : ''}</div>
         <dl class="facts">
-            <dt>WhatsApp</dt><dd>${esc(m.phone || '–')}</dd><dt>Email</dt><dd>${esc(m.email || '–')}${m.email_moving ? '<br><span class="small muted">New email: their app moves here when they sign in with it</span>' : ''}</dd>
+            <dt>WhatsApp</dt><dd>${esc(m.phone || '–')}</dd><dt>Email</dt><dd>${esc(m.email || '–')}${m.move_from && !m.user_id ? '<br><span class="small muted">Email changed: waiting for them to sign in with it</span>' : ''}</dd>
             <dt>Birthday</dt><dd>${m.dob ? fmtDayMonth(m.dob) : '–'}</dd>
             <dt>Blood group</dt><dd>${esc(m.blood_group || '–')}</dd><dt>Locality</dt><dd>${esc(m.locality || '–')}</dd>
             <dt>Hometown</dt><dd>${esc(m.hideout || '–')}</dd><dt>Emergency</dt><dd>${esc(m.emergency_phone || '–')}</dd>
@@ -3265,12 +3265,13 @@ function memberEdit(m) {
                 if (!d.email && m.user_id) return toast('They\'re on the app, so they need an email', true);
             }
             const emailChanged = 'email' in d && d.email !== String(m.email || '').toLowerCase();
-            if (emailChanged && m.user_id && !confirmBox(`Change ${firstName(m)}'s email to ${d.email}?\n\nTheir app moves to this Google account the next time they sign in with it. Their records come along.`)) return;
+            const self = m.user_id && m.user_id === state.me.user_id;
+            if (emailChanged && m.user_id && !confirmBox(`Change ${self ? 'your' : firstName(m) + "'s"} email to ${d.email}?\n\n${self ? 'You' : firstName(m)} will be signed out of the RWB App and must sign in with ${d.email}. ${self ? 'Your' : 'Their'} records and role come along.`)) return;
             busy(e.submitter, async () => {
                 const r = await api.admin.update(m.id, d);
                 Object.assign(m, d, { phone: d.phone.replace(/\D/g, '').slice(-10), dob: d.dob || null, email: d.email || null });
-                if (r === 'moving') m.email_moving = true;
-                toast(r === 'moving' ? `Saved. Ask ${firstName(m)} to sign in with ${d.email}` : 'Saved'); state.dir = null; memberSheet(m); adminMembers();
+                if (r === 'moved') { if (self) return location.reload(); m.move_from = m.user_id; m.user_id = null; }
+                toast(r === 'moved' ? `Saved. ${firstName(m)} is signed out; ask them to sign in with ${d.email}` : 'Saved'); state.dir = null; memberSheet(m); adminMembers();
             });
         };
     });
@@ -4013,6 +4014,14 @@ async function boot() {
         const sess = await api.session();
         if (!sess) return viewSignIn();
         const status = await api.linkAccount();
+        if (status === 'moved') {   /* an admin changed their RWB email: this Google account is signed out */
+            await api.signOut().catch(() => {});
+            viewSignIn();
+            const note = document.createElement('div'); note.className = 'warn'; note.style.marginTop = '12px';
+            note.innerHTML = '<b>Your RWB email was changed.</b> An RWB admin changed the email on your membership, so this Google account no longer opens the RWB App. Sign in with your new email. Everything you saved is still there.';
+            app.querySelector('.signin')?.appendChild(note);
+            return;
+        }
         if (status !== 'member') {   /* not a member: in someone's RWB FAM, or joining with an invite code? */
             const fam = status === 'pending' ? null : await api.famMe().catch(() => null);
             if (fam) return bootFam(fam);
@@ -4025,6 +4034,14 @@ async function boot() {
         api.settings().then(v => { state.settings = v || {}; }).catch(() => { state.settings = {}; });
         await load.news(true);
         await render();
+        if (!state.movedCheck) {   /* coming back to the app: was their email changed meanwhile? (at most every 10 min) */
+            state.movedCheck = Date.now();
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState !== 'visible' || Date.now() - state.movedCheck < 600000) return;
+                state.movedCheck = Date.now();
+                api.linkAccount().then(st => { if (st === 'moved') location.reload(); }).catch(() => {});
+            });
+        }
         if (!trk.resumed) { trk.resumed = true; resumeShare(); if (NATIVE) { nativePushOn(false).catch(() => {}); setTimeout(nativeUpdateAsk, 2500); if (sharing()) setTimeout(() => RwbTrack()?.perms?.().then(p => notifCheck({ notif: p?.notifications })).catch(() => {}), 1500); } else setTimeout(appPromo, 1500); }
     } catch (e) {
         tabbar.hidden = true;

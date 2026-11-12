@@ -1,14 +1,15 @@
 -- 63 · Admins can change a member's email (Admin → Members → name → Edit details).
 -- Run once in Supabase → SQL Editor, after 62. Safe to run more than once.
 -- * Not on the app yet: the new email is saved and they sign in to the app with it.
--- * Already on the app with another Google account: their old account keeps working until they sign in
---   with the new email. Then the app moves to the new account, and everything they saved comes along
---   (service records, bills, fuel log, documents, My Ride, reminders, Motomart posts, RSVPs…).
+-- * Already on the app with another Google account: that account is signed out of RWB straight away
+--   (next time it opens, it's sent to the sign-in screen with a note). When they sign in with the new email,
+--   everything they saved comes along (service records, bills, fuel log, documents, My Ride, reminders,
+--   Motomart posts, RSVPs…). Their role (admin, coordinator) stays too.
 -- * The same carry-over now also happens when a member moves their app themselves
 --   ("No Account Found" → "Can't use that email?"). Before, their old records stayed behind.
 -- * The RWB contact sheet gets the new email too (through the usual sync).
 
-alter table public.members add column if not exists email_moving boolean not null default false;
+alter table public.members add column if not exists move_from uuid;   -- the old app account, until they sign in with the new email
 
 -- Which old Google accounts became which new ones (so moved bills and documents still open)
 create table if not exists private.account_moves (
@@ -75,7 +76,7 @@ declare
   m   members;
   app_email text;
   other text;
-  moving boolean;
+  moving boolean := false;
 begin
   if not is_admin() then raise exception 'Admins only'; end if;
   select * into m from members where id = p_member_id;
@@ -84,7 +85,6 @@ begin
   if p ? 'phone' and exists (select 1 from members where phone = ph and id <> p_member_id) then
     raise exception 'Another member already has WhatsApp No. %', ph;
   end if;
-  moving := m.email_moving;
   if p ? 'email' and em is distinct from lower(coalesce(m.email, '')) then
     if em = '' and m.user_id is not null then raise exception 'They''re on the app, so they need an email'; end if;
     if em <> '' and em !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'Please check the email'; end if;
@@ -92,8 +92,13 @@ begin
     if other is not null then raise exception '% already uses this email', other; end if;
     if m.user_id is not null then
       select lower(email) into app_email from auth.users where id = m.user_id;
-      moving := em is distinct from coalesce(app_email, '');   -- back to their own app email = no move
+      moving := em is distinct from coalesce(app_email, '');   -- their own app email = nothing to move
     end if;
+  end if;
+  if moving then
+    -- sign the old account out of RWB: it's no longer linked, and its phone stops getting RWB notifications
+    update members set user_id = null, move_from = m.user_id where id = p_member_id;
+    delete from fcm_tokens where user_id = m.user_id;
   end if;
   update members set
     full_name       = coalesce(nullif(regexp_replace(trim(p ->> 'full_name'), '\s+', ' ', 'g'), ''), full_name),
@@ -101,7 +106,6 @@ begin
     dob             = case when p ? 'dob'             then nullif(p ->> 'dob', '')::date              else dob end,
     phone           = case when p ? 'phone'           then ph                                         else phone end,
     email           = case when p ? 'email'           then nullif(em, '')                             else email end,
-    email_moving    = moving,
     vrn             = case when p ? 'vrn'             then nullif(upper(trim(p ->> 'vrn')), '')       else vrn end,
     bike            = case when p ? 'bike'            then nullif(trim(p ->> 'bike'), '')            else bike end,
     blood_group     = case when p ? 'blood_group'     then nullif(trim(p ->> 'blood_group'), '')     else blood_group end,
@@ -110,7 +114,7 @@ begin
     emergency_phone = case when p ? 'emergency_phone' then nullif(right(regexp_replace(p ->> 'emergency_phone', '\D', '', 'g'), 10), '') else emergency_phone end,
     alt_phone       = case when p ? 'alt_phone'       then nullif(right(regexp_replace(p ->> 'alt_phone', '\D', '', 'g'), 10), '')       else alt_phone end
   where id = p_member_id;
-  return case when moving and not m.email_moving then 'moving' else 'saved' end;
+  return case when moving then 'moved' else 'saved' end;
 end $$;
 revoke execute on function public.admin_update_member(bigint, jsonb) from public, anon;
 grant execute on function public.admin_update_member(bigint, jsonb) to authenticated;
@@ -126,11 +130,12 @@ begin
   if exists (select 1 from members where user_id = auth.uid()) then return 'member'; end if;
   if not exists (select 1 from auth.users where id = auth.uid() and email_confirmed_at is not null) then em := ''; end if;
   if em <> '' then
-    select * into m from members where lower(email) = em and status = 'active' and (user_id is null or email_moving)
-      order by email_moving desc, id desc limit 1;
+    select * into m from members where lower(email) = em and status = 'active' and user_id is null
+      order by (move_from is not null) desc, id desc limit 1;
     if m.id is not null then
-      update members set user_id = auth.uid(), email_moving = false where id = m.id;
-      if m.user_id is not null then perform private.move_account(m.user_id, auth.uid()); end if;
+      if m.move_from is not null then perform set_config('rwb.quiet_join', 'on', true); end if;   -- no "new Ronin joined" note
+      update members set user_id = auth.uid(), move_from = null where id = m.id;
+      if m.move_from is not null then perform private.move_account(m.move_from, auth.uid()); end if;
       return 'member';
     end if;
     -- filled the join form with this email and is waiting for approval
@@ -141,6 +146,7 @@ begin
   end if;
   if exists (select 1 from link_requests where user_id = auth.uid() and status = 'pending') then return 'pending'; end if;
   if exists (select 1 from link_requests where user_id = auth.uid() and status = 'rejected') then return 'rejected'; end if;
+  if exists (select 1 from members where move_from = auth.uid()) then return 'moved'; end if;   -- an admin changed their email
   return 'not_found';
 end $$;
 revoke execute on function public.link_account() from public, anon;
@@ -162,10 +168,11 @@ begin
     return jsonb_build_object('ok', false);
   end if;
   old_email := m.email;
-  update members set user_id = auth.uid(), email = em, email_moving = false where id = m.id;   -- the sheet's email updates too
+  if m.move_from is not null then perform set_config('rwb.quiet_join', 'on', true); end if;
+  update members set user_id = auth.uid(), email = em, move_from = null where id = m.id;   -- the sheet's email updates too
   delete from private.find_attempts where user_id = auth.uid();
+  perform private.move_account(coalesce(m.user_id, m.move_from), auth.uid());
   if m.user_id is not null then
-    perform private.move_account(m.user_id, auth.uid());
     -- it was on the app with another Google account: tell the admins
     insert into notifications (kind, title, body, url, audience, created_by)
     values ('admin', 'App account moved: ' || m.full_name,
@@ -176,5 +183,30 @@ begin
 end $$;
 revoke execute on function public.claim_membership(text, text, date) from public, anon;
 grant execute on function public.claim_membership(text, text, date) to authenticated;
+
+-- "A new Ronin joined the app" only for real newcomers, not for someone whose email changed
+create or replace function private.member_events() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.user_id is not null and (tg_op = 'INSERT' or old.user_id is null)
+     and coalesce(current_setting('rwb.quiet_join', true), '') <> 'on' then
+    insert into notifications (kind, title, body, url, created_by)
+    values ('member', 'A new Ronin joined the app 🏍️', 'Say hello to ' || new.full_name || '!', '#home', new.user_id);
+  end if;
+  return new;
+end $$;
+
+-- Removed while waiting to sign in with the new email: delete the old app account too (as removal does)
+create or replace function private.members_drop_moved() returns trigger
+language plpgsql security definer set search_path = public, private as $$
+begin
+  if new.status <> 'active' and old.status = 'active' and old.move_from is not null then
+    delete from auth.users where id = old.move_from;
+    new.move_from := null;
+  end if;
+  return new;
+end $$;
+drop trigger if exists members_drop_moved on public.members;
+create trigger members_drop_moved before update of status on public.members for each row execute function private.members_drop_moved();
 
 notify pgrst, 'reload schema';
