@@ -211,6 +211,7 @@ async function doRender() {
     if (name === 'admin' && param) state.adminTab = param;
     tabbar.hidden = false;
     if (name !== 'chat') state.cameFrom = name;
+    if (name === 'motomart' && document.body.dataset.route !== 'motomart') Object.assign(mmState, { branch: 'all', cat: 'all', q: '', mine: false, review: false });   /* MotoMart always opens on All */
     document.body.dataset.route = name;
     tabbar.querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.tab === (name === 'members' ? 'crew' : name)));
     tabbar.querySelectorAll('a[aria-current]').forEach(a => a.setAttribute('aria-current', 'page'));
