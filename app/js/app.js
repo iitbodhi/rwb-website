@@ -194,6 +194,10 @@ const stillHere = n => n === navN;
     addEventListener('scroll', on, { passive: true, capture: true });
     addEventListener('touchmove', on, { passive: true });
     addEventListener('wheel', on, { passive: true });
+    addEventListener('pointerdown', on, { passive: true });
+    /* lighter phones (4 GB memory or less, or few cores): keep the decorations still all the time */
+    const mem = navigator.deviceMemory, cores = navigator.hardwareConcurrency;
+    if ((mem && mem <= 4) || (cores && cores <= 4)) root.classList.add('lite');
 })();
 async function doRender() {
     if (!state.me) return;          /* signed out / not loaded yet: boot() shows the right screen */

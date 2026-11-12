@@ -1762,3 +1762,15 @@ body[data-route=calendar] .btn.fab{padding:11px 18px;font-size:.88rem}
 /* smoothness: pause decorative loops while scrolling, keep the background glows on their own GPU layer */
 .bg{contain:strict}
 html.scrolling .bg i,html.scrolling .pookie-fab,html.scrolling .pookie-fab::after,html.scrolling .brand-ring::after{animation-play-state:paused!important}
+
+/* =================== Speed (Nov 2026) ===================
+   Screens appear almost at once: a shorter, lighter entrance. Opening a sheet no longer blurs the whole page.
+   On lighter phones (html.lite, set in app.js) the background glows stay still and Pookie doesn't float,
+   so the phone's graphics chip only works when something actually changes. */
+#app > *:not(.top):not(.demo-bar){animation:rise .2s cubic-bezier(.2,.7,.2,1) both}
+#app > *:nth-child(3),#app > *:nth-child(4),#app > *:nth-child(5),#app > *:nth-child(n+6){animation-delay:0s}
+#app.same > *{animation:none!important}
+@keyframes rise{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+dialog#sheet::backdrop{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(0,0,0,.5)}
+html.lite .bg i,html.lite .pookie-fab,html.lite .pookie-fab::after{animation:none!important}
+html.lite .brand-ring::after{animation-iteration-count:1!important}
