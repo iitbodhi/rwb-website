@@ -1851,17 +1851,15 @@ function viewVideos() {
 }
 
 /* =================== Calendar: everything with a date in one place ===================
-   Events (past and coming), document renewals, next service, My Ride parts falling due, the member's own reminders,
-   Indian and West Bengal holidays and fill-ups. Renewal, service and part dates also reach the phone as
+   Vehicle dates only: document renewals, next service, My Ride parts falling due, the member's own reminders,
+   and logged services, parts and fill-ups. (Events and holidays were removed at Bodhi's request.) Renewal, service and part dates also reach the phone as
    notifications (setup file 62: the database sends them every morning at 8:30). */
 const CS = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const CAL_CATS = {
-    event: ['Events', CS('<path d="M5.5 21V4h11l-2 4 2 4h-11"/>'), 1],
     renew: ['Renewals', CS('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h4"/>'), 1],
     service: ['Service', CS('<path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8V21h3.2l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>'), 1],
     ride: ['My Ride', CS('<path d="M12 2.8 20 7.4v9.2L12 21.2 4 16.6V7.4z"/><circle cx="12" cy="12" r="3"/>'), 1],
     mine: ['Reminders', CS('<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.3 1.6M4.5 4 2.5 6M19.5 4l2 2"/>'), 1],
-    holiday: ['Holidays', CS('<path d="M12 3l2.3 5.4 5.7.5-4.3 3.8 1.3 5.6L12 15.4 7 18.3l1.3-5.6L4 8.9l5.7-.5z"/>'), 1],
     fuel: ['Fill-ups', CS('<path d="M12 3.5s6 6.4 6 10.5a6 6 0 0 1-12 0c0-4.1 6-10.5 6-10.5z"/>'), 0]
 };
 const CAL_WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -1874,55 +1872,6 @@ const longDay = iso => { const p = parts(iso); return `${wdOf(iso)}, ${p.d} ${MO
 const inDays = n => n === 0 ? 'today' : n === 1 ? 'tomorrow' : n === -1 ? 'yesterday' : n > 0 ? `in ${n} days` : `${-n} days ago`;
 const calOff = () => { try { const v = JSON.parse(localStorage.getItem('rwb-cal-off') || 'null'); return new Set(v || Object.keys(CAL_CATS).filter(k => !CAL_CATS[k][2])); } catch { return new Set(['fuel']); } };
 
-/* Indian holidays. Built in: the West Bengal Government's official list for 2026 (Finance Dept. notification
-   4188-F(P2), 27 Nov 2025) plus the festivals that fall on Sundays, and the fixed-date holidays of 2027.
-   The rest (other years, festivals across India) comes from the internet through the "holidays" function. */
-const HOLI_BUILTIN = (() => {
-    const N = 'nat', W = 'wb', F = 'fest';
-    const y26 = [['01-01', "New Year's Day", W], ['01-12', 'Swami Vivekananda Jayanti', W], ['01-14', 'Makar Sankranti', F], ['01-22', 'Day before Saraswati Puja', W],
-        ['01-23', 'Netaji Jayanti · Saraswati Puja', W], ['01-26', 'Republic Day', N], ['02-04', 'Shab-e-Barat', W], ['02-14', 'Thakur Panchanan Barma Jayanti', W],
-        ['02-15', 'Maha Shivaratri', F], ['03-03', 'Doljatra', W], ['03-04', 'Holi', W], ['03-17', 'Harichand Thakur Jayanti', W], ['03-20', 'Day before Eid-ul-Fitr', W],
-        ['03-21', 'Eid-ul-Fitr', W], ['03-26', 'Ram Navami', W], ['03-31', 'Mahavir Jayanti', W], ['04-03', 'Good Friday', W], ['04-14', 'Dr B. R. Ambedkar Jayanti', W],
-        ['04-15', 'Poila Boishakh (Bengali New Year)', W], ['05-01', 'May Day · Buddha Purnima', W], ['05-09', 'Rabindra Jayanti', W], ['05-26', 'Day before Bakrid', W],
-        ['05-27', 'Id-ud-Zoha (Bakrid)', W], ['06-26', 'Muharram', W], ['07-16', 'Rathayatra', W], ['08-15', 'Independence Day', N], ['08-26', 'Fateha-Dwaz-Daham', W],
-        ['08-28', 'Raksha Bandhan', W], ['09-04', 'Janmashtami', W], ['09-17', 'Viswakarma Puja', W], ['10-02', 'Gandhi Jayanti', N], ['10-10', 'Mahalaya', W],
-        ['10-15', 'Durga Puja: Maha Chaturthi', W], ['10-16', 'Durga Puja: Maha Panchami', W], ['10-17', 'Durga Puja: Maha Shashthi', W], ['10-18', 'Durga Puja: Maha Saptami', F],
-        ['10-19', 'Durga Puja: Maha Ashtami', W], ['10-20', 'Durga Puja: Maha Nabami', W], ['10-21', 'Vijaya Dashami', W], ['10-22', 'Durga Puja (extra holiday)', W],
-        ['10-23', 'Durga Puja (extra holiday)', W], ['10-24', 'Durga Puja (extra holiday)', W], ['10-25', 'Lakshmi Puja', F], ['10-26', 'Lakshmi Puja (extra holiday)', W],
-        ['11-08', 'Kali Puja · Diwali', F], ['11-09', 'Kali Puja (extra holiday)', W], ['11-10', 'Kali Puja (extra holiday)', W], ['11-11', 'Bhai Phonta (Bhratridwitiya)', W],
-        ['11-12', 'Day after Bhai Phonta', W], ['11-15', 'Chhath Puja', F], ['11-16', 'Chhath Puja (extra holiday)', W], ['11-24', 'Guru Nanak Jayanti', W], ['12-25', 'Christmas Day', W]];
-    const fixed = [['01-01', "New Year's Day", W], ['01-12', 'Swami Vivekananda Jayanti', W], ['01-23', 'Netaji Jayanti', W], ['01-26', 'Republic Day', N],
-        ['04-14', 'Dr B. R. Ambedkar Jayanti', W], ['05-01', 'May Day', W], ['08-15', 'Independence Day', N], ['10-02', 'Gandhi Jayanti', N], ['12-25', 'Christmas Day', W]];
-    return [...y26.map(([d, n, t]) => ({ date: '2026-' + d, name: n, type: t })), ...fixed.map(([d, n, t]) => ({ date: '2027-' + d, name: n, type: t }))];
-})();
-const HOLI_TYPE = { nat: 'National holiday', wb: 'West Bengal govt holiday', fest: 'Festival (falls on a Sunday)', public: 'Public holiday in India', obs: 'Observance' };
-const holiWords = n => String(n).toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/).filter(w => w.length >= 4 && !['holiday', 'extra', 'birthday', 'jayanti', 'india'].includes(w));
-function mergeHolidays(online = []) {
-    const out = [...HOLI_BUILTIN], byDate = new Map();
-    out.forEach(h => (byDate.get(h.date) || byDate.set(h.date, []).get(h.date)).push(h));
-    for (const h of online) {
-        if (!/^\d{4}-\d\d-\d\d$/.test(h.date || '') || !h.name) continue;
-        const same = byDate.get(h.date) || [], w = holiWords(h.name);
-        if (same.some(s => s.name === h.name || holiWords(s.name).some(x => w.some(y => x.slice(0, 5) === y.slice(0, 5))))) continue;
-        const row = { date: h.date, name: h.name, type: h.type === 'public' ? 'public' : 'obs' };
-        out.push(row); (byDate.get(h.date) || byDate.set(h.date, []).get(h.date)).push(row);
-    }
-    return out;
-}
-let holiLoading = null;
-/* built-in list straight away; the internet list is fetched in the background (kept on the phone for a week) */
-function holidays(onFresh) {
-    let cache = null; try { cache = JSON.parse(localStorage.getItem('rwb-holidays') || 'null'); } catch { /* ignore */ }
-    if (!state.holidays) state.holidays = mergeHolidays(cache?.list || []);
-    if ((!cache || Date.now() - cache.at > 7 * 864e5) && !holiLoading && api.holidays) {
-        holiLoading = api.holidays().then(list => {
-            if (!Array.isArray(list) || !list.length) return;
-            try { localStorage.setItem('rwb-holidays', JSON.stringify({ at: Date.now(), list })); } catch { /* ignore */ }
-            state.holidays = mergeHolidays(list); onFresh?.();
-        }).catch(() => { /* offline or not set up: the built-in list is enough; try again tomorrow */ try { localStorage.setItem('rwb-holidays', JSON.stringify({ at: Date.now() - 6 * 864e5, list: cache?.list || [] })); } catch { /* ignore */ } }).finally(() => { holiLoading = null; });
-    }
-    return state.holidays;
-}
 
 /* how many km a day this rider usually rides (from odometer readings over the last year): used to guess when a km-based due falls */
 function kmPerDay(services = [], fuel = []) {
@@ -1970,12 +1919,6 @@ const whenIdle = f => (window.requestIdleCallback ? requestIdleCallback(() => f(
 /* every dated thing between two days (inclusive), as calendar items */
 function calItems(d, from, to) {
     const out = [], inR = iso => iso >= from && iso <= to;
-    for (const e of d.events) {
-        const s = localDay(e.starts_at), end = e.ends_at ? localDay(e.ends_at) : s, mine = d.rsvp[e.id], past = evtPast(e);
-        for (let x = s; x <= end && x <= to; x = isoAdd(x, 1)) if (inR(x)) out.push({ id: 'e' + e.id, date: x, cat: 'event', title: e.title, first: x === s,
-            sub: [x === s ? evtTime(e.starts_at) : 'Continues', e.location, e.status === 'cancelled' ? 'Cancelled' : mine ? RSVP_TXT[mine.status] : past ? 'Past event' : ''].filter(Boolean).join(' · '),
-            off: e.status === 'cancelled', start: e.starts_at, end: e.ends_at, location: e.location, note: e.description, href: '#events/' + e.id, btn: 'Open event' });
-    }
     for (const doc of d.docs) if (doc.expiry_date && inR(doc.expiry_date)) {
         const st = docStatus(doc);
         out.push({ id: 'd' + doc.id, date: doc.expiry_date, cat: 'renew', title: `${docName(doc)} ${st.days < 0 ? 'expired' : 'expires'}`, sub: st.days < 0 ? 'Renew it and update My documents' : 'Renew before this day',
@@ -1998,8 +1941,7 @@ function calItems(d, from, to) {
             x = addMonths(r.due_date, r.repeat === 'monthly' ? k : 12 * k);
         }
     }
-    for (const h of d.hol) if (inR(h.date)) out.push({ id: 'h' + h.date + h.name, date: h.date, cat: 'holiday', title: h.name, sub: HOLI_TYPE[h.type] || '', soft: h.type === 'obs', hol: h.type !== 'obs' });
-    const order = { renew: 0, service: 1, ride: 2, mine: 3, event: 4, holiday: 5, fuel: 6 };
+    const order = { renew: 0, service: 1, ride: 2, mine: 3, fuel: 4 };
     return out.filter(i => !d.off.has(i.cat)).sort((a, b) => a.date.localeCompare(b.date) || (a.done || 0) - (b.done || 0) || order[a.cat] - order[b.cat] || String(a.start || '').localeCompare(String(b.start || '')));
 }
 const calAlert = () => docsAlert() || !!state.calSoon;
@@ -2017,11 +1959,9 @@ function calGcalUrl(it) {
 /* loads once when the Calendar opens; tapping days, months and filters only redraws (no network) */
 async function viewCalendar() {
     const n = navN;
-    const [services, fuel, docs, ride, evd, mine] = await Promise.all([load.services(), load.fuel(), load.docs(), load.ride().catch(() => ({ parts: null })),
-        loadEvents().catch(() => ({ events: [], mine: {} })), load.reminders()]);
+    const [services, fuel, docs, ride, mine] = await Promise.all([load.services(), load.fuel(), load.docs(), load.ride().catch(() => ({ parts: null })), load.reminders()]);
     if (!stillHere(n)) return;
-    state.calData = { events: evd.events || [], rsvp: evd.mine || {}, docs, services, fuel, parts: ride.parts || [], due: dueItems(services, fuel, ride.parts), mine };
-    holidays(() => { if (stillHere(n)) drawCal(); });
+    state.calData = { docs, services, fuel, parts: ride.parts || [], due: dueItems(services, fuel, ride.parts), mine };
     drawCal();
     whenIdle(() => syncReminders(services, fuel, ride));
 }
@@ -2029,7 +1969,7 @@ const CAL_CHEV = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 const CAL_FILTER = CS('<path d="M4 6h16M7 12h10M10 18h4"/>');
 function drawCal() {
     const D = state.calData; if (!D) return;
-    const today = todayISO(), off = calOff(), data = { ...D, hol: state.holidays || [], off };
+    const today = todayISO(), off = calOff(), data = { ...D, off };
     const month = state.calMonth || today.slice(0, 7), sel = state.calDay || today;
     const [Y, M] = month.split('-').map(Number);
     const first = `${month}-01`, startPad = new Date(first + 'T00:00:00Z').getUTCDay(), gridFrom = isoAdd(first, -startPad);
@@ -2037,10 +1977,10 @@ function drawCal() {
     const all = calItems(data, gridFrom < today ? gridFrom : today, isoAdd(gridTo > today ? gridTo : today, 45));
     const byDay = new Map(); all.forEach(i => (byDay.get(i.date) || byDay.set(i.date, []).get(i.date)).push(i));
     /* overdue renewals, service and parts first, then what's coming in the next 45 days */
-    const overdue = calItems({ ...data, off: new Set(['event', 'holiday', 'fuel', 'mine']) }, isoAdd(today, -60), isoAdd(today, -1)).filter(i => !i.done && i.level);
-    const soon = all.filter(i => i.date >= today && i.date <= isoAdd(today, 45) && !i.done && i.cat !== 'fuel' && !i.soft && (i.cat !== 'event' || i.first) && !(i.date === today && i.cat === 'holiday'));
+    const overdue = calItems({ ...data, off: new Set(['fuel', 'mine']) }, isoAdd(today, -60), isoAdd(today, -1)).filter(i => !i.done && i.level);
+    const soon = all.filter(i => i.date >= today && i.date <= isoAdd(today, 45) && !i.done && i.cat !== 'fuel');
     state.calSoon = [...overdue, ...soon].some(i => ['renew', 'service', 'ride', 'mine'].includes(i.cat) && daysTo(i.date) <= 7);
-    const upcoming = [...overdue, ...soon.filter(i => i.date > today || (sel !== today && i.cat !== 'event'))], showAll = state.calAll;
+    const upcoming = [...overdue, ...soon.filter(i => i.date > today || sel !== today)], showAll = state.calAll;
     const short = iso => { const n = daysTo(iso); return n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n < 0 ? `${-n}d late` : `${parts(iso).d} ${MONTHS[parts(iso).m - 1]}`; };
     const row = (i, when) => `<button class="cal-it c-${i.cat}${i.off ? ' off' : ''}${i.soft ? ' soft' : ''}${i.level ? ' ' + i.level : ''}" data-act="cal-it" data-id="${esc(i.id)}" data-d="${i.date}">
         <span class="cal-ico">${CAL_CATS[i.cat][1]}</span><span class="grow"><b>${esc(i.title)}</b>${i.sub ? `<small>${esc(i.sub)}</small>` : ''}</span>${when ? `<span class="cal-when">${short(i.date)}</span>` : ''}</button>`;
@@ -2048,8 +1988,8 @@ function drawCal() {
         return `<h2>${x === today ? 'Today' : esc(longDay(x))}</h2>${its.length ? `<div class="cal-list">${its.map(i => row(i)).join('')}</div>` : `<p class="cal-none">${x < today ? 'Nothing on this day.' : 'Nothing planned. Tap ＋ to add a reminder.'}</p>`}`; };
     const cell = k => {
         const x = isoAdd(gridFrom, k), its = byDay.get(x) || [], p = parts(x);
-        const cats = [...new Set(its.filter(i => !i.hol && !i.soft).map(i => i.cat))], ic = cats.length > 3 ? [...cats.slice(0, 2), '+'] : cats;
-        return `<button class="cd${p.m !== M ? ' other' : ''}${x === today ? ' today' : ''}${x === sel ? ' sel' : ''}${its.some(i => i.hol) ? ' hol' : ''}" data-act="cal-day" data-d="${x}" aria-label="${esc(longDay(x))}${its.length ? `, ${its.length} item${its.length > 1 ? 's' : ''}` : ''}">
+        const cats = [...new Set(its.map(i => i.cat))], ic = cats.length > 3 ? [...cats.slice(0, 2), '+'] : cats;
+        return `<button class="cd${p.m !== M ? ' other' : ''}${x === today ? ' today' : ''}${x === sel ? ' sel' : ''}" data-act="cal-day" data-d="${x}" aria-label="${esc(longDay(x))}${its.length ? `, ${its.length} item${its.length > 1 ? 's' : ''}` : ''}">
             <b>${p.d}</b><span class="cdi">${ic.map(c => c === '+' ? '<i class="more">+</i>' : `<i class="c-${c}">${CAL_CATS[c][1]}</i>`).join('')}</span></button>`;
     };
     const list = showAll ? upcoming.slice(0, 30) : upcoming.slice(0, 5);
@@ -2073,7 +2013,7 @@ function drawCal() {
     actions = {
         'cal-day': el => {
             const x = el.dataset.d; state.calDay = x;
-            if (x.slice(0, 7) !== month) { state.calMonth = x.slice(0, 7); return drawCal(); }
+            if (x.slice(0, 7) !== month || x === today || sel === today) { state.calMonth = x.slice(0, 7); return drawCal(); }   /* today's items move between Today and Coming up */
             app.querySelector('.cd.sel')?.classList.remove('sel'); el.classList.add('sel');
             $('#cal-day').innerHTML = dayHtml(x);
         },
@@ -2884,7 +2824,7 @@ function waMsg(kind, x = {}) {
     const first = firstName(x) || 'Warrior', me = firstName(state.me) || 'RWB';
     const T = {
         welcome: `Hi ${first}! 🎉\n\nWelcome to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nMeanwhile, get the RWB App: https://${APP_LINK}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}. Your details are already there.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
-        existing: `Hi Warrior ${first}! 👋\n\nYou're already in our RWB WhatsApp group, so nothing to worry about. Your RWB App account is ready: just open the app and explore.\n\n📍 Track: live location on rides, SOS to the RWB team\n🔧 Service: records, bills and next-service reminders\n⛽ Mileage: your real km/l and fuel spends\n🛒 Motomart: buy and sell used riding gear\n📘 Guides: maintenance help and tested gear\n📅 Events: rides, RSVPs and shared expenses\n🗓️ Calendar: renewals, service dates, events and holidays, with reminders\n🏍️ RWB: members and leaderboards\n🤖 Pookie: our AI for any bike question\n\nPlease also update your details in the Me tab (you can set your bike model and add up to 3 bikes).\n\n${APP_LINK}\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
+        existing: `Hi Warrior ${first}! 👋\n\nYou're already in our RWB WhatsApp group, so nothing to worry about. Your RWB App account is ready: just open the app and explore.\n\n📍 Track: live location on rides, SOS to the RWB team\n🔧 Service: records, bills and next-service reminders\n⛽ Mileage: your real km/l and fuel spends\n🛒 Motomart: buy and sell used riding gear\n📘 Guides: maintenance help and tested gear\n📅 Events: rides, RSVPs and shared expenses\n🗓️ Calendar: renewal, service and parts due dates, with reminders\n🏍️ RWB: members and leaderboards\n🤖 Pookie: our AI for any bike question\n\nPlease also update your details in the Me tab (you can set your bike model and add up to 3 bikes).\n\n${APP_LINK}\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
         returning: `Hi ${first}! 🎉\n\nWelcome back to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nThe RWB App: https://${APP_LINK}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
         rejected: `Hi ${first},\n\nThank you for your interest in Ronin Warriors of Bengal. We're sorry, we couldn't approve your registration this time${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'}\n\nIf you think this is a mistake, or things change, just reply here and we'll be happy to help.\n\nRide safe! 🙏\n– ${me}, RWB`,
         change_ok: `Hi ${first}! ✅ Your ${x.what || 'profile'} update in the RWB App is approved. Thanks for keeping your details up to date.\n– ${me}, RWB`,

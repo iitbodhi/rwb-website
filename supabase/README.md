@@ -144,4 +144,3 @@ Members removed by an admin are not re-added from old rows; if they fill the for
 # Calendar (setup file 62)
 
 1. **SQL Editor → New query** → paste all of `supabase/calendar.sql` → **Run**. It adds members' own reminders, the 8:30 AM reminder notifications (renewals, service, My Ride parts) and teaches Pookie about the Calendar.
-2. **Edge Functions → Deploy a new function → Via Editor** → name it exactly `holidays` → paste `supabase/functions/holidays/index.ts` → **Deploy**. It gives the Calendar the Indian holidays list from Google's free public holiday calendar. Without it the Calendar still shows the West Bengal Government list built into the app.
