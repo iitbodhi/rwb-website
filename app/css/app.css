@@ -2167,3 +2167,10 @@ html.lite .skel i,html.lite .gd-skel i{animation:none}
 .gd-cover img,.gd-pic img,.mm-img img,.gd-ath img,.mm-s-img img,.vid-thumb img{opacity:0;transition:opacity .3s ease}
 .gd-cover img.in,.gd-pic img.in,.mm-img img.in,.gd-ath img.in,.mm-s-img img.in,.vid-thumb img.in{opacity:1}
 @media (prefers-reduced-motion:reduce){#nav-bar{display:none}html.nav-wait #app > *{opacity:1}.skel i,.gd-skel i{animation:none}}
+/* swipe between tabs: the new screen slides in from the side the finger moved towards */
+#app[data-swipe=next] > *:not(.demo-bar){animation:swipe-in-l .24s cubic-bezier(.22,.8,.24,1) both}
+#app[data-swipe=prev] > *:not(.demo-bar){animation:swipe-in-r .24s cubic-bezier(.22,.8,.24,1) both}
+#app.same[data-swipe] > *{animation:none!important}
+@keyframes swipe-in-l{from{opacity:0;transform:translateX(36px)}to{opacity:1;transform:none}}
+@keyframes swipe-in-r{from{opacity:0;transform:translateX(-36px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){#app[data-swipe] > *{animation:none!important}}

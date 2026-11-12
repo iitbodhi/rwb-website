@@ -259,6 +259,49 @@ window.addEventListener('hashchange', () => {
     else { navIdx = ++navMax; try { history.replaceState({ ...(history.state || {}), rwbNav: navIdx }, ''); } catch { /* ignore */ } navScroll = 0; }
     closeSheet(); closeMmSearch(); gdClose(true); render();
 });
+/* Swipe left / right anywhere on a main screen to move to the next / previous tab (the tab buttons still work).
+   Parts of a screen that already swipe sideways keep their own swipe: sliding rows and pagers, the leaderboard,
+   the calendar month, alerts, maps, sliders and text boxes. */
+(() => {
+    const OWN = '#board,#cal-pager,[data-swipe],.leaflet-container,input,textarea,select,[contenteditable],[data-noswipe],.sos-hold,.blocker';
+    const scrollsSideways = el => {
+        for (; el && el !== app; el = el.parentElement) {
+            if (el.scrollWidth > el.clientWidth + 2) { const o = getComputedStyle(el).overflowX; if (o === 'auto' || o === 'scroll') return true; }
+        }
+        return false;
+    };
+    const tabs = () => [...tabbar.querySelectorAll('a[data-tab]')].filter(a => a.offsetParent !== null);   /* only the tabs showing (RWB FAM has fewer) */
+    let x0 = null, y0 = 0, t0 = 0, ok = false, moved = false;
+    app.addEventListener('touchstart', e => {
+        x0 = null; moved = false;
+        if (e.touches.length !== 1 || tabbar.hidden || sheet.open || document.querySelector('.gd-viewer')) return;
+        const t = e.touches[0];
+        if (t.clientX < 18 || t.clientX > innerWidth - 18) return;        /* the phone's own back gesture lives at the edges */
+        if (e.target.closest(OWN) || scrollsSideways(e.target)) return;
+        const route = document.body.dataset.route;
+        ok = tabs().some(a => a.dataset.tab === route);
+        if (!ok) return;
+        x0 = t.clientX; y0 = t.clientY; t0 = Date.now();
+    }, { passive: true });
+    app.addEventListener('touchend', e => {
+        if (x0 == null) return;
+        const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0, ms = Date.now() - t0; x0 = null;
+        if (getSelection()?.toString()) return;                                   /* selecting text, not swiping */
+        const fast = ms < 300 && Math.abs(dx) > 40;                                /* a quick flick counts too */
+        if (!(Math.abs(dx) > 70 || fast) || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+        const list = tabs(), i = list.findIndex(a => a.dataset.tab === document.body.dataset.route);
+        const next = list[i + (dx < 0 ? 1 : -1)];
+        if (i < 0 || !next) return;
+        moved = true; setTimeout(() => moved = false, 350);
+        app.dataset.swipe = dx < 0 ? 'next' : 'prev';
+        setTimeout(() => delete app.dataset.swipe, 600);
+        try { navigator.vibrate?.(8); } catch { /* ignore */ }
+        location.hash = next.getAttribute('href');
+    }, { passive: true });
+    app.addEventListener('touchcancel', () => { x0 = null; }, { passive: true });
+    /* a swipe that ends on a button or link doesn't also tap it */
+    app.addEventListener('click', e => { if (moved) { e.preventDefault(); e.stopPropagation(); } }, true);
+})();
 
 const demoBar = () => api?.demo ? `<div class="demo-bar">Demo mode: sample data, saved only on this device. <button data-act="reset-demo">Reset</button></div>` : '';
 const BELL = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>';
