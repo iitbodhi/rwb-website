@@ -1650,7 +1650,7 @@ button.rw-btn{padding:8px 14px}
 @keyframes lbTwinkle{0%,100%{opacity:0;transform:scale(.3)}50%{opacity:1;transform:scale(1)}}
 @keyframes lbSheen{0%{transform:translateX(-60%)}45%,100%{transform:translateX(60%)}}
 /* the same screen refreshing: no replay */
-#app.same .lp-who,#app.same .lp-step,#app.same .lp-step span,#app.same .lp-crown,#app.same .lb-list li,#app.same .lb-me{animation-duration:0s!important;animation-delay:0s!important}
+#app.same:not(.lb-play) .lp-who,#app.same:not(.lb-play) .lp-step,#app.same:not(.lb-play) .lp-step span,#app.same:not(.lb-play) .lp-crown,#app.same:not(.lb-play) .lb-list li,#app.same:not(.lb-play) .lb-me{animation-duration:0s!important;animation-delay:0s!important}
 @media (prefers-reduced-motion:reduce){.lp-who,.lp-step span,.lp-crown,.lb-list li,.lb-me{opacity:1!important}.lp-step{transform:none!important}.lp.empty .lp-who{opacity:.55!important}}
 /* podium riders hop now and then: #1 highest, then #2 and #3 in a wave */
 .lp-ring{animation:lbHop 4.2s cubic-bezier(.3,0,.3,1) calc(2.4s + var(--hd)) infinite}
@@ -2167,10 +2167,21 @@ html.lite .skel i,html.lite .gd-skel i{animation:none}
 .gd-cover img,.gd-pic img,.mm-img img,.gd-ath img,.mm-s-img img,.vid-thumb img{opacity:0;transition:opacity .3s ease}
 .gd-cover img.in,.gd-pic img.in,.mm-img img.in,.gd-ath img.in,.mm-s-img img.in,.vid-thumb img.in{opacity:1}
 @media (prefers-reduced-motion:reduce){#nav-bar{display:none}html.nav-wait #app > *{opacity:1}.skel i,.gd-skel i{animation:none}}
-/* swipe between tabs: the new screen slides in from the side the finger moved towards */
-#app[data-swipe=next] > *:not(.demo-bar){animation:swipe-in-l .24s cubic-bezier(.22,.8,.24,1) both}
-#app[data-swipe=prev] > *:not(.demo-bar){animation:swipe-in-r .24s cubic-bezier(.22,.8,.24,1) both}
-#app.same[data-swipe] > *{animation:none!important}
-@keyframes swipe-in-l{from{opacity:0;transform:translateX(36px)}to{opacity:1;transform:none}}
-@keyframes swipe-in-r{from{opacity:0;transform:translateX(-36px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){#app[data-swipe] > *{animation:none!important}}
+/* swipe between tabs: the screen follows the finger, then the next one glides in from the side it came from */
+#app.sw-drag > *:not(.top):not(.demo-bar):not(.fab):not(.mm-fabs):not(.promo):not(.sos-alarm){transform:translate3d(var(--sx,0),0,0);opacity:var(--so,1);animation:none!important;will-change:transform,opacity}
+#app.sw-drag > :is(.fab,.mm-fabs){opacity:var(--so,1);animation:none!important}
+#app.sw-out > *:not(.top):not(.demo-bar){transition:transform .15s cubic-bezier(.4,0,1,1),opacity .13s linear}
+#app.sw-back > *:not(.top):not(.demo-bar){transition:transform .36s cubic-bezier(.18,1.25,.4,1),opacity .25s ease-out}
+html.nav-wait #app.sw-drag > *{opacity:var(--so,1)}
+#app[data-slide=next] > *:not(.top):not(.demo-bar):not(.fab):not(.mm-fabs){animation:swipe-in-l .34s cubic-bezier(.16,1,.3,1) both}
+#app[data-slide=prev] > *:not(.top):not(.demo-bar):not(.fab):not(.mm-fabs){animation:swipe-in-r .34s cubic-bezier(.16,1,.3,1) both}
+#app[data-slide] > :is(.fab,.mm-fabs){animation:swipe-fade .3s ease-out both}
+#app.same[data-slide] > *{animation:none!important}
+@keyframes swipe-in-l{from{opacity:0;transform:translate3d(56px,0,0)}to{opacity:1;transform:none}}
+@keyframes swipe-in-r{from{opacity:0;transform:translate3d(-56px,0,0)}to{opacity:1;transform:none}}
+@keyframes swipe-fade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){#app[data-slide] > *,#app.sw-drag > *{animation:none!important;transform:none!important}}
+#app.same > #board.slide-l{animation:board-in-l .28s ease!important}#app.same > #board.slide-r{animation:board-in-r .28s ease!important}
+/* You vs RWB: keeps its space while the comparison loads, then fades in (nothing below it jumps) */
+.card.vs:has(> .skel){min-height:176px}
+.card.vs.vs-in > *{animation:swipe-fade .3s ease-out both}

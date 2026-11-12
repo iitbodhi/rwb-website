@@ -197,11 +197,16 @@ const navUI = (() => {
             if (on) { on = false; bar.className = 'done'; setTimeout(() => { if (bar.className === 'done') bar.className = ''; }, 450); } }
     };
 })();
+let onPaint = () => {}, paintedN = -1;          /* set by the swipe handler below */
 const STALE = new Error('stale screen');
 (() => {
     const d = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
     Object.defineProperty(app, 'innerHTML', { configurable: true, get() { return d.get.call(this); },
-        set(v) { if (paintN >= 0 && paintN !== navN) throw STALE; d.set.call(this, v); navUI.painted(); } });
+        set(v) { if (paintN >= 0 && paintN !== navN) throw STALE; onPaint();
+            /* the entrance plays once per screen visit: a refresh moments later (fresh data, or real content after the
+               placeholders) swaps in quietly instead of replaying it, so nothing flickers */
+            if (paintN >= 0) { if (paintedN === navN) this.classList.add('same'); else paintedN = navN; }
+            d.set.call(this, v); if (navScroll === 0 && window.scrollY) window.scrollTo(0, 0); navUI.painted(); } });
 })();
 /* still on the screen that started loading? (for parts filled in after the first paint) */
 const stillHere = n => n === navN;
@@ -238,7 +243,7 @@ async function doRender() {
     tabbar.querySelectorAll('a[aria-current]').forEach(a => a.setAttribute('aria-current', 'page'));
     /* the entrance animation plays when the screen changes, not when the same screen refreshes */
     const route = name + '/' + (param || '');
-    app.classList.toggle('same', route === lastRoute); lastRoute = route;
+    app.classList.toggle('same', route === lastRoute); app.classList.remove('lb-play'); lastRoute = route;
     paintN = navN;
     navUI.start(route !== app.dataset.shown); app.dataset.shown = route;
     pingCopy().catch(() => {});
@@ -259,48 +264,89 @@ window.addEventListener('hashchange', () => {
     else { navIdx = ++navMax; try { history.replaceState({ ...(history.state || {}), rwbNav: navIdx }, ''); } catch { /* ignore */ } navScroll = 0; }
     closeSheet(); closeMmSearch(); gdClose(true); render();
 });
-/* Swipe left / right anywhere on a main screen to move to the next / previous tab (the tab buttons still work).
-   Parts of a screen that already swipe sideways keep their own swipe: sliding rows and pagers, the leaderboard,
-   the calendar month, alerts, maps, sliders and text boxes. */
+/* Swipe left / right on a main screen to move to the next / previous tab (the tab buttons still work).
+   The screen follows the finger; let go past a third of the way (or flick) and it slides off while the next one
+   glides in from the other side. Not far enough: it springs back. Track is left out (tap its button), and parts
+   of a screen that already swipe sideways keep their own swipe: pagers, the leaderboard, the calendar month,
+   alerts, maps, chip rows and text boxes. */
 (() => {
-    const OWN = '#board,#cal-pager,[data-swipe],.leaflet-container,input,textarea,select,[contenteditable],[data-noswipe],.sos-hold,.blocker';
+    const OWN = '#cal-pager,[data-swipe],.leaflet-container,input,textarea,select,[contenteditable],[data-noswipe],.sos-hold,.blocker';
+    const SKIP = ['track'];
     const scrollsSideways = el => {
-        for (; el && el !== app; el = el.parentElement) {
+        for (; el && el !== app; el = el.parentElement)
             if (el.scrollWidth > el.clientWidth + 2) { const o = getComputedStyle(el).overflowX; if (o === 'auto' || o === 'scroll') return true; }
-        }
         return false;
     };
-    const tabs = () => [...tabbar.querySelectorAll('a[data-tab]')].filter(a => a.offsetParent !== null);   /* only the tabs showing (RWB FAM has fewer) */
-    let x0 = null, y0 = 0, t0 = 0, ok = false, moved = false;
-    app.addEventListener('touchstart', e => {
-        x0 = null; moved = false;
-        if (e.touches.length !== 1 || tabbar.hidden || sheet.open || document.querySelector('.gd-viewer')) return;
+    const tabs = () => [...tabbar.querySelectorAll('a[data-tab]')].filter(a => !SKIP.includes(a.dataset.tab) && a.offsetParent !== null);
+    let g = null, raf = 0, moved = false, pending = false, busy = false;
+    const set = (x, o) => { app.style.setProperty('--sx', x.toFixed(1) + 'px'); app.style.setProperty('--so', o.toFixed(3)); };
+    const clear = () => { cancelAnimationFrame(raf); app.classList.remove('sw-drag', 'sw-out', 'sw-back'); app.style.removeProperty('--sx'); app.style.removeProperty('--so'); };
+    document.addEventListener('touchstart', e => {
+        g = null;
+        const tg = e.target; if (!(app.contains(tg) || tg === document.body || tg === document.documentElement || tg.closest?.('.bg'))) return;
+        if (busy || e.touches.length !== 1 || tabbar.hidden || sheet.open || document.querySelector('.gd-viewer,.promo,.mm-search')) return;
         const t = e.touches[0];
         if (t.clientX < 18 || t.clientX > innerWidth - 18) return;        /* the phone's own back gesture lives at the edges */
         if (e.target.closest(OWN) || scrollsSideways(e.target)) return;
-        const route = document.body.dataset.route;
-        ok = tabs().some(a => a.dataset.tab === route);
-        if (!ok) return;
-        x0 = t.clientX; y0 = t.clientY; t0 = Date.now();
-    }, { passive: true });
-    app.addEventListener('touchend', e => {
-        if (x0 == null) return;
-        const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0, ms = Date.now() - t0; x0 = null;
-        if (getSelection()?.toString()) return;                                   /* selecting text, not swiping */
-        const fast = ms < 300 && Math.abs(dx) > 40;                                /* a quick flick counts too */
-        if (!(Math.abs(dx) > 70 || fast) || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+        /* the leaderboard flips boards first; from the first / last board the swipe carries on to the next tab */
+        let board = null;
+        if (e.target.closest('#board')) { const d = [...app.querySelectorAll('.board-dots i')], k = d.findIndex(x => x.classList.contains('on')); board = { first: k <= 0, last: k >= d.length - 1 }; }
         const list = tabs(), i = list.findIndex(a => a.dataset.tab === document.body.dataset.route);
-        const next = list[i + (dx < 0 ? 1 : -1)];
-        if (i < 0 || !next) return;
-        moved = true; setTimeout(() => moved = false, 350);
-        app.dataset.swipe = dx < 0 ? 'next' : 'prev';
-        setTimeout(() => delete app.dataset.swipe, 600);
-        try { navigator.vibrate?.(8); } catch { /* ignore */ }
-        location.hash = next.getAttribute('href');
+        if (i < 0) return;
+        g = { board, x: t.clientX, y: t.clientY, t: performance.now(), lock: null, dx: 0, list, i, pts: [[t.clientX, performance.now()]] };
     }, { passive: true });
-    app.addEventListener('touchcancel', () => { x0 = null; }, { passive: true });
+    document.addEventListener('touchmove', e => {
+        if (!g) return;
+        const t = e.touches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
+        if (!g.lock) {
+            if (Math.abs(dx) < 9 && Math.abs(dy) < 9) return;
+            g.lock = Math.abs(dx) > Math.abs(dy) * 1.25 ? 'x' : 'y';
+            if (g.lock === 'y') { g = null; return; }
+            if (g.board && !(dx < 0 ? g.board.last : g.board.first)) { g = null; return; }
+            g.x = t.clientX; app.classList.remove('sw-back'); app.classList.add('same', 'sw-drag'); delete app.dataset.slide;   /* the entrance never replays after a spring-back */   /* start from here: no jump */
+        }
+        if (e.cancelable) e.preventDefault();                                /* sideways now: the page doesn't scroll */
+        const now = performance.now(), d = t.clientX - g.x;
+        g.pts.push([t.clientX, now]); if (g.pts.length > 8) g.pts.shift(); g.dx = d;
+        const edge = !g.list[g.i + (d < 0 ? 1 : -1)];
+        const x = edge ? d * 0.18 : d * 0.92;                                 /* first / last tab: a little rubber-band give */
+        const o = 1 - Math.min(0.5, Math.abs(x) / innerWidth * 0.9);
+        cancelAnimationFrame(raf); raf = requestAnimationFrame(() => set(x, o));
+    }, { passive: false });
+    const end = () => {
+        if (!g) return; const { lock, dx, pts, list, i } = g; g = null;
+        /* finger speed over the last 100 ms (px per ms), so a quick flick counts even when it's short */
+        const now = performance.now(), last = pts[pts.length - 1], ref = pts.find(p => now - p[1] <= 100) || last;
+        const r0 = ref === last && pts.length > 1 ? pts[pts.length - 2] : ref;
+        const v = now - last[1] > 100 ? 0 : (last[0] - r0[0]) / Math.max(16, last[1] - r0[1]);
+        if (lock !== 'x') return;
+        moved = true; setTimeout(() => moved = false, 350);
+        const dir = dx < 0 ? 1 : -1, next = list[i + dir];
+        const go = next && !getSelection()?.toString() && (Math.abs(dx) > innerWidth * 0.3 || (Math.abs(v) > 0.3 && Math.sign(v) === Math.sign(dx) && Math.abs(dx) > 24));
+        cancelAnimationFrame(raf);
+        if (!go) { app.classList.add('sw-back'); requestAnimationFrame(() => set(0, 1)); setTimeout(() => { if (!g) clear(); }, 380); return; }
+        busy = true;
+        app.classList.add('sw-out'); requestAnimationFrame(() => set(-dir * innerWidth * 0.32, 0));
+        try { navigator.vibrate?.(6); } catch { /* ignore */ }
+        setTimeout(() => {                                                    /* the old screen is gone: open the next one */
+            busy = false; pending = true; app.dataset.slide = dir > 0 ? 'next' : 'prev';
+            location.hash = next.getAttribute('href');
+        }, 130);
+    };
+    document.addEventListener('touchend', end, { passive: true });
+    document.addEventListener('touchcancel', end, { passive: true });
     /* a swipe that ends on a button or link doesn't also tap it */
     app.addEventListener('click', e => { if (moved) { e.preventDefault(); e.stopPropagation(); } }, true);
+    /* tapping a tab slides the same way: a tab to the right comes in from the right, one to the left from the left */
+    tabbar.addEventListener('click', e => {
+        const a = e.target.closest('a[data-tab]'), all = [...tabbar.querySelectorAll('a[data-tab]')];
+        const from = all.findIndex(x => x.dataset.tab === document.body.dataset.route), to = all.indexOf(a);
+        if (!a || from < 0 || to === from) return;
+        pending = true; app.dataset.slide = to > from ? 'next' : 'prev';
+    });
+    addEventListener('hashchange', () => { if (!pending) delete app.dataset.slide; pending = false; });
+    /* called the moment the next screen paints, in the same frame, so the old one never flashes back */
+    onPaint = clear;
 })();
 
 const demoBar = () => api?.demo ? `<div class="demo-bar">Demo mode: sample data, saved only on this device. <button data-act="reset-demo">Reset</button></div>` : '';
@@ -1435,7 +1481,9 @@ function bindCentrePicker(body) {
 /* ---------- how my mileage compares with other warriors ---------- */
 async function drawVs(el, mine) {
     if (!el) return;
+    const wait = !state.board;
     const rows = state.board ??= await api.boards().catch(() => []);
+    if (wait) el.classList.add('vs-in');   /* filled in after a wait: fade in, in the space kept for it */
     const others = rows.filter(r => !r.is_me && r.kmpl > 0).map(r => Number(r.kmpl));
     if (!mine) { el.innerHTML = '<p class="small muted">Add a full-tank fill-up with your Trip A reading to see how your mileage compares with other warriors.</p>'; return; }
     if (others.length < 2) { el.innerHTML = `<p class="small muted">Your average is <b>${kmplTxt(mine)}</b>. Comparison appears once a few more warriors log full-tank fill-ups.</p>`; return; }
@@ -2268,7 +2316,7 @@ async function viewMileage() {
             <div class="stat"><b>${f1(ms.best)}</b><span>Best tank</span></div>
             <div class="stat"><b>${ms.cpk ? '₹' + ms.cpk.toFixed(2) : '–'}</b><span>Fuel cost / km</span></div>
         </div></section>
-        <section class="section"><h2>You vs RWB</h2><div class="card vs" id="vs"><p class="small muted">Comparing…</p></div></section>
+        <section class="section"><h2>You vs RWB</h2><div class="card vs" id="vs">${state.board ? '' : SKEL(4)}</div></section>
         ${TIPS}
         ${logs.length || svcs.length ? `<section class="section"><h2>Spends and mileage</h2><div class="card trend" id="trend"></div></section>` : ''}
         <section class="section"><h2>Fill-ups</h2>${logs.length ? `<div class="list">${[...logs].reverse().map(f => fuelCard(f, byEnd.get(f.id))).join('')}</div>` :
@@ -4796,7 +4844,7 @@ async function viewCrew() {
         <a class="mem-entry" href="#members"><span class="mem-faces">${[...new Map([...(state.gps || []), ...raw].filter(r => r.full_name).map(r => [r.full_name, r])).values()].slice(0, 4).map(r => face(r, 'avatar sm')).join('')}</span>
             <span class="grow"><b>RWB Members</b><span class="small muted">${state.dir ? `${state.dir.length} riders · ` : ''}Find a rider · RWB team contacts</span></span>${ICON.chev}</a>`;
     lbCount($('#board'));
-    const showBoard = (k, dir = 0) => { state.boardKey = k; const el = $('#board'); if (!el) return; app.classList.remove('same'); el.innerHTML = boardHtml(k, raw);
+    const showBoard = (k, dir = 0) => { state.boardKey = k; const el = $('#board'); if (!el) return; app.classList.add('lb-play'); el.innerHTML = boardHtml(k, raw);
         app.querySelectorAll('.lb-tabs [data-b]').forEach(b => b.setAttribute('aria-selected', b.dataset.b === k));
         app.querySelector(`.lb-tabs [data-b="${k}"]`)?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
         app.querySelectorAll('.board-dots i').forEach((d, i) => d.classList.toggle('on', keys[i] === k));
