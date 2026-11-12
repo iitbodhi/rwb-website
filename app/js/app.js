@@ -1965,13 +1965,13 @@ async function viewCalendar() {
 }
 const CAL_CHEV = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
 const CAL_FILTER = CS('<path d="M4 6h16M7 12h10M10 18h4"/>');
-function drawCal() {
+function drawCal(turn = 0) {   /* turn: +1 / -1 = page to the next / previous month */
     const D = state.calData; if (!D) return;
     const today = todayISO(), off = calOff(), data = { ...D, off };
     const month = state.calMonth || today.slice(0, 7), sel = state.calDay || today;
     const [Y, M] = month.split('-').map(Number);
     const first = `${month}-01`, startPad = new Date(first + 'T00:00:00Z').getUTCDay(), gridFrom = isoAdd(first, -startPad);
-    const daysIn = new Date(Date.UTC(Y, M, 0)).getUTCDate(), cells = Math.ceil((startPad + daysIn) / 7) * 7, gridTo = isoAdd(gridFrom, cells - 1);
+    const daysIn = new Date(Date.UTC(Y, M, 0)).getUTCDate(), cells = 42, gridTo = isoAdd(gridFrom, cells - 1);
     const all = calItems(data, gridFrom < today ? gridFrom : today, isoAdd(gridTo > today ? gridTo : today, 45));
     const byDay = new Map(); all.forEach(i => (byDay.get(i.date) || byDay.set(i.date, []).get(i.date)).push(i));
     /* overdue renewals, service and parts first, then what's coming in the next 45 days */
@@ -1991,44 +1991,71 @@ function drawCal() {
             <b>${p.d}</b><span class="cdi">${ic.map(c => c === '+' ? '<i class="more">+</i>' : `<i class="c-${c}">${CAL_CATS[c][1]}</i>`).join('')}</span></button>`;
     };
     const list = showAll ? upcoming.slice(0, 30) : upcoming.slice(0, 5);
-    app.innerHTML = top('Calendar') + `
-        <section class="cal-card">
-            <div class="cal-head">
-                <h2>${MONTHS_LONG[M - 1]} <span>${Y}</span></h2>
+    const headHtml = `<h2>${MONTHS_LONG[M - 1]} <span>${Y}</span></h2>
                 ${month !== today.slice(0, 7) ? '<button class="cal-today" data-act="cal-today">Today</button>' : ''}
                 <button class="cal-nav" data-act="cal-f-open" aria-label="Show or hide kinds" aria-expanded="${!!state.calFilt}">${CAL_FILTER}</button>
                 <button class="cal-nav" data-act="cal-mv" data-n="-1" aria-label="Previous month">${CAL_CHEV('M15 6l-6 6 6 6')}</button>
-                <button class="cal-nav" data-act="cal-mv" data-n="1" aria-label="Next month">${CAL_CHEV('M9 6l6 6-6 6')}</button></div>
-            ${state.calFilt ? `<div class="cal-filters" role="group" aria-label="Show on the calendar">${Object.entries(CAL_CATS).map(([k, [name, svg]]) => `<button class="c-${k}" data-act="cal-f" data-k="${k}" aria-pressed="${!off.has(k)}">${svg}${name}</button>`).join('')}</div>` : ''}
-            <div class="cal-grid" id="cal-grid">${CAL_WD.map(w => `<span class="cw">${w[0]}</span>`).join('')}${Array.from({ length: cells }, (_, k) => cell(k)).join('')}</div>
+                <button class="cal-nav" data-act="cal-mv" data-n="1" aria-label="Next month">${CAL_CHEV('M9 6l6 6-6 6')}</button>`;
+    const filtHtml = state.calFilt ? `<div class="cal-filters" role="group" aria-label="Show on the calendar">${Object.entries(CAL_CATS).map(([k, [name, svg]]) => `<button class="c-${k}" data-act="cal-f" data-k="${k}" aria-pressed="${!off.has(k)}">${svg}${name}</button>`).join('')}</div>` : '';
+    const gridHtml = CAL_WD.map(w => `<span class="cw">${w[0]}</span>`).join('') + Array.from({ length: cells }, (_, k) => cell(k)).join('');
+    const upHtml = upcoming.length ? `<section class="section"><h2>Coming up</h2><div class="cal-list">${list.map(i => row(i, 1)).join('')}</div>
+            ${upcoming.length > 5 ? `<button class="cal-more" data-act="cal-all">${showAll ? 'Show less' : `Show all ${Math.min(upcoming.length, 30)}`}</button>` : ''}</section>` : '';
+    const belowHtml = `<section class="section cal-day" id="cal-day">${dayHtml(sel)}</section>${upHtml}
+        ${data.mine === null && isAdmin() ? '<p class="cal-none">Own reminders need setup file 62 (calendar.sql).</p>' : ''}`;
+    const fade = el => { el.classList.remove('cal-fade'); void el.offsetWidth; el.classList.add('cal-fade'); };
+    const card = $('#cal-card');
+    if (!card) {
+        app.innerHTML = top('Calendar') + `
+        <section class="cal-card" id="cal-card">
+            <div class="cal-head" id="cal-head">${headHtml}</div>
+            <div id="cal-filt">${filtHtml}</div>
+            <div class="cal-pager" id="cal-pager"><div class="cal-grid" id="cal-grid">${gridHtml}</div></div>
         </section>
-        <section class="section cal-day" id="cal-day">${dayHtml(sel)}</section>
-        ${upcoming.length ? `<section class="section"><h2>Coming up</h2><div class="cal-list">${list.map(i => row(i, 1)).join('')}</div>
-            ${upcoming.length > 5 ? `<button class="cal-more" data-act="cal-all">${showAll ? 'Show less' : `Show all ${Math.min(upcoming.length, 30)}`}</button>` : ''}</section>` : ''}
-        ${data.mine === null && isAdmin() ? '<p class="cal-none">Own reminders need setup file 62 (calendar.sql).</p>' : ''}
+        <div id="cal-below">${belowHtml}</div>
         <button class="btn fab" data-act="cal-add" aria-label="Add a reminder">＋ Reminder</button>`;
+        calSwipe();
+    } else {
+        /* already on screen: change only what changed, so nothing else blinks */
+        const head = $('#cal-head'); if (turn) setTimeout(() => { if (head.isConnected) head.innerHTML = headHtml; }, 190); else head.innerHTML = headHtml;   /* the month name changes as the page flips over */
+        if ($('#cal-filt').innerHTML !== filtHtml) $('#cal-filt').innerHTML = filtHtml;
+        const pager = $('#cal-pager'), oldG = $('#cal-grid');
+        pager.querySelectorAll('.cal-leaf').forEach(l => l.remove()); oldG.classList.remove('cal-under', 'next', 'prev');
+        if (turn && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            /* the old month lifts off like a calendar page; the new month is underneath */
+            const leaf = oldG; leaf.removeAttribute('id'); leaf.classList.add('cal-leaf', turn > 0 ? 'next' : 'prev');
+            const g = document.createElement('div'); g.className = 'cal-grid cal-under ' + (turn > 0 ? 'next' : 'prev'); g.addEventListener('animationend', () => g.classList.remove('cal-under', 'next', 'prev'), { once: true }); g.id = 'cal-grid'; g.innerHTML = gridHtml;
+            pager.prepend(g);
+            const done = () => leaf.remove(); leaf.addEventListener('animationend', done, { once: true }); setTimeout(done, 400);
+        } else oldG.innerHTML = gridHtml;
+        const below = $('#cal-below');
+        if (below.dataset.html !== belowHtml) { below.innerHTML = belowHtml; fade(below); }
+    }
+    $('#cal-below').dataset.html = belowHtml;
     const pool = [...all, ...overdue], find = el => pool.find(i => i.id === el.dataset.id && i.date === el.dataset.d);
     actions = {
         'cal-day': el => {
             const x = el.dataset.d; state.calDay = x;
-            if (x.slice(0, 7) !== month || x === today || sel === today) { state.calMonth = x.slice(0, 7); return drawCal(); }   /* today's items move between Today and Coming up */
+            if (x.slice(0, 7) !== month || x === today || sel === today) { const t = x.slice(0, 7) > month ? 1 : x.slice(0, 7) < month ? -1 : 0; state.calMonth = x.slice(0, 7); return drawCal(t); }   /* today's items move between Today and Coming up */
             app.querySelector('.cd.sel')?.classList.remove('sel'); el.classList.add('sel');
-            $('#cal-day').innerHTML = dayHtml(x);
+            const dd = $('#cal-day'); dd.innerHTML = dayHtml(x); fade(dd);
         },
-        'cal-mv': el => { const d = addMonths(first, Number(el.dataset.n)); state.calMonth = d.slice(0, 7); state.calDay = d.slice(0, 7) === today.slice(0, 7) ? today : d; drawCal(); },
-        'cal-today': () => { state.calMonth = null; state.calDay = null; drawCal(); },
+        'cal-mv': el => { const d = addMonths(first, Number(el.dataset.n)); state.calMonth = d.slice(0, 7); state.calDay = d.slice(0, 7) === today.slice(0, 7) ? today : d; drawCal(Number(el.dataset.n)); },
+        'cal-today': () => { const back = month < today.slice(0, 7) ? 1 : month > today.slice(0, 7) ? -1 : 0; state.calMonth = null; state.calDay = null; drawCal(back); },
         'cal-f-open': () => { state.calFilt = !state.calFilt; drawCal(); },
         'cal-f': el => { off.has(el.dataset.k) ? off.delete(el.dataset.k) : off.add(el.dataset.k); try { localStorage.setItem('rwb-cal-off', JSON.stringify([...off])); } catch { /* ignore */ } drawCal(); },
         'cal-all': () => { state.calAll = !state.calAll; drawCal(); },
         'cal-it': el => { const i = find(el); if (i) calItemSheet(i); },
         'cal-add': () => data.mine === null ? toast('Reminders aren\'t set up yet. Ask an RWB admin.', true) : reminderForm({ due_date: sel >= today ? sel : today })
     };
-    /* swipe the month left or right */
-    const g = $('#cal-grid'); let x0 = null, y0 = 0;
+}
+/* swipe the month left or right (set once per visit, on the page holder, so it keeps working after page turns) */
+function calSwipe() {
+    const g = $('#cal-pager'); let x0 = null, y0 = 0, swiped = false;
     g.addEventListener('pointerdown', e => { x0 = e.clientX; y0 = e.clientY; }, { passive: true });
     g.addEventListener('pointerup', e => { if (x0 == null) return; const dx = e.clientX - x0, dy = e.clientY - y0; x0 = null;
-        if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) { g.dataset.swiped = '1'; setTimeout(() => delete g.dataset.swiped, 300); actions['cal-mv']({ dataset: { n: dx < 0 ? 1 : -1 } }); } }, { passive: true });
-    g.addEventListener('click', e => { if (g.dataset.swiped) { e.preventDefault(); e.stopPropagation(); } }, true);
+        if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) { swiped = true; setTimeout(() => swiped = false, 300); actions['cal-mv']?.({ dataset: { n: dx < 0 ? 1 : -1 } }); } }, { passive: true });
+    g.addEventListener('pointercancel', () => { x0 = null; }, { passive: true });
+    g.addEventListener('click', e => { if (swiped) { e.preventDefault(); e.stopPropagation(); } }, true);
 }
 function calItemSheet(i) {
     const n = daysTo(i.date), r = i.rec;

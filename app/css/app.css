@@ -2116,3 +2116,21 @@ html.lite .gd-glass,html.lite .gd-count{background:rgba(36,32,30,.7)}
 html.lite .gd-cats{background:color-mix(in srgb,var(--paper-2) 92%,transparent)}
 
 #gd-fab[hidden]{display:none}
+
+/* Calendar page turn: the old month turns away on its spine like a calendar page (first half), the new month turns
+   in from behind it (second half). Never both at once, so numbers never overlap. Only transform + opacity: smooth. */
+.cal-pager{position:relative;perspective:900px;touch-action:pan-y}
+.cal-leaf{position:absolute;top:0;left:0;right:0;z-index:2;backface-visibility:hidden;-webkit-backface-visibility:hidden;will-change:transform;pointer-events:none;
+  animation:cal-out-n .2s cubic-bezier(.5,0,.9,.6) forwards}
+.cal-leaf.next{transform-origin:left center}
+.cal-leaf.prev{transform-origin:right center;animation-name:cal-out-p}
+.cal-under{backface-visibility:hidden;-webkit-backface-visibility:hidden;will-change:transform;animation:cal-in-n .26s cubic-bezier(.15,.5,.3,1) .2s both}
+.cal-under.next{transform-origin:right center}
+.cal-under.prev{transform-origin:left center;animation-name:cal-in-p}
+@keyframes cal-out-n{to{transform:rotateY(-90deg);opacity:.6}}
+@keyframes cal-out-p{to{transform:rotateY(90deg);opacity:.6}}
+@keyframes cal-in-n{from{transform:rotateY(90deg);opacity:.6}to{transform:none;opacity:1}}
+@keyframes cal-in-p{from{transform:rotateY(-90deg);opacity:.6}to{transform:none;opacity:1}}
+.cal-fade,#app > #cal-below.cal-fade{animation:cal-fade .28s ease-out both}
+@keyframes cal-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+#app.same > #cal-below.cal-fade{animation:cal-fade .28s ease-out both!important}
