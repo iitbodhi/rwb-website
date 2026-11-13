@@ -18,13 +18,13 @@
  * 3. App → sheet: members approved in the app get a row here; changes in the app (Me → Edit, bikes, VRN verified)
  *    update their row. Rows added by the app say "RWB App" in the "Added via" column.
  * 4. A member removed in the app is removed from this sheet; the row is first copied to the "Removed members" tab.
- * 5. Safety net, every 10 minutes (syncWithApp): VRNs lose their spaces, and every row is checked against the app and repaired.
+ * 5. Safety net, every 12 hours (syncWithApp): VRNs lose their spaces, and every row is checked against the app and repaired.
  *    Whichever side changed since the last check wins: a sheet edit that didn't reach the app is sent again, an app change
  *    is written here. Anyone missing is added, removed / rejected entries move to their tabs, gaps in the app are filled.
  * 6. Duplicates (same WhatsApp number or same VRN) are never removed by themselves: admins get an alert in the app and
  *    choose which entry to keep. Their choice is carried out here (rows move to "Older entries"). Needs setup file 49.
  * 7. A member restored in the app gets their old row back from "Removed members" (with all their answers).
- * 8. Empty rows between entries are removed (after every form entry and every 10 minutes).
+ * 8. Empty rows between entries are removed (after every form entry and every 12 hours).
  *
  * SET-UP / UPDATE (keeps the same web address):
  *   a) Extensions → Apps Script → replace everything with this file → put your SYNC_SECRET back → Save.
@@ -88,7 +88,7 @@ function setup() {
   syncTnc();
   syncAnswers();
   syncWithApp();
-  console.log('Ready: new form entries go to the approval list, edits here update the app, the app shows the same join form, and the sheet is checked against the app every 10 minutes.');
+  console.log('Ready: new form entries go to the approval list, edits here update the app, the app shows the same join form, and the sheet is checked against the app every 12 hours.');
 }
 
 /** Runs by itself for every join form entry (a trigger on the form itself): the entry goes to the app's approval list
@@ -659,13 +659,13 @@ const p10_ = x => String(x == null ? '' : x).replace(/\D/g, '').slice(-10);
 /** Tells the app this sheet's web address, so its instant updates always arrive here. */
 function registerWebhook_() {
   let url = ''; try { url = ScriptApp.getService().getUrl() || ''; } catch (e) { /* not deployed yet */ }
-  if (!/\/exec$/.test(url)) { console.log('Web app not deployed yet (Deploy → New deployment → Web app), so instant updates from the app are off. The 15-minute check still works.'); return; }
+  if (!/\/exec$/.test(url)) { console.log('Web app address not available here (normal when setup runs from the editor). The app keeps the address it already has; after a change, do Deploy → Manage deployments → New version.'); return; }
   const r = UrlFetchApp.fetchAll([rpc_('sheet_set_webhook', { p_secret: SYNC_SECRET, p_url: url })])[0];
   console.log('Web address sent to the app: ' + r.getContentText());
 }
 
 /**
- * Runs every 10 minutes by itself (and from setup). Safe to run any time from the editor too.
+ * Runs every 12 hours by itself (and from setup). Safe to run any time from the editor too.
  *   1. Sheet edits that couldn't reach the app earlier are sent again; empty rows between entries are removed.
  *   2. Duplicates admins sorted out in the app: the rows they removed move to "Older entries".
  *   3. VRNs lose their spaces; every "agree" answer is written the same way, "Understood & agreed".
@@ -873,7 +873,11 @@ function reconcile_(app) {
 function answerCells_(heads, col, answers) {
   const own = new Set(Object.values(col)), out = [];
   Object.keys(answers || {}).forEach(t => {
-    const c = heads.indexOf(String(t).trim()), v = answers[t];
+    const s = String(t).trim();
+    let c = heads.indexOf(s);
+    /* the 12-hour check sends long question titles cut to 120 characters (setup file 67): match by the start */
+    if (c < 0 && s.length >= 120) c = heads.findIndex(h => String(h).trim().indexOf(s) === 0);
+    const v = answers[t];
     if (c < 0 || own.has(c) || isHelperHead_(t) || v == null || String(v).trim() === '') return;
     out.push([c, v]);
   });
@@ -946,7 +950,7 @@ function deleteRowsAt_(sheet, rowNos) {
 /* ======================= Empty rows ======================= */
 /**
  * Removes empty rows between entries (the join form sometimes writes a new entry far below the last one after rows
- * were moved away). Runs after every form entry and every 10 minutes; run it from the editor any time.
+ * were moved away). Runs after every form entry and every 12 hours; run it from the editor any time.
  * A row counts as empty when it has no value at all (helper columns titled with just a number are ignored).
  */
 function compactBlankRows_(sheet) {

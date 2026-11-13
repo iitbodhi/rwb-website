@@ -28,7 +28,7 @@ declare g jsonb; ents jsonb; s text; n integer := 0; old jsonb;
 begin
   perform private.sheet_ok(p_secret);
   select coalesce(jsonb_object_agg(gkey, seen_at), '{}'::jsonb) into old from private.sheet_dupes;   -- when each group was first seen
-  delete from private.sheet_dupes;
+  delete from private.sheet_dupes where true;   -- "where true": Supabase refuses a DELETE without WHERE from the API
   for g in select * from jsonb_array_elements(coalesce(p_groups, '[]'::jsonb)) loop
     -- entries an admin already removed (waiting for the sheet to move them) are left out
     select coalesce(jsonb_agg(e), '[]'::jsonb) into ents from jsonb_array_elements(g -> 'entries') e
