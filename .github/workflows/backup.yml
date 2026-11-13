@@ -1,0 +1,54 @@
+# Nightly backup of the RWB database (members, events, MotoMart, service logs, everything in Supabase).
+# Free: runs on GitHub, keeps the last 30 nights. Each backup is locked with your own password (AES-256),
+# so even though this repository is public, nobody can open a backup without that password.
+#
+# Setup (once, by Bodhi). GitHub → this repository → Settings → Secrets and variables → Actions → New repository secret:
+#   SUPABASE_DB_URL  Supabase → Connect (top of the project page) → "Session pooler" → copy the URI and put the
+#                    database password in place of [YOUR-PASSWORD]. (Forgot it? Database → Settings → Reset password.)
+#   BACKUP_PASSWORD  any long password you make up. Keep it somewhere safe (a password manager or written down):
+#                    without it the backups can't be opened, by anyone, including you.
+# Until both are added, this does nothing.
+#
+# To get a backup: Actions → Database backup → newest green run → Artifacts → rwb-db-… (zip).
+# To open it (on a computer):  gpg -d rwb-db-YYYY-MM-DD.sql.gz.gpg | gunzip > rwb.sql   (asks for BACKUP_PASSWORD)
+name: Database backup
+on:
+  schedule:
+    - cron: '23 21 * * *'   # every night, 02:53 IST
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      HAS_SECRETS: ${{ secrets.SUPABASE_DB_URL != '' && secrets.BACKUP_PASSWORD != '' }}
+    steps:
+      - name: Not set up yet
+        if: env.HAS_SECRETS != 'true'
+        run: echo "Add the SUPABASE_DB_URL and BACKUP_PASSWORD secrets to turn on nightly backups."
+      - name: Dump and lock the database
+        if: env.HAS_SECRETS == 'true'
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          day=$(TZ=Asia/Kolkata date +%F)
+          # Postgres 17 tools, the same version as Supabase
+          docker run --rm -e DB_URL postgres:17 sh -c 'pg_dump "$DB_URL" --no-owner --no-privileges --schema=public --schema=private' \
+            | gzip -9 > db.sql.gz
+          test "$(stat -c %s db.sql.gz)" -gt 10000   # an almost empty file means something went wrong
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$PASS" --symmetric --cipher-algo AES256 \
+            -o "rwb-db-$day.sql.gz.gpg" db.sql.gz
+          rm db.sql.gz
+          echo "BACKUP_FILE=rwb-db-$day.sql.gz.gpg" >> "$GITHUB_ENV"
+          ls -la rwb-db-*.gpg
+      - name: Keep it for 30 days
+        if: env.HAS_SECRETS == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rwb-db-${{ github.run_number }}
+          path: ${{ env.BACKUP_FILE }}
+          retention-days: 30
+          if-no-files-found: error

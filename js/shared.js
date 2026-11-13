@@ -10,7 +10,7 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
     document.body.insertAdjacentHTML('afterbegin', '<div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>');
     document.body.insertAdjacentHTML('afterbegin', `
 <header class="nav" id="nav">
-  <a href="${home ? '#home' : 'index.html'}" class="nav-brand"><img src="assets/logo.png" alt="" width="40" height="40"><span>RWB</span></a>
+  <a href="${home ? '#home' : 'index.html'}" class="nav-brand"><img src="assets/logo-96.webp" alt="" width="40" height="40"><span>RWB</span></a>
   <nav class="nav-links" id="nav-links" aria-label="Main">
     ${link(base + '#join', 'Social')}${link(base + '#events', 'Events')}${link(base + '#gallery', 'Gallery')}${link('maintenance.html', 'Maintenance', 'maintenance')}${link('accessories.html', 'Accessories', 'accessories')}${link(base + '#market', 'Marketplace')}${link(base + '#warriors', 'Warriors')}${link(base + '#app', 'App')}${link(base + '#about', 'About')}
   </nav>

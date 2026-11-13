@@ -217,7 +217,7 @@ function renderMarket(rows) {
     track.innerHTML = rows.map(r => {
         const sold = /sold/i.test(r.status || ''), price = typeof r.price === 'number' ? inr(r.price) : rupees(r.price);
         const img = r.image ? `<img src="${esc(driveImg(r.image))}" alt="${esc(r.name)}" loading="lazy" referrerpolicy="no-referrer">`
-                            : `<img class="ph" src="assets/logo.png" alt="">`;
+                            : `<img class="ph" src="assets/logo-96.webp" alt="">`;
         return `<article class="prod${sold ? ' sold' : ''}"><div class="prod-img">${img}${r.category ? `<em>${esc(r.category)}</em>` : ''}</div>
             <div class="prod-body"><h3>${esc(r.name)}</h3><p>${esc(r.description || '')}</p>
             ${price ? `<div class="price">${esc(price)}</div>` : ''}

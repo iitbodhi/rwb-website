@@ -6,6 +6,8 @@ import { registerPlugin as capRegister } from '../vendor/capacitor/core.js';   /
 const C = typeof APP_CONFIG !== 'undefined' ? APP_CONFIG : {}, SITE = typeof CONFIG !== 'undefined' ? CONFIG : {};
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+/* links typed by people (product pages, call links): only web, mail, phone or in-app links, never javascript: */
+const safeUrl = u => { const t = String(u ?? '').trim(); return /^(https?:\/\/|mailto:|tel:|#|\/(?!\/))/i.test(t) ? t : '#'; };
 const app = $('#app'), tabbar = $('#tabbar'), sheet = $('#sheet');
 
 let api;
@@ -1604,7 +1606,7 @@ async function eventPage(e) {
             </div></div>
             <div class="evt-facts">
                 ${live && !past && e.capacity ? `<p><span>🎟</span>${evtSlots(e, headcount)}</p>` : ''}
-                ${e.call_link ? `<p><span>📞</span><a href="${esc(e.call_link)}" target="_blank" rel="noopener">Join the call</a></p>` : ''}
+                ${e.call_link ? `<p><span>📞</span><a href="${esc(safeUrl(e.call_link))}" target="_blank" rel="noopener">Join the call</a></p>` : ''}
                 ${e.reminder_minutes != null ? `<p><span>⏰</span>Reminder ${esc(REMINDERS.find(r => r[0] === e.reminder_minutes)?.[1].toLowerCase() || '')} for people going</p>` : ''}
             </div>
             ${e.description ? `<p class="evt-desc">${linkify(e.description)}</p>` : ''}
@@ -3988,7 +3990,7 @@ function newsCard(n, del = false) {
     const go = n.url && n.url !== '#news' && n.url.startsWith('#');
     return `<article class="card news ${n.kind}"><div class="row" style="align-items:flex-start"><span class="news-ico" aria-hidden="true">${KIND_ICON[n.kind] || ICON.mega}</span>
         <div class="grow"><h3>${esc(n.title)}</h3>${n.body ? `<p>${linkify(n.body)}</p>` : ''}
-        <p class="small muted" style="margin-top:6px">${timeAgo(n.created_at)}${n.audience === 'admins' ? ' · admins only' : n.audience === 'moderators' ? ' · team only' : ''}${go ? ` · <a href="${esc(n.url)}">Open</a>` : ''}</p></div>
+        <p class="small muted" style="margin-top:6px">${timeAgo(n.created_at)}${n.audience === 'admins' ? ' · admins only' : n.audience === 'moderators' ? ' · team only' : ''}${go ? ` · <a href="${esc(safeUrl(n.url))}">Open</a>` : ''}</p></div>
         ${del ? `<button class="icon-btn" data-act="del-news" data-id="${n.id}" aria-label="Delete">🗑</button>` : ''}</div></article>`;
 }
 async function viewNews() {
@@ -4071,7 +4073,7 @@ function listingCard(l) {
     const sub = k === 'new' ? [catGroup(l), hostOf(l.link)].filter(Boolean).join(' · ') : k === 'merch' ? catGroup(l) : [l.condition, l.size && 'Size ' + l.size].filter(Boolean).join(' · ') || catGroup(l);
     const flag = { pending: 'Waiting for approval', rejected: 'Not approved' }[l.status];
     return `<button class="mm-card tap${sold ? ' is-sold' : ''}" data-act="listing" data-id="${l.id}">
-        <div class="mm-img"${!img && l.link ? ` data-link="${esc(l.link)}"` : ''}>${img ? `<img src="${esc(img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span class="mm-ph">${catIco(catGroup(l))}</span>
+        <div class="mm-img"${!img && l.link ? ` data-link="${esc(safeUrl(l.link))}"` : ''}>${img ? `<img src="${esc(img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span class="mm-ph">${catIco(catGroup(l))}</span>
             <span class="mm-kind k-${k}">${MM_KIND[k]}</span>${flag ? `<span class="mm-flag ${l.status}">${flag}</span>` : ''}${sold ? `<span class="mm-sold">${k === 'used' ? 'Sold' : 'Sold out'}</span>` : ''}</div>
         <div class="mm-body"><b class="mm-price">${price(l.price)}</b><span class="mm-name">${esc(l.product_name)}</span><span class="mm-sub">${esc(sub)}</span></div></button>`;
 }
@@ -4207,7 +4209,7 @@ function listingDetail(l) {
     const statusTxt = { live: 'Available', sold: k === 'used' ? 'Sold' : 'Sold out', pending: 'Waiting for approval', rejected: 'Not approved' }[l.status];
     openSheet(l.product_name, `<div class="mm-detail${sold ? ' is-sold' : ''}">
         <div class="mm-gal">${pics.length ? `<div class="gallery">${pics.map((u, i) => `<img src="${esc(u)}" alt="Photo ${i + 1} of ${esc(l.product_name)}" referrerpolicy="no-referrer">`).join('')}</div>`
-            : `<div class="mm-gal-ph"${l.link ? ` data-link="${esc(l.link)}"` : ''}><span class="mm-ph">${catIco(catGroup(l))}</span></div>`}
+            : `<div class="mm-gal-ph"${l.link ? ` data-link="${esc(safeUrl(l.link))}"` : ''}><span class="mm-ph">${catIco(catGroup(l))}</span></div>`}
             <span class="mm-kind k-${k}">${MM_KIND[k]}</span>${sold ? `<span class="mm-sold">${statusTxt}</span>` : ''}</div>
         ${pics.length > 1 ? `<p class="small muted" style="text-align:center;margin-top:4px">Swipe for ${pics.length} photos</p>` : ''}
         <div class="mm-d-head"><b class="mm-price">${price(l.price)}</b><span class="badge ${l.status === 'live' ? 'ok' : sold ? '' : 'orange'}">${statusTxt}</span></div>
@@ -4218,8 +4220,8 @@ function listingDetail(l) {
         ${k === 'used' ? `<dl class="facts">${fact('Size', l.size)}${fact('Age', l.age)}${fact('Condition', l.condition)}${fact('Reason', l.reason)}${fact('Seller', l.seller_name)}${fact('Posted', l.published_at ? fmtDate(String(l.published_at).slice(0, 10)) : '')}</dl>` : ''}
         ${l.details ? `<p style="margin:10px 0 16px">${linkify(l.details)}</p>` : ''}
         <div class="list">
-            ${k === 'new' && l.link && !sold ? `<a class="btn block mm-cta" href="${esc(l.link)}" target="_blank" rel="noopener noreferrer">Check product ↗</a><p class="small muted" style="text-align:center;margin-top:-4px">Sold by ${esc(hostOf(l.link) || 'the store')}, not by RWB. Price and stock can change.</p>` : ''}
-            ${k === 'merch' && !sold ? (l.seller_phone ? `<a class="btn wa block" href="${waTo(l.seller_phone, merchMsg)}" target="_blank" rel="noopener">Order on WhatsApp</a>` : l.link ? `<a class="btn block mm-cta" href="${esc(l.link)}" target="_blank" rel="noopener noreferrer">Order now ↗</a>` : `<a class="btn block mm-cta" href="${esc(SITE.INSTAGRAM_DM_URL || 'https://ig.me/m/ronin_warriors_bengal')}" target="_blank" rel="noopener">Order on Instagram</a>`) : ''}
+            ${k === 'new' && l.link && !sold ? `<a class="btn block mm-cta" href="${esc(safeUrl(l.link))}" target="_blank" rel="noopener noreferrer">Check product ↗</a><p class="small muted" style="text-align:center;margin-top:-4px">Sold by ${esc(hostOf(l.link) || 'the store')}, not by RWB. Price and stock can change.</p>` : ''}
+            ${k === 'merch' && !sold ? (l.seller_phone ? `<a class="btn wa block" href="${waTo(l.seller_phone, merchMsg)}" target="_blank" rel="noopener">Order on WhatsApp</a>` : l.link ? `<a class="btn block mm-cta" href="${esc(safeUrl(l.link))}" target="_blank" rel="noopener noreferrer">Order now ↗</a>` : `<a class="btn block mm-cta" href="${esc(SITE.INSTAGRAM_DM_URL || 'https://ig.me/m/ronin_warriors_bengal')}" target="_blank" rel="noopener">Order on Instagram</a>`) : ''}
             ${k === 'used' && !own && l.status === 'live' ? `<a class="btn wa block" href="${waTo(l.seller_phone, contact)}" target="_blank" rel="noopener">Message seller on WhatsApp</a>` : ''}
             ${judge && l.status === 'pending' ? `<div class="btns"><button class="btn ghost" data-x="reject">Reject</button><button class="btn" data-x="approve">Approve</button></div>` : ''}
             ${l.status === 'live' ? '<button class="btn ghost block" data-x="share">Share to WhatsApp</button>' : ''}
