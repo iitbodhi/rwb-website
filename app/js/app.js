@@ -3569,14 +3569,17 @@ async function adminDupes() {
     });
 }
 async function adminRequests() {
-    const [reqs, chg, inc, all] = await Promise.all([api.admin.requests(), api.admin.changes().catch(() => []), api.admin.incomplete().catch(() => null), state.adminMembers ? Promise.resolve(state.adminMembers) : api.admin.members().then(m => (state.adminMembers = m)).catch(() => [])]);
+    /* the approval list shows first; the follow-ups (they need every member) fill in under it when they arrive */
+    const later = Promise.all([api.admin.incomplete().catch(() => null), state.adminMembers ? Promise.resolve(state.adminMembers) : api.admin.members().then(m => (state.adminMembers = m)).catch(() => [])]);
+    const [reqs, chg] = await Promise.all([api.admin.requests(), api.admin.changes().catch(() => [])]);
     const digest = () => `🛡️ RWB App: ${reqs.length + chg.length} waiting for approval\n${reqs.length ? `\nNew entries (${reqs.length}):\n${azSort(reqs).slice(0, 15).map(r => `• ${r.full_name} (${r.source === 'form' ? 'form' : 'app'})`).join('\n')}` : ''}${chg.length ? `\n\nProfile changes (${chg.length}):\n${azSort(chg).slice(0, 15).map(c => `• ${c.full_name}: ${CHANGE_TXT[c.kind]}`).join('\n')}` : ''}\n\nOpen: roninwb.in/app → Home → Admin`;
     $('#admin-body').innerHTML = (reqs.length || chg.length ? `<button class="btn ghost block share-admins" data-act="digest">📣 Share this list to the admin WhatsApp group</button>` : '') + (reqs.length || chg.length ? `${reqs.length ? `<p class="small muted" style="margin-bottom:10px">New entries from the RWB join form. Check the 4 points, then approve and add them to the WhatsApp group. Rejected entries are deleted from the sheet.</p>
         <div class="list">${reqs.map(reqCard).join('')}</div>` : ''}
         ${chg.length ? `<h2 class="group-title" style="margin-top:${reqs.length ? 22 : 0}px">Changes to approve</h2><p class="small muted" style="margin-bottom:10px">Members changed an important detail in their profile.</p><div class="list">${chg.map(changeCard).join('')}</div>` : ''}`
-        : '<div class="card empty"><b>All clear</b>Nothing waiting for approval.</div>') + (inc ? followUps(inc, all) : '');
+        : '<div class="card empty"><b>All clear</b>Nothing waiting for approval.</div>') + '<div id="fu-box"></div>';
     const byCid = id => chg.find(c => c.id === Number(id));
-    if (inc) bindFollowUps(inc, all);
+    const fuBox = $('#fu-box');
+    later.then(([inc, all]) => { if (!inc || !fuBox.isConnected) return; fuBox.outerHTML = followUps(inc, all); bindFollowUps(inc, all); }).catch(() => {});
     Object.assign(actions, {
         digest: () => openWA(waShare(digest())),
         'chg-msg': b => { const c = byCid(b.dataset.cid); tellOnWhatsApp(`Message ${firstName(c)}`, c.phone, `Hi ${firstName(c)}! 👋 About your ${CHANGE_TXT[c.kind].toLowerCase()} update in the RWB App: \n\n– ${firstName(state.me)}, RWB`); },
