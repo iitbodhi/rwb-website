@@ -3724,7 +3724,7 @@ function reasonSheet(title, quick, done) {
 }
 function rejectSheet(r) {
     const quick = ['Not a Ronin owner', 'VRN could not be verified', 'Duplicate entry', 'Did not agree to the T&C'];
-    openSheet('Reject ' + firstName(r), `<form id="rj"><p class="small muted" style="margin-bottom:10px">${r.source === 'form' ? 'Their entry is deleted from the sheet (Form responses 3).' : 'They see that the request was not approved.'} The reason is kept for admins for 60 days.</p>
+    openSheet('Reject ' + firstName(r), `<form id="rj"><p class="small muted" style="margin-bottom:10px">${r.source === 'form' ? 'Their entry is deleted from the sheet (Members tab).' : 'They see that the request was not approved.'} The reason is kept for admins for 60 days.</p>
         <div class="chips" style="margin-bottom:10px">${quick.map(q => `<button type="button" class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
         <label>Reason (optional)<textarea name="reason" rows="2" maxlength="200"></textarea></label>
         <button class="btn danger block">Reject</button></form>`, body => {

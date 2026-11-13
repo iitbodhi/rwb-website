@@ -1,7 +1,12 @@
 /**
  * RWB App ⇄ RWB contact sheet (the Google Sheet with the join form responses)
  *
- * ONE WAY TO JOIN: roninwb.in → Join us → the RWB join form → a row in "Form responses 3".
+ * ONE WAY TO JOIN: roninwb.in → Join us → the RWB join form → the app's approval list → a row in the "Members" tab.
+ * 0. The join form is NOT linked to this sheet (Google made a new "Form responses N" tab every time it was re-linked,
+ *    and entries went missing). This script picks up every answer from the form itself (onJoinForm) and writes it into
+ *    the one "Members" tab, which it remembers by its ID, so renaming or moving the tab never breaks anything.
+ *    If someone links the form to this sheet again, the next check unlinks it and hides the new tab (no data is lost:
+ *    every answer is also kept in the form's own Responses tab).
  * 1. Join form → approval: every new form entry goes to the app's approval list (it is not a member yet).
  *    Its row here says "Waiting for approval" in the "App · Status" column until an admin decides.
  *      Approved → "Member". Once they sign in to the app (same email; their details are already there) → "In App".
@@ -65,8 +70,12 @@ const AGREED = 'Understood & agreed', NOT_AGREED = "I don't agree";   // the T&C
 /** Run once (and again after updating this file). Installs the automatic triggers. */
 function setup() {
   const ss = SpreadsheetApp.getActive();
-  ScriptApp.getProjectTriggers().filter(t => ['onFormSubmitSync', 'onSheetEdit', 'publishForm', 'syncAnswers', 'syncWithApp'].includes(t.getHandlerFunction())).forEach(t => ScriptApp.deleteTrigger(t));
-  ScriptApp.newTrigger('onFormSubmitSync').forSpreadsheet(ss).onFormSubmit().create();
+  ScriptApp.getProjectTriggers().filter(t => ['onFormSubmitSync', 'onJoinForm', 'onSheetEdit', 'publishForm', 'syncAnswers', 'syncWithApp'].includes(t.getHandlerFunction())).forEach(t => ScriptApp.deleteTrigger(t));
+  const members = responsesSheet_();                 // remembers the Members tab by its ID before anything moves
+  ScriptApp.newTrigger('onJoinForm').forForm(FORM_ID).onFormSubmit().create();   // answers come from the form, not from a linked tab
+  keepFormUnlinked_();
+  if (members.getName() !== MEMBERS_TAB && !ss.getSheetByName(MEMBERS_TAB)) { members.setName(MEMBERS_TAB); console.log('The members tab is now called "' + MEMBERS_TAB + '".'); }
+  catchUpEntries_();
   ScriptApp.newTrigger('onSheetEdit').forSpreadsheet(ss).onEdit().create();
   ScriptApp.newTrigger('publishForm').timeBased().everyHours(1).create();
   ScriptApp.newTrigger('syncAnswers').timeBased().everyDays(1).atHour(3).create();
@@ -82,35 +91,123 @@ function setup() {
   console.log('Ready: new form entries go to the approval list, edits here update the app, the app shows the same join form, and the sheet is checked against the app every 10 minutes.');
 }
 
-/** Runs by itself for every new form submission: the entry waits for an admin in the app. */
-function onFormSubmitSync(e) {
-  const sheet = e.range.getSheet();
-  try { formEntry_(e, sheet); }
-  finally {
-    /* the form sometimes writes a new entry far below the last one: close the gap (even if sending to the app failed) */
-    const lock = LockService.getScriptLock();
-    if (lock.tryLock(20000)) { try { const n = compactBlankRows_(sheet); if (n) console.log('Empty rows removed: ' + n); } finally { lock.releaseLock(); } }
-  }
+/** Runs by itself for every join form entry (a trigger on the form itself): the entry goes to the app's approval list
+ *  and gets a row in the Members tab. */
+function onJoinForm(e) {
+  if (!e || !e.response) return;
+  const r = addEntries_([e.response], false);
+  console.log('New form entry: ' + r.log.join(', '));
 }
-function formEntry_(e, sheet) {
-  const rowNo = e.range.getRow();
-  const col = columns_(sheet);
-  const heads = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const row = sheet.getRange(rowNo, 1, 1, sheet.getLastColumn()).getValues()[0];
-  if (col.vrn !== undefined && cleanVrn_(row[col.vrn]) !== String(row[col.vrn])) { row[col.vrn] = cleanVrn_(row[col.vrn]); sheet.getRange(rowNo, col.vrn + 1).setValue(row[col.vrn]); }
-  const m = toMember_(heads, row);
-  const res = send_([m]);
-  if (String(res[0]) === 'pending') {
-    sheet.getRange(rowNo, col.status + 1).setValue(ST.waiting);
-    UrlFetchApp.fetchAll([rpc_('sheet_upsert_member_answers', { p_secret: SYNC_SECRET, p_phone: m.phone, p_answers: answers_(heads, row) })]);
-  } else if (String(res[0]) === 'updated') {
-    /* an existing member filled the form again with the same name, VRN and email: their details are updated (no approval);
-       their older row stays until an admin picks which one to keep (the app shows it as a duplicate) */
-    sheet.getRange(rowNo, col.status + 1).setValue(ST.member);
-    UrlFetchApp.fetchAll([rpc_('sheet_set_answers', { p_secret: SYNC_SECRET, p_rows: [{ phone: m.phone, answers: answers_(heads, row) }] })]);
-    setStatus_({ status: 'approved', phone: m.phone });
-  }
-  console.log('New form entry: ' + res.join(', '));
+
+/* The form's answers on one entry, by question title (dates become date cells, ticked boxes "a, b") */
+function responseAnswers_(resp) {
+  const out = {};
+  resp.getItemResponses().forEach(ir => {
+    const it = ir.getItem(), t = String(it.getTitle() || '').trim();
+    let v = ir.getResponse();
+    if (!t || v == null || v === '') return;
+    if (it.getType() === FormApp.ItemType.DATE && /^\d{4}-\d{2}-\d{2}$/.test(String(v))) {
+      const p = String(v).split('-'); v = new Date(+p[0], +p[1] - 1, +p[2], 12);   // midday, so no time zone can move the day
+    } else if (Array.isArray(v)) v = v.map(x => Array.isArray(x) ? x.join(', ') : x).join(', ');
+    out[t] = v;
+  });
+  return out;
+}
+
+/**
+ * Writes form entries into the Members tab and sends them to the app.
+ * catchUp = true (missed entries): a row is only added when the app has the entry waiting for approval, or just
+ * took it now, and the tab doesn't already have it. Entries the app already decided (approved / rejected) are skipped.
+ */
+function addEntries_(responses, catchUp, waiting) {
+  const out = { added: 0, log: [] }, approveAfter = [];
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const sheet = responsesSheet_();
+    let col = columns_(sheet);
+    const heads = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+    const last = sheet.getLastRow();
+    const have = last > 1 ? sheet.getRange(2, 1, last - 1, sheet.getLastColumn()).getValues().map(r => ({ p: p10_(r[col.phone]), t: r[col.joined_at] instanceof Date ? r[col.joined_at].getTime() : 0 })) : [];
+    responses.forEach(resp => {
+      const ts = resp.getTimestamp(), ans = responseAnswers_(resp);
+      /* each answer goes into the column with the same title; a renamed question still finds its old column;
+         a brand-new question gets a new column at the end */
+      const at = {};
+      Object.keys(ans).forEach(t => {
+        let i = heads.findIndex(h => h.toLowerCase() === t.toLowerCase());
+        if (i < 0) { const k = Object.keys(COLUMNS).find(k => t.toLowerCase().indexOf(COLUMNS[k]) === 0); if (k && col[k] !== undefined) i = col[k]; }
+        if (i < 0) { sheet.getRange(1, heads.length + 1).setValue(t); heads.push(t); i = heads.length - 1; }
+        at[i] = ans[t];
+      });
+      col = columns_(sheet);
+      const row = heads.map((h, i) => at[i] !== undefined ? at[i] : '');
+      if (col.joined_at !== undefined) row[col.joined_at] = ts;
+      if (col.email !== undefined && !row[col.email]) { let em = ''; try { em = resp.getRespondentEmail() || ''; } catch (e) { /* not collected */ } row[col.email] = em; }
+      if (col.vrn !== undefined) row[col.vrn] = cleanVrn_(row[col.vrn]);
+      const m = toMember_(heads, row);
+      const label = (m.full_name || '?') + ' (' + (m.phone || 'no number') + ')';
+      if (catchUp && have.some(x => x.p === m.phone && Math.abs(x.t - ts.getTime()) < 2000)) { out.log.push(label + ': already in the tab'); return; }
+      const res = String(send_([m])[0]);
+      let status = '';
+      if (res === 'pending') status = ST.waiting;
+      else if (res === 'updated') { status = ST.member; approveAfter.push(m.phone); }
+      else if (catchUp) {
+        /* the app had it already: add the row only while it's still waiting for an admin and nobody has a row for that number */
+        if (!(res === 'exists' && waiting && waiting.has(m.phone) && !have.some(x => x.p === m.phone))) { out.log.push(label + ': ' + res + ', no row needed'); return; }
+        status = ST.waiting;
+      }
+      if (col.status !== undefined && status) row[col.status] = status;
+      appendInside_(sheet, [row]);
+      have.push({ p: m.phone, t: ts.getTime() });
+      out.added++;
+      if (res === 'pending') UrlFetchApp.fetchAll([rpc_('sheet_upsert_member_answers', { p_secret: SYNC_SECRET, p_phone: m.phone, p_answers: answers_(heads, row) })]);
+      /* an existing member filled the form again with the same name, VRN and email: their details are updated (no approval);
+         their older row stays until an admin picks which one to keep (the app shows it as a duplicate) */
+      if (res === 'updated') UrlFetchApp.fetchAll([rpc_('sheet_set_answers', { p_secret: SYNC_SECRET, p_rows: [{ phone: m.phone, answers: answers_(heads, row) }] })]);
+      out.log.push(label + ': ' + res);
+    });
+    const n = compactBlankRows_(sheet); if (n) console.log('Empty rows removed: ' + n);
+  } finally { lock.releaseLock(); }
+  approveAfter.forEach(p => setStatus_({ status: 'approved', phone: p }));
+  return out;
+}
+
+/**
+ * Entries the sheet missed (sent while the form was writing into another tab): read from the form itself and added
+ * to the Members tab. Looks at everything sent from 3 days before the newest form row in the tab. Runs from setup;
+ * safe to run again any time (nothing is added twice, and entries admins already decided are left alone).
+ */
+function catchUpEntries_() {
+  const sheet = responsesSheet_(), col = columns_(sheet), last = sheet.getLastRow();
+  let newest = 0;
+  if (last > 1) sheet.getRange(2, 1, last - 1, sheet.getLastColumn()).getValues().forEach(r => {
+    const t = r[col.joined_at] instanceof Date ? r[col.joined_at].getTime() : 0;
+    if (t && String(r[col.added] || '') !== 'RWB App') newest = Math.max(newest, t);
+  });
+  const since = new Date(Math.max(0, newest - 3 * 864e5));
+  const resps = FormApp.openById(FORM_ID).getResponses(since);
+  if (!resps.length) { console.log('Missed form entries: none.'); return 0; }
+  const ex = UrlFetchApp.fetchAll([rpc_('sheet_export_members', { p_secret: SYNC_SECRET })])[0];
+  if (ex.getResponseCode() !== 200) throw new Error('Could not read the app: ' + ex.getContentText().slice(0, 200));
+  const waiting = new Set(JSON.parse(ex.getContentText()).filter(m => m.pending).map(m => p10_(m.phone)));
+  const r = addEntries_(resps, true, waiting);
+  console.log('Form entries since ' + Utilities.formatDate(since, 'Asia/Kolkata', 'dd/MM/yyyy') + ': ' + resps.length + '. Rows added: ' + r.added + '.\n' + r.log.join('\n'));
+  return r.added;
+}
+/** Run from the editor any time to pick up form entries the Members tab is missing. */
+function addMissedEntries() { catchUpEntries_(); }
+
+/**
+ * Keeps the join form unlinked from this spreadsheet and hides any "Form responses" tab other than Members.
+ * (Linking the form again would make Google start yet another tab; answers reach the Members tab without it.)
+ */
+function keepFormUnlinked_() {
+  const ss = SpreadsheetApp.getActive(), form = FormApp.openById(FORM_ID), keep = responsesSheet_().getSheetId();
+  let dest = ''; try { dest = form.getDestinationId(); } catch (e) { dest = ''; }
+  if (dest && dest === ss.getId()) { form.removeDestination(); console.log('The join form was linked to this sheet again; unlinked (answers still reach the Members tab).'); }
+  ss.getSheets().forEach(s => {
+    if (s.getSheetId() !== keep && /^form responses/i.test(s.getName()) && !s.isSheetHidden()) { s.hideSheet(); console.log('Old copy hidden: "' + s.getName() + '" (not deleted).'); }
+  });
 }
 
 /** Runs by itself when someone edits this sheet: the changed details go to the app. */
@@ -175,7 +272,9 @@ function retryQueued_() {
 /* the automatic triggers, reinstalled if one went missing */
 function ensureTriggers_() {
   const have = ScriptApp.getProjectTriggers().map(t => t.getHandlerFunction()), ss = SpreadsheetApp.getActive(), made = [];
-  if (!have.includes('onFormSubmitSync')) { ScriptApp.newTrigger('onFormSubmitSync').forSpreadsheet(ss).onFormSubmit().create(); made.push('form'); }
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'onFormSubmitSync').forEach(t => ScriptApp.deleteTrigger(t));   // the old linked-tab trigger
+  if (!have.includes('onJoinForm')) { ScriptApp.newTrigger('onJoinForm').forForm(FORM_ID).onFormSubmit().create(); made.push('form'); }
+  try { keepFormUnlinked_(); } catch (e) { console.log('Could not check the form link: ' + e); }
   if (!have.includes('onSheetEdit')) { ScriptApp.newTrigger('onSheetEdit').forSpreadsheet(ss).onEdit().create(); made.push('edit'); }
   if (!have.includes('syncWithApp')) { ScriptApp.newTrigger('syncWithApp').timeBased().everyHours(12).create(); made.push('12-hour check'); }
   if (made.length) console.log('Triggers reinstalled: ' + made.join(', '));
@@ -194,19 +293,18 @@ function syncAll() {
 }
 
 /* ---------- helpers ---------- */
-/* The tab the join form writes into. Set the exact name here if the tab is ever renamed. */
-const RESPONSES_TAB = 'Form responses 3';
+/* The one tab with every member. Found by the ID remembered at setup, so renaming or moving it never breaks anything.
+   First time: the tab called "Members", else the old "Form responses 3" (it is renamed to "Members" by setup). */
+const MEMBERS_TAB = 'Members', OLD_MEMBERS_TAB = 'Form responses 3';
 let responsesCache_;
 function responsesSheet_() {
   if (responsesCache_) return responsesCache_;
-  const ss = SpreadsheetApp.getActive(), all = ss.getSheets();
-  const byName = RESPONSES_TAB && ss.getSheetByName(RESPONSES_TAB);
-  /* else: the visible tab linked to the join form (old, hidden response tabs are never used) */
-  const linked = all.filter(s => { try { return !!s.getFormUrl(); } catch (e) { return false; } });
-  const named = all.filter(s => /form responses/i.test(s.getName()));
-  responsesCache_ = byName || linked.find(s => String(s.getFormUrl()).indexOf(FORM_ID) >= 0 && !s.isSheetHidden()) || linked.find(s => !s.isSheetHidden())
-    || named.find(s => !s.isSheetHidden()) || linked[0] || named[0] || all[0];
-  return responsesCache_;
+  const ss = SpreadsheetApp.getActive(), props = PropertiesService.getScriptProperties();
+  const id = Number(props.getProperty('membersTabId') || 0);
+  const s = (id ? ss.getSheets().find(x => x.getSheetId() === id) : null) || ss.getSheetByName(MEMBERS_TAB) || ss.getSheetByName(OLD_MEMBERS_TAB);
+  if (!s) throw new Error('The members tab was not found. Name the tab with all the members "' + MEMBERS_TAB + '" and run setup again.');
+  if (s.getSheetId() !== id) props.setProperty('membersTabId', String(s.getSheetId()));
+  return (responsesCache_ = s);
 }
 /** Run from the editor to see which tab the script works on, and every tab in this spreadsheet. */
 function whichTab() {

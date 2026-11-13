@@ -8,7 +8,7 @@
 - A new Android build is needed only for native changes: icon, the Track background service, notifications, Google sign-in sheet, permissions. Those live in `android-app/`.
 - Any change under `android-app/**` triggers `.github/workflows/android.yml`. Build N gets versionCode 100+N and version 2.0.N. The build makes the RWB-Play-N .aab (Bodhi uploads it to Play Console → Closed testing) and also updates `download/RWB-App.apk`.
 - Backend: Supabase (project region ap-northeast-2, Seoul), free plan. Watch the egress usage.
-- Member sheet: the RWB_Contact Google Sheet, synced every 12 hours by `tools/form-sync.gs` (Apps Script).
+- Member sheet: the RWB_Contact Google Sheet, synced every 12 hours by `tools/form-sync.gs` (Apps Script). Since Nov 2026 the join form is **not linked** to the sheet (every re-link made a new "Form responses N" tab and entries went missing): a trigger on the form (`onJoinForm`) sends each entry to the app and writes it into the one **Members** tab (formerly "Form responses 3"), found by its ID (script property `membersTabId`). `keepFormUnlinked_` (in setup and every check) unlinks the form if someone links it again and hides stray response tabs. `addMissedEntries` picks up entries the tab missed.
 
 ## Where things are
 - `app/index.html`: app shell and the "Nightfall" intro, which plays on every open.
