@@ -1088,7 +1088,9 @@ async function viewHome() {
     const docWarn = docs.map(d => ({ d, st: docStatus(d) })).filter(x => x.st.level === 'bad' || x.st.level === 'warn').sort((a, b) => a.st.days - b.st.days)[0];
     syncKmpl(fuel); whenIdle(() => syncReminders(services, fuel, ride));
     const today = bdays.filter(b => b.day === todayISO());
-    const fresh = listings.filter(l => l.status === 'live').slice(0, 8);
+    /* Fresh on MotoMart: RWB Merch first, then used, then new accessories (each newest first) */
+    const FRESH_ORDER = { merch: 0, used: 1, new: 2 };
+    const fresh = listings.filter(l => l.status === 'live').map((l, i) => [l, i]).sort((a, b) => (FRESH_ORDER[kindOf(a[0])] ?? 3) - (FRESH_ORDER[kindOf(b[0])] ?? 3) || a[1] - b[1]).map(x => x[0]).slice(0, 8);
     firstNotifAsk();
     let pushAsk = false; try { pushAsk = NATIVE ? !localStorage.getItem(FCM_KEY) && !localStorage.getItem('rwb-push-dismissed') : pushSupported() && Notification.permission === 'default' && !localStorage.getItem('rwb-push-dismissed'); } catch { /* ignore */ }
     const names = today.map(b => b.full_name.split(' ')[0]);
