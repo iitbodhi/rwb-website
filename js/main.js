@@ -215,13 +215,13 @@ function renderMarket(rows) {
     rows = rows.filter(r => r.name);
     if (!rows.length) { track.innerHTML = '<p class="muted">New products are on the way. Check back soon.</p>'; return; }
     track.innerHTML = rows.map(r => {
-        const sold = /sold/i.test(r.status || ''), price = r.price === 0 ? 'Free' : typeof r.price === 'number' ? inr(r.price) : rupees(r.price);
+        const sold = /sold/i.test(r.status || ''), price = r.soon ? 'Coming soon' : r.price === 0 ? 'Free' : typeof r.price === 'number' ? inr(r.price) : rupees(r.price);
         const img = r.image ? `<img src="${esc(driveImg(r.image))}" alt="${esc(r.name)}" loading="lazy" referrerpolicy="no-referrer">`
                             : `<img class="ph" src="assets/logo-96.webp" alt="">`;
         return `<article class="prod${sold ? ' sold' : ''}"><div class="prod-img">${img}${r.category ? `<em>${esc(r.category)}</em>` : ''}</div>
             <div class="prod-body"><h3>${esc(r.name)}</h3><p>${esc(r.description || '')}</p>
             ${price ? `<div class="price">${esc(price)}</div>` : ''}
-            <a class="btn ${sold ? 'off' : ''}" href="${CONFIG.INSTAGRAM_DM_URL}" target="_blank" rel="noopener">${sold ? 'Sold out' : 'Get now'}</a></div></article>`;
+            ${r.soon && !sold ? '<span class="btn off soon">Coming Soon</span>' : `<a class="btn ${sold ? 'off' : ''}" href="${CONFIG.INSTAGRAM_DM_URL}" target="_blank" rel="noopener">${sold ? 'Sold out' : 'Get now'}</a>`}</div></article>`;
     }).join('');
 }
 loadMotomart().then(d => d.items.filter(i => i.kind === 'merch'))

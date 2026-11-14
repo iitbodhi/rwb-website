@@ -2167,3 +2167,6 @@ html.lite .skel i,html.lite .gd-skel i{animation:none}
 .gd-cover img,.gd-pic img,.mm-img img,.gd-ath img,.mm-s-img img,.vid-thumb img{opacity:0;transition:opacity .3s ease}
 .gd-cover img.in,.gd-pic img.in,.mm-img img.in,.gd-ath img.in,.mm-s-img img.in,.vid-thumb img.in{opacity:1}
 @media (prefers-reduced-motion:reduce){#nav-bar{display:none}html.nav-wait #app > *{opacity:1}.skel i,.gd-skel i{animation:none}}
+/* RWB Merch "Coming Soon": a teaser, nothing to tap */
+.mm-soon{pointer-events:none;cursor:default;background:repeating-linear-gradient(135deg,#141414 0 14px,#1e1e1e 14px 28px);color:#fff;letter-spacing:.14em;text-transform:uppercase;font-weight:800;box-shadow:none}
+.mm-soon-tag{background:rgba(212,80,26,.92)}

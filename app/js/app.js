@@ -4033,6 +4033,9 @@ const MM_KIND = { used: 'Used', new: 'New', merch: 'RWB Merch' };
 const SOLD_DAYS = 15;
 const mmState = { branch: 'all', cat: 'all', sort: 'price-asc', q: '', mine: false, review: false, swept: false };
 const price = n => Number(n) === 0 ? 'Free' : '₹' + Number(n).toLocaleString('en-IN');
+/* a "Coming soon" merch post has no price yet: it shows "Coming soon" and can't be ordered */
+const soon = l => kindOf(l) === 'merch' && !!l.coming_soon;
+const lprice = l => soon(l) ? 'Coming soon' : price(l.price);
 const photo = (l, i = 0) => l.photos?.[i] ? api.photoUrl(l.photos[i]) : i === 0 && l.image_url ? l.image_url : '';
 const allPhotos = l => l.photos?.length ? l.photos.map(p => api.photoUrl(p)) : l.image_url ? [l.image_url] : [];
 const mine = l => l.user_id === state.myId;
@@ -4076,8 +4079,8 @@ function listingCard(l) {
     const flag = { pending: 'Waiting for approval', rejected: 'Not approved' }[l.status];
     return `<button class="mm-card tap${sold ? ' is-sold' : ''}" data-act="listing" data-id="${l.id}">
         <div class="mm-img"${!img && l.link ? ` data-link="${esc(safeUrl(l.link))}"` : ''}>${img ? `<img src="${esc(img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span class="mm-ph">${catIco(catGroup(l))}</span>
-            <span class="mm-kind k-${k}">${MM_KIND[k]}</span>${flag ? `<span class="mm-flag ${l.status}">${flag}</span>` : ''}${sold ? `<span class="mm-sold">${k === 'used' ? 'Sold' : 'Sold out'}</span>` : ''}</div>
-        <div class="mm-body"><b class="mm-price">${price(l.price)}</b><span class="mm-name">${esc(l.product_name)}</span><span class="mm-sub">${esc(sub)}</span></div></button>`;
+            <span class="mm-kind k-${k}">${MM_KIND[k]}</span>${soon(l) && !sold ? '<span class="mm-sold mm-soon-tag">Coming soon</span>' : ''}${flag ? `<span class="mm-flag ${l.status}">${flag}</span>` : ''}${sold ? `<span class="mm-sold">${k === 'used' ? 'Sold' : 'Sold out'}</span>` : ''}</div>
+        <div class="mm-body"><b class="mm-price">${lprice(l)}</b><span class="mm-name">${esc(l.product_name)}</span><span class="mm-sub">${esc(sub)}</span></div></button>`;
 }
 /* store pictures that weren't saved with the post are looked up from the product link (same free preview service as before) */
 const watchPreviews = root => root.querySelectorAll('.mm-img[data-link]').forEach(b => accObs.observe(b));
@@ -4166,7 +4169,7 @@ function mmSearch(items) {
         if (!q) { list.innerHTML = popular.length ? `<p class="mm-s-h">Popular</p><div class="chips">${popular.map(c => `<button class="chip" data-q="${esc(c)}">${esc(c)}</button>`).join('')}</div>` : ''; return; }
         const hits = mmSort(items.filter(l => searchMatch(q, mmText(l))));
         list.innerHTML = hits.length ? hits.slice(0, 6).map(l => { const img = photo(l); return `<button class="mm-s-row" data-id="${l.id}"><span class="mm-s-img">${img ? `<img src="${esc(img)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : catIco(catGroup(l))}</span>
-                <span class="grow"><b>${markWords(esc(l.product_name), q)}</b><small>${MM_KIND[kindOf(l)]} · ${esc(catGroup(l))}${l.status === 'sold' ? ' · sold' : ''}</small></span><b class="mm-s-price">${price(l.price)}</b></button>`; }).join('')
+                <span class="grow"><b>${markWords(esc(l.product_name), q)}</b><small>${MM_KIND[kindOf(l)]} · ${esc(catGroup(l))}${l.status === 'sold' ? ' · sold' : ''}</small></span><b class="mm-s-price">${lprice(l)}</b></button>`; }).join('')
             + `<button class="mm-s-all" data-all="1">See all ${hits.length} result${hits.length === 1 ? '' : 's'} for “${esc(q)}” ›</button>`
             : `<p class="mm-s-none">Nothing matches “${esc(q)}” yet.</p>`;
     };
@@ -4186,9 +4189,9 @@ const maskName = n => String(n || '').trim().split(/\s+/).filter(Boolean).map(w 
 const maskPhone = p => { const d = String(p || '').replace(/\D/g, '').slice(-10); return d.length === 10 ? `${d.slice(0, 2)}••••••${d.slice(-2)}` : '–'; };
 function sellPostText(l) {
     const url = `https://roninwb.in/app/#motomart/${l.id}`, k = kindOf(l);
-    if (k === 'new') return `🆕 *RWB MOTOMART · New accessory*\n\n${l.product_name}\nCategory: ${catGroup(l)}\nPrice: ${price(l.price)}${l.details ? `\n\n${l.details}` : ''}\n\n👉 See it and open the store page in the RWB App: ${url}`;
-    if (k === 'merch') return `🔥 *RWB MERCH*\n\n${l.product_name}\nPrice: ${price(l.price)}${l.details ? `\n${l.details}` : ''}\n\n👉 Order in the RWB App: ${url}`;
-    return `📌 *RWB MOTOMART · Used*\n\nProduct Name: ${l.product_name}\nSize: ${l.size || '–'}\nCategory: ${l.category}\nAge: ${l.age || '–'}\nCondition: ${l.condition || '–'}\nReason for Selling: ${l.reason || '–'}\nSelling Price: ${price(l.price)}\nSeller: ${maskName(l.seller_name)} · ${maskPhone(l.seller_phone)}${l.details ? `\n\n${l.details}` : ''}\n\n🔒 The seller's contact is in the RWB App only.\n👉 Photos & contact: ${url}`;
+    if (k === 'new') return `🆕 *RWB MOTOMART · New accessory*\n\n${l.product_name}\nCategory: ${catGroup(l)}\nPrice: ${lprice(l)}${l.details ? `\n\n${l.details}` : ''}\n\n👉 See it and open the store page in the RWB App: ${url}`;
+    if (k === 'merch') return `🔥 *RWB MERCH*\n\n${l.product_name}\nPrice: ${lprice(l)}${l.details ? `\n${l.details}` : ''}\n\n👉 Order in the RWB App: ${url}`;
+    return `📌 *RWB MOTOMART · Used*\n\nProduct Name: ${l.product_name}\nSize: ${l.size || '–'}\nCategory: ${l.category}\nAge: ${l.age || '–'}\nCondition: ${l.condition || '–'}\nReason for Selling: ${l.reason || '–'}\nSelling Price: ${lprice(l)}\nSeller: ${maskName(l.seller_name)} · ${maskPhone(l.seller_phone)}${l.details ? `\n\n${l.details}` : ''}\n\n🔒 The seller's contact is in the RWB App only.\n👉 Photos & contact: ${url}`;
 }
 async function shareListing(l) {
     const text = sellPostText(l), pics = allPhotos(l).slice(0, 4);
@@ -4212,14 +4215,14 @@ function listingDetail(l) {
     const own = mine(l), adm = isMod(), judge = isAdmin() || (adm && !own), k = kindOf(l), sold = l.status === 'sold', team = k !== 'used';
     const pics = allPhotos(l);
     const fact = (key, v) => v ? `<dt>${key}</dt><dd>${esc(v)}</dd>` : '';
-    const contact = `Hi ${String(l.seller_name || '').split(' ')[0]}, I saw your ${l.product_name} (${price(l.price)}) on RWB MotoMart. Is it still available?`;
+    const contact = `Hi ${String(l.seller_name || '').split(' ')[0]}, I saw your ${l.product_name} (${lprice(l)}) on RWB MotoMart. Is it still available?`;
     const statusTxt = { live: 'Available', sold: k === 'used' ? 'Sold' : 'Sold out', pending: 'Waiting for approval', rejected: 'Not approved' }[l.status];
     openSheet(l.product_name, `<div class="mm-detail${sold ? ' is-sold' : ''}">
         <div class="mm-gal">${pics.length ? `<div class="gallery">${pics.map((u, i) => `<img src="${esc(u)}" alt="Photo ${i + 1} of ${esc(l.product_name)}" referrerpolicy="no-referrer">`).join('')}</div>`
             : `<div class="mm-gal-ph"${l.link ? ` data-link="${esc(safeUrl(l.link))}"` : ''}><span class="mm-ph">${catIco(catGroup(l))}</span></div>`}
             <span class="mm-kind k-${k}">${MM_KIND[k]}</span>${sold ? `<span class="mm-sold">${statusTxt}</span>` : ''}</div>
         ${pics.length > 1 ? `<p class="small muted" style="text-align:center;margin-top:4px">Swipe for ${pics.length} photos</p>` : ''}
-        <div class="mm-d-head"><b class="mm-price">${price(l.price)}</b><span class="badge ${l.status === 'live' ? 'ok' : sold ? '' : 'orange'}">${statusTxt}</span></div>
+        <div class="mm-d-head"><b class="mm-price">${lprice(l)}</b>${soon(l) && l.status === 'live' ? '' : `<span class="badge ${l.status === 'live' ? 'ok' : sold ? '' : 'orange'}">${statusTxt}</span>`}</div>
         <p class="mm-d-cat">${esc(catGroup(l))}${k === 'new' && l.link ? ` · from <b>${esc(hostOf(l.link))}</b>` : ''}</p>
         ${l.status === 'rejected' && l.reject_reason ? `<p class="warn" style="margin:8px 0">Admin note: ${esc(l.reject_reason)}. Edit the post to send it again.</p>` : ''}
         ${l.status === 'pending' && own && !isAdmin() ? `<p class="warn" style="margin:8px 0">${adm ? 'An admin or another coordinator' : 'An admin or coordinator'} will check and publish your post, usually within 24 hours.</p>` : ''}
@@ -4228,10 +4231,11 @@ function listingDetail(l) {
         ${l.details ? `<p style="margin:10px 0 16px">${linkify(l.details)}</p>` : ''}
         <div class="list">
             ${k === 'new' && l.link && !sold ? `<a class="btn block mm-cta" href="${esc(safeUrl(l.link))}" target="_blank" rel="noopener noreferrer">Check product ↗</a><p class="small muted" style="text-align:center;margin-top:-4px">Sold by ${esc(hostOf(l.link) || 'the store')}, not by RWB. Price and stock can change.</p>` : ''}
-            ${k === 'merch' && !sold ? `<a class="btn block mm-cta" href="${esc(merchHref(l))}" target="_blank" rel="noopener noreferrer"${merchGo(l) === 'group' ? ' data-x="getnow"' : ''}>Get now</a>` : ''}
+            ${k === 'merch' && !sold && soon(l) ? `<span class="btn block mm-soon" role="note">Coming Soon</span>` : ''}
+            ${k === 'merch' && !sold && !soon(l) ? `<a class="btn block mm-cta" href="${esc(merchHref(l))}" target="_blank" rel="noopener noreferrer"${merchGo(l) === 'group' ? ' data-x="getnow"' : ''}>Get now</a>` : ''}
             ${k === 'used' && !own && l.status === 'live' ? `<a class="btn wa block" href="${waTo(l.seller_phone, contact)}" target="_blank" rel="noopener">Message seller on WhatsApp</a>` : ''}
             ${judge && l.status === 'pending' ? `<div class="btns"><button class="btn ghost" data-x="reject">Reject</button><button class="btn" data-x="approve">Approve</button></div>` : ''}
-            ${l.status === 'live' ? '<button class="btn ghost block" data-x="share">Share to WhatsApp</button>' : ''}
+            ${l.status === 'live' && (!soon(l) || adm) ? '<button class="btn ghost block" data-x="share">Share to WhatsApp</button>' : ''}
             ${(own && k === 'used' || adm && k === 'merch') && ['live', 'sold'].includes(l.status) ? `<button class="btn ${l.status === 'live' ? '' : 'ghost'} block" data-x="toggle">${l.status === 'live' ? (team ? 'Mark as sold out' : 'Mark as sold') : (team ? 'Back in stock' : 'Put back on sale')}</button>` : ''}
             ${own && k === 'used' || adm && team ? '<button class="btn ghost block" data-x="edit">Edit</button>' : ''}
             ${!own && k === 'used' && l.status === 'live' ? `<button class="linkish" data-report="listing" data-ref="${l.id}" data-label="${esc(l.product_name + ' · ' + (l.seller_name || ''))}" style="margin:6px auto 0;display:block;color:var(--muted)">🚩 Report this post</button>` : ''}
@@ -4368,8 +4372,9 @@ function teamForm(l = null, kind = 'new') {
         <div class="tf-pv" id="tf-pv" hidden></div>
         <label>Product name<input name="product_name" required maxlength="120" placeholder="e.g. Mototorque crash guard for Ronin" value="${esc(l?.product_name || '')}"></label>
         <div id="tf-cat"></div>
-        <label class="switch tf-free"><span>Free<span class="hint" style="display:block">Given away at no cost. Shown as “Free” instead of a price.</span></span><input type="checkbox" name="free"${l && kindOf(l) === 'merch' && Number(l.price) === 0 ? ' checked' : ''}></label>
-        <label id="tf-price">Price (₹)<input name="price" type="number" required min="0" step="1" inputmode="numeric" value="${esc(l?.price ?? '')}"></label>
+        <label class="switch tf-soon"><span>Coming Soon<span class="hint" style="display:block">Tease it before launch: members see “Coming Soon” and can’t order or contact anyone. No price needed. Turn it off when it’s ready.</span></span><input type="checkbox" name="soon"${l && soon(l) ? ' checked' : ''}></label>
+        <label class="switch tf-free"><span>Free<span class="hint" style="display:block">Given away at no cost. Shown as “Free” instead of a price.</span></span><input type="checkbox" name="free"${l && kindOf(l) === 'merch' && !soon(l) && Number(l.price) === 0 ? ' checked' : ''}></label>
+        <label id="tf-price">Price (₹)<input name="price" type="number" required min="0" step="1" inputmode="numeric" value="${esc(l && soon(l) ? '' : l?.price ?? '')}"></label>
         <label>Description <span class="hint">optional</span><textarea name="details" maxlength="1000" placeholder="Fits Ronin 225? Colour, sizes, offer…">${esc(l?.details || '')}</textarea></label>
         <div class="tf-merch">
             <label class="switch"><span>Direct orders to WhatsApp<span class="hint" style="display:block">“Get now” opens the RWB main group. Off: it opens RWB’s Instagram. A link above always comes first.</span></span><input type="checkbox" name="wa_orders"${l?.wa_orders ? ' checked' : ''}></label></div>
@@ -4397,8 +4402,14 @@ function teamForm(l = null, kind = 'new') {
             if (r.title && !f.product_name.value.trim()) f.product_name.value = r.title.replace(/\s*[|–-]\s*[^|–-]*$/, '').slice(0, 120);
             hint();
         };
-        const freeUI = () => { const fr = k === 'merch' && f.free.checked; body.querySelector('#tf-price').hidden = fr; f.price.required = !fr; };
-        f.free.onchange = freeUI;
+        const freeUI = () => {
+            const m = k === 'merch', sn = m && f.soon.checked, fr = m && !sn && f.free.checked;
+            body.querySelector('.tf-soon').hidden = !m;
+            body.querySelector('.tf-free').hidden = !m || sn;
+            body.querySelector('.tf-merch').hidden = !m || sn;
+            body.querySelector('#tf-price').hidden = sn || fr; f.price.required = !(sn || fr);
+        };
+        f.free.onchange = f.soon.onchange = freeUI;
         const setKind = nk => {
             k = nk;
             body.querySelectorAll('.seg [data-k]').forEach(b => b.setAttribute('aria-selected', b.dataset.k === k));
@@ -4407,8 +4418,7 @@ function teamForm(l = null, kind = 'new') {
                 : `RWB merch. ${when} on the app and roninwb.in, and members get a notification.`;
             body.querySelector('#link-l').innerHTML = k === 'new' ? 'Product link <span class="hint">the store page</span>' : 'Order link <span class="hint">optional · Google Form or any website. “Get now” opens it</span>';
             link.required = k === 'new';
-            body.querySelector('.tf-merch').hidden = k !== 'merch';
-            body.querySelector('.tf-free').hidden = k !== 'merch'; freeUI();
+            freeUI();
             const cur = l?.category || ''; const list = k === 'merch' ? MERCH_CATS : MM_CATS;
             body.querySelector('#tf-cat').innerHTML = catField(list, l ? (k === 'merch' ? cur : (MM_CATS.includes(catGroup(cur)) ? catGroup(cur) : cur)) : '');
             bindCatField(body);
@@ -4425,7 +4435,7 @@ function teamForm(l = null, kind = 'new') {
             if (pvBox.classList.contains('busy')) return toast('One moment, still reading the website…');
             if (needPhoto()) return toast('Add one photo or a screenshot of the product', true);
             const category = catValue(d); if (!category) return toast('Type the new category', true);
-            const rec = { id: l?.id, kind: k, photos: kept.concat(removed), product_name: d.product_name.trim(), category, price: k === 'merch' && f.free.checked ? 0 : Number(d.price),
+            const rec = { id: l?.id, kind: k, photos: kept.concat(removed), product_name: d.product_name.trim(), category, price: k === 'merch' && (f.soon.checked || f.free.checked) ? 0 : Number(d.price), coming_soon: k === 'merch' && f.soon.checked,
                 details: d.details.trim() || null, link: d.link.trim() || null, image_url: image_url || null,
                 seller_name: null, seller_phone: null, wa_orders: k === 'merch' && f.wa_orders.checked,
                 size: null, age: null, condition: null, reason: null };

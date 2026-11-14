@@ -80,7 +80,8 @@ Bottom tabs: Home, Service, Mileage, Track (middle), MotoMart, Warriors, Events.
   approves it (an admin's own post goes live at once), buyers message the seller on WhatsApp; mark it sold and it greys out, then it's deleted after 15 days.
   WhatsApp shares hide the seller's name and number (contact only inside the app). New = new accessories listed by admins
   and coordinators ("+ List accessory"; a coordinator's listing is approved by an admin or another coordinator); "Check product" opens the store page; RWB doesn't sell them. RWB Merch = official
-  RWB jerseys, stickers etc., listed by the team; "Order on WhatsApp". New accessories and merch also show on roninwb.in.
+  RWB jerseys, stickers etc., listed by the team; "Get now" opens the order form or link, the RWB WhatsApp group or
+  RWB's Instagram. Some merch is free. "Coming Soon" merch is a teaser: no price yet and no way to order until it launches. New accessories and merch also show on roninwb.in.
 - Warriors: members and leaderboards. Events: rides, RSVPs and shared expenses.
 - Me: profile, bikes (up to 3), notifications, what other members can see, sign out.
 - Teach Pookie: answer Pookie's questions, earn XP; admins or coordinators check answers before Pookie uses them.
@@ -143,7 +144,7 @@ async function siteRows(): Promise<K[]> {
         for (const i of (d.items || []).slice(0, 150)) {
           const what = i.kind === "merch" ? "RWB merch" : "New accessory in MotoMart (picked by the RWB team)";
           rows.push(prep({ title: `${what}: ${i.name} (${i.category || "-"})`, source: "gear",
-            content: `${what}: ${i.name}, category ${i.category || "-"}, price ₹${i.price}${i.status === "sold" ? " (sold out)" : ""}. In the app: MotoMart → ${i.kind === "merch" ? "RWB Merch" : "New"}${i.link ? ", store link " + i.link : ""}.` }));
+            content: `${what}: ${i.name}, category ${i.category || "-"}, ${i.soon ? "coming soon (not out yet: no price and no orders yet)" : i.price === 0 ? "free (no cost)" : "price ₹" + i.price}${i.status === "sold" ? " (sold out)" : ""}. In the app: MotoMart → ${i.kind === "merch" ? "RWB Merch" : "New"}${i.link ? ", store link " + i.link : ""}.` }));
         }
       }
     } catch (_) { /* Pookie still works without them */ }
@@ -358,7 +359,7 @@ async function pdfText(bytes: Uint8Array): Promise<string> {
   return pages.join("\n\n").replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-const VERSION = "pookie-9";
+const VERSION = "pookie-10";
 const list = (s: unknown, dflt: string) => String(s || dflt).split(",").map((x) => x.trim()).filter(Boolean);
 
 /* ---------------- Request ---------------- */
