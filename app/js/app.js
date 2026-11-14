@@ -4032,7 +4032,7 @@ const MERCH_CATS = ['Clothing', 'Stickers', 'Accessories'];
 const MM_KIND = { used: 'Used', new: 'New', merch: 'RWB Merch' };
 const SOLD_DAYS = 15;
 const mmState = { branch: 'all', cat: 'all', sort: 'price-asc', q: '', mine: false, review: false, swept: false };
-const price = n => '₹' + Number(n).toLocaleString('en-IN');
+const price = n => Number(n) === 0 ? 'Free' : '₹' + Number(n).toLocaleString('en-IN');
 const photo = (l, i = 0) => l.photos?.[i] ? api.photoUrl(l.photos[i]) : i === 0 && l.image_url ? l.image_url : '';
 const allPhotos = l => l.photos?.length ? l.photos.map(p => api.photoUrl(p)) : l.image_url ? [l.image_url] : [];
 const mine = l => l.user_id === state.myId;
@@ -4368,7 +4368,8 @@ function teamForm(l = null, kind = 'new') {
         <div class="tf-pv" id="tf-pv" hidden></div>
         <label>Product name<input name="product_name" required maxlength="120" placeholder="e.g. Mototorque crash guard for Ronin" value="${esc(l?.product_name || '')}"></label>
         <div id="tf-cat"></div>
-        <label>Price (₹)<input name="price" type="number" required min="0" step="1" inputmode="numeric" value="${esc(l?.price ?? '')}"></label>
+        <label class="switch tf-free"><span>Free<span class="hint" style="display:block">Given away at no cost. Shown as “Free” instead of a price.</span></span><input type="checkbox" name="free"${l && kindOf(l) === 'merch' && Number(l.price) === 0 ? ' checked' : ''}></label>
+        <label id="tf-price">Price (₹)<input name="price" type="number" required min="0" step="1" inputmode="numeric" value="${esc(l?.price ?? '')}"></label>
         <label>Description <span class="hint">optional</span><textarea name="details" maxlength="1000" placeholder="Fits Ronin 225? Colour, sizes, offer…">${esc(l?.details || '')}</textarea></label>
         <div class="tf-merch">
             <label class="switch"><span>Direct orders to WhatsApp<span class="hint" style="display:block">“Get now” opens the RWB main group. Off: it opens RWB’s Instagram. A link above always comes first.</span></span><input type="checkbox" name="wa_orders"${l?.wa_orders ? ' checked' : ''}></label></div>
@@ -4396,6 +4397,8 @@ function teamForm(l = null, kind = 'new') {
             if (r.title && !f.product_name.value.trim()) f.product_name.value = r.title.replace(/\s*[|–-]\s*[^|–-]*$/, '').slice(0, 120);
             hint();
         };
+        const freeUI = () => { const fr = k === 'merch' && f.free.checked; body.querySelector('#tf-price').hidden = fr; f.price.required = !fr; };
+        f.free.onchange = freeUI;
         const setKind = nk => {
             k = nk;
             body.querySelectorAll('.seg [data-k]').forEach(b => b.setAttribute('aria-selected', b.dataset.k === k));
@@ -4405,6 +4408,7 @@ function teamForm(l = null, kind = 'new') {
             body.querySelector('#link-l').innerHTML = k === 'new' ? 'Product link <span class="hint">the store page</span>' : 'Order link <span class="hint">optional · Google Form or any website. “Get now” opens it</span>';
             link.required = k === 'new';
             body.querySelector('.tf-merch').hidden = k !== 'merch';
+            body.querySelector('.tf-free').hidden = k !== 'merch'; freeUI();
             const cur = l?.category || ''; const list = k === 'merch' ? MERCH_CATS : MM_CATS;
             body.querySelector('#tf-cat').innerHTML = catField(list, l ? (k === 'merch' ? cur : (MM_CATS.includes(catGroup(cur)) ? catGroup(cur) : cur)) : '');
             bindCatField(body);
@@ -4421,7 +4425,7 @@ function teamForm(l = null, kind = 'new') {
             if (pvBox.classList.contains('busy')) return toast('One moment, still reading the website…');
             if (needPhoto()) return toast('Add one photo or a screenshot of the product', true);
             const category = catValue(d); if (!category) return toast('Type the new category', true);
-            const rec = { id: l?.id, kind: k, photos: kept.concat(removed), product_name: d.product_name.trim(), category, price: Number(d.price),
+            const rec = { id: l?.id, kind: k, photos: kept.concat(removed), product_name: d.product_name.trim(), category, price: k === 'merch' && f.free.checked ? 0 : Number(d.price),
                 details: d.details.trim() || null, link: d.link.trim() || null, image_url: image_url || null,
                 seller_name: null, seller_phone: null, wa_orders: k === 'merch' && f.wa_orders.checked,
                 size: null, age: null, condition: null, reason: null };
