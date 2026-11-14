@@ -1862,17 +1862,18 @@ function docStatus(d) {
 }
 /* =================== Built-in how-to videos (app/videos, also posted as RWB Instagram stories): shown in Guides → App =================== */
 const VIDEOS = [   /* [file, title, what it covers, seconds, who]; who: undefined = members, 'team' = coordinators + admins, 'fam' = RWB FAM */
-    ['home', 'Home & My Ride', 'Your bike, odometer, parts tracker and VRN check', 27],
-    ['track', 'Track & SOS', 'Share your live location on rides, and SOS', 28],
-    ['service', 'Service', 'Log services, bills and reminders', 43],
-    ['mileage', 'Mileage', 'Your real km per litre with Trip A', 44],
-    ['motomart', 'MotoMart', 'Buy and sell used riding gear', 43],
-    ['guides', 'Guides & Pookie', 'Guides, the RWB AI and Teach Pookie', 23],
-    ['events', 'Events', 'Rides, meet-ups and shared costs', 40],
-    ['warriorboards', 'Warriorboards', 'Rankings, members and the RWB team', 27],
-    ['me', 'Me', 'Your profile, theme, notifications and privacy', 31],
-    ['coordinators-and-admins', 'Team tools', 'For coordinators and admins', 33, 'team'],
-    ['fam-app', 'RWB FAM', 'Home, Track, events and settings for family', 23, 'fam']
+    ['home', 'Home & My Ride', 'Update your km, check your parts, VRN check', 37],
+    ['track', 'Track & SOS', 'Share your location on rides, see riders, SOS', 31],
+    ['service', 'Service', 'Add a service and its bill', 37],
+    ['mileage', 'Mileage', 'Your real km per litre with Trip A', 34],
+    ['motomart', 'MotoMart', 'Buy and sell bike gear', 37],
+    ['guides', 'Guides & Pookie', 'Read guides and ask Pookie', 29],
+    ['events', 'Events', 'Join rides and share costs', 32],
+    ['warriorboards', 'Warriorboards', 'Top riders and finding members', 21],
+    ['me', 'Me', 'Your photo, details, theme and privacy', 26],
+    ['calendar', 'Calendar & Papers', 'Reminders, and your licence, RC, PUC and insurance', 36],
+    ['coordinators-and-admins', 'Team tools', 'For coordinators and admins', 36, 'team'],
+    ['fam-app', 'RWB FAM', 'Where is my rider, rides and settings', 27, 'fam']
 ];
 
 /* =================== Calendar: everything with a date in one place ===================

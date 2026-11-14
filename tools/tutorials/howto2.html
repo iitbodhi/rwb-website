@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>RWB how-to</title>
+<style>
+:root{--o:#e8662e;--o2:#d4501a;--muted:#a49d95}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1080px;height:1920px;overflow:hidden;background:#0e0d0c}
+body{font:500 34px/1.3 'Barlow',sans-serif;color:#fff;-webkit-font-smoothing:antialiased}
+#v{position:absolute;inset:0;overflow:hidden;background:radial-gradient(120% 70% at 85% -5%,#3a1d10 0%,rgba(14,13,12,0) 60%),radial-gradient(90% 60% at 0% 105%,#2a160c 0%,rgba(14,13,12,0) 60%),#0e0d0c}
+.topbar{position:absolute;left:56px;right:56px;top:64px;display:flex;align-items:center;gap:22px;z-index:20}
+.topbar img{width:92px;height:92px;border-radius:50%}
+.brand{font:800 42px/1 'Barlow Condensed';letter-spacing:.05em;text-transform:uppercase}
+.brand small{display:block;font:600 27px/1.2 'Barlow';letter-spacing:.02em;text-transform:none;color:var(--muted);margin-top:6px}
+.pill{margin-left:auto;font:700 30px/1 'Barlow';padding:16px 26px;border-radius:99px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16)}
+.prog{position:absolute;left:56px;right:56px;top:184px;height:8px;border-radius:9px;background:rgba(255,255,255,.1);z-index:20;overflow:hidden}
+.prog i{position:absolute;left:0;top:0;bottom:0;background:var(--o);border-radius:9px}
+.scene{position:absolute;inset:0;opacity:0}
+.cap{position:absolute;left:56px;right:56px;top:226px;z-index:10}
+.cap .step{font:800 32px/1 'Barlow';letter-spacing:.14em;color:var(--o);text-transform:uppercase}
+.cap h1{font:800 92px/.95 'Barlow Condensed';text-transform:uppercase;margin-top:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* the zoomed phone screen: a window that follows where the action is */
+.win{position:absolute;left:150px;width:780px;top:400px;height:1090px;border-radius:44px;overflow:hidden;background:#e9e6e1;
+  box-shadow:0 0 0 12px #1c1917,0 0 0 14px rgba(255,255,255,.12),0 50px 120px -30px rgba(0,0,0,.95)}
+.cam{position:absolute;left:0;top:0;width:390px;height:844px;transform-origin:0 0}
+.layer{position:absolute;inset:0}
+.layer img{width:390px;height:844px;display:block}
+.hl{position:absolute;border:3.5px solid var(--o);border-radius:14px;box-shadow:0 0 0 4px rgba(232,102,46,.25),0 0 22px 4px rgba(232,102,46,.55);pointer-events:none;opacity:0;z-index:5}
+.ripple{position:absolute;width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:50%;background:rgba(232,102,46,.45);border:2px solid #fff;opacity:0;z-index:6}
+.finger{position:absolute;font-size:46px;line-height:1;width:46px;margin-left:-19px;margin-top:-3px;opacity:0;z-index:7;filter:drop-shadow(0 6px 10px rgba(0,0,0,.5));transform-origin:30% 0}
+.sub{position:absolute;left:56px;right:56px;top:1530px;min-height:150px;display:grid;place-items:center;text-align:center;padding:22px 34px;border-radius:32px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);font:600 44px/1.25 'Barlow';color:#fff;z-index:30}
+.sub b{color:#ffb38c}
+.cover{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;text-align:center;padding:0 80px 160px}
+.cover .badge{width:300px;height:300px;border-radius:50%;display:grid;place-items:center;font-size:150px;background:radial-gradient(circle at 35% 30%,#f08a52,#c94512);box-shadow:0 0 0 14px rgba(232,102,46,.18),0 40px 90px -20px rgba(232,102,46,.7)}
+.cover .kicker{font:800 36px/1 'Barlow';letter-spacing:.18em;color:var(--o);text-transform:uppercase;margin-top:64px}
+.cover h2{font:800 150px/.9 'Barlow Condensed';text-transform:uppercase;margin-top:18px}
+.cover p{font:500 48px/1.25 'Barlow';color:#d8d2cb;margin-top:26px;max-width:18ch}
+.end h2{font-size:120px}
+</style></head><body>
+<div id="v">
+  <div class="topbar"><img src="" alt=""><div class="brand">RWB App<small>How to</small></div><span class="pill" id="pill"></span></div>
+  <div class="prog"><i id="bar"></i></div>
+  <div id="stage"></div>
+  <div class="sub" id="sub"></div>
+</div>
+<script>/*data*/</script>
+<script>
+const { SHOTS, PLAN, CFG, LOGO } = window;
+const K = 2.0, WH = 1090, WW = 780;          /* zoom of the phone screen, window size */
+document.querySelector('.topbar img').src = LOGO;
+document.getElementById('pill').textContent = CFG.title;
+const stage = document.getElementById('stage');
+const S = PLAN.scenes.map(p => ({ ...p }));
+const steps = S.filter(s => s.kind === 'app').length;
+const clampY = y => Math.max(0, Math.min(844 - WH / K, y));
+S.forEach((s, si) => {
+  if (s.kind === 'card') s.html = `<div class="cover"><div class="badge">${CFG.icon}</div><div class="kicker">RWB App · How to</div><h2>${CFG.title}</h2><p>${CFG.tag}</p></div>`;
+  else if (s.kind === 'end') s.html = `<div class="cover end"><img src="${LOGO}" style="width:260px;height:260px;border-radius:50%;box-shadow:0 30px 80px -10px rgba(232,102,46,.55)"><h2 style="margin-top:48px">Ride <span style="color:var(--o)">safe!</span></h2><p>More how-to videos: tap <b style="color:#fff">?</b> in the app</p></div>`;
+  else {
+    const sc = SHOTS[s.idx], raw = sc.beats.reduce((a, b) => a + b.hold, 0), k = (s.dur - .3) / raw;
+    let t = .15, fy = null;
+    s.beats = sc.beats.map(b => {
+      const o = { ...b, hold: b.hold * k, at: t };
+      o.tapAt = b.tap ? o.at + Math.max(.55, Math.min(1.3, o.hold * .6)) : null;
+      /* where the camera looks: the thing being tapped, else what it looked at before (top of the screen at first) */
+      if (b.focus != null) fy = b.focus; else if (b.box) fy = b.box[1] + b.box[3] / 2; else if (b.tap) fy = b.tap[1]; else if (fy != null && fy > 780) fy = 0;   /* after a tap on the bottom bar: show the new screen from the top */
+      o.camY = clampY((fy ?? 0) - WH / K / 2 + (fy == null ? 0 : 0));
+      t += o.hold; return o;
+    });
+    /* a beat without a target keeps the next target's view if the scene started without one */
+    for (let i = s.beats.length - 2; i >= 0; i--) if (!s.beats[i].box && !s.beats[i].tap && i === 0) s.beats[i].camY = s.beats[i].camY;
+    s.html = `<div class="cap"><div class="step">Step ${s.idx + 1} of ${steps}</div><h1>${sc.cap.title}</h1></div>
+      <div class="win"><div class="cam">${s.beats.map((b, bi) => `<div class="layer" data-b="${bi}"><img src="${b.img}">${b.overlay || ''}</div>`).join('')}
+      <div class="hl"></div><div class="ripple"></div><div class="finger">👆</div></div></div>`;
+  }
+  stage.insertAdjacentHTML('beforeend', `<div class="scene" data-s="${si}">${s.html}</div>`);
+});
+const scenes = [...stage.querySelectorAll('.scene')];
+let acc0 = 0; S.forEach(s => { s.start = acc0; acc0 += s.dur; });
+const TOTAL = acc0; window.TOTAL = TOTAL;
+const ease = x => x < 0 ? 0 : x > 1 ? 1 : x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2, cl = x => Math.max(0, Math.min(1, x));
+const subEl = document.getElementById('sub');
+window.render = t => {
+  let si = 0; while (si < S.length - 1 && t >= S[si].start + S[si].dur) si++;
+  const s = S[si], lt = t - s.start, sc = scenes[si];
+  document.getElementById('bar').style.width = (t / TOTAL * 100).toFixed(2) + '%';
+  scenes.forEach((x, i) => { if (i !== si) x.style.opacity = 0; });
+  const fin = si === 0 ? 1 : cl(lt / .25), fout = si < S.length - 1 ? cl((s.dur - lt) / .2) : 1;
+  sc.style.opacity = Math.min(fin, fout);
+  /* subtitles: the sentence being spoken */
+  let cur = null; s.sents.forEach(x => { if (lt >= x.t - .15) cur = x; });
+  const txt = cur && lt <= cur.t + cur.d + .6 ? cur.text : (cur && s.kind === 'app' ? cur.text : '');
+  if (subEl.dataset.txt !== txt) { subEl.dataset.txt = txt; subEl.innerHTML = txt ? `<span>${txt}</span>` : ''; }
+  subEl.style.opacity = txt ? Math.min(fin, fout) : 0;
+  if (!s.beats) return;
+  let bi = 0; s.beats.forEach((b, i) => { if (lt >= b.at) bi = i; });
+  const b = s.beats[bi], layers = sc.querySelectorAll('.layer'), fade = cl((lt - b.at) / .18);
+  layers.forEach((l, i) => { l.style.opacity = i === bi ? (bi ? fade : 1) : i === bi - 1 ? 1 : 0; l.style.zIndex = i === bi ? 2 : 1; });
+  /* camera: glide from the previous beat's view to this one */
+  const prevY = bi ? s.beats[bi - 1].camY : b.camY, cy = prevY + (b.camY - prevY) * ease((lt - b.at) / .55);
+  const cam = sc.querySelector('.cam'); cam.style.transform = `scale(${K}) translateY(${-cy}px)`;
+  const hl = sc.querySelector('.hl'), f = sc.querySelector('.finger'), r = sc.querySelector('.ripple');
+  if (b.box) {
+    const [x, y, w, h] = b.box, p = 5;
+    hl.style.left = (x - p) + 'px'; hl.style.top = (y - p) + 'px'; hl.style.width = (w + 2 * p) + 'px'; hl.style.height = (h + 2 * p) + 'px';
+    const on = cl((lt - b.at - .25) / .25);
+    hl.style.opacity = on * (b.tapAt && !b.point ? cl((b.tapAt + .45 - lt) / .2) : 1);
+  } else hl.style.opacity = 0;
+  if (b.tap) {
+    const [x, y] = b.tap, ta = b.tapAt, pre = .55, p = ease((lt - (ta - pre)) / pre);
+    f.style.left = (x + (1 - p) * 40) / 1 + 'px'; f.style.top = (y + (1 - p) * 70) + 'px';
+    const vis = lt >= ta - pre && lt <= ta + .45; f.style.opacity = vis ? Math.min(cl((lt - (ta - pre)) / .15), cl((ta + .45 - lt) / .15)) : 0;
+    f.style.transform = `scale(${lt >= ta && lt <= ta + .18 ? .84 : 1})`;
+    const rp = (lt - ta) / .5; r.style.left = x + 'px'; r.style.top = y + 'px'; r.style.opacity = rp >= 0 && rp <= 1 ? 1 - rp : 0; r.style.transform = `scale(${.6 + rp * 1.1})`;
+  } else { f.style.opacity = 0; r.style.opacity = 0; }
+};
+render(0);
+</script></body></html>

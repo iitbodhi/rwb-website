@@ -1,6 +1,6 @@
 import asyncio
 from playwright.async_api import async_playwright
-S='/tmp/claude-0/-home-claude/298ce0ef-b0f8-5ec3-a03d-16ae7e00049c/scratchpad/tut2/assets'
+S='/home/claude/work/tut3/assets'
 def prod(emoji, bg1, bg2, label=''):
     return f"""<body style="margin:0;width:600px;height:600px;display:grid;place-items:center;background:radial-gradient(circle at 50% 40%,{bg1},{bg2});font-family:Barlow">
       <div style="font-size:300px;line-height:1;filter:drop-shadow(0 30px 30px rgba(0,0,0,.35))">{emoji}</div>

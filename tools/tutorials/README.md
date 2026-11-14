@@ -1,13 +1,26 @@
-# RWB App how-to videos
+# RWB App how-to videos (Guides → App)
 
-Tools used to make the 9:16 tutorial videos (1080x1920, 30 fps).
+The 12 built-in how-to videos in `app/videos/` (listed in `VIDEOS` in `app/js/app.js`). Remade in Nov 2026 for the current app,
+in plain words for riders who aren't tech savvy: one action per step, a voice that says what to tap, subtitles,
+the phone screen zoomed in on the part being used, an orange box around the button and a finger that taps it.
 
-* `tutorial.html` + `render_install.py`: the install videos (Android and iPhone), drawn phone screens. `tutorial.html?v=android|ios`.
-* `record.py`: drives the real app in demo mode as a member, screenshots every step and records tap positions (one function per video).
-* `player.html` + `render_screens.py`: turns those screenshots into the animated phone video with captions.
-* `assets.py`: sample pictures used in the videos (bill, helmet, gear, profile photo).
+Each video is 720x1280, under 60 s, about 1 MB (H.264 crf 31, 48 kbps mono audio). Videos stream from the server
+(the service worker never stores them), so they cost the phone no storage.
 
-Pipeline: serve a copy of the site with `SUPABASE_URL` blanked (demo mode) on localhost:8766, run `python3 assets.py`,
-`python3 record.py [names]`, `python3 render_screens.py <name>`, then
-`ffmpeg -framerate 30 -i frames/<name>/%05d.jpg -f lavfi -i anullsrc=r=44100:cl=stereo -shortest -c:v libx264 -crf 20 -pix_fmt yuv420p -c:a aac -movflags +faststart out.mp4`.
-Paths inside the scripts point at the working folder they were made in; change `S` at the top of each script.
+## Files
+* `videos.py`: what each video shows and says (one function per video; `r.scene(title, [sentences])`, then taps).
+  Write "R W B", "S O S", "one one two" in the spoken text: the subtitles show them as RWB, SOS and 112.
+* `rec.py`: drives the real app in demo mode (member "Rohan Das"; admin role for team tools, FAM for the family video),
+  screenshots each step and remembers where the finger taps.
+* `tiles.py`: stand-in street-map tiles for Track (the real map tiles can't be reached from the recording machine).
+* `make.py`: voice (Piper, en-us-ryan-high), timing, frames from `howto2.html`, soft music, MP4 + cover JPG.
+* `probe.py` / `sheet.py`: helpers to look at a screen's buttons and check a recording before rendering.
+* `tutorial.html`, `render_install.py`, `install_*`, `mix_install.py`: the older install videos. `explainer*`: promo explainers.
+
+## Remaking a video
+1. Serve the repo: `python3 -m http.server 8766 --directory <repo>`.
+2. Fonts: Barlow + Barlow Condensed installed locally (`~/.fonts`). Voice: Piper binary and `en-us-ryan-high.onnx`
+   (GitHub releases of rhasspy/piper, tag `v0.0.2` has the voice) in the folder `V` at the top of `make.py`.
+3. Change `S` at the top of `rec.py` / `make.py` to a work folder that has `assets/` (run `assets.py` and `checklist_pdf.py`; add `logo-384.png`: the logo at 384 px).
+4. `python3 videos.py service` then `python3 sheet.py service` (check the steps), then `python3 make.py service`.
+5. Copy `out/service.mp4` and `out/service.jpg` to `app/videos/`, update the seconds in `VIDEOS`, bump `VERSION` in `app/sw.js`.
