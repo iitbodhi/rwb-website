@@ -124,3 +124,11 @@ document.addEventListener("click", function (e) { var a = e.target.closest && e.
    Stops casual saving only: screenshots still work. */
 document.addEventListener('contextmenu', e => { if (e.target.closest?.('img, picture, canvas, video, .g-item, .w-card, .lb, .profile')) e.preventDefault(); });
 document.addEventListener('dragstart', e => { if (e.target.tagName === 'IMG') e.preventDefault(); });
+
+/* Speed: low-power phones get a lighter look (html.lite), and decorations pause while the page scrolls (html.scrolling) */
+(function speed() {
+    const h = document.documentElement;
+    if ((navigator.deviceMemory && navigator.deviceMemory <= 4) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4)) h.classList.add('lite');
+    let t = 0;
+    addEventListener('scroll', () => { if (!t) h.classList.add('scrolling'); clearTimeout(t); t = setTimeout(() => { t = 0; h.classList.remove('scrolling'); }, 200); }, { passive: true });
+})();

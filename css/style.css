@@ -737,3 +737,19 @@ dialog:has(.pdf){max-width:min(900px,96vw);width:100%;height:92vh;max-height:92v
 /* photos can't be long-pressed to save or dragged out (see shared.js) */
 img{-webkit-touch-callout:none;-webkit-user-drag:none;-webkit-user-select:none;user-select:none}
 .g-item,.w-card,.lb,.profile img{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+
+/* ===== Speed (Nov 15 2026): same look, far less work for the phone while scrolling ===== */
+/* the moving glow is made of soft gradients already: no blur filter or blend needed (they made the phone repaint a huge area every frame) */
+.bg i{filter:none;mix-blend-mode:normal}
+/* big full-width areas: see-through colour instead of live blur */
+.alt{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(255,255,255,.4)}
+.dark,.app-x{backdrop-filter:none;-webkit-backdrop-filter:none;background:#100f0e}
+.footer{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(255,255,255,.4)}
+/* the glow holds still while the page scrolls */
+html.scrolling .bg i{animation-play-state:paused}
+/* low-power phones (4 GB / 4 cores or less): glow still, cards without live blur */
+html.lite .bg i{animation:none}
+html.lite .ev,html.lite .prod,html.lite .post,html.lite .acc,html.lite .tile,html.lite .ev-day,html.lite .search,html.lite .chip,html.lite .tabs button,html.lite .btn-ghost,html.lite .social a,html.lite .ax-btn,html.lite .lb-nav{backdrop-filter:none;-webkit-backdrop-filter:none}
+html.lite .ev,html.lite .prod,html.lite .post,html.lite .tile{background:rgba(255,255,255,.86)}
+html.lite .tabs button:not(.active),html.lite .btn-ghost,html.lite .social a{background:rgba(255,255,255,.7)}
+html.lite .dark .tabs button:not(.active){background:rgba(255,255,255,.06)}

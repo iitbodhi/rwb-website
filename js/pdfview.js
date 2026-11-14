@@ -6,6 +6,8 @@
     const base = (document.currentScript?.src || location.href).replace(/[^/]*$/, '') + 'pdfjs/';
     let lib = null, open = 0;
     const load = () => lib ||= import(base + 'pdf.mjs').then(m => { m.GlobalWorkerOptions.workerSrc = base + 'pdf.worker.mjs'; return m; });
+    let warm = false;   /* fetch the reader's two files ahead of time (cached by the browser), so the first guide opens fast */
+    const preload = () => { if (!warm) { warm = true; fetch(base + 'pdf.worker.mjs', { priority: 'low' }).catch(() => {}); } return load(); };
     const css = document.createElement('style');
     css.textContent = `.pdfv{position:relative;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;background:#e9e6e0;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .pdfv-pages{display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px}
@@ -13,6 +15,9 @@
 .pdfv-page canvas{display:block;width:100%;height:100%;pointer-events:none}
 .pdfv-page::after{content:"";position:absolute;inset:0}
 .pdfv-msg{padding:2.5rem 1.2rem;text-align:center;color:#6b665f;font-size:.95rem}
+.pdfv-poster{position:relative;margin:10px auto;width:calc(100% - 20px);max-width:900px;background:#fff;border-radius:4px;overflow:hidden;box-shadow:0 2px 10px -4px rgba(0,0,0,.35)}
+.pdfv-poster img{display:block;width:100%;filter:blur(.6px)}
+.pdfv-poster .pdfv-spin{position:absolute;left:50%;top:40%;margin:-14px 0 0 -14px}
 .pdfv-spin{width:28px;height:28px;margin:0 auto .8rem;border-radius:50%;border:3px solid rgba(0,0,0,.12);border-top-color:#d4501a;animation:pdfv-r .8s linear infinite}
 @keyframes pdfv-r{to{transform:rotate(1turn)}}
 @media print{html.pdfv-on body{display:none!important}}`;
@@ -22,10 +27,11 @@
     addEventListener('beforeprint', () => { if (open) document.documentElement.classList.add('pdfv-on'); });
 
     /* host: an empty element (give it a height). Returns { close } */
-    function show(host, url) {
+    function show(host, url, opt = {}) {
         let alive = true, doc = null, io = null, ro = null, lastW = 0;
         open++; document.documentElement.classList.add('pdfv-on');
-        host.classList.add('pdfv'); host.innerHTML = '<div class="pdfv-msg"><div class="pdfv-spin"></div>Opening the guide…</div>';
+        host.classList.add('pdfv'); /* the preview picture (first page) shows at once; the sharp pages replace it when ready */
+        host.innerHTML = opt.poster ? `<div class="pdfv-poster"><img src="${String(opt.poster).replace(/"/g, '&quot;')}" alt="" draggable="false"><div class="pdfv-spin"></div></div>` : '<div class="pdfv-msg"><div class="pdfv-spin"></div>Opening the guide…</div>';
         const stop = e => e.preventDefault();
         host.addEventListener('contextmenu', stop); host.addEventListener('dragstart', stop);
         const drawPage = async (box, force) => {
@@ -41,7 +47,7 @@
         };
         (async () => {
             try {
-                const pdfjs = await load();
+                const pdfjs = await preload();
                 doc = await pdfjs.getDocument({ url, disableAutoFetch: true, isEvalSupported: false }).promise;
                 if (!alive) return doc.destroy();
                 host.innerHTML = '<div class="pdfv-pages"></div>';
@@ -64,5 +70,5 @@
         return { close() { if (!alive) return; alive = false; io?.disconnect(); ro?.disconnect(); doc?.destroy(); host.innerHTML = '';
             if (--open <= 0) { open = 0; document.documentElement.classList.remove('pdfv-on'); } } };
     }
-    window.RWBPdf = { show, preload: load };
+    window.RWBPdf = { show, preload };
 })();

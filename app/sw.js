@@ -1,6 +1,6 @@
 /* RWB App service worker: keeps the app shell available offline and loads it fast.
    Bump VERSION whenever app files change so phones pick up the new version. */
-const VERSION = 'rwb-app-v183';
+const VERSION = 'rwb-app-v184';
 const SHELL = ['./', 'index.html', 'config.js', 'css/app.css', 'js/app.js', 'js/api.js', '../js/data.js', '../js/terms.js', '../js/pdfview.js',
     'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 

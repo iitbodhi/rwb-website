@@ -2481,6 +2481,7 @@ async function viewGuides() {
         gadd: () => gdForm({ cat: gState.cat, kind: gState.type !== 'all' ? gState.type : null }, () => { if (location.hash.startsWith('#guides')) viewGuides(); })
     };
     gdPill(); requestAnimationFrame(() => app.querySelector('.gd-cats')?.classList.add('ready'));
+    if (typeof RWBPdf !== 'undefined') setTimeout(() => RWBPdf.preload().catch(() => {}), 1200);   /* PDFs open fast */
     const n = navN;
     if (state.gd) { drawGuides(); loadGuides(true).then(() => stillHere(n) && drawGuides()).catch(() => {}); return; }   /* cache first, fresh copy in the background */
     try { await loadGuides(); } catch (e) { if (stillHere(n)) $('#gd-body').innerHTML = `<div class="card empty"><b>Could not load Guides</b>${esc(e.message)}<p style="margin-top:12px"><button class="btn sm" onclick="location.reload()">Try again</button></p></div>`; return; }
@@ -2589,7 +2590,7 @@ function gdPdf(it) {
         ${ok ? '<div class="gd-pdfhost"></div>' : `<div class="card empty gd-empty"><span class="gd-empty-ico">${GD_ICO.pdf}</span><b>PDF preview</b>${demo ? 'In the real app the PDF opens here.' : 'Please update the app and try again.'}</div>`}
         <p class="gd-meta" style="margin:10px 2px">${esc([it.pages ? it.pages + ' pages' : '', it.bytes ? mb(it.bytes) : '', it.uploader, gdDay(it)].filter(Boolean).join(' · '))}</p>
         <div class="gd-sheet-acts">${ok ? '<button class="btn ghost" data-x="full">Full screen</button>' : ''}${gdCanManage(it) ? `<button class="btn ghost" data-x="manage">${GD_ICO.more} Manage</button>` : ''}</div>`, body => {
-        if (ok) { v = RWBPdf.show(body.querySelector('.gd-pdfhost'), it.url); sheet.addEventListener('close', () => v?.close(), { once: true }); }
+        if (ok) { v = RWBPdf.show(body.querySelector('.gd-pdfhost'), it.url, { poster: it.thumb_url }); sheet.addEventListener('close', () => v?.close(), { once: true }); }
         body.querySelector('[data-x=full]')?.addEventListener('click', () => { v?.close(); v = null; closeSheet(); gdPdfFull(it); });
         body.querySelector('[data-x=manage]')?.addEventListener('click', () => gdManage(it));
     });
@@ -2597,7 +2598,7 @@ function gdPdf(it) {
 function gdPdfFull(it) {
     const L = gdOverlay('gd-player gd-pdfx', it.title);
     L.el.innerHTML = `<div class="gd-pdfx-host"></div><div class="gd-ptop"><button class="gd-glass" data-x="close" aria-label="Close">${GD_ICO.close}</button><span class="gd-count gd-pdfx-t">${esc(it.title)}</span><span></span></div>`;
-    const v = RWBPdf.show(L.el.querySelector('.gd-pdfx-host'), it.url); L.cleanup.push(() => v.close());
+    const v = RWBPdf.show(L.el.querySelector('.gd-pdfx-host'), it.url, { poster: it.thumb_url }); L.cleanup.push(() => v.close());
     L.el.querySelector('[data-x=close]').addEventListener('click', () => gdClose());
 }
 
@@ -2651,7 +2652,7 @@ function gdPlayer(list, start = 0) {
     const activate = i => {
         if (i === cur) return; cur = i;
         slides.forEach((s, k) => { const v = vid(k); if (k !== i && v) { v.pause(); s.classList.remove('paused'); } });
-        load(i, 'auto'); load(i + 1, 'metadata');
+        load(i, 'auto'); load(i + 1, 'auto'); load(i + 2, 'metadata');
         const c = L.el.querySelector('.gd-count b'); if (c) c.textContent = i + 1;
         const pr = L.el.querySelector('.gd-pr'), canM = gdCanManage(list[i]), mbtn = pr.querySelector('[data-x=manage]');
         if (canM && !mbtn) pr.insertAdjacentHTML('afterbegin', `<button class="gd-glass" data-x="manage" aria-label="Manage">${GD_ICO.more}</button>`); else if (!canM && mbtn) mbtn.remove();

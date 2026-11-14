@@ -48,7 +48,7 @@ grid.addEventListener('click', e => {
     const id = e.target.closest('[data-id]')?.dataset.id; if (!id) return;
     const p = posts.find(x => String(x.id) === id); if (!p || !safe(p.url)) return;
     openDialog(`<div class="pdf-bar"><b>${esc(title(p.title))}</b>${p.pages ? `<span>${p.pages} page${p.pages === 1 ? '' : 's'}</span>` : ''}</div><div class="pdf-host"></div>`, 'pdf');
-    viewer = RWBPdf.show($('#dialog-body .pdf-host'), p.url);
+    viewer = RWBPdf.show($('#dialog-body .pdf-host'), p.url, { poster: safe(p.thumb) });
 });
 dialog.addEventListener('close', () => { viewer?.close(); viewer = null; });
 search.addEventListener('input', draw);

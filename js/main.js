@@ -131,33 +131,49 @@ renderWarriors();
 /* Gallery: two strips drifting in opposite directions. Tap a photo to open it; arrows/swipe inside the viewer. */
 const galA = marquee($('#gallery-a'), { speed: 22, dir: -1 }), galB = marquee($('#gallery-b'), { speed: 22, dir: 1 });
 dialog.addEventListener('close', () => { galA.pause(false); galB.pause(false); warMq.pause(false); });
+/* Google Photos/Drive links (lh3.googleusercontent.com/d/ID) can be asked for a smaller WebP copy: about 5x lighter */
+const gSized = (u, spec) => /^https:\/\/lh3\.googleusercontent\.com\/d\/[\w-]+$/.test(u) ? `${u}=${spec}` : u;
+const GAL_KEY = 'rwb-gal-v1', GAL_ROW = 22;   /* photos per moving row (a fresh random pick on every visit) */
+const shuffle = a => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
+function showGallery(imgs) {
+    const tile = (im, i, k) => `<button class="g-item" data-i="${i}" aria-label="Open photo ${i + 1}"><img src="${esc(gSized(im.url, 'h560-rw'))}" alt="${esc(im.label || 'RWB ride photo')}" ${k < 5 ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async" draggable="false"></button>`;
+    const pick = shuffle(imgs.map((_, i) => i)), few = imgs.length < 2 * GAL_ROW;
+    const rowA = few ? pick.slice(0, GAL_ROW) : pick.slice(0, GAL_ROW), rowB = few ? [...pick].reverse().slice(0, GAL_ROW) : pick.slice(GAL_ROW, 2 * GAL_ROW);
+    galA.set(rowA.map((i, k) => tile(imgs[i], i, k)).join(''));
+    galB.set(rowB.map((i, k) => tile(imgs[i], i, k)).join(''));
+    $('#gallery-b').hidden = false;
+    $$('.mq-gal').forEach(markLoaded);
+    gal.list = imgs;
+}
+const gal = { list: [] };
+const galBig = i => gSized(gal.list[i].url, 'w1920-rw');
+function galShow(i) {
+    const imgs = gal.list; i = (i + imgs.length) % imgs.length;
+    const body = $('#dialog-body');
+    if (body.classList.contains('lb') && dialog.open) { const img = body.querySelector('img'); const u = galBig(i); if (img.getAttribute('src') !== u) { img.classList.remove('ok'); img.src = u; } body.dataset.i = i; body.querySelector('.lb-n').textContent = `${i + 1} / ${imgs.length}`; }
+    else { openDialog(`<img src="${esc(galBig(i))}" alt="${esc(imgs[i].label || 'RWB ride photo')}" draggable="false">
+        <button class="lb-nav prev" aria-label="Previous photo">‹</button><button class="lb-nav next" aria-label="Next photo">›</button><span class="lb-n">${i + 1} / ${imgs.length}</span>`, 'lb');
+        $('#dialog-body').dataset.i = i; }
+    [i + 1, i - 1].forEach(k => { const n = new Image(); n.decoding = 'async'; n.src = galBig((k + imgs.length) % imgs.length); });   /* the next and previous photos are ready before the swipe */
+}
+$('.mq-stack').addEventListener('click', e => {
+    const b = e.target.closest('.g-item'); if (!b || !gal.list.length) return;
+    galA.pause(true); galB.pause(true); galShow(+b.dataset.i);
+});
+dialog.addEventListener('click', e => { const n = e.target.closest('.lb-nav'); if (n) { e.stopPropagation(); galShow(+$('#dialog-body').dataset.i + (n.classList.contains('next') ? 1 : -1)); } });
+dialog.addEventListener('keydown', e => { if (!$('#dialog-body').classList.contains('lb')) return; if (e.key === 'ArrowRight') galShow(+$('#dialog-body').dataset.i + 1); if (e.key === 'ArrowLeft') galShow(+$('#dialog-body').dataset.i - 1); });
+let galTx = null; dialog.addEventListener('touchstart', e => { galTx = e.touches[0].clientX; }, { passive: true });
+dialog.addEventListener('touchend', e => { if (galTx === null || !$('#dialog-body').classList.contains('lb')) return; const dx = e.changedTouches[0].clientX - galTx; galTx = null; if (Math.abs(dx) > 50) galShow(+$('#dialog-body').dataset.i + (dx < 0 ? 1 : -1)); }, { passive: true });
+/* the photo list is kept on the phone, so the gallery shows at once on the next visit; a fresh list is fetched in the background */
 async function loadGallery() {
+    let saved = null; try { saved = JSON.parse(localStorage.getItem(GAL_KEY)); } catch { /* ignore */ }
+    if (saved?.length) showGallery(saved);
     try {
-        const imgs = await (await fetch(CONFIG.GALLERY_SCRIPT_URL)).json();
+        const imgs = (await (await fetch(CONFIG.GALLERY_SCRIPT_URL)).json()).filter(im => im?.url);
         if (!imgs.length) throw 0;
-        const tile = (im, i) => `<button class="g-item" data-i="${i}" aria-label="Open photo ${i + 1}"><img src="${esc(im.url)}" alt="${esc(im.label || 'RWB ride photo')}" loading="lazy" decoding="async" draggable="false"></button>`;
-        const idx = imgs.map((_, i) => i);
-        const rowA = imgs.length < 8 ? idx : idx.filter(i => i % 2 === 0), rowB = imgs.length < 8 ? [...idx].reverse() : idx.filter(i => i % 2);
-        galA.set(rowA.map(i => tile(imgs[i], i)).join(''));
-        galB.set(rowB.map(i => tile(imgs[i], i)).join(''));
-        $$('.mq-gal').forEach(markLoaded);
-        const show = i => {
-            i = (i + imgs.length) % imgs.length;
-            const body = $('#dialog-body');
-            if (body.classList.contains('lb') && dialog.open) { const img = body.querySelector('img'); if (img.getAttribute('src') !== imgs[i].url) { img.classList.remove('ok'); img.src = imgs[i].url; } body.dataset.i = i; body.querySelector('.lb-n').textContent = `${i + 1} / ${imgs.length}`; return; }
-            openDialog(`<img src="${esc(imgs[i].url)}" alt="${esc(imgs[i].label || 'RWB ride photo')}">
-                <button class="lb-nav prev" aria-label="Previous photo">‹</button><button class="lb-nav next" aria-label="Next photo">›</button><span class="lb-n">${i + 1} / ${imgs.length}</span>`, 'lb');
-            $('#dialog-body').dataset.i = i;
-        };
-        $('.mq-stack').addEventListener('click', e => {
-            const b = e.target.closest('.g-item'); if (!b) return;
-            galA.pause(true); galB.pause(true); show(+b.dataset.i);
-        });
-        dialog.addEventListener('click', e => { const n = e.target.closest('.lb-nav'); if (n) { e.stopPropagation(); show(+$('#dialog-body').dataset.i + (n.classList.contains('next') ? 1 : -1)); } });
-        dialog.addEventListener('keydown', e => { if (!$('#dialog-body').classList.contains('lb')) return; if (e.key === 'ArrowRight') show(+$('#dialog-body').dataset.i + 1); if (e.key === 'ArrowLeft') show(+$('#dialog-body').dataset.i - 1); });
-        let tx = null; dialog.addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
-        dialog.addEventListener('touchend', e => { if (tx === null || !$('#dialog-body').classList.contains('lb')) return; const dx = e.changedTouches[0].clientX - tx; tx = null; if (Math.abs(dx) > 50) show(+$('#dialog-body').dataset.i + (dx < 0 ? 1 : -1)); }, { passive: true });
-    } catch { $('#gallery-a .mq-strip').innerHTML = '<p class="muted mq-wait">Photos will be here soon.</p>'; $('#gallery-b').hidden = true; }
+        try { localStorage.setItem(GAL_KEY, JSON.stringify(imgs.map(({ url, label }) => ({ url, label })))); } catch { /* full */ }
+        if (!saved?.length) showGallery(imgs);   /* already showing the saved list: the new one is used from the next visit */
+    } catch { if (!saved?.length) { $('#gallery-a .mq-strip').innerHTML = '<p class="muted mq-wait">Photos will be here soon.</p>'; $('#gallery-b').hidden = true; } }
 }
 loadGallery();
 
