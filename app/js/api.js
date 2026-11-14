@@ -519,7 +519,7 @@ function demoApi() {
             ...[['Mototorque crash guard for Ronin', 'Protection', 4700, '#1d3557', 'GUARD'], ['Bobo phone mount with charger', 'Navigation', 2199, '#2a9d8f', 'MOUNT'], ['Mototorque bash plate', 'Protection', 1300, '#264653', 'BASH'],
                 ['Mototorque rear rack', 'Luggage Option', 4900, '#6c584c', 'RACK'], ['Mototorque saddle stays', 'Luggage Option', 4000, '#7f5539', 'STAYS'], ['Mototorque side stand extender', 'Protection', 450, '#3a5a40', 'STAND']]
                 .map(([n, c, p, bg, t], i) => L(10 + i, { kind: 'new', product_name: n, category: c, price: p, link: 'https://mototorque.in/', photos: [pic(bg, t)], user_id: 'me', seller_name: null, seller_phone: null, condition: null })),
-            L(20, { kind: 'merch', product_name: 'RWB Jersey (Wanderer)', category: 'Clothing', price: 999, details: 'Essence of Light tone with silhouette adventure print.', photos: [pic('#d4501a', 'JERSEY')], user_id: 'me', seller_name: 'Demo Rider', seller_phone: '9000000001', condition: null }),
+            L(20, { kind: 'merch', product_name: 'RWB Jersey (Wanderer)', category: 'Clothing', price: 999, details: 'Essence of Light tone with silhouette adventure print.', photos: [pic('#d4501a', 'JERSEY')], user_id: 'me', seller_name: null, seller_phone: null, wa_orders: true, condition: null }),
             L(21, { kind: 'merch', product_name: 'RWB Sticker (Special Edition)', category: 'Stickers', price: 50, details: '3D embossed matte & glossy waterproof.', photos: [pic('#111111', 'STICKER')], user_id: 'me', seller_name: null, seller_phone: null, condition: null, status: 'sold', sold_at: daysAgo(30) })
         ];
         const news = [

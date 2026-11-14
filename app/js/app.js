@@ -4199,13 +4199,18 @@ async function shareListing(l) {
     openWA(waShare(text));
 }
 
+/* RWB Merch "Get now": the post's own link (Google Form, store…) first, then the RWB main WhatsApp group
+   if the poster turned on "Direct orders to WhatsApp", otherwise RWB's Instagram. */
+const IG_DM = () => SITE.INSTAGRAM_DM_URL || 'https://ig.me/m/ronin_warriors_bengal';
+const merchGo = l => l.link && safeUrl(l.link) !== '#' ? 'link' : l.wa_orders && state.settings?.wa_group_link ? 'group' : 'ig';
+const merchHref = l => ({ link: () => safeUrl(l.link), group: () => state.settings.wa_group_link, ig: IG_DM })[merchGo(l)]();
+
 function listingDetail(l) {
     if (!l) return toast('That post is no longer available', true);
     const own = mine(l), adm = isMod(), judge = isAdmin() || (adm && !own), k = kindOf(l), sold = l.status === 'sold', team = k !== 'used';
     const pics = allPhotos(l);
     const fact = (key, v) => v ? `<dt>${key}</dt><dd>${esc(v)}</dd>` : '';
     const contact = `Hi ${String(l.seller_name || '').split(' ')[0]}, I saw your ${l.product_name} (${price(l.price)}) on RWB MotoMart. Is it still available?`;
-    const merchMsg = `Hi, I'd like to order the ${l.product_name} (${price(l.price)}) from RWB Merch.`;
     const statusTxt = { live: 'Available', sold: k === 'used' ? 'Sold' : 'Sold out', pending: 'Waiting for approval', rejected: 'Not approved' }[l.status];
     openSheet(l.product_name, `<div class="mm-detail${sold ? ' is-sold' : ''}">
         <div class="mm-gal">${pics.length ? `<div class="gallery">${pics.map((u, i) => `<img src="${esc(u)}" alt="Photo ${i + 1} of ${esc(l.product_name)}" referrerpolicy="no-referrer">`).join('')}</div>`
@@ -4221,7 +4226,7 @@ function listingDetail(l) {
         ${l.details ? `<p style="margin:10px 0 16px">${linkify(l.details)}</p>` : ''}
         <div class="list">
             ${k === 'new' && l.link && !sold ? `<a class="btn block mm-cta" href="${esc(safeUrl(l.link))}" target="_blank" rel="noopener noreferrer">Check product ↗</a><p class="small muted" style="text-align:center;margin-top:-4px">Sold by ${esc(hostOf(l.link) || 'the store')}, not by RWB. Price and stock can change.</p>` : ''}
-            ${k === 'merch' && !sold ? (l.seller_phone ? `<a class="btn wa block" href="${waTo(l.seller_phone, merchMsg)}" target="_blank" rel="noopener">Order on WhatsApp</a>` : l.link ? `<a class="btn block mm-cta" href="${esc(safeUrl(l.link))}" target="_blank" rel="noopener noreferrer">Order now ↗</a>` : `<a class="btn block mm-cta" href="${esc(SITE.INSTAGRAM_DM_URL || 'https://ig.me/m/ronin_warriors_bengal')}" target="_blank" rel="noopener">Order on Instagram</a>`) : ''}
+            ${k === 'merch' && !sold ? `<a class="btn block mm-cta" href="${esc(merchHref(l))}" target="_blank" rel="noopener noreferrer"${merchGo(l) === 'group' ? ' data-x="getnow"' : ''}>Get now</a>` : ''}
             ${k === 'used' && !own && l.status === 'live' ? `<a class="btn wa block" href="${waTo(l.seller_phone, contact)}" target="_blank" rel="noopener">Message seller on WhatsApp</a>` : ''}
             ${judge && l.status === 'pending' ? `<div class="btns"><button class="btn ghost" data-x="reject">Reject</button><button class="btn" data-x="approve">Approve</button></div>` : ''}
             ${l.status === 'live' ? '<button class="btn ghost block" data-x="share">Share to WhatsApp</button>' : ''}
@@ -4237,6 +4242,7 @@ function listingDetail(l) {
         on('reject', b => { const r = window.prompt('Reason (the seller will see this):', 'Please add clearer photos'); if (r === null) return; busy(b, async () => { await api.setListingStatus(l.id, 'rejected', r.trim() || null); await after('Rejected'); }); });
         on('toggle', b => busy(b, async () => { await api.setListingStatus(l.id, l.status === 'live' ? 'sold' : 'live'); await after(l.status === 'live' ? (team ? 'Marked as sold out' : `Marked as sold 🎉 It’s removed after ${SOLD_DAYS} days.`) : 'Back on sale'); }));
         on('share', b => busy(b, () => shareListing(l)));
+        const gn = body.querySelector('[data-x=getnow]'); if (gn) gn.onclick = e => { e.preventDefault(); openWA(gn.href); };
         on('edit', () => team ? teamForm(l, k) : listingForm(l));
         on('del', b => { if (confirmBox('Delete this post and its photos?')) busy(b, async () => { await api.deleteListing(l); await after('Deleted'); }); });
     });
@@ -4363,9 +4369,7 @@ function teamForm(l = null, kind = 'new') {
         <label>Price (₹)<input name="price" type="number" required min="0" step="1" inputmode="numeric" value="${esc(l?.price ?? '')}"></label>
         <label>Description <span class="hint">optional</span><textarea name="details" maxlength="1000" placeholder="Fits Ronin 225? Colour, sizes, offer…">${esc(l?.details || '')}</textarea></label>
         <div class="tf-merch">
-            <p class="small muted" style="margin:4px 0 6px">Who takes orders? Members tap “Order on WhatsApp” to message this person. Leave the number blank to send them to RWB’s Instagram instead.</p>
-            <div class="grid2"><label>Order contact name<input name="seller_name" maxlength="80" value="${esc(l ? l.seller_name || '' : state.me.full_name || '')}"></label>
-            <label>Their WhatsApp<input name="seller_phone" inputmode="tel" value="${esc(l ? l.seller_phone || '' : state.me.phone || '')}"></label></div></div>
+            <label class="switch"><span>Direct orders to WhatsApp<span class="hint" style="display:block">“Get now” opens the RWB main group. Off: it opens RWB’s Instagram. A link above always comes first.</span></span><input type="checkbox" name="wa_orders"${l?.wa_orders ? ' checked' : ''}></label></div>
         <fieldset><legend>Photo <span class="hint muted small" id="ph-hint"></span></legend>
             <div class="thumbs" id="thumbs"></div>
             <label class="file-pick"><input type="file" accept="${MM_ACCEPT}" multiple id="pics"><span>📷 Add photo or screenshot</span></label></fieldset>
@@ -4396,7 +4400,7 @@ function teamForm(l = null, kind = 'new') {
             const when = isAdmin() ? 'It goes live at once' : 'An admin or another coordinator approves it, then it goes live';
             body.querySelector('#tf-help').textContent = k === 'new' ? `A new accessory from a store. ${when} on the app and roninwb.in. Members tap “Check product” to open the store page.`
                 : `RWB merch. ${when} on the app and roninwb.in, and members get a notification.`;
-            body.querySelector('#link-l').innerHTML = k === 'new' ? 'Product link <span class="hint">the store page</span>' : 'Order or website link <span class="hint">optional</span>';
+            body.querySelector('#link-l').innerHTML = k === 'new' ? 'Product link <span class="hint">the store page</span>' : 'Order link <span class="hint">optional · Google Form or any website. “Get now” opens it</span>';
             link.required = k === 'new';
             body.querySelector('.tf-merch').hidden = k !== 'merch';
             const cur = l?.category || ''; const list = k === 'merch' ? MERCH_CATS : MM_CATS;
@@ -4415,11 +4419,9 @@ function teamForm(l = null, kind = 'new') {
             if (pvBox.classList.contains('busy')) return toast('One moment, still reading the website…');
             if (needPhoto()) return toast('Add one photo or a screenshot of the product', true);
             const category = catValue(d); if (!category) return toast('Type the new category', true);
-            let phone = String(d.seller_phone || '').replace(/\D/g, '').slice(-10);
-            if (k === 'merch' && phone && phone.length !== 10) return toast('WhatsApp number needs 10 digits', true);
             const rec = { id: l?.id, kind: k, photos: kept.concat(removed), product_name: d.product_name.trim(), category, price: Number(d.price),
                 details: d.details.trim() || null, link: d.link.trim() || null, image_url: image_url || null,
-                seller_name: k === 'merch' && phone ? (d.seller_name || '').trim() || null : null, seller_phone: k === 'merch' && phone ? phone : null,
+                seller_name: null, seller_phone: null, wa_orders: k === 'merch' && f.wa_orders.checked,
                 size: null, age: null, condition: null, reason: null };
             busy(e.submitter, async () => {
                 await api.saveListing(rec, added.map(a => a.file), removed);
