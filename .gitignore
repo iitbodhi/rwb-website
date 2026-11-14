@@ -7,3 +7,4 @@ RWB_Contact*.csv
 *.keystore
 *.aab
 signing-key-info.txt
+__pycache__/
