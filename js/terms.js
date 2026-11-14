@@ -1,6 +1,6 @@
 /* RWB Terms & Conditions: one source for roninwb.in/terms.html and the RWB App */
 window.RWB_TNC = {
-    updated: '12 November 2026',
+    updated: '15 November 2026',
     version: '2.0',
     sections: [
 
@@ -58,6 +58,7 @@ window.RWB_TNC = {
         'The RWB App and website are provided free, “as is” and “as available”, by volunteers. We do our best to keep them accurate and running, but we cannot promise they will always be available, error-free or secure.',
         'Mileage, service reminders, calendar reminders and dates (renewals, service and parts due), maintenance guides, accessory picks and answers from Pookie (the AI assistant) are for general guidance only. Always follow your bike\'s owner manual and a qualified mechanic, and check important information yourself. Reminders can arrive late or not at all (for example with notifications turned off or no internet), so you remain responsible for renewing your documents and servicing your bike on time.',
         'MotoMart is a notice board for members. New accessories listed by the RWB team are suggestions with links to outside stores: RWB does not sell them, and you buy them from the store on its own terms, price and warranty. For used gear, every sale is directly between the buyer and the seller: RWB does not handle money, check items or guarantee any transaction. Inspect items yourself, never pay in advance to people you don\'t know, and report suspicious posts to an admin.',
+        'RWB Merch is sold or given out by the RWB team. Members order through the RWB team only: the order form or link on the post, the RWB WhatsApp group, or RWB\'s Instagram. Prices, sizes and stock are shown on each post and can change; free items are free for every member. Items marked “Coming Soon” are previews only: they can\'t be ordered or reserved, and their design, price and release date may change.',
         'Sellers must own what they sell, describe it honestly, and must not list stolen, counterfeit, illegal or unsafe items. RWB coordinators may approve, edit or remove posts.',
         'Shared expense records in Events are a convenience only. Settling payments is between the members involved.',
         'Documents you save in the app (such as your licence or RC) are visible only to you. You are responsible for keeping copies of anything important.',
