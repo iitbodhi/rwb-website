@@ -70,5 +70,18 @@
         return { close() { if (!alive) return; alive = false; io?.disconnect(); ro?.disconnect(); doc?.destroy(); host.innerHTML = '';
             if (--open <= 0) { open = 0; document.documentElement.classList.remove('pdfv-on'); } } };
     }
-    window.RWBPdf = { show, preload };
+    /* first page as a small JPEG (the preview picture made on the phone when a guide PDF is added) */
+    async function cover(file, width = 480) {
+        const pdfjs = await preload();
+        const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
+        try {
+            const page = await doc.getPage(1), v1 = page.getViewport({ scale: 1 }), vp = page.getViewport({ scale: width / v1.width });
+            const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+            const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+            await page.render({ canvasContext: ctx, viewport: vp }).promise;
+            for (const q of [.78, .66, .55]) { const b = await new Promise(r => c.toBlob(r, 'image/jpeg', q)); if (b && b.size < 280e3) return b; }
+            throw new Error('preview too big');
+        } finally { doc.destroy(); }
+    }
+    window.RWBPdf = { show, preload, cover };
 })();

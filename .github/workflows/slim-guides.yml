@@ -1,0 +1,35 @@
+# Makes guide PDFs uploaded in the RWB App lighter (same look) and gives each one a preview picture.
+# Free: runs on GitHub every 30 minutes and finishes in seconds when there is nothing new.
+# Uses the SUPABASE_DB_URL secret that the nightly backup already uses; nothing else to set up.
+name: Slim guide PDFs
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: slim-guides
+jobs:
+  slim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Anything new?
+        id: check
+        run: |
+          if [ -z "$DB_URL" ]; then echo "Add the SUPABASE_DB_URL secret first."; echo "n=0" >> "$GITHUB_OUTPUT"; exit 0; fi
+          command -v psql >/dev/null || { sudo apt-get -qq update && sudo apt-get -qq install -y postgresql-client >/dev/null; }
+          n=$(psql "$DB_URL" -Atc "select count(*) from public.guide_items where kind = 'pdf' and slim is null")
+          echo "$n new guide PDF(s)"; echo "n=$n" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.n != '0'
+        with:
+          sparse-checkout: tools/guides
+      - name: Make them lighter
+        if: steps.check.outputs.n != '0'
+        run: |
+          sudo apt-get -qq update && sudo apt-get -qq install -y poppler-utils >/dev/null
+          pip install -q pikepdf fonttools pillow "psycopg[binary]"
+          python tools/guides/slim_guides.py

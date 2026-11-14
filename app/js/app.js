@@ -2841,7 +2841,10 @@ async function gdCheck(f) {
         else c.push(['ok', `${mb(file.size)}`, `under ${GD_LIM.pdfMB} MB`]);
         try { const txt = new TextDecoder('latin1').decode(await file.arrayBuffer()); const n = (txt.match(/\/Type\s*\/Page[^s]/g) || []).length; if (n) { f.meta.pages = n; c.push(['ok', `${n} page${n === 1 ? '' : 's'}`, '']); }
             if (n && !/\/Font\b/.test(txt)) c.push(['warn', 'Looks like scanned pages.', 'Pookie can’t read photos of text; a typed PDF works better.']); } catch { /* fine */ }
-        f.out = file; f.ok = !c.some(x => x[0] === 'bad'); return;
+        if (file.size > 3e6 && file.size <= GD_LIM.pdfMB * 1e6) c.push(['ok', 'Heavy PDF: no problem.', 'RWB makes it lighter for members automatically, within about an hour of adding it. It looks exactly the same.']);
+        f.out = file; f.ok = !c.some(x => x[0] === 'bad');
+        if (f.ok && typeof RWBPdf !== 'undefined') try { f.thumb = await RWBPdf.cover(file); } catch { /* no preview picture: the RWB robot adds one */ }
+        return;
     }
     if (f.kind === 'image') {
         const okType = /^image\/(jpe?g|png|webp|heic|heif)$/i.test(file.type) || /^(jpe?g|png|webp|heic|heif)$/.test(ext);
