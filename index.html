@@ -54,44 +54,52 @@
 <section class="section alt" id="gallery">
   <div class="wrap">
     <p class="label">Gallery</p>
-    <h2>RWB Memories</h2>
-    <div class="rail"><button class="rail-btn prev" aria-label="Scroll left">‹</button><div class="track" id="gallery-track" aria-live="polite"><p class="muted">Loading…</p></div><button class="rail-btn next" aria-label="Scroll right">›</button></div>
+    <div class="sec-head">
+      <h2>RWB Memories</h2>
+      <p class="sec-hint">Hover to pause · drag or tap a photo</p>
+    </div>
+  </div>
+  <div class="mq-stack" data-reveal>
+    <div class="mq mq-gal" id="gallery-a" aria-label="RWB ride photos"><div class="mq-strip"><p class="muted mq-wait">Loading…</p></div></div>
+    <div class="mq mq-gal" id="gallery-b" aria-hidden="true"><div class="mq-strip"></div></div>
   </div>
 </section>
 
 <section class="section" id="events">
   <div class="wrap">
     <p class="label">Calendar</p>
-    <h2>Rides &amp; events</h2>
-    <div class="tabs" id="event-tabs" role="tablist">
-      <button class="active" data-filter="upcoming">Upcoming</button>
-      <button data-filter="live">Today</button>
-      <button data-filter="past">Past</button>
-      <button data-filter="all">All</button>
+    <div class="sec-head">
+      <h2>Rides &amp; events</h2>
+      <div class="tabs" id="event-tabs" role="tablist">
+        <button class="active" data-filter="upcoming">Upcoming</button>
+        <button data-filter="live">Today</button>
+        <button data-filter="past">Past</button>
+        <button data-filter="all">All</button>
+      </div>
     </div>
     <div class="rail"><button class="rail-btn prev" aria-label="Scroll left">‹</button><div class="track" id="events-list" aria-live="polite"><p class="muted">Loading…</p></div><button class="rail-btn next" aria-label="Scroll right">›</button></div>
   </div>
 </section>
 
-<section class="section alt" id="maintenance">
-  <div class="wrap teaser">
-    <p class="label">Garage</p>
-    <div>
-      <h2>Ronin Maintenance</h2>
-      <p>Service guides, how-tos and checklists from our coordinators, all in one place.</p>
+<section class="section garage">
+  <div class="wrap">
+    <p class="label">Garage &amp; gear</p>
+    <div class="tiles" data-reveal>
+      <a class="tile" href="maintenance.html">
+        <svg class="ic tile-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6.5a4 4 0 0 0 5 5L12 19a2.1 2.1 0 0 1-3-3z"/><path d="M14.5 6.5 17 4l3 3-2.5 2.5"/></svg>
+        <span class="tile-k">Garage</span>
+        <h3>Ronin Maintenance</h3>
+        <p>Service guides, how-tos and checklists from our coordinators, all in one place.</p>
+        <span class="tile-go">Read the guides <i aria-hidden="true">→</i></span>
+      </a>
+      <a class="tile" href="accessories.html">
+        <svg class="ic tile-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg>
+        <span class="tile-k">Gear</span>
+        <h3>Ronin Accessories</h3>
+        <p>New accessories for the Ronin, picked by our admins and coordinators.</p>
+        <span class="tile-go">See accessories <i aria-hidden="true">→</i></span>
+      </a>
     </div>
-    <a href="maintenance.html" class="btn">Read the guides</a>
-  </div>
-</section>
-
-<section class="section" id="accessories">
-  <div class="wrap teaser">
-    <p class="label">Gear</p>
-    <div>
-      <h2>Ronin Accessories</h2>
-      <p>New accessories for the Ronin, picked by our admins and coordinators.</p>
-    </div>
-    <a href="accessories.html" class="btn">See accessories</a>
   </div>
 </section>
 
@@ -129,15 +137,20 @@
 <section class="section dark" id="warriors">
   <div class="wrap">
     <p class="label">The team</p>
-    <h2>Meet The Warriors</h2>
-    <div class="tabs" id="warrior-tabs">
-      <button class="active" data-filter="all">All</button>
-      <button data-filter="admin">Admins</button>
-      <button data-filter="coadmin">Co-admins</button>
-      <button data-filter="coordinator">Co-ordinators</button>
+    <div class="sec-head">
+      <h2>Meet The Warriors</h2>
+      <div class="sec-tools">
+        <div class="tabs" id="warrior-tabs">
+          <button class="active" data-filter="all">All</button>
+          <button data-filter="admin">Admins</button>
+          <button data-filter="coadmin">Co-admins</button>
+          <button data-filter="coordinator">Co-ordinators</button>
+        </div>
+        <div class="mq-arrows" id="warrior-arrows"><button class="mq-btn" data-step="-1" aria-label="Previous">‹</button><button class="mq-btn" data-step="1" aria-label="Next">›</button></div>
+      </div>
     </div>
-    <div class="rail"><button class="rail-btn prev" aria-label="Scroll left">‹</button><div class="track center-snap" id="warriors-track" aria-live="polite"></div><button class="rail-btn next" aria-label="Scroll right">›</button></div>
   </div>
+  <div class="mq mq-war" id="warriors-mq" data-reveal><div class="mq-strip"></div></div>
 </section>
 
 <section class="section alt" id="market">

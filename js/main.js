@@ -5,6 +5,8 @@ $$('.rail').forEach(rail => {
     const track = rail.querySelector('.track');
     rail.querySelector('.prev').onclick = () => track.scrollBy({ left: -track.clientWidth * .8, behavior: 'smooth' });
     rail.querySelector('.next').onclick = () => track.scrollBy({ left: track.clientWidth * .8, behavior: 'smooth' });
+    const fit = () => rail.classList.toggle('fits', track.scrollWidth <= track.clientWidth + 2);
+    new MutationObserver(fit).observe(track, { childList: true }); new ResizeObserver(fit).observe(track); fit();
 });
 
 /* Count-up stats */
@@ -28,88 +30,134 @@ fetch(CONFIG.APP_SUPABASE_URL + '/rest/v1/rpc/public_member_count', { method: 'P
         $$('[data-members]').forEach(e => e.textContent = n.toLocaleString('en-IN'));
     }).catch(() => {});
 
-/* Warriors: the card in the centre of the screen turns to colour */
-const warTrack = $('#warriors-track');
-function markCenter() {
-    const box = warTrack.getBoundingClientRect(), mid = box.left + box.width / 2;
-    let best = null, bestDist = Infinity;
-    warTrack.querySelectorAll('.w-card').forEach(c => {
-        const r = c.getBoundingClientRect(), d = Math.abs(r.left + r.width / 2 - mid);
-        if (d < bestDist) { bestDist = d; best = c; }
-        c.classList.remove('in-center');
+/* ===== Marquee: a slow, endless strip. Moves with the GPU (transform), eases to a stop on hover,
+   can be dragged or swiped (with a little momentum), and sleeps when it's off screen. ===== */
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const canHover = matchMedia('(hover:hover)').matches;
+function marquee(view, { speed = 30, dir = -1, onFrame } = {}) {
+    const strip = view.querySelector('.mq-strip');
+    const m = { x: 0, cur: 0, v: 0, period: 0, items: [], hover: false, held: false, visible: false, hold: false, still: false, raf: 0, last: 0, dragged: false };
+    const place = () => { strip.style.transform = `translate3d(${m.x.toFixed(2)}px,0,0)`; onFrame?.(m); };
+    const wrapX = () => { if (m.period) { m.x %= m.period; if (m.x > 0) m.x -= m.period; } };
+    function frame(now) {
+        const dt = Math.min(now - m.last, 64) / 1000; m.last = now;
+        const target = (m.hover || m.held || m.hold || reduceMotion) ? 0 : speed * dir;
+        m.cur += (target - m.cur) * (1 - Math.exp(-dt * 2.6));          /* soft start and stop */
+        if (!m.held) { m.x += (m.cur + m.v) * dt; m.v *= Math.exp(-dt * 3.2); if (Math.abs(m.v) < 2) m.v = 0; }
+        wrapX(); place();
+        const idle = !m.held && !m.v && Math.abs(m.cur) < .3 && target === 0;
+        m.raf = (m.visible && !m.still && !idle) || m.held ? requestAnimationFrame(frame) : 0;
+    }
+    const wake = () => { if (!m.raf && m.visible && !m.still) { m.last = performance.now(); m.raf = requestAnimationFrame(frame); } };
+    new IntersectionObserver(e => { m.visible = e[0].isIntersecting && !document.hidden; wake(); }, { rootMargin: '120px 0px' }).observe(view);
+    document.addEventListener('visibilitychange', () => { m.visible = m.visible && !document.hidden; if (!document.hidden) { m.visible = true; wake(); } });
+    if (canHover) { view.addEventListener('mouseenter', () => { m.hover = true; wake(); }); view.addEventListener('mouseleave', () => { m.hover = false; wake(); }); }
+    /* drag / swipe (vertical page scroll still works on phones) */
+    let sx = 0, sy = 0, lx = 0, lt = 0, vel = 0, id = null, decided = false;
+    view.addEventListener('pointerdown', e => { if (m.still || e.button > 0) return; id = e.pointerId; sx = lx = e.clientX; sy = e.clientY; lt = performance.now(); vel = 0; decided = false; m.dragged = false; m.held = true; m.v = 0; wake(); });
+    view.addEventListener('pointermove', e => {
+        if (e.pointerId !== id) return;
+        if (!decided) { const dx = Math.abs(e.clientX - sx), dy = Math.abs(e.clientY - sy); if (dx < 6 && dy < 6) return; decided = true;
+            if (dy > dx) { id = null; m.held = false; return; } m.dragged = true; view.setPointerCapture(id); view.classList.add('dragging'); }
+        const now = performance.now(), dx = e.clientX - lx; m.x += dx; wrapX(); place();
+        vel = .8 * (dx / Math.max(now - lt, 1) * 1000) + .2 * vel; lx = e.clientX; lt = now;
     });
-    best?.classList.add('in-center');
+    const up = e => { if (e.pointerId !== id) return; id = null; m.held = false; view.classList.remove('dragging');
+        if (m.dragged) { m.v = Math.max(-2600, Math.min(2600, vel)); m.cur = 0; } wake(); };
+    view.addEventListener('pointerup', up); view.addEventListener('pointercancel', up);
+    view.addEventListener('click', e => { if (m.dragged) { e.preventDefault(); e.stopPropagation(); m.dragged = false; } }, true);
+    view.addEventListener('dragstart', e => e.preventDefault());
+    /* trackpad sideways swipes */
+    view.addEventListener('wheel', e => { if (m.still || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return; e.preventDefault(); m.x -= e.deltaX; wrapX(); place(); m.cur = 0; wake(); }, { passive: false });
+    function measure() {
+        const n = m.n; if (!n) return;
+        const kids = strip.children;
+        m.period = kids[n] ? kids[n].offsetLeft - kids[0].offsetLeft : 0;
+        m.items = [...kids].map(k => ({ el: k, c: k.offsetLeft + k.offsetWidth / 2 }));
+        wrapX(); place();
+    }
+    /* fill the strip with enough copies of the set to loop without a gap; a short set just sits still, centred */
+    function set(html) {
+        strip.innerHTML = html; m.n = strip.children.length; m.x = 0; m.v = 0;
+        const one = [...strip.children], setW = strip.scrollWidth;
+        m.still = !m.n || setW <= view.clientWidth;
+        view.classList.toggle('still', m.still);
+        if (!m.still) {
+            const copies = Math.ceil(view.clientWidth / setW) + 1;
+            for (let c = 0; c < copies; c++) one.forEach(k => { const d = k.cloneNode(true); d.setAttribute('aria-hidden', 'true'); d.tabIndex = -1; strip.append(d); });
+        }
+        measure(); m.cur = reduceMotion ? 0 : speed * dir; wake();
+    }
+    let rT = 0, lastW = 0; new ResizeObserver(() => { if (view.clientWidth === lastW) return; const first = !lastW; lastW = view.clientWidth; if (first) return; clearTimeout(rT); rT = setTimeout(() => { if (strip.children.length && m.n) { const html = [...strip.children].slice(0, m.n).map(k => k.outerHTML).join(''); const keep = m.x; set(html); m.x = keep; wrapX(); place(); } }, 150); }).observe(view);
+    return { set, m, nudge: steps => { if (m.still) return; m.v += steps * (m.items[1] ? m.items[1].c - m.items[0].c : 300) * 3.2; m.cur = 0; wake(); },
+        pause: on => { m.hold = on; wake(); } };
 }
-let centerRaf = 0;
-warTrack.addEventListener('scroll', () => { cancelAnimationFrame(centerRaf); centerRaf = requestAnimationFrame(markCenter); }, { passive: true });
-window.addEventListener('resize', markCenter);
+/* pictures fade in once they have loaded */
+document.addEventListener('load', e => { if (e.target.tagName === 'IMG') e.target.classList.add('ok'); }, true);
+const markLoaded = root => root.querySelectorAll('img').forEach(i => { if (i.complete && i.naturalWidth) i.classList.add('ok'); });
+
+/* Warriors: a slow endless strip; the card passing the centre turns to colour */
+const warView = $('#warriors-mq');
+let warCenter = null;
+const warMq = marquee(warView, { speed: 26, dir: -1, onFrame: m => {
+    if (m.items.length) {
+        const mid = -m.x + warView.clientWidth / 2;
+        let best = null, bd = Infinity; for (const it of m.items) { const d = Math.abs(it.c - mid); if (d < bd) { bd = d; best = it.el; } }
+        if (best !== warCenter || !warCenter?.isConnected) { warCenter?.classList.remove('in-center'); best?.classList.add('in-center'); warCenter = best; }
+    }
+} });
 function renderWarriors(filter = 'all') {
     const list = filter === 'all' ? WARRIORS : WARRIORS.filter(w => w.role === filter);
-    warTrack.innerHTML = list.map(w => `
+    warCenter = null;
+    warMq.set(list.map(w => `
         <button class="w-card" data-name="${esc(w.name)}">
-            <img src="${w.photo}" alt="" loading="lazy">
+            <img src="${w.photo}" alt="" loading="lazy" decoding="async" draggable="false">
             <span><b>${esc(w.name)}</b><small>${w.nickname ? `“${esc(w.nickname)}” · ` : ''}${esc(w.roleLabel)}</small></span>
-        </button>`).join('');
-    warTrack.scrollLeft = 0;
-    requestAnimationFrame(markCenter);
+        </button>`).join(''));
+    markLoaded(warView);
+    $('#warrior-arrows').hidden = warMq.m.still;
 }
-warTrack.addEventListener('click', e => {
+warView.addEventListener('click', e => {
     const w = WARRIORS.find(x => x.name === e.target.closest('.w-card')?.dataset.name); if (!w) return;
+    warMq.pause(true);
     openDialog(`<img src="${w.photo}" alt="${esc(w.name)}"><div>
         <h3>${esc(w.name)}</h3><span class="role">${w.nickname ? `“${esc(w.nickname)}” · ` : ''}${esc(w.roleLabel)}</span>
         <p class="bike">${esc(w.bike)}</p><p>${esc(w.desc)}</p></div>`, 'profile');
 });
+$('#warrior-arrows').addEventListener('click', e => { const b = e.target.closest('[data-step]'); if (b) warMq.nudge(+b.dataset.step); });
 tabs('#warrior-tabs', renderWarriors);
 renderWarriors();
 
-/* Gallery: auto-scrolling loop. Pauses on touch, hover, while a photo is open, and off-screen. */
-const galTrack = $('#gallery-track');
-const gal = { acc: 0, period: 0, count: 0, pausedUntil: 0, wasPaused: false, open: false, visible: true, hover: false };
-const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const galPause = (ms = 2500) => { gal.pausedUntil = performance.now() + ms; };
-['touchstart', 'touchend', 'mousedown', 'mouseup', 'wheel', 'keydown'].forEach(ev => galTrack.addEventListener(ev, () => galPause(), { passive: true }));
-if (matchMedia('(hover:hover)').matches) {
-    galTrack.addEventListener('mouseenter', () => gal.hover = true);
-    galTrack.addEventListener('mouseleave', () => gal.hover = false);
-}
-new IntersectionObserver(e => gal.visible = e[0].isIntersecting).observe(galTrack);
-dialog.addEventListener('close', () => gal.open = false);
-function galMeasure() {
-    if (gal.count && galTrack.children[gal.count]) gal.period = galTrack.children[gal.count].offsetLeft - galTrack.children[0].offsetLeft;
-}
-window.addEventListener('resize', galMeasure);
-let galLast = 0;
-const GAL_SPEED = 120;   /* pixels per second: raise this number to go faster */
-(function galLoop(now = performance.now()) {
-    const dt = Math.min(now - galLast, 64) / 1000; galLast = now;
-    const paused = gal.open || gal.hover || !gal.visible || !gal.period || reduceMotion || performance.now() < gal.pausedUntil;
-    if (paused) gal.wasPaused = true;
-    else {
-        if (gal.wasPaused) { gal.acc = galTrack.scrollLeft; gal.wasPaused = false; }
-        gal.acc += GAL_SPEED * dt;
-        while (gal.acc >= gal.period) gal.acc -= gal.period;
-        galTrack.scrollLeft = gal.acc;
-    }
-    requestAnimationFrame(galLoop);
-})();
-
+/* Gallery: two strips drifting in opposite directions. Tap a photo to open it; arrows/swipe inside the viewer. */
+const galA = marquee($('#gallery-a'), { speed: 22, dir: -1 }), galB = marquee($('#gallery-b'), { speed: 22, dir: 1 });
+dialog.addEventListener('close', () => { galA.pause(false); galB.pause(false); warMq.pause(false); });
 async function loadGallery() {
     try {
         const imgs = await (await fetch(CONFIG.GALLERY_SCRIPT_URL)).json();
         if (!imgs.length) throw 0;
-        const reps = Math.max(2, Math.ceil(1800 / (imgs.length * 316)));   /* copies so the loop never runs dry */
-        let html = '';
-        for (let r = 0; r < reps; r++) imgs.forEach((im, i) => {
-            html += `<button class="g-item" data-i="${i}" ${r ? 'aria-hidden="true" tabindex="-1"' : `aria-label="Open photo ${i + 1}"`}><img src="${esc(im.url)}" alt="${r ? '' : esc(im.label || 'RWB ride photo')}" loading="lazy" decoding="async"></button>`;
-        });
-        galTrack.innerHTML = html;
-        gal.count = imgs.length; galMeasure();
-        galTrack.onclick = e => {
-            const b = e.target.closest('.g-item'); if (!b) return;
-            gal.open = true;
-            openDialog(`<img src="${esc(imgs[b.dataset.i].url)}" alt="">`, 'lb');
+        const tile = (im, i) => `<button class="g-item" data-i="${i}" aria-label="Open photo ${i + 1}"><img src="${esc(im.url)}" alt="${esc(im.label || 'RWB ride photo')}" loading="lazy" decoding="async" draggable="false"></button>`;
+        const idx = imgs.map((_, i) => i);
+        const rowA = imgs.length < 8 ? idx : idx.filter(i => i % 2 === 0), rowB = imgs.length < 8 ? [...idx].reverse() : idx.filter(i => i % 2);
+        galA.set(rowA.map(i => tile(imgs[i], i)).join(''));
+        galB.set(rowB.map(i => tile(imgs[i], i)).join(''));
+        $$('.mq-gal').forEach(markLoaded);
+        const show = i => {
+            i = (i + imgs.length) % imgs.length;
+            const body = $('#dialog-body');
+            if (body.classList.contains('lb') && dialog.open) { const img = body.querySelector('img'); if (img.getAttribute('src') !== imgs[i].url) { img.classList.remove('ok'); img.src = imgs[i].url; } body.dataset.i = i; body.querySelector('.lb-n').textContent = `${i + 1} / ${imgs.length}`; return; }
+            openDialog(`<img src="${esc(imgs[i].url)}" alt="${esc(imgs[i].label || 'RWB ride photo')}">
+                <button class="lb-nav prev" aria-label="Previous photo">‹</button><button class="lb-nav next" aria-label="Next photo">›</button><span class="lb-n">${i + 1} / ${imgs.length}</span>`, 'lb');
+            $('#dialog-body').dataset.i = i;
         };
-    } catch { galTrack.innerHTML = '<p class="muted">Photos will be here soon.</p>'; }
+        $('.mq-stack').addEventListener('click', e => {
+            const b = e.target.closest('.g-item'); if (!b) return;
+            galA.pause(true); galB.pause(true); show(+b.dataset.i);
+        });
+        dialog.addEventListener('click', e => { const n = e.target.closest('.lb-nav'); if (n) { e.stopPropagation(); show(+$('#dialog-body').dataset.i + (n.classList.contains('next') ? 1 : -1)); } });
+        dialog.addEventListener('keydown', e => { if (!$('#dialog-body').classList.contains('lb')) return; if (e.key === 'ArrowRight') show(+$('#dialog-body').dataset.i + 1); if (e.key === 'ArrowLeft') show(+$('#dialog-body').dataset.i - 1); });
+        let tx = null; dialog.addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
+        dialog.addEventListener('touchend', e => { if (tx === null || !$('#dialog-body').classList.contains('lb')) return; const dx = e.changedTouches[0].clientX - tx; tx = null; if (Math.abs(dx) > 50) show(+$('#dialog-body').dataset.i + (dx < 0 ? 1 : -1)); }, { passive: true });
+    } catch { $('#gallery-a .mq-strip').innerHTML = '<p class="muted mq-wait">Photos will be here soon.</p>'; $('#gallery-b').hidden = true; }
 }
 loadGallery();
 
