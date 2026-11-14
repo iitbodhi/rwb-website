@@ -2175,3 +2175,6 @@ html.lite .skel i,html.lite .gd-skel i{animation:none}
 .gd-pdfx-host{position:absolute;inset:0;padding-top:calc(env(safe-area-inset-top,0px) + 58px)}
 .gd-pdfx .pdfv{background:#141312}
 .gd-pdfx-t{max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* photos and videos can't be long-pressed to save or dragged out (see app.js); a member's own bills/documents still can */
+img,video,canvas{-webkit-touch-callout:none;-webkit-user-drag:none;-webkit-user-select:none;user-select:none}
+.bill-view img,.doc-page img{-webkit-touch-callout:default;-webkit-user-drag:auto}

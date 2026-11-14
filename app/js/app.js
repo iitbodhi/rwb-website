@@ -55,6 +55,15 @@ $('#sheet-close').addEventListener('click', closeSheet);
 sheet.addEventListener('click', e => { if (e.target === sheet) closeSheet(); });
 sheet.addEventListener('close', () => { $('#sheet-body').innerHTML = ''; });
 
+/* Photos, videos and guide PDFs can't be saved: no long-press "Download image", no right-click, no dragging out,
+   no download button on videos (Nov 2026). A member's OWN bills and documents (.bill-view, .doc-page) keep their
+   long-press and "Open / download", since only they can see them. Screenshots still work: this stops casual saving only. */
+const OWN_FILES = '.bill-view, .doc-page';
+document.addEventListener('contextmenu', e => { const t = e.target; if (t.closest?.('img, video, canvas, picture, .pdfv') && !t.closest(OWN_FILES)) e.preventDefault(); });
+document.addEventListener('dragstart', e => { if (/^(IMG|VIDEO)$/.test(e.target.tagName) && !e.target.closest(OWN_FILES)) e.preventDefault(); });
+document.addEventListener('loadstart', e => { const v = e.target; if (v.tagName !== 'VIDEO') return;
+    v.setAttribute('controlslist', 'nodownload noplaybackrate noremoteplayback'); v.disablePictureInPicture = true; v.setAttribute('disableremoteplayback', ''); }, true);
+
 /* run an async action with a busy button and a friendly error */
 async function busy(btn, fn) {
     const label = btn?.innerHTML; if (btn) { btn.disabled = true; btn.textContent = 'Please wait…'; }
