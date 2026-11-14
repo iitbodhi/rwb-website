@@ -118,3 +118,9 @@ const inr = n => '₹' + Number(n).toLocaleString('en-IN');
 
 /* always the newest RWB app build: a fresh ?v= at the moment of the tap, so no cache hands out an older copy */
 document.addEventListener("click", function (e) { var a = e.target.closest && e.target.closest("a[href*=\"RWB-App.apk\"]"); if (a) a.href = a.href.split("?")[0] + "?v=" + Date.now(); }, true);
+
+/* Photos: no "Save image / Download image" on long-press or right-click, and no dragging them out (Nov 2026).
+   iPhone needs the CSS (-webkit-touch-callout), Android and computers need the contextmenu block.
+   Stops casual saving only: screenshots still work. */
+document.addEventListener('contextmenu', e => { if (e.target.closest?.('img, picture, canvas, video, .g-item, .w-card, .lb, .profile')) e.preventDefault(); });
+document.addEventListener('dragstart', e => { if (e.target.tagName === 'IMG') e.preventDefault(); });
