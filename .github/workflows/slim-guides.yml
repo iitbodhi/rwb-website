@@ -6,6 +6,9 @@ on:
   schedule:
     - cron: '7,37 * * * *'
   workflow_dispatch:
+  push:   # also runs when the robot itself is changed
+    branches: [main]
+    paths: ['tools/guides/**', '.github/workflows/slim-guides.yml']
 permissions:
   contents: read
 concurrency: slim-guides
