@@ -2400,15 +2400,11 @@ function builtinGuides() {
     return list.map(([id, title, sub, sec, who], i) => ({ id: 'b-' + id, builtin: true, cat: 'app', kind: 'video', title, description: sub, tags: who === 'team' ? 'team coordinators admins' : '',
         url: `videos/${id}.mp4`, thumb_url: `videos/${id}.jpg`, duration_s: sec, team: who === 'team', uploader: 'RWB', order: i }));
 }
-async function driveGuides() {
-    if (!SITE.MAINTENANCE_SCRIPT_URL) return [];
-    const list = await (await fetch(SITE.MAINTENANCE_SCRIPT_URL)).json();
-    return list.filter(p => /^[\w-]+$/.test(p.id)).map(p => ({ id: 'd-' + p.id, drive: p.id, cat: 'maint', kind: 'pdf', title: pdfTitle(p.name), description: p.description || '',
-        thumb_url: `https://drive.google.com/thumbnail?id=${p.id}&sz=w200`, created_at: p.date ? String(p.date).slice(0, 10) : '', uploader: 'RWB' }));
-}
+/* The old Google Drive maintenance PDFs were moved into Guides (setup file 73, Nov 2026), so there is no Drive list any more */
+async function driveGuides() { return []; }
 /* The old Drive PDF list is slow (a Google script), so Guides never waits for it: it joins in when it arrives.
    The last list is also kept on the phone, so Guides opens instantly next time and refreshes in the background. */
-const GD_KEY = 'rwb-gd-v1';
+const GD_KEY = 'rwb-gd-v2';   /* v2: the Drive PDFs moved into Guides (Nov 2026) */
 const gdBuild = (db, drive, cats, setup = true) => ({ db, drive, setup, cats, all: [...db, ...drive, ...builtinGuides()] });
 function gdFromPhone() {
     if (state.gd || isFam()) return state.gd;
@@ -2447,7 +2443,7 @@ function gdShort(it, rail = false) {
         <b class="gd-t">${markWords(esc(it.title), gState.q)}</b><span class="gd-s">${esc([it.builtin ? 'RWB App' : it.uploader, gdDay(it)].filter(Boolean).join(' · '))}</span></button>`;
 }
 function gdDoc(it) {
-    const meta = [it.pages ? `${it.pages} page${it.pages === 1 ? '' : 's'}` : '', it.bytes ? mb(it.bytes) : '', it.drive ? 'Google Drive' : it.uploader, gdDay(it)].filter(Boolean).join(' · ');
+    const meta = [it.pages ? `${it.pages} page${it.pages === 1 ? '' : 's'}` : '', it.bytes ? mb(it.bytes) : '', it.uploader, gdDay(it)].filter(Boolean).join(' · ');
     return `<button class="gd-doc" data-act="gopen" data-id="${esc(it.id)}"><span class="gd-doc-ico">${GD_ICO.pdf}<em>PDF</em></span>
         <span class="grow"><b>${markWords(esc(it.title), gState.q)}</b>${it.description ? `<span class="gd-desc">${markWords(esc(it.description), gState.q)}</span>` : ''}<span class="gd-meta">${esc(meta)}</span></span>${ICON.chev}</button>`;
 }
@@ -2576,16 +2572,24 @@ function gdOpen(id) {
     if (it.kind === 'image') return gdViewer(list, list.indexOf(it));
     gdPdf(it);
 }
+/* PDFs open in our own viewer (js/pdfview.js): pages as pictures, no download, print or "open" buttons */
 function gdPdf(it) {
-    const src = it.drive ? `https://drive.google.com/file/d/${encodeURIComponent(it.drive)}/preview` : `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(it.url)}`;
-    const open = it.drive ? `https://drive.google.com/file/d/${encodeURIComponent(it.drive)}/view` : it.url;
-    const demo = api.demo && !it.drive;
+    const demo = api.demo && !/^https:/.test(it.url || ''), ok = !demo && typeof RWBPdf !== 'undefined';
+    let v = null;
     openSheet(it.title, `${it.description ? `<p class="small muted" style="margin:-4px 0 10px">${esc(it.description)}</p>` : ''}
-        ${demo ? `<div class="card empty gd-empty"><span class="gd-empty-ico">${GD_ICO.pdf}</span><b>PDF preview</b>In the real app the PDF opens here.</div>` : `<iframe class="pdf" src="${esc(src)}" title="${esc(it.title)}"></iframe>`}
+        ${ok ? '<div class="gd-pdfhost"></div>' : `<div class="card empty gd-empty"><span class="gd-empty-ico">${GD_ICO.pdf}</span><b>PDF preview</b>${demo ? 'In the real app the PDF opens here.' : 'Please update the app and try again.'}</div>`}
         <p class="gd-meta" style="margin:10px 2px">${esc([it.pages ? it.pages + ' pages' : '', it.bytes ? mb(it.bytes) : '', it.uploader, gdDay(it)].filter(Boolean).join(' · '))}</p>
-        <div class="gd-sheet-acts"><a class="btn ghost" href="${esc(open)}" target="_blank" rel="noopener">Open full screen</a>${gdCanManage(it) ? `<button class="btn ghost" data-x="manage">${GD_ICO.more} Manage</button>` : ''}</div>`, body => {
+        <div class="gd-sheet-acts">${ok ? '<button class="btn ghost" data-x="full">Full screen</button>' : ''}${gdCanManage(it) ? `<button class="btn ghost" data-x="manage">${GD_ICO.more} Manage</button>` : ''}</div>`, body => {
+        if (ok) { v = RWBPdf.show(body.querySelector('.gd-pdfhost'), it.url); sheet.addEventListener('close', () => v?.close(), { once: true }); }
+        body.querySelector('[data-x=full]')?.addEventListener('click', () => { v?.close(); v = null; closeSheet(); gdPdfFull(it); });
         body.querySelector('[data-x=manage]')?.addEventListener('click', () => gdManage(it));
     });
+}
+function gdPdfFull(it) {
+    const L = gdOverlay('gd-player gd-pdfx', it.title);
+    L.el.innerHTML = `<div class="gd-pdfx-host"></div><div class="gd-ptop"><button class="gd-glass" data-x="close" aria-label="Close">${GD_ICO.close}</button><span class="gd-count gd-pdfx-t">${esc(it.title)}</span><span></span></div>`;
+    const v = RWBPdf.show(L.el.querySelector('.gd-pdfx-host'), it.url); L.cleanup.push(() => v.close());
+    L.el.querySelector('[data-x=close]').addEventListener('click', () => gdClose());
 }
 
 /* full-screen overlays (video player, picture viewer) close with the phone's Back button too */

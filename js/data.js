@@ -11,8 +11,7 @@ const CONFIG = {
     /* Opens a direct message to RWB on Instagram (used by "Contact to order") */
     INSTAGRAM_DM_URL: 'https://ig.me/m/ronin_warriors_bengal',
     /* RWB Merch and Ronin Accessories come from MotoMart in the RWB App (setup file 65) */
-    /* Ronin Maintenance: Apps Script web app link that lists the PDFs in your Drive folder */
-    MAINTENANCE_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbz4v89tStt7dg7p6wgvFdCJL3WqRjAFCMc6oRiR3SnDRsxrnY6SNpLGpDJaSDpZQw0aRw/exec',
+    /* Ronin Maintenance guides now come from the RWB App (Guides → Maintenance → + Add). The old Drive folder is no longer used. */
     /* RWB App for Android (.apk). Leave empty until the file is in the repo; then "Download Now" downloads it */
     APK_URL: 'download/RWB-App.apk'
 };

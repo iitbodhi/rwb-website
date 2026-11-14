@@ -2170,3 +2170,8 @@ html.lite .skel i,html.lite .gd-skel i{animation:none}
 /* RWB Merch "Coming Soon": a teaser, nothing to tap */
 .mm-soon{pointer-events:none;cursor:default;background:repeating-linear-gradient(135deg,#141414 0 14px,#1e1e1e 14px 28px);color:#fff;letter-spacing:.14em;text-transform:uppercase;font-weight:800;box-shadow:none}
 .mm-soon-tag{background:rgba(212,80,26,.92)}
+/* Guides PDFs in our own viewer (Nov 2026) */
+.gd-pdfhost{height:68dvh;border-radius:12px;border:1px solid var(--line)}
+.gd-pdfx-host{position:absolute;inset:0;padding-top:calc(env(safe-area-inset-top,0px) + 58px)}
+.gd-pdfx .pdfv{background:#141312}
+.gd-pdfx-t{max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

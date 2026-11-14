@@ -728,3 +728,9 @@ dialog:has(.lb) .dialog-close{background:rgba(20,18,16,.55);backdrop-filter:blur
   #market .lead{grid-column:1;grid-row:3}
   #market .rail{grid-column:2;grid-row:2/span 2}
 }
+/* guide PDF viewer (Nov 2026): our own pages, no Google page */
+dialog:has(.pdf){max-width:min(900px,96vw);width:100%;height:92vh;max-height:92vh;overflow:hidden}
+#dialog-body.pdf{display:flex;flex-direction:column;height:100%}
+.pdf-bar span{font:500 .7rem/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.pdf-host{flex:1;min-height:0}
+.post-thumb img{-webkit-user-drag:none;object-position:top}
