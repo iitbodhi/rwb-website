@@ -406,9 +406,12 @@ function viewSignIn() {
     tabbar.hidden = true;
     app.innerHTML = `${demoBar()}<section class="signin">
         <img src="icons/logo-384.png" alt="Ronin Warriors of Bengal">
-        <div><h1>RWB App</h1><p class="lead">For members of Ronin Warriors of Bengal. Sign in with the Google account you used on the RWB join form.</p></div>
+        ${JOIN_MODE ? `<div><h1>Join RWB</h1><p class="lead">Ronin owner or not, every rider is welcome. Continue with Google to fill the RWB join form: your Google email becomes your RWB email.</p></div>
         <button class="btn gbtn block" data-act="google">${G_ICON} Continue with Google</button>
-        <p class="small muted">Not a member yet? <a href="${esc(JOIN_URL)}" target="_blank" rel="noopener">Join RWB here</a> with the RWB join form. Once an admin approves you, sign in with the same email.</p>
+        <p class="small muted">Already a member? Continue with the Google account you use for RWB.</p>`
+        : `<div><h1>RWB App</h1><p class="lead">For members of Ronin Warriors of Bengal. Sign in with the Google account you use for RWB.</p></div>
+        <button class="btn gbtn block" data-act="google">${G_ICON} Continue with Google</button>
+        <p class="small muted">New to RWB? Tap <b>Continue with Google</b>, then <b>Join RWB</b>. Every rider is welcome.</p>`}
         ${(() => { try { const e = localStorage.getItem('rwb-gsheet-err'); return e ? `<p class="small muted" style="opacity:.6;font-size:11px;word-break:break-all">Google sheet: ${esc(e)}</p>` : ''; } catch { return ''; } })()}
     </section>`;
     actions = { google: b => busy(b, () => api.signIn()) };
@@ -428,13 +431,15 @@ const SOCIAL = [
     ['Instagram', 'https://www.instagram.com/ronin_warriors_bengal', /insta|\big\b/i, 'img/social-instagram.png'],
     ['WhatsApp channel', 'https://whatsapp.com/channel/0029VaiK6QHEgGfTItym9t2H', /channel/i, 'img/social-whatsapp.png']];
 const FOLLOW = SOCIAL.filter(x => x[1]);
-const SKIP_Q = /^(timestamp|email( address)?|score)$/i;
+const SKIP_Q = /^(timestamp|email( address)?|score|which bike do you ride now\?)$/i;
 const isExtraQ = q => !SKIP_Q.test(String(q).trim()) && !/^\s*[0-9.]*\s*$/.test(String(q)) && !formKey(q);
 const ansText = a => Array.isArray(a) ? a.join(', ') : String(a ?? '').trim();
 /* the join-form answers that don't have their own field in the profile (sticker, social media and so on) */
 const extraAnswers = m => Object.entries(m?.form_answers || {}).filter(([q, a]) => isExtraQ(q) && ansText(a));
 /* every such question: from the live join form (even if unanswered) plus anything already on the record */
-const moreQs = m => [...new Set([...(joinFormDef?.items || []).filter(i => i.title && !['PAGE_BREAK', 'SECTION_HEADER', 'IMAGE', 'VIDEO'].includes(i.type) && isExtraQ(i.title)).map(i => i.title),
+/* a member's answers, with the Ronin answer worked out from their bike when the join form didn't ask (sticker questions are for Ronin owners) */
+const memberAns = m => { const k = roninKind(m); return { [RONIN_Q]: k === 'yes' ? R_YES : k === 'booked' ? R_BOOKED : R_NOT, ...(m?.form_answers || {}) }; };
+const moreQs = m => [...new Set([...(joinFormDef?.items || []).filter(i => i.title && !['PAGE_BREAK', 'SECTION_HEADER', 'IMAGE', 'VIDEO'].includes(i.type) && isExtraQ(i.title) && (!i.show || i.show(memberAns(m)))).map(i => i.title),
     ...extraAnswers(m).map(([q]) => q)])];
 const answerRows = (m, mine) => (mine ? moreQs(m).map(q => [q, m.form_answers?.[q]]) : extraAnswers(m)).map(([q, a]) => { const so = SOCIAL.find(x => x[2].test(q)); return `<div class="ans-row"><span class="grow"><small>${esc(q)}</small><b class="${ansText(a) ? '' : 'muted'}">${esc(ansText(a) || 'Not answered yet')}</b></span>${so?.[1] && mine ? `<a class="btn sm ghost" href="${so[1]}" target="_blank" rel="noopener">Visit ↗</a>` : ''}</div>`; }).join('');
 const followRwb = () => `<div class="follow-rwb">${FOLLOW.map(([n, u, , ic]) => `<a href="${u}" target="_blank" rel="noopener"><img class="fi" src="${ic}" alt="" width="40" height="40" loading="lazy">${esc(n)}</a>`).join('')}</div>`;
@@ -461,8 +466,56 @@ const formKey = title => (FORM_KEYS.find(([, re]) => re.test(String(title || '')
 const PHONE_KEYS = ['phone', 'emergency_phone', 'alt_phone'];
 const isAgree = v => /(agree|understood|accept|yes|i do)/i.test(v || '') && !/(don'?t|do not|not agree|disagree|^no\b)/i.test(v || '');
 const roninAnswer = v => /^(yes|yeah|yep)/i.test(String(v || '').trim()) ? 'TVS Ronin 225' : String(v || '').trim();
+/* =================== The RWB join form (setup file 75: RWB's own form, the Google Form is retired) ===================
+   The question titles are the same as on the old Google Form, so answers land in the same sheet columns and in
+   Me → More from RWB. Every rider is welcome: Ronin owners, Ronin booked, and riders without a Ronin. */
+const RONIN_Q = 'Do you own a Ronin bike?', R_YES = 'Yeah!', R_BOOKED = 'Booked, waiting for delivery', R_NOT = 'Not yet';
+const OTHER_BIKE_Q = 'Which bike do you ride now?', STICKER_Q = 'Have you received RWB sticker?';
+const TNC_Q = 'Please read carefully before proceeding\nRWB Terms & Conditions\nBy choosing “Understood & agreed”, you confirm that:\n• You are 18 or older and hold a valid motorcycle driving licence. Membership is free and mainly for TVS Ronin owners; admins may approve or decline any registration.\n• Your details are true and complete, and the VRN you give is your own. Admins may verify it. One membership per person.\n• You take part in rides and events voluntarily and at your own risk. You will obey traffic laws, wear an ISI-certified helmet and proper gear, keep your papers valid, and never ride drunk, race or perform stunts. RWB, its admins, coordinators and volunteers are not liable for any accident, injury, loss or damage.\n• You will respect every member and the public, and follow ride leads. No harassment, hate, spam, scams or unapproved promotions in RWB groups, the app or at events.\n• RWB is a free, non-profit, volunteer community and is not affiliated with TVS Motor Company.\n• Photos and videos from RWB rides and events may be shared on RWB’s website and social media.\n• Your details are used only to run the community. Other members see only your name, nickname and photo unless you choose to share more. RWB never sells your data.\n• Admins may remove members who break these rules. You can leave any time, and your app data is then deleted. \nFull Terms & Conditions: https://roninwb.in/terms.html\nPrivacy Policy: https://roninwb.in/privacy.html';
+const ronin = a => a[RONIN_Q] || '';
+const DONE = ['Done!', 'Maybe later'];
+const JOIN_DEF = { title: '', description: '', items: [
+    { type: 'SECTION_HEADER', title: 'Warm welcome!', help: 'A few details so the RWB team knows you, and can act fast in an emergency on a ride. Every rider is welcome, with or without a Ronin.' },
+    { type: 'MULTIPLE_CHOICE', title: RONIN_Q, required: true, choices: [{ value: R_YES }, { value: R_BOOKED }, { value: R_NOT }] },
+    { type: 'TEXT', title: 'VRN please', required: true, help: 'Your Ronin\'s registration number, for example WB02AB1234. Not the engine or chassis number. An admin may verify it.', show: a => ronin(a) === R_YES },
+    { type: 'TEXT', title: OTHER_BIKE_Q, help: 'Optional. Leave it blank if you don\'t ride one yet.', show: a => ronin(a) === R_NOT },
+    { type: 'PAGE_BREAK', title: 'About you' },
+    { type: 'TEXT', title: 'Full Name', required: true },
+    { type: 'DATE', title: 'Date of Birth', required: true, help: 'RWB is for riders aged 18 and over.' },
+    { type: 'TEXT', title: 'WhatsApp No.', required: true, help: 'Your 10-digit WhatsApp number. Only this number is added to the RWB group.' },
+    { type: 'TEXT', title: 'Mobile No. (alternative)', help: 'Optional, if different from your WhatsApp number.' },
+    { type: 'TEXT', title: 'In case of emergency, contact (number)', required: true, help: 'Someone close to you we can call in an emergency.' },
+    { type: 'LIST', title: 'Blood group', required: true, choices: ['A +ve', 'B +ve', 'AB +ve', 'O +ve', 'A -ve', 'B -ve', 'AB -ve', 'O -ve', 'Other'].map(value => ({ value })) },
+    { type: 'PAGE_BREAK', title: 'Where you ride from' },
+    { type: 'PARAGRAPH_TEXT', title: 'Current Locality', required: true, help: 'Nearest city, town, area or landmark. Not your full address.' },
+    { type: 'PARAGRAPH_TEXT', title: 'Permanent Hideout', required: true, help: 'Your hometown: nearest city, town or district. Not your full address.' },
+    { type: 'PAGE_BREAK', title: 'RWB sticker and socials' },
+    { type: 'MULTIPLE_CHOICE', title: STICKER_Q, required: true, choices: [{ value: 'Yeah!' }, { value: 'Not yet...' }], show: a => ronin(a) === R_YES },
+    { type: 'MULTIPLE_CHOICE', title: 'Have you fixed the sticker to your bike?', required: true, choices: [{ value: 'Of course!' }, { value: 'Not yet...' }], show: a => ronin(a) === R_YES && a[STICKER_Q] === 'Yeah!' },
+    { type: 'MULTIPLE_CHOICE', title: 'Are you willing to collect sticker?', required: true, choices: [{ value: 'Hell yeah!' }, { value: 'Maybe later' }], show: a => ronin(a) === R_YES && a[STICKER_Q] === 'Not yet...' },
+    { type: 'MULTIPLE_CHOICE', title: 'Are you following us on our FB page (link below)?', required: true, choices: DONE.map(value => ({ value })) },
+    { type: 'MULTIPLE_CHOICE', title: 'Have you joined our FB group (link below)?', required: true, choices: DONE.map(value => ({ value })) },
+    { type: 'MULTIPLE_CHOICE', title: 'Are you following us on our Instagram page (link below)?', required: true, choices: DONE.map(value => ({ value })) },
+    { type: 'MULTIPLE_CHOICE', title: 'Are you following us on our WhatsApp channel (link below)?', required: true, choices: DONE.map(value => ({ value })) },
+    { type: 'PAGE_BREAK', title: 'Terms & Conditions' },
+    { type: 'MULTIPLE_CHOICE', title: TNC_Q, label: 'RWB Terms & Conditions', help: TNC_Q.split('\n').slice(3, -2).join('\n'), required: true, choices: [{ value: 'Understood & agreed' }] }
+] };
+/* the Ronin answer → the member's bike: a Ronin, a booked Ronin, or the bike they ride now */
+function bikeFromJoin(a) {
+    const r = ronin(a);
+    if (r === R_YES || /^(yes|yeah|yep)/i.test(r)) return 'TVS Ronin 225';
+    if (r === R_BOOKED) return 'TVS Ronin 225 (booked)';
+    return String(a[OTHER_BIKE_Q] || '').trim() || 'No bike yet';
+}
+/* Ronin owner, Ronin booked, or a Non-Ronin rider: from the join answer, else from the bike */
+const roninKind = x => { const r = ronin(x?.answers || x?.form_answers || {}), b = String(x?.bike || '');
+    if (r === R_BOOKED || /booked/i.test(b)) return 'booked';
+    if (r === R_NOT || /^nope/i.test(r)) return 'no';
+    if (r === R_YES || /ronin/i.test(b) || /^\s*(yes|yeah|yep)\b/i.test(b)) return 'yes';
+    return b ? 'no' : 'yes'; };
+const RONIN_TAG = { booked: '<span class="badge ronin-tag booked">Ronin booked</span>', no: '<span class="badge ronin-tag">Non-Ronin</span>', yes: '' };
 let joinFormDef;   // loaded once
-async function loadJoinForm() { if (joinFormDef === undefined) joinFormDef = await api.joinForm().catch(() => null); return joinFormDef; }
+async function loadJoinForm() { joinFormDef = JOIN_DEF; return joinFormDef; }
 const formTitle = (key, fallback) => (joinFormDef?.items || []).find(i => i.type !== 'PAGE_BREAK' && i.type !== 'SECTION_HEADER' && formKey(i.title) === key)?.title || fallback;
 
 /* the value to show for a question, from what RWB already knows about this person */
@@ -482,18 +535,18 @@ function prefillFor(item, known) {
 }
 function formItemHtml(item, i, val) {
     const k = formKey(item.title), name = `q${i}`, req = item.required ? ' required' : '';
-    const head = `<span class="fq-title">${esc(item.title)}${item.required ? ' <span class="req">*</span>' : ''}</span>${item.help ? `<span class="fq-help">${esc(item.help)}</span>` : ''}`;
+    const head = `<span class="fq-title">${esc(item.label || item.title)}${item.required ? ' <span class="req">*</span>' : ''}</span>${item.help ? `<span class="fq-help">${esc(item.help)}</span>` : ''}`;
     if (k === 'tnc' && item.choices) item = { ...item, choices: item.choices.filter(c => !/(don'?t|do not|not agree|disagree)/i.test(c.value)) };   /* joining means agreeing */
     if (item.type === 'MULTIPLE_CHOICE' || item.type === 'CHECKBOX') {
         const multi = item.type === 'CHECKBOX', vals = multi ? String(val || '').split(/,\s*/) : [val];
-        return `<fieldset class="fq${k === 'tnc' ? ' fq-tnc' : ''}" data-i="${i}"${item.required ? ' data-req="1"' : ''}><legend>${head}</legend>${k === 'tnc' ? '<button type="button" class="link-btn tnc-link" data-act="tnc-read">Read the full RWB Terms & Conditions ›</button>' : ''}${item.choices.map(c => `<label class="fq-choice"><input type="${multi ? 'checkbox' : 'radio'}" name="${name}" value="${esc(c.value)}"${vals.includes(c.value) ? ' checked' : ''}${c.ends ? ' data-ends="1"' : ''}><span>${esc(c.value)}</span></label>`).join('')}</fieldset>`;
+        return `<fieldset class="fq${k === 'tnc' ? ' fq-tnc' : ''}" data-i="${i}"${item.required ? ' data-req="1"' : ''}${item.show ? ' hidden' : ''}><legend>${head}</legend>${k === 'tnc' ? '<button type="button" class="link-btn tnc-link" data-act="tnc-read">Read the full RWB Terms & Conditions ›</button>' : ''}${item.choices.map(c => `<label class="fq-choice"><input type="${multi ? 'checkbox' : 'radio'}" name="${name}" value="${esc(c.value)}"${vals.includes(c.value) ? ' checked' : ''}${c.ends ? ' data-ends="1"' : ''}><span>${esc(c.value)}</span></label>`).join('')}</fieldset>`;
     }
-    if (item.type === 'LIST') return `<label class="fq" data-i="${i}">${head}<select name="${name}"${req}><option value="">Choose</option>${item.choices.map(c => `<option${c.value === val ? ' selected' : ''}>${esc(c.value)}</option>`).join('')}</select></label>`;
-    if (item.type === 'DATE') return `<label class="fq" data-i="${i}">${head}<input type="date" name="${name}" max="${todayISO()}"${req} value="${esc(val)}"></label>`;
-    if (item.type === 'PARAGRAPH_TEXT') return `<label class="fq" data-i="${i}">${head}<textarea name="${name}" rows="3"${req}>${esc(val)}</textarea></label>`;
-    if (item.type === 'SCALE') return `<label class="fq" data-i="${i}">${head}<select name="${name}"${req}><option value="">Choose</option>${Array.from({ length: (item.high || 5) - (item.low || 1) + 1 }, (_, j) => (item.low || 1) + j).map(n => `<option${String(n) === val ? ' selected' : ''}>${n}</option>`).join('')}</select></label>`;
+    if (item.type === 'LIST') return `<label class="fq" data-i="${i}"${item.show ? ' hidden' : ''}>${head}<select name="${name}"${req}><option value="">Choose</option>${item.choices.map(c => `<option${c.value === val ? ' selected' : ''}>${esc(c.value)}</option>`).join('')}</select></label>`;
+    if (item.type === 'DATE') return `<label class="fq" data-i="${i}"${item.show ? ' hidden' : ''}>${head}<input type="date" name="${name}" max="${todayISO()}"${req} value="${esc(val)}"></label>`;
+    if (item.type === 'PARAGRAPH_TEXT') return `<label class="fq" data-i="${i}"${item.show ? ' hidden' : ''}>${head}<textarea name="${name}" rows="3"${req}>${esc(val)}</textarea></label>`;
+    if (item.type === 'SCALE') return `<label class="fq" data-i="${i}"${item.show ? ' hidden' : ''}>${head}<select name="${name}"${req}><option value="">Choose</option>${Array.from({ length: (item.high || 5) - (item.low || 1) + 1 }, (_, j) => (item.low || 1) + j).map(n => `<option${String(n) === val ? ' selected' : ''}>${n}</option>`).join('')}</select></label>`;
     const extra = PHONE_KEYS.includes(k) ? ' inputmode="tel" autocomplete="off"' : k === 'vrn' ? ' autocapitalize="characters"' : k === 'full_name' ? ' autocomplete="name"' : '';
-    return `<label class="fq" data-i="${i}">${head}<input name="${name}"${extra}${req} value="${esc(val)}"></label>`;
+    return `<label class="fq" data-i="${i}"${item.show ? ' hidden' : ''}>${head}<input name="${name}"${extra}${req} value="${esc(val)}"></label>`;
 }
 /* the form split into pages at each page break (like Google Forms) */
 function formPages(def) {
@@ -504,24 +557,32 @@ function formPages(def) {
     });
     return pages.filter((p, n) => n === 0 || p.items.length);
 }
+/* the answers so far, for questions shown only after a certain answer (it.show) */
+function formAnswers(def, form) {
+    const fd = new FormData(form), a = {};
+    def.items.forEach((it, i) => { if (it.type !== 'PAGE_BREAK' && it.type !== 'SECTION_HEADER') a[it.title] = String(fd.get(`q${i}`) ?? '').trim(); });
+    return a;
+}
+const itemShown = (it, a) => !it.show || it.show(a);
 function readForm(def, form) {
-    const fd = new FormData(form), out = { answers: {} };
+    const fd = new FormData(form), out = { answers: {} }, now = formAnswers(def, form);
     def.items.forEach((it, i) => {
-        if (it.type === 'PAGE_BREAK' || it.type === 'SECTION_HEADER') return;
+        if (it.type === 'PAGE_BREAK' || it.type === 'SECTION_HEADER' || !itemShown(it, now)) return;
         const v = (it.type === 'CHECKBOX' ? fd.getAll(`q${i}`).join(', ') : String(fd.get(`q${i}`) ?? '')).replace(/\s+/g, ' ').trim();
         if (v) out.answers[it.title] = v;
         const k = formKey(it.title); if (!k) return;
         if (k === 'tnc') out.tnc = isAgree(v);
-        else if (k === 'bike') out.bike = roninAnswer(v);
+        else if (k === 'bike') out.bike = def === JOIN_DEF ? bikeFromJoin(now) : roninAnswer(v);
         else if (k === 'vrn') out.vrn = v.toUpperCase();
         else out[k] = v;
     });
     if (!def.items.some(it => formKey(it.title) === 'tnc')) out.tnc = !!form.querySelector('[name=tnc]')?.checked;
     return out;
 }
-function checkPage(pg, form) {
+function checkPage(pg, form, def) {
+    const now = def ? formAnswers(def, form) : {};
     for (const it of pg.items) {
-        if (it.type === 'SECTION_HEADER') continue;
+        if (it.type === 'SECTION_HEADER' || (it.show && !it.show(now))) continue;
         const k = formKey(it.title), name = `q${it.i}`;
         const v = it.type === 'CHECKBOX' || it.type === 'MULTIPLE_CHOICE' ? [...form.querySelectorAll(`[name=${name}]:checked`)].map(x => x.value).join(', ') : String(form.elements[name]?.value || '').trim();
         if (it.required && !v) return `Please answer: ${it.title}`;
@@ -546,57 +607,109 @@ function vrnWatch(vrnInput, phoneInput) {
     vrnInput.addEventListener('change', check); vrnInput.addEventListener('blur', check);
 }
 const vrnTaken = form => form.querySelector('.vrn-taken:not([hidden])')?.textContent.replace(/^⚠ /, '') || '';
-function liveJoinForm(def, known, sess, filled = false) {
+function liveJoinForm(def, known, sess, filled = false, back = null) {
     const pages = formPages(def);
     let at = 0;
-    app.innerHTML = `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>Join RWB</h1></header>
-        <p class="small muted" style="margin:4px 0 14px">Signed in as <b>${esc(sess.email)}</b>${filled ? '. We filled in what RWB already knows; check it and change anything that\'s wrong.' : '. Same questions as the RWB join form.'}</p>
-        <form id="req" class="gform" novalidate>${pages.map((pg, n) => `<section class="gpage" data-p="${n}"${n ? ' hidden' : ''}>
+    const stepName = n => pages[n].title || (n ? '' : 'Welcome');
+    app.innerHTML = `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${filled ? 'Update my answers' : 'Join RWB'}</h1></header>
+        <div class="jf-prog" aria-live="polite"><div class="jf-bar"><i id="jf-fill"></i></div><span class="jf-step" id="jf-step"></span></div>
+        <p class="jx-acct"><span class="jx-dot" aria-hidden="true"></span>${esc(sess.email)}</p>
+        <form id="req" class="gform jf" novalidate>${pages.map((pg, n) => `<section class="gpage" data-p="${n}"${n ? ' hidden' : ''}>
             ${pg.title ? `<h2 class="gp-title">${esc(pg.title)}</h2>` : ''}${pg.help ? `<p class="gp-help">${esc(pg.help)}</p>` : ''}
             ${pg.items.map(it => it.type === 'SECTION_HEADER' ? `<div class="fq-section"><b>${esc(it.title)}</b>${it.help ? `<span class="fq-help">${esc(it.help)}</span>` : ''}</div>` : formItemHtml(it, it.i, prefillFor(it, known))).join('')}
             ${n === pages.length - 1 && !def.items.some(it => formKey(it.title) === 'tnc') ? rulesBlock() : ''}
-            <div class="gnav">${n ? '<button type="button" class="btn ghost" data-act="gback">Back</button>' : ''}${n < pages.length - 1 ? '<button type="button" class="btn" data-act="gnext">Next</button>' : '<button class="btn">Send to admins</button>'}</div>
-            <p class="small muted gp-count">Page ${n + 1} of ${pages.length}</p></section>`).join('')}
+            <div class="gnav">${n ? '<button type="button" class="btn ghost" data-act="gback">Back</button>' : ''}${n < pages.length - 1 ? '<button type="button" class="btn" data-act="gnext">Continue</button>' : `<button class="btn">${filled ? 'Send again' : 'Send to the admins'}</button>`}</div></section>`).join('')}
         </form>
-        <button type="button" class="btn ghost block" data-act="out" style="margin-top:10px">Use a different Google account</button>`;
+        <p class="jx-links">${back ? '<button type="button" class="link-btn" data-act="jback">Cancel</button><span aria-hidden="true">·</span>' : ''}<button type="button" class="link-btn" data-act="out">Use a different Google account</button></p>`;
     const form = $('#req');
     const qIdx = key => def.items.findIndex(it => formKey(it.title) === key);
     vrnWatch(form.querySelector(`[name=q${qIdx('vrn')}]`), form.querySelector(`[name=q${qIdx('phone')}]`));
-    const show = n => { at = n; form.querySelectorAll('.gpage').forEach(p => p.hidden = Number(p.dataset.p) !== n); window.scrollTo(0, 0); };
+    /* "Visit" links next to the social media questions */
+    def.items.forEach((it, i) => { const so = SOCIAL.find(x => x[1] && x[2].test(it.title) && /follow|join/i.test(it.title)); const el = form.querySelector(`.fq[data-i="${i}"] legend`);
+        if (so && el) el.insertAdjacentHTML('beforeend', ` <a class="fq-visit" href="${so[1]}" target="_blank" rel="noopener">Open ${esc(so[0])} ↗</a>`); });
+    /* questions that depend on an earlier answer (VRN only for Ronin owners, and so on) */
+    const relayout = () => { const a = formAnswers(def, form); def.items.forEach((it, i) => { if (!it.show) return; const el = form.querySelector(`.fq[data-i="${i}"]`); if (el) el.hidden = !it.show(a); }); };
+    form.addEventListener('change', relayout); relayout();
+    const show = n => { at = n; form.querySelectorAll('.gpage').forEach(p => p.hidden = Number(p.dataset.p) !== n); window.scrollTo(0, 0);
+        $('#jf-fill').style.width = `${Math.round((n + 1) / pages.length * 100)}%`; $('#jf-step').textContent = `Step ${n + 1} of ${pages.length}${stepName(n) ? ' · ' + stepName(n) : ''}`; };
+    show(0);
     actions = {
         out: () => api.signOut(),
+        jback: () => back?.(),
         'tnc-read': () => showTnc(),
-        gnext: () => { const err = checkPage(pages[at], form) || (form.querySelector(`.gpage[data-p="${at}"] .vrn-taken:not([hidden])`) ? vrnTaken(form) : ''); if (err) return toast(err, true); show(at + 1); },
+        gnext: () => { const err = checkPage(pages[at], form, def) || (form.querySelector(`.gpage[data-p="${at}"] .vrn-taken:not([hidden])`) ? vrnTaken(form) : ''); if (err) return toast(err, true); show(at + 1); },
         gback: () => show(at - 1)
     };
     form.addEventListener('submit', e => {
         e.preventDefault();
-        for (let n = 0; n < pages.length; n++) { const err = checkPage(pages[n], form); if (err) { show(n); return toast(err, true); } }
+        for (let n = 0; n < pages.length; n++) { const err = checkPage(pages[n], form, def); if (err) { show(n); return toast(err, true); } }
         const f = readForm(def, form);
         if (!f.full_name || !f.phone) return toast('Full Name and WhatsApp No. are needed', true);
         if (f.emergency_phone && f.phone && f.emergency_phone.replace(/\D/g, '').slice(-10) === f.phone.replace(/\D/g, '').slice(-10)) return toast('The emergency contact should be someone else\'s number', true);
+        if (isMinor(f.dob)) return toast('RWB is for riders aged 18 and over. Please check your date of birth.', true);
         if (!f.tnc) return toast('You need to agree to the RWB Terms & Conditions to join.', true);
         if (vrnTaken(form)) return toast(vrnTaken(form), true);
-        busy(e.submitter, async () => { await api.requestAccess(f); boot(); });
+        busy(e.submitter, async () => { await api.requestAccess(f); toast(filled ? 'Sent again to the admins 👍' : 'Sent to the RWB admins 👍'); boot(); });
     });
 }
 
-/* Not a member (yet). The only way to join is the RWB join form on roninwb.in: an admin approves the entry, then the
-   rider signs in here with the same email and their details are already filled in. */
-const JOIN_URL = SITE.JOIN_FORM_URL || 'https://roninwb.in';
-async function viewAccess(status, sess) {
+/* Not a member (yet). New riders join right here (or on roninwb.in/join, which opens this): sign in with Google, fill
+   the RWB join form, an admin approves, and they're in. Riders waiting, on hold or not approved see where they stand. */
+const JOIN_URL = 'https://roninwb.in/join/';
+/* riders who aren't members yet reach RWB on Instagram (admins' numbers and the RWB WhatsApp group stay private) */
+const RWB_IG_DM = SITE.INSTAGRAM_DM_URL || 'https://ig.me/m/ronin_warriors_bengal';
+const JOIN_MODE = (() => { try { if (/[?&]join\b/.test(location.search) || location.hash === '#join') sessionStorage.setItem('rwb-join', '1'); return sessionStorage.getItem('rwb-join') === '1'; } catch { return false; } })();
+async function startJoin(sess, mine = null) {
+    await loadJoinForm();
+    const back = () => viewAccess(mine?.status || 'not_found', sess, true);
+    liveJoinForm(JOIN_DEF, mine ? { ...mine, answers: mine.answers || {} } : { full_name: sess.name || '' }, sess, !!mine, back);
+}
+const ago = t => t ? timeAgo(t) : '';
+async function viewAccess(status, sess, noJump = false) {
     tabbar.hidden = true;
-    actions = { recheck: b => busy(b, boot), out: () => api.signOut(), 'help-admins': () => joinHelpSheet(sess), 'fam-join': () => famJoinScreen(sess) };
-    if (status === 'pending') {
-        app.innerHTML = `${demoBar()}<section class="signin"><img src="icons/logo-128.png" alt="">
-            <div><h1>Waiting for approval</h1><p class="lead">We've got your RWB join form. An RWB admin will check your details, usually within a day.</p></div>
-            <p class="small muted">Once you're approved you'll get a WhatsApp message. Then open the app and sign in with <b>${esc(sess.email)}</b>: your details will already be there.</p>
-            <button class="btn block" data-act="recheck">Check again</button>
-            <button class="btn ghost block" data-act="out">Sign out</button></section>`;
+    actions = { recheck: b => busy(b, boot), out: () => api.signOut(), 'fam-join': () => famJoinScreen(sess) };
+    if (status === 'pending' || status === 'hold' || status === 'rejected') {
+        const mine = await api.myJoin().catch(() => null) || { status };
+        const canApply = mine.can_apply !== false;
+        actions.edit = b => busy(b, () => startJoin(sess, mine));
+        const I = { pending: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
+            hold: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M10 9v6M14 9v6"/></svg>',
+            rejected: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.5 9.5l5 5M14.5 9.5l-5 5"/></svg>' };
+        const S = {
+            pending: { h: 'Request sent', lead: 'Your request is with the RWB admins. They usually check within a day.' },
+            hold: { h: 'On hold', lead: 'The RWB admins have paused your request for now.' },
+            rejected: { h: 'Not approved', lead: canApply ? 'The RWB admins couldn\'t approve your request this time.' : 'The RWB admins couldn\'t approve your request.' }
+        }[status];
+        const steps = status === 'rejected' ? '' : `<ol class="jx-steps">
+            <li class="done"><i aria-hidden="true"></i><span><b>Request sent</b><small>${ago(mine.created_at) || 'Done'}</small></span></li>
+            <li class="${status === 'hold' ? 'paused' : 'now'}"><i aria-hidden="true"></i><span><b>Admin check</b><small>${status === 'hold' ? 'On hold' + (mine.decided_at ? ' · ' + ago(mine.decided_at) : '') : 'Usually within a day'}</small></span></li>
+            <li><i aria-hidden="true"></i><span><b>Welcome to RWB</b><small>The app opens with ${esc(sess.email)}</small></span></li></ol>`;
+        const note = status === 'hold' && mine.hold_note ? ['Note from the admins', mine.hold_note] : status === 'rejected' && mine.reason ? ['Reason', mine.reason] : null;
+        const tip = { pending: 'You\'ll get a notification and a WhatsApp message once you\'re approved.', hold: 'Changed something, or got your Ronin? Update your answers and the request goes back to the admins.',
+            rejected: canApply ? 'If things have changed, or you think this was a mistake, you can apply again.' : 'You can\'t send a new request. If you think this is a mistake, contact RWB.' }[status];
+        const btns = { pending: '<button class="btn block" data-act="recheck">Check again</button><button class="btn ghost block" data-act="edit">Edit my answers</button>',
+            hold: '<button class="btn block" data-act="edit">Update my answers</button><a class="btn ghost block" href="${RWB_IG_DM}" target="_blank" rel="noopener">Contact RWB</a>',
+            rejected: (canApply ? '<button class="btn block" data-act="edit">Apply again</button>' : '') + `<a class="btn ${canApply ? 'ghost ' : ''}block" href="${RWB_IG_DM}" target="_blank" rel="noopener">Contact RWB</a>` }[status];
+        const links = { pending: '<a class="link-btn" href="${RWB_IG_DM}" target="_blank" rel="noopener">Contact RWB</a><span aria-hidden="true">·</span><button class="link-btn" data-act="out">Sign out</button>',
+            hold: '<button class="link-btn" data-act="recheck">Check again</button><span aria-hidden="true">·</span><button class="link-btn" data-act="out">Sign out</button>',
+            rejected: '<button class="link-btn" data-act="out">Sign out</button>' }[status];
+        app.innerHTML = `${demoBar()}<section class="jx ${status}">
+            <div class="jx-hero"><div class="jx-ico" aria-hidden="true">${I[status]}</div><h1>${S.h}</h1><p class="jx-lead">${S.lead}</p></div>
+            ${steps}
+            ${note ? `<div class="jx-note"><span>${note[0]}</span><b>${esc(note[1])}</b></div>` : ''}
+            <p class="jx-tip">${tip}</p>
+            <div class="jx-actions">${btns}</div>
+            <p class="jx-links">${links}</p>
+            <p class="jx-acct"><span class="jx-dot" aria-hidden="true"></span>${esc(sess.email)}</p></section>`;
         return;
     }
+    /* came from roninwb.in/join: straight to the form */
+    if (JOIN_MODE && !noJump) return startJoin(sess);
+    actions.join = b => busy(b, () => startJoin(sess));
     app.innerHTML = `${demoBar()}<section class="signin no-acct"><img src="icons/logo-128.png" alt="">
         <div><h1>No Account Found!</h1><p class="lead">There's no RWB membership for <b>${esc(sess.email)}</b>.</p></div>
+        <div class="card na-card na-join"><b class="na-h">New to RWB?</b><p class="small muted">Every rider is welcome, with or without a Ronin. It takes about 3 minutes.</p>
+            <button type="button" class="btn block" data-act="join">Join RWB</button></div>
         <form class="card na-card na-find" id="naf" novalidate>
             <b class="na-h">Already in RWB? Find your account</b>
             <p class="small muted">Enter the WhatsApp number and VRN you joined RWB with.</p>
@@ -605,8 +718,7 @@ async function viewAccess(status, sess) {
             <button class="btn block" data-x="find">Find my email</button>
             <div id="na-out" hidden></div>
         </form>
-        <div class="card na-card"><p>Still stuck? <button type="button" class="linkish" data-act="help-admins">WhatsApp the Admins</button> to know your registered email.</p></div>
-        <div class="card na-card"><p>Not joined yet? <a href="${esc(JOIN_URL)}" target="_blank" rel="noopener">Join here</a></p></div>
+        <div class="card na-card"><p>Still stuck? <a class="linkish" href="${RWB_IG_DM}" target="_blank" rel="noopener">Contact RWB</a> on Instagram to know your registered email.</p></div>
         <div class="card na-card"><p>Family of an RWB member? <button type="button" class="linkish" data-act="fam-join">Join RWB FAM with an invite code</button></p></div>
         <button class="btn ghost block" data-act="out">Use a different Google account</button></section>`;
     bindFindAccount(sess);
@@ -624,7 +736,7 @@ function bindFindAccount(sess) {
         e.preventDefault(); const v = read(), err = check(v); if (err) return toast(err, true);
         busy(f.querySelector('[data-x=find]'), async () => {
             const r = await api.findMyEmail(v.phone, v.vrn); out.hidden = false;
-            if (!r?.found) { out.innerHTML = '<p class="warn small">No RWB member found with that WhatsApp number and VRN. Check both and try again, or WhatsApp the Admins.</p>'; return; }
+            if (!r?.found) { out.innerHTML = '<p class="warn small">No RWB member found with that WhatsApp number and VRN. Check both and try again, or contact RWB on Instagram.</p>'; return; }
             if (r.on_app) { out.innerHTML = `<div class="na-hint"><span class="small muted">This membership is already on the app with</span><b>${esc(r.hint || 'another email')}</b></div>
                 <button type="button" class="btn block" data-x="switch">Sign in with that account</button>` + verifyForm('', true); }
             else out.innerHTML = (r.hint ? `<div class="na-hint"><span class="small muted">You joined RWB with</span><b>${esc(r.hint)}</b></div>
@@ -634,15 +746,17 @@ function bindFindAccount(sess) {
             if (cl) cl.onclick = () => { const dob = out.querySelector('[name=dob]').value, v2 = read(), err2 = check(v2);
                 if (err2) return toast(err2, true); if (!dob) return toast('Enter your date of birth', true);
                 busy(cl, async () => { const res = await api.claimMembership(v2.phone, v2.vrn, dob);
-                    if (!res?.ok) return toast('Those details don\'t match your RWB record. Check your date of birth, or WhatsApp the Admins.', true);
+                    if (!res?.ok) return toast('Those details don\'t match your RWB record. Check your date of birth, or contact RWB on Instagram.', true);
                     toast(`Welcome${res.name ? ', ' + res.name : ''}! You're in. 🏍️`); boot(); }); };
         });
     };
 }
-async function joinHelpSheet(sess) {
+async function joinHelpSheet(sess, status = '') {
     const list = await api.joinHelpAdmins().catch(() => []);
-    const msg = a => `Hi ${a.first_name}, I'm ${sess.name || 'an RWB member'}. I signed in to the RWB App with ${sess.email}, but it says No Account Found. Could you tell me which email I registered with?`;
-    openSheet('WhatsApp the Admins', `<p class="small muted" style="margin-bottom:10px">Choose an admin. They'll tell you the email you joined with, so you can sign in with it.</p>
+    const msg = a => status === 'pending' || status === 'hold' || status === 'rejected'
+        ? `Hi ${a.first_name}, I'm ${sess.name || 'a rider'}. I sent an RWB join request in the RWB App with ${sess.email}${status === 'hold' ? ' and it\'s on hold' : status === 'rejected' ? ' and it wasn\'t approved' : ''}. Could you help me with it?`
+        : `Hi ${a.first_name}, I'm ${sess.name || 'an RWB member'}. I signed in to the RWB App with ${sess.email}, but it says No Account Found. Could you tell me which email I registered with?`;
+    openSheet('WhatsApp the Admins', `<p class="small muted" style="margin-bottom:10px">Choose an admin. ${status && status !== 'not_found' ? 'They\'ll help you with your join request.' : 'They\'ll tell you the email you joined with, so you can sign in with it.'}</p>
         <div class="group">${list.length ? list.map(a => `<div class="bike-row"><span class="g-ico">🛡️</span><span class="grow"><b>${esc(a.first_name)}</b><span class="small muted">RWB admin</span></span>
             <a class="btn sm wa" target="_blank" rel="noopener" href="${waTo(a.phone, msg(a))}">WhatsApp</a></div>`).join('') : '<p class="small muted" style="padding:12px">Could not load the admins. Please try again, or message RWB on Instagram.</p>'}</div>`);
 }
@@ -3433,11 +3547,13 @@ function checksOf(r) {
     const entry = c.entry === 'ok' ? { ok: true, t: e.t, s: 'Checked' + by('entry') }
         : c.entry === 'dup' ? { ok: false, warn: true, t: 'Possible duplicate', s: 'Flagged for a closer look' + by('entry') }
         : { ok: e.ok, warn: e.warn, t: e.t, s: e.s };
-    const ronin = c.ronin === 'ok' ? { ok: true, t: 'Owns a Ronin', s: 'Confirmed' + by('ronin') }
-        : c.ronin === 'booked' ? { ok: true, t: 'Ronin booked', s: 'Delivery pending' + by('ronin') }
-        : c.ronin === 'no' ? { ok: false, t: 'No Ronin', s: `Answer: ${r.bike || '–'}` + by('ronin') }
-        : { ok: !!r.has_ronin, t: r.has_ronin ? 'Has a Ronin' : 'No Ronin', s: `Answer: ${r.bike || '–'}` };
-    const vrn = r.vrn_verified ? { ok: true, t: 'VRN verified', s: (c.vrn === 'ok' ? 'Checked' : 'Ticked') + by('vrn') }
+    const kind = c.ronin === 'ok' ? 'yes' : c.ronin === 'booked' ? 'booked' : c.ronin === 'no' ? 'no' : roninKind(r);
+    const other = r.answers?.[OTHER_BIKE_Q] || (kind === 'no' && r.bike && !/^no bike/i.test(r.bike) ? r.bike : '');
+    const ronin = kind === 'yes' ? { ok: true, t: 'Owns a Ronin', s: c.ronin ? 'Confirmed' + by('ronin') : `Answer: ${r.answers?.[RONIN_Q] || r.bike || '–'}` }
+        : kind === 'booked' ? { ok: true, t: 'Ronin booked', s: 'Delivery pending' + by('ronin') }
+        : { ok: true, t: 'Non-Ronin rider', s: (other ? `Rides: ${other}` : 'No bike yet') + by('ronin') + ' · welcome too' };
+    const vrn = kind !== 'yes' && !r.vrn_verified ? { ok: true, t: 'No VRN needed', s: kind === 'booked' ? 'They can add it in Me after delivery' : 'Non-Ronin rider' }
+        : r.vrn_verified ? { ok: true, t: 'VRN verified', s: (c.vrn === 'ok' ? 'Checked' : 'Ticked') + by('vrn') }
         : c.vrn === 'no' ? { ok: false, t: 'VRN couldn\'t be verified', s: 'Marked' + by('vrn') }
         : r.vrn_known ? { ok: true, t: 'VRN verified', s: 'Verified earlier, same VRN on their record' }
         : { ok: false, unk: true, pending: true, t: 'VRN not checked yet', s: 'Tap to mark it after checking' };
@@ -3448,15 +3564,19 @@ function checksOf(r) {
     return [{ k: 'entry', ...entry }, { k: 'ronin', ...ronin }, { k: 'vrn', ...vrn }, { k: 'tnc', ...tnc }];
 }
 function reqCard(r) {
-    const cks = checksOf(r), all = cks.every(c => c.ok);
+    const cks = checksOf(r), all = cks.every(c => c.ok), st = r.status || 'pending';
     const ico = c => c.ok ? '✓' : c.pending ? '' : c.warn || c.unk ? '!' : '✕';
-    return `<div class="card req-card" data-id="${r.id}">
-        <div class="row" style="gap:8px;align-items:flex-start"><div class="grow"><h3>${esc(r.full_name)}</h3>
-            <p class="small muted">${r.source === 'form' ? 'Join form' : 'App request'} · ${timeAgo(r.form_ts || r.created_at)}${r.on_app ? ' · signed in on the app' : ''}</p>
+    const btns = st === 'rejected' ? `<button class="btn ghost" data-act="ask" data-id="${r.id}">💬 Message</button><button class="btn ghost" data-act="reopen" data-id="${r.id}">Move back to New</button>`
+        : `<button class="btn ghost" data-act="ask" data-id="${r.id}" aria-label="Message ${esc(r.full_name)} on WhatsApp">💬 Message</button>${st === 'hold' ? `<button class="btn ghost" data-act="reopen" data-id="${r.id}">Back to New</button>` : `<button class="btn ghost" data-act="hold" data-id="${r.id}">On hold</button>`}<button class="btn ghost" data-act="reject" data-id="${r.id}">Reject</button><button class="btn" data-act="approve" data-id="${r.id}">Approve</button>`;
+    return `<div class="card req-card st-${st}" data-id="${r.id}">
+        <div class="row" style="gap:8px;align-items:flex-start"><div class="grow"><h3>${esc(r.full_name)} ${RONIN_TAG[roninKind(r)]}</h3>
+            <p class="small muted">${r.source === 'form' ? 'Google Form' : 'RWB join form'} · ${timeAgo(r.form_ts || r.created_at)}${r.on_app ? ' · signed in' : ''}</p>
+            ${st === 'hold' ? `<p class="req-note hold">⏸️ On hold${r.decided_by ? ` by ${esc(r.decided_by)}` : ''} ${r.decided_at ? timeAgo(r.decided_at) : ''}${r.hold_note ? `<b>“${esc(r.hold_note)}”</b>` : ''}</p>` : ''}
+            ${st === 'rejected' ? `<p class="req-note rej">Rejected${r.decided_by ? ` by ${esc(r.decided_by)}` : ''} ${r.decided_at ? timeAgo(r.decided_at) : ''}${r.spam ? ' · <span class="badge danger-tag">Spam: can\'t apply again</span>' : ''}${r.reject_reason ? `<b>“${esc(r.reject_reason)}”</b>` : ''}</p>` : ''}
             ${r.updated_at && Date.now() - Date.parse(r.updated_at) < 3 * 864e5 ? `<span class="upd-tag">✏️ Updated ${timeAgo(r.updated_at)}</span>` : ''}</div>
             <span class="req-score ${all ? 'ok' : ''}">${cks.filter(c => c.ok).length}/4</span></div>
         <ul class="checks">${cks.map(c => `<li class="${c.ok ? 'yes' : c.pending ? 'no pend' : c.warn || c.unk ? 'warn' : 'no'} tap-chk" data-act="chk" data-id="${r.id}" data-k="${c.k}" role="button" tabindex="0" aria-label="${esc(c.t)}: change">
-            <span class="ci">${ico(c)}</span><span class="grow"><b>${esc(c.t)}</b>${c.k === 'vrn' ? `<small><span class="vrn">${esc(r.vrn || r.member_vrn || 'No VRN given')}</span>${c.s ? ' · ' + esc(c.s) : ''}</small>` : c.s ? `<small>${esc(c.s)}</small>` : ''}</span><span class="chk-edit" aria-hidden="true">›</span>
+            <span class="ci">${ico(c)}</span><span class="grow"><b>${esc(c.t)}</b>${c.k === 'vrn' ? `<small>${c.t === 'No VRN needed' && !r.vrn ? '' : `<span class="vrn">${esc(r.vrn || r.member_vrn || 'No VRN given')}</span>`}${c.s ? (c.t === 'No VRN needed' && !r.vrn ? '' : ' · ') + esc(c.s) : ''}</small>` : c.s ? `<small>${esc(c.s)}</small>` : ''}</span><span class="chk-edit" aria-hidden="true">›</span>
             ${c.k === 'vrn' && r.vrn ? `<span class="vrn-tools"><button class="link-btn" data-act="copy-vrn" data-v="${esc(r.vrn)}">Copy</button><button class="link-btn" data-act="vrn-sites" data-v="${esc(r.vrn)}">Check VRN ↗</button></span>` : ''}
             ${c.k === 'vrn' && r.vrn_other ? `<small class="dup">⚠ Same VRN as ${esc(r.vrn_other)}</small>` : ''}</li>`).join('')}</ul>
         ${r.match_linked && r.on_app && r.check_entry !== 'new' ? '<p class="warn small" style="margin-bottom:10px">⚠ This number is already linked to another app account.</p>' : ''}
@@ -3466,7 +3586,7 @@ function reqCard(r) {
             ${r.dob ? `<dt>Birthday</dt><dd>${fmtDayMonth(r.dob)}</dd>` : ''}<dt>Bike</dt><dd>${esc(r.bike || '–')}</dd>${r.blood_group ? `<dt>Blood group</dt><dd>${esc(r.blood_group)}</dd>` : ''}
             ${r.locality ? `<dt>Locality</dt><dd>${esc(r.locality)}</dd>` : ''}${r.hideout ? `<dt>Hometown</dt><dd>${esc(r.hideout)}</dd>` : ''}
             ${r.emergency_phone ? `<dt>Emergency</dt><dd>${esc(r.emergency_phone)}</dd>` : ''}${r.alt_phone ? `<dt>Alt. mobile</dt><dd>${esc(r.alt_phone)}</dd>` : ''}</dl>`}</details>
-        <div class="btns req-btns" style="margin-top:12px"><button class="btn ghost" data-act="ask" data-id="${r.id}" aria-label="Message ${esc(r.full_name)} on WhatsApp">💬 Message</button><button class="btn ghost" data-act="reject" data-id="${r.id}">Reject</button><button class="btn" data-act="approve" data-id="${r.id}">Approve</button></div></div>`;
+        <div class="btns req-btns ${st === 'rejected' ? 'two' : 'four'}" style="margin-top:12px">${btns}</div></div>`;
 }
 /* age from a date of birth (YYYY-MM-DD); RWB is 18+ (Terms, Privacy Policy and the DPDP Act's rules for children) */
 function ageOf(dob) {
@@ -3480,7 +3600,7 @@ function checkSheet(r, k) {
     const e = entryCheck(r);
     const OPTS = {
         entry: { title: 'New or existing member', opts: [['auto', `Automatic: ${e.t}`, e.s], ['ok', '✓ Checked, looks fine', 'You checked who they are'], ['dup', '⚠ Possible duplicate', 'Already registered under another number or name']] },
-        ronin: { title: 'Has a Ronin', opts: [['auto', 'From their answer', `“${r.bike || 'No answer'}”`], ['ok', '✓ Owns a Ronin', 'Confirmed by you'], ['booked', '✓ Ronin booked', 'Delivery pending (counts as yes)'], ['no', '✕ No Ronin', 'Doesn\'t own one']] },
+        ronin: { title: 'Ronin', opts: [['auto', 'From their answer', `“${r.answers?.[RONIN_Q] || r.bike || 'No answer'}”`], ['ok', '✓ Owns a Ronin', 'Confirmed by you'], ['booked', '✓ Ronin booked', 'Delivery pending'], ['no', '✓ Non-Ronin rider', 'Doesn\'t own one. Welcome too']] },
         vrn: { title: 'VRN verified', opts: [['ok', '✓ Verified', 'Checked with Check VRN, the RC, or with the rider'], ['no', '✕ Couldn\'t verify', 'The number or the owner didn\'t match'], ['auto', 'Not checked yet', r.vrn_known ? 'Same VRN as on their member record (counts as verified)' : '']] },
         tnc: { title: 'Agreed to the T&C', opts: [['auto', 'From their answer', r.tnc == null && !(c.tnc_orig ?? null) ? 'No answer on record' : ''], ['ok', '✓ Agreed', 'For example, they replied “I agree” on WhatsApp'], ['no', '✕ Doesn\'t agree', '']] }
     }[k];
@@ -3502,6 +3622,7 @@ function waMsg(kind, x = {}) {
         existing: `Hi Warrior ${first}! 👋\n\nYou're already in our RWB WhatsApp group, so nothing to worry about. Your RWB App account is ready: just open the app and explore.\n\n📍 Track: live location on rides, SOS to the RWB team\n🔧 Service: records, bills and next-service reminders\n⛽ Mileage: your real km/l and fuel spends\n🛒 MotoMart: buy and sell used riding gear\n📘 Guides: maintenance help and tested gear\n📅 Events: rides, RSVPs and shared expenses\n🗓️ Calendar: events plus renewal, service and parts due dates, with reminders\n🏍️ RWB: members and leaderboards\n🤖 Pookie: our AI for any bike question\n\nPlease also update your details in the Me tab (you can set your bike model and add up to 3 bikes).\n\n${APP_LINK}\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
         returning: `Hi ${first}! 🎉\n\nWelcome back to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nThe RWB App: https://${APP_LINK}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
         rejected: `Hi ${first},\n\nThank you for your interest in Ronin Warriors of Bengal. We're sorry, we couldn't approve your registration this time${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'}\n\nIf you think this is a mistake, or things change, just reply here and we'll be happy to help.\n\nRide safe! 🙏\n– ${me}, RWB`,
+        hold: `Hi ${first}! 👋\n\nThanks for your interest in Ronin Warriors of Bengal. Your join request is on hold for now${x.note ? `: ${x.note.replace(/[.\s]+$/, '')}.` : '.'}\n\n${x.on_app ? 'You can see this in the RWB App and update your answers there anytime.' : 'Just reply here if you have any questions.'}\n– ${me}, RWB`,
         change_ok: `Hi ${first}! ✅ Your ${x.what || 'profile'} update in the RWB App is approved. Thanks for keeping your details up to date.\n– ${me}, RWB`,
         change_no: `Hi ${first}, we couldn't approve your ${x.what || 'profile'} update in the RWB App${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'} Just reply here if you'd like help with it. 🙏\n– ${me}, RWB`,
         ask: `Hi ${first}! 👋\n\nThanks for registering with Ronin Warriors of Bengal. Before we approve you, could you please help us with:\n${(x.asks || []).map(a => '• ' + a).join('\n') || '• '}\n${(x.asks || []).some(a => /terms/i.test(a)) ? `\n📜 RWB Terms & Conditions: ${TNC_URL}\nIf you agree, just reply “I agree” here.\n` : ''}\n${x.on_app ? 'You can update your details in the RWB App (open it and tap Edit my details), or just reply here.' : 'You can edit your join form response (use the same email), or just reply here.'}\n\nThank you!\n– ${me}, RWB`,
@@ -3593,15 +3714,20 @@ async function adminDupes() {
 async function adminRequests() {
     /* the approval list shows first; the follow-ups (they need every member) fill in under it when they arrive */
     const later = Promise.all([api.admin.incomplete().catch(() => null), state.adminMembers ? Promise.resolve(state.adminMembers) : api.admin.members().then(m => (state.adminMembers = m)).catch(() => [])]);
-    const [reqs, chg] = await Promise.all([api.admin.requests(), api.admin.changes().catch(() => [])]);
+    state.joinView ||= 'pending';
+    const view = state.joinView;
+    const [jl, chg] = await Promise.all([api.admin.joinList(view), view === 'pending' ? api.admin.changes().catch(() => []) : Promise.resolve([])]);
+    const reqs = jl.list || [], cnt = jl.counts || {};
+    const seg = `<div class="seg join-seg" role="tablist" aria-label="Join requests">${[['pending', 'New'], ['hold', 'On hold'], ['rejected', 'Rejected']].map(([k, t]) => `<button role="tab" aria-selected="${view === k}" data-act="jview" data-v="${k}">${t}${cnt[k] ? ` (${cnt[k]})` : ''}</button>`).join('')}</div>`;
+    const lead = { pending: 'New join requests. Check the 4 points, then approve and add them to the WhatsApp group. Non-Ronin riders are welcome too.', hold: 'Paused requests. The rider sees your note in the app and can update their answers; an update brings them back to New.', rejected: 'Rejected in the last 60 days. The rider sees the reason and can apply again, unless marked as spam.' }[view];
     const digest = () => `🛡️ RWB App: ${reqs.length + chg.length} waiting for approval\n${reqs.length ? `\nNew entries (${reqs.length}):\n${azSort(reqs).slice(0, 15).map(r => `• ${r.full_name} (${r.source === 'form' ? 'form' : 'app'})`).join('\n')}` : ''}${chg.length ? `\n\nProfile changes (${chg.length}):\n${azSort(chg).slice(0, 15).map(c => `• ${c.full_name}: ${CHANGE_TXT[c.kind]}`).join('\n')}` : ''}\n\nOpen: roninwb.in/app → Home → Admin`;
-    $('#admin-body').innerHTML = (reqs.length || chg.length ? `<button class="btn ghost block share-admins" data-act="digest">📣 Share this list to the admin WhatsApp group</button>` : '') + (reqs.length || chg.length ? `${reqs.length ? `<p class="small muted" style="margin-bottom:10px">New entries from the RWB join form. Check the 4 points, then approve and add them to the WhatsApp group. Rejected entries are deleted from the sheet.</p>
+    $('#admin-body').innerHTML = seg + (view === 'pending' && (reqs.length || chg.length) ? `<button class="btn ghost block share-admins" data-act="digest">📣 Share this list to the admin WhatsApp group</button>` : '') + (reqs.length || chg.length ? `${reqs.length ? `<p class="small muted" style="margin-bottom:10px">${lead}</p>
         <div class="list">${reqs.map(reqCard).join('')}</div>` : ''}
         ${chg.length ? `<h2 class="group-title" style="margin-top:${reqs.length ? 22 : 0}px">Changes to approve</h2><p class="small muted" style="margin-bottom:10px">Members changed an important detail in their profile.</p><div class="list">${chg.map(changeCard).join('')}</div>` : ''}`
-        : '<div class="card empty"><b>All clear</b>Nothing waiting for approval.</div>') + '<div id="fu-box"></div>';
+        : `<div class="card empty"><b>${view === 'pending' ? 'All clear' : 'Nobody here'}</b>${view === 'pending' ? 'Nothing waiting for approval.' : view === 'hold' ? 'No requests on hold.' : 'No rejected requests in the last 60 days.'}</div>`) + (view === 'pending' ? '<div id="fu-box"></div>' : '');
     const byCid = id => chg.find(c => c.id === Number(id));
     const fuBox = $('#fu-box');
-    later.then(([inc, all]) => { if (!inc || !fuBox.isConnected) return; fuBox.outerHTML = followUps(inc, all); bindFollowUps(inc, all); }).catch(() => {});
+    later.then(([inc, all]) => { if (!inc || !fuBox?.isConnected) return; fuBox.outerHTML = followUps(inc, all); bindFollowUps(inc, all); }).catch(() => {});
     Object.assign(actions, {
         digest: () => openWA(waShare(digest())),
         'chg-msg': b => { const c = byCid(b.dataset.cid); tellOnWhatsApp(`Message ${firstName(c)}`, c.phone, `Hi ${firstName(c)}! 👋 About your ${CHANGE_TXT[c.kind].toLowerCase()} update in the RWB App: \n\n– ${firstName(state.me)}, RWB`); },
@@ -3621,7 +3747,7 @@ async function adminRequests() {
         'copy-vrn': async b => { try { await navigator.clipboard.writeText(b.dataset.v); toast('VRN copied'); } catch { toast(b.dataset.v); } },
         approve: b => {
             const r = byId(b.dataset.id), miss = checksOf(r).filter(c => !c.ok).map(c => c.t);
-            if (miss.length && !confirmBox(`Not all 4 checks are ticked:\n• ${miss.join('\n• ')}\n\nApprove ${r.full_name} anyway?`)) return;
+            if (miss.length && !confirmBox(`Not all 4 checks are green:\n• ${miss.join('\n• ')}\n\nApprove ${r.full_name} anyway?`)) return;
             busy(b, async () => {
                 await api.admin.approve(r.id); state.adminMembers = null; state.dir = null; toast(`${r.full_name} approved. Now add them to the RWB WhatsApp group.`); await viewAdmin();
                 const kind = r.check_entry === 'existing' || r.check_entry === 'recent' ? 'existing' : r.check_entry === 'returning' ? 'returning' : 'welcome';
@@ -3629,12 +3755,15 @@ async function adminRequests() {
             });
         },
         reject: b => rejectSheet(byId(b.dataset.id)),
+        hold: b => holdSheet(byId(b.dataset.id)),
+        reopen: b => { const r = byId(b.dataset.id); if (confirmBox(`Move ${r.full_name} back to New?${r.spam ? ' They will be able to apply again.' : ''}`)) busy(b, async () => { await api.admin.reopen(r.id); toast('Moved back to New'); state.joinView = 'pending'; await adminRequests(); }); },
+        jview: el => { state.joinView = el.dataset.v; adminRequests(); },
         ask: b => askSheet(byId(b.dataset.id)),
         chk: el => checkSheet(byId(el.dataset.id), el.dataset.k)
     });
     /* keep the list fresh while it's open: people may update their details after a message */
     clearInterval(state.apprTimer);
-    state.apprTimer = setInterval(() => { if (location.hash.startsWith('#admin') && state.adminTab === 'requests' && document.visibilityState === 'visible' && !$('dialog#sheet[open]')) adminRequests(); else if (!location.hash.startsWith('#admin')) clearInterval(state.apprTimer); }, 30000);
+    state.apprTimer = setInterval(() => { if (location.hash.startsWith('#admin') && state.adminTab === 'requests' && state.joinView === 'pending' && document.visibilityState === 'visible' && !$('dialog#sheet[open]')) adminRequests(); else if (!location.hash.startsWith('#admin')) clearInterval(state.apprTimer); }, 30000);
 }
 /* Follow-ups: Terms & Conditions, missing details, not on the app, and people who left — with a view filter */
 const FU_VIEWS = { app: 'On the app', all: 'Members', gone: 'Left / removed' };
@@ -3728,7 +3857,7 @@ function bindFollowUps(inc, all) {
 /* Ask the applicant for something before deciding (they can update their details; the card refreshes by itself) */
 function askSheet(r) {
     const ASKS = ['Confirm your bike\'s VRN (registration number)', 'Share a photo of your RC', 'Confirm that you own a TVS Ronin', 'Agree to the RWB Terms & Conditions', 'Add an emergency contact number', 'Check your WhatsApp number'];
-    const pre = [!(r.vrn_verified || r.vrn_known) && ASKS[0], !r.has_ronin && ASKS[2], !(r.tnc === true || r.member_tnc === true) && ASKS[3], !r.emergency_phone && ASKS[4]].filter(Boolean);
+    const pre = [roninKind(r) === 'yes' && !(r.vrn_verified || r.vrn_known) && ASKS[0], !(r.tnc === true || r.member_tnc === true) && ASKS[3], !r.emergency_phone && ASKS[4]].filter(Boolean);
     openSheet(`Message ${firstName(r)}`, `<p class="small muted" style="margin-bottom:8px">Pick what you need from them. When they update their details, this card refreshes by itself.</p>
         <div class="chips" id="ask-chips" style="margin-bottom:10px">${ASKS.map(a => `<button type="button" class="chip" aria-pressed="${pre.includes(a)}" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div>
         <textarea id="wa-text" rows="11" style="font-size:.9rem;line-height:1.45"></textarea>
@@ -3748,13 +3877,25 @@ function reasonSheet(title, quick, done) {
     });
 }
 function rejectSheet(r) {
-    const quick = ['Not a Ronin owner', 'VRN could not be verified', 'Duplicate entry', 'Did not agree to the T&C'];
-    openSheet('Reject ' + firstName(r), `<form id="rj"><p class="small muted" style="margin-bottom:10px">${r.source === 'form' ? 'Their entry is deleted from the sheet (Members tab).' : 'They see that the request was not approved.'} The reason is kept for admins for 60 days.</p>
+    const quick = ['VRN could not be verified', 'Duplicate entry', 'Did not agree to the T&C', 'Details look fake'];
+    openSheet('Reject ' + firstName(r), `<form id="rj"><p class="small muted" style="margin-bottom:10px">They see the reason in the app${r.source === 'form' ? ', and their entry is deleted from the sheet' : ''}. They can apply again unless you mark it as spam. Not sure yet? Use <b>On hold</b> instead.</p>
         <div class="chips" style="margin-bottom:10px">${quick.map(q => `<button type="button" class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
-        <label>Reason (optional)<textarea name="reason" rows="2" maxlength="200"></textarea></label>
+        <label>Reason (the rider sees this)<textarea name="reason" rows="2" maxlength="200"></textarea></label>
+        <label class="check-row"><input type="checkbox" name="spam"> <span><b>Spam or fake</b><small class="muted"> They can't send a new request. You can undo it from Rejected.</small></span></label>
         <button class="btn danger block">Reject</button></form>`, body => {
         body.querySelectorAll('[data-q]').forEach(c => c.onclick = () => { body.querySelector('[name=reason]').value = c.dataset.q; });
-        body.querySelector('#rj').onsubmit = e => { e.preventDefault(); const reason = e.target.reason.value.trim(); busy(e.submitter, async () => { await api.admin.reject(r.id, reason); closeSheet(); toast('Rejected'); await viewAdmin(); tellOnWhatsApp(`Let ${firstName(r)} know`, r.phone, waMsg('rejected', { ...r, reason })); }); };
+        body.querySelector('#rj').onsubmit = e => { e.preventDefault(); const reason = e.target.reason.value.trim(), spam = e.target.spam.checked; busy(e.submitter, async () => { await api.admin.reject(r.id, reason, spam); closeSheet(); toast(spam ? 'Rejected as spam' : 'Rejected'); await viewAdmin(); if (!spam) tellOnWhatsApp(`Let ${firstName(r)} know`, r.phone, waMsg('rejected', { ...r, reason })); }); };
+    });
+}
+/* On hold: not yes, not no. The rider sees the note in the app (and gets a notification) and can update their answers */
+function holdSheet(r) {
+    const quick = ['We\'ll call you soon to say hello', 'Waiting for your Ronin delivery. Add the VRN when you get it', 'Please send a photo of your RC on WhatsApp', 'Please check your details and send them again'];
+    openSheet('Put ' + firstName(r) + ' on hold', `<form id="hd"><p class="small muted" style="margin-bottom:10px">${r.on_app ? 'They see your note in the RWB App and get a notification.' : 'They filled the Google Form and aren\'t on the app yet, so send the note on WhatsApp too.'} When they update their answers, the request comes back to New.</p>
+        <div class="chips" style="margin-bottom:10px">${quick.map(q => `<button type="button" class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+        <label>Note for the rider<textarea name="note" rows="2" maxlength="300"></textarea></label>
+        <button class="btn block">Put on hold</button></form>`, body => {
+        body.querySelectorAll('[data-q]').forEach(c => c.onclick = () => { body.querySelector('[name=note]').value = c.dataset.q; });
+        body.querySelector('#hd').onsubmit = e => { e.preventDefault(); const note = e.target.note.value.trim(); busy(e.submitter, async () => { await api.admin.hold(r.id, note); closeSheet(); toast('On hold'); await viewAdmin(); tellOnWhatsApp(`Let ${firstName(r)} know`, r.phone, waMsg('hold', { ...r, note })); }); };
     });
 }
 async function adminMembers() {
@@ -3787,7 +3928,7 @@ async function adminMembers() {
             <div class="grow"><div class="who">${esc(m.full_name)} <span class="badge gone-tag ${m.status}">${GONE_TXT[m.status]}</span></div>
             <div class="meta">${GONE_TXT[m.status]} ${m.removed_at ? fmtDate(String(m.removed_at).slice(0, 10)) : ''}${m.removed_by ? ` · by ${esc(m.removed_by)}` : ''}${m.removed_note ? ` · “${esc(m.removed_note)}”` : ''} · ${esc(m.phone || '')}</div></div></button>`
             : `<button class="card tap row member-row" data-act="member" data-id="${m.id}">${face(m, 'avatar sm')}
-            <div class="grow"><div class="who">${esc(m.full_name)} ${roleBadge(m)}${isNewMember(m) ? ' <span class="badge new-tag">New Member</span>' : ''}</div>
+            <div class="grow"><div class="who">${esc(m.full_name)} ${roleBadge(m)}${RONIN_TAG[roninKind(m)]}${isNewMember(m) ? ' <span class="badge new-tag">New Member</span>' : ''}</div>
             <div class="meta">${sort !== 'team' || isNewMember(m) ? `<span class="joined">Joined ${fmtDate(String(m.joined_at || m.created_at).slice(0, 10))}</span> · ` : ''}${m.avg_kmpl ? `<b class="kmpl-tag">${kmplTxt(m.avg_kmpl)}</b> · ` : ''}${esc([m.phone, m.vrn, m.locality].filter(Boolean).join(' · '))}</div></div>
             ${famOf(m.id).length ? `<span class="badge fam-badge" title="RWB FAM">👨‍👩‍👧 ${famOf(m.id).length}</span>` : ''}${m.user_id ? '<span class="badge ok">On app</span>' : ''}</button>`).join('') || '<div class="card empty">No one matches.</div>';
         $('#more').hidden = hits.length <= limit;
@@ -4917,10 +5058,12 @@ function hideBoot() {
 async function boot() {
     try {
         if (await nativeOutdated()) return nativeBlocker();   /* an old RWB Android app: must install the new build first */
-        if (!NATIVE && /android/i.test(navigator.userAgent)) return nativeBlocker(true);   /* Android browser: use the RWB Android app (iPhone stays on the web app) */
+        const androidWeb = !NATIVE && /android/i.test(navigator.userAgent);
+        if (androidWeb && !JOIN_MODE) return nativeBlocker(true);   /* Android browser: use the RWB Android app (iPhone stays on the web app); joining from roninwb.in/join works in the browser */
         const sess = await api.session();
         if (!sess) return viewSignIn();
         const status = await api.linkAccount();
+        if (androidWeb && status === 'member') { try { sessionStorage.removeItem('rwb-join'); } catch { /* ignore */ } return nativeBlocker(true); }
         if (status === 'moved') {   /* an admin changed their RWB email: this Google account is signed out */
             await api.signOut().catch(() => {});
             viewSignIn();
@@ -4930,9 +5073,9 @@ async function boot() {
             return;
         }
         if (status !== 'member') {   /* not a member: in someone's RWB FAM, or joining with an invite code? */
-            const fam = status === 'pending' ? null : await api.famMe().catch(() => null);
+            const fam = status !== 'not_found' ? null : await api.famMe().catch(() => null);
             if (fam) return bootFam(fam);
-            if (status !== 'pending' && famCodeSaved()) return famJoinScreen(sess);
+            if (status === 'not_found' && famCodeSaved()) return famJoinScreen(sess);
             return viewAccess(status, sess);
         }
         state.fam = null; delete document.body.dataset.fam;

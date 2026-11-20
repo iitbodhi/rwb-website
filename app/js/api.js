@@ -108,6 +108,8 @@ async function supabaseApi(url, key) {
             if (r.error && /could not find|function/i.test(r.error.message || '')) return must(await sb.rpc('request_access', args));
             return must(r);
         },
+        /* setup file 75: the rider's own join request (status, admin note, answers to edit) */
+        async myJoin() { const r = await sb.rpc('my_join'); if (r.error) { if (/could not find|function/i.test(r.error.message || '')) return null; throw new Error(r.error.message); } return r.data; },
         myRequest: async () => must(await sb.from('link_requests').select('*').eq('user_id', await uid()).order('created_at', { ascending: false }).limit(1).maybeSingle()),
         me: async () => must(await sb.from('members').select('*').eq('user_id', await uid()).single()),
         updateMe: async f => must(await sb.from('members').update(f).eq('user_id', await uid()).select().single()),
@@ -430,9 +432,17 @@ async function supabaseApi(url, key) {
                 if (!u.error) { const m = new Map(u.data.map(x => [x.id, x])); list.forEach(r => { const x = m.get(r.id) || {}; r.updated_at = x.updated_at || null; r.checks = x.checks || {}; }); }
                 return list;
             },
+            /* setup file 75: New / On hold / Rejected, with the counts; before it, only New */
+            async joinList(status = 'pending') {
+                const r = await sb.rpc('admin_join_list', { p_status: status });
+                if (r.error && /could not find|function/i.test(r.error.message || '')) { const list = status === 'pending' ? await this.requests() : []; return { list, counts: { pending: status === 'pending' ? list.length : 0, hold: 0, rejected: 0 } }; }
+                return must(r);
+            },
+            hold: async (id, note = '') => must(await sb.rpc('admin_hold_request', { p_request_id: id, p_note: note || null })),
+            reopen: async id => must(await sb.rpc('admin_reopen_request', { p_request_id: id })),
             approve: async id => must(await sb.rpc('admin_approve_request', { p_request_id: id })),
-            async reject(id, reason = '') {
-                const r = await sb.rpc('admin_reject_request', { p_request_id: id, p_reason: reason || null });
+            async reject(id, reason = '', spam = false) {
+                const r = await sb.rpc('admin_reject_request', spam ? { p_request_id: id, p_reason: reason || null, p_spam: true } : { p_request_id: id, p_reason: reason || null });
                 if (r.error && /could not find|function/i.test(r.error.message || '')) return must(await sb.rpc('admin_reject_request', { p_request_id: id }));
                 return must(r);
             },
@@ -506,8 +516,9 @@ function demoApi() {
         });
         const requests = [
             { id: 1, source: 'app', email: 'newrider@example.com', full_name: 'Kunal Das', phone: '9000000010', dob: '1998-08-21', vrn: 'WB 26 KL 3333', bike: 'TVS Ronin 225', blood_group: 'O+', locality: 'Kalyani', emergency_phone: '9000000077', created_at: daysAgo(1), match_member_id: null, match_name: null, match_linked: false, tnc: true, vrn_verified: false, on_app: true, check_entry: 'new', has_ronin: true, vrn_other: null },
-            { id: 2, source: 'form', email: 'riya@example.com', full_name: 'Riya Basu', phone: '9000000011', dob: '1996-04-02', vrn: 'WB 02 AB 1234', bike: 'Royal Enfield Hunter', blood_group: 'A+', locality: 'Behala', emergency_phone: '9000000078', created_at: daysAgo(0), match_member_id: null, match_name: null, match_linked: false, tnc: true, vrn_verified: false, on_app: false, check_entry: 'new', has_ronin: false, vrn_other: 'Demo Rider' },
-            { id: 3, source: 'app', email: 'sourav.p@gmail.com', full_name: 'Sourav Paul', phone: '9000000005', dob: '1993-02-10', vrn: 'WB 12 IJ 2222', bike: 'TVS Ronin 225', blood_group: 'B+', locality: 'Barasat', emergency_phone: '9000000079', created_at: daysAgo(0), match_member_id: 5, match_name: 'Sourav Paul', match_linked: false, match_status: 'active', member_since: '2025-03-14', tnc: null, member_tnc: true, vrn_verified: false, vrn_known: true, member_vrn: 'WB 12 IJ 2222', on_app: true, check_entry: 'existing', has_ronin: true, vrn_other: null }];
+            { id: 2, source: 'form', email: 'riya@example.com', full_name: 'Riya Basu', phone: '9000000011', dob: '1996-04-02', vrn: null, bike: 'Royal Enfield Hunter', answers: { 'Do you own a Ronin bike?': 'Not yet', 'Which bike do you ride now?': 'Royal Enfield Hunter' }, blood_group: 'A+', locality: 'Behala', emergency_phone: '9000000078', created_at: daysAgo(0), match_member_id: null, match_name: null, match_linked: false, tnc: true, vrn_verified: false, on_app: false, check_entry: 'new', has_ronin: false, vrn_other: null },
+            { id: 3, source: 'app', email: 'sourav.p@gmail.com', full_name: 'Sourav Paul', phone: '9000000005', dob: '1993-02-10', vrn: 'WB 12 IJ 2222', bike: 'TVS Ronin 225', blood_group: 'B+', locality: 'Barasat', emergency_phone: '9000000079', created_at: daysAgo(0), match_member_id: 5, match_name: 'Sourav Paul', match_linked: false, match_status: 'active', member_since: '2025-03-14', tnc: null, member_tnc: true, vrn_verified: false, vrn_known: true, member_vrn: 'WB 12 IJ 2222', on_app: true, check_entry: 'existing', has_ronin: true, vrn_other: null },
+            { id: 4, source: 'app', email: 'arko.m@gmail.com', full_name: 'Arko Mitra', phone: '9000000012', dob: '2000-11-02', vrn: null, bike: 'TVS Ronin 225 (booked)', answers: { 'Do you own a Ronin bike?': 'Booked, waiting for delivery' }, blood_group: 'B +ve', locality: 'Dum Dum', emergency_phone: '9000000080', created_at: daysAgo(2), match_member_id: null, match_name: null, match_linked: false, tnc: true, vrn_verified: false, on_app: true, check_entry: 'new', has_ronin: true, status: 'hold', hold_note: 'Waiting for your Ronin delivery. Add the VRN when you get it.', decided_by: 'Bodhi', decided_at: daysAgo(1) }];
         const pic = (bg, label) => 'demo:data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600"><rect width="100%" height="100%" fill="${bg}"/><text x="50%" y="52%" text-anchor="middle" font-family="sans-serif" font-size="54" font-weight="700" fill="#fff">${label}</text></svg>`);
         const L = (id, o) => ({ id, user_id: 'u2', size: '', age: '', condition: 'Good', reason: '', details: '', seller_name: 'Arjun Sen', seller_phone: '9000000002', status: 'live', reject_reason: null, created_at: daysAgo(id), published_at: daysAgo(id), ...o });
         const listings = [
@@ -580,8 +591,18 @@ function demoApi() {
         async signOut() { db.signedIn = false; save(); authFns.forEach(f => f('SIGNED_OUT')); },
         resetDemo() { db = seed(); db.signedIn = true; save(); },
 
-        linkAccount: () => { let f = null; try { f = localStorage.getItem('rwb-demo-fam'); } catch { /* ignore */ } return wait(f ? 'not_found' : 'member'); },   /* 'join': the RWB FAM join screen */
-        requestAccess: () => wait('pending'),
+        linkAccount: () => { let f = null, j = null; try { f = localStorage.getItem('rwb-demo-fam'); j = localStorage.getItem('rwb-demo-join'); } catch { /* ignore */ }
+            if (j) { const r = (db.requests || []).find(x => x.id === db.myJoinId); return wait(r ? (r.status || 'pending') === 'approved' ? 'member' : (r.status || 'pending') : 'not_found'); }
+            return wait(f ? 'not_found' : 'member'); },   /* 'join': the RWB FAM join screen; rwb-demo-join: a new rider (setup file 75) */
+        async requestAccess(f) {
+            const ex = (db.requests || []).find(x => x.id === db.myJoinId);
+            if (ex?.spam) throw new Error('You can\'t send a new request. If you think this is a mistake, please message an RWB admin.');
+            const rec = { source: 'app', email: 'newrider@example.com', full_name: f.full_name, phone: String(f.phone).replace(/\D/g, '').slice(-10), dob: f.dob, vrn: f.vrn || null, bike: f.bike, blood_group: f.blood_group, locality: f.locality, hideout: f.hideout, emergency_phone: f.emergency_phone, alt_phone: f.alt_phone || null, tnc: true, answers: f.answers, on_app: true, check_entry: 'new', status: 'pending', vrn_verified: false, checks: {} };
+            if (ex) { Object.assign(ex, rec, { updated_at: new Date().toISOString(), hold_note: null, reject_reason: null }); if (ex.decided_at) { ex.created_at = new Date().toISOString(); ex.decided_at = null; } }
+            else { const id = nid(); db.myJoinId = id; db.requests.push({ id, ...rec, created_at: new Date().toISOString() }); }
+            save(); return wait('pending');
+        },
+        myJoin() { const r = (db.requests || []).find(x => x.id === db.myJoinId); return wait(r ? { ...r, status: r.status || 'pending', hold_note: r.hold_note, reason: r.reject_reason, can_apply: !r.spam } : null); },
         myRequest: () => wait(null),
         me: () => wait(me()),
         async updateMe(f) { const bad = Object.keys(f).filter(k => !['full_name', 'nickname', 'dob', 'phone', 'alt_phone', 'bike', 'vrn', 'blood_group', 'locality', 'hideout', 'emergency_phone', 'avatar_url', 'show_on_leaderboard', 'notify', 'odo_km', 'odo_date', 'avg_kmpl', 'kmpl_tanks'].includes(k)); if (bad.length) throw new Error(`Could not find the '${bad[0]}' column of 'members' in the schema cache`); Object.assign(me(), f); save(); return wait(me()); },   /* strict like the real database */
@@ -834,15 +855,23 @@ function demoApi() {
                     { id: 'b2', row: 640, name: 'Sourav Pal', phone: '9000000077', vrn: 'WB02AB1234', email: 'sourav@example.com', joined: '20/10/2026 21:40', status: 'Member', filled: 11, tnc: false, best: false, on_app: false, member: 'active' }] }]),
             async resolveDupe(key, remove, ignore) { db.dupes = (db.dupes || []).filter(g => g.key !== key); save(); return { result: ignore ? 'ignored' : 'done', rows: (remove || []).length }; },
             stats: () => wait({ members: db.members.length, on_app: db.members.filter(m => m.user_id).length, pending: db.requests.length, admins: db.members.filter(m => m.role !== 'member').length }),
-            requests: () => wait(db.requests),
+            requests: () => wait(db.requests.filter(r => (r.status || 'pending') === 'pending')),
+            joinList(status = 'pending') {
+                const st = r => r.status || 'pending', counts = { pending: 0, hold: 0, rejected: 0 };
+                db.requests.forEach(r => { if (st(r) in counts) counts[st(r)]++; });
+                return wait({ list: db.requests.filter(r => st(r) === status), counts });
+            },
+            async hold(id, note = '') { Object.assign(db.requests.find(x => x.id === id), { status: 'hold', hold_note: note || null, decided_at: new Date().toISOString(), decided_by: me().nickname || me().full_name.split(' ')[0] }); save(); return 'hold'; },
+            async reopen(id) { Object.assign(db.requests.find(x => x.id === id), { status: 'pending', hold_note: null, reject_reason: null, spam: false, decided_at: null, decided_by: null }); save(); return 'pending'; },
             async approve(id) {
                 const r = db.requests.find(x => x.id === id);
                 const ex = db.members.find(m => m.phone === r.phone);
                 if (ex) Object.assign(ex, { full_name: r.full_name, vrn: r.vrn || ex.vrn, locality: r.locality || ex.locality, bike: r.bike || ex.bike, vrn_verified: r.vrn_verified || ex.vrn_verified });
                 else db.members.push({ id: nid(), full_name: r.full_name, phone: r.phone, email: r.email, dob: r.dob, vrn: r.vrn, bike: r.bike, locality: r.locality, role: 'member', user_id: r.on_app ? 'u' + id : null, vrn_verified: !!r.vrn_verified, joined_at: iso(today) });
-                db.requests = db.requests.filter(x => x.id !== id); save(); return 'approved';
+                if (id === db.myJoinId) r.status = 'approved'; else db.requests = db.requests.filter(x => x.id !== id);
+                save(); return 'approved';
             },
-            async reject(id) { db.requests = db.requests.filter(x => x.id !== id); save(); return 'rejected'; },
+            async reject(id, reason = '', spam = false) { Object.assign(db.requests.find(x => x.id === id), { status: 'rejected', reject_reason: reason || null, spam: !!spam, decided_at: new Date().toISOString(), decided_by: me().nickname || me().full_name.split(' ')[0] }); save(); return 'rejected'; },
             changes: () => wait((db.changes || []).filter(c => c.status === 'pending')),
             async setSetting(k, v) { db.groupLink = v || null; save(); return v || ''; },
             async setCheck(id, k, v) {
