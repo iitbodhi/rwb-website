@@ -655,7 +655,9 @@ function demoApi() {
         agreeTnc: () => { Object.assign(me(), { tnc_agreed: true, tnc_version: window.RWB_TNC?.version || null, tnc_agreed_at: new Date().toISOString() }); save(); return wait('ok'); },
         withdrawTnc: () => { Object.assign(me(), { tnc_agreed: false, tnc_version: null }); save(); return wait('withdrawn'); },
         leaveRwb: () => { me().status = 'left'; save(); return wait('left'); },
-        deleteMyAccount: () => { me().status = 'left'; save(); return wait('deleted'); },
+        deleteMyAccount: () => { let j = null; try { j = localStorage.getItem('rwb-demo-join'); } catch { /* ignore */ }
+            if (j) { db.requests = db.requests.filter(x => x.id !== db.myJoinId); db.myJoinId = null; db.signedIn = false; save(); return wait('deleted'); }
+            me().status = 'left'; save(); return wait('deleted'); },
         findMyEmail: (phone, vrn) => { const k = v => (v || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), p = String(phone).replace(/\D/g, '').slice(-10);
             const m = db.members.find(x => x.phone === p && (!x.status || x.status === 'active') && (k(x.vrn) === k(vrn) || (x.member_bikes || []).some(b => k(b.vrn) === k(vrn))));
             return wait(m ? { found: true, hint: m.email ? m.email.split('@')[0].slice(0, m.email.split('@')[0].length > 4 ? 3 : 1) + '•••@' + m.email.split('@')[1] : null, on_app: !!m.user_id } : { found: false }); },

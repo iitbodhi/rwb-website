@@ -2263,3 +2263,4 @@ img,video,canvas{-webkit-touch-callout:none;-webkit-user-drag:none;-webkit-user-
 #net-pill i{width:8px;height:8px;border-radius:50%;background:#f2a33a;flex:none}
 #net-pill.sync i{background:var(--ok,#2e9e5b);animation:netpulse 1.2s ease-in-out infinite}
 @keyframes netpulse{50%{opacity:.35}}
+.jx-del{margin-top:-6px}.jx-del .link-btn{color:var(--muted);font-weight:500;font-size:.82rem;text-decoration:underline;text-underline-offset:3px}

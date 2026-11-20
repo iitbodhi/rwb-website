@@ -677,6 +677,17 @@ async function viewAccess(status, sess, noJump = false) {
         const mine = await api.myJoin().catch(() => null) || { status };
         const canApply = mine.can_apply !== false;
         actions.edit = b => busy(b, () => startJoin(sess, mine));
+        /* Google Play: anyone who can make an account in the app can delete it there too */
+        actions.delreq = () => openSheet('Delete my request', `<p style="margin-bottom:10px">This deletes your RWB join request and your sign-in (<b>${esc(sess.email)}</b>) from RWB. The admins won't see your request any more.</p>
+            <p class="small muted" style="margin-bottom:14px">You can always apply again later at roninwb.in/join.</p>
+            <button class="btn danger block" data-x="del">Delete my request</button><button class="btn ghost block" data-x="no" style="margin-top:8px">Keep it</button>`, body => {
+            body.querySelector('[data-x=no]').onclick = () => closeSheet();
+            body.querySelector('[data-x=del]').onclick = e => busy(e.currentTarget, async () => {
+                await api.deleteMyAccount('Deleted their join request'); closeSheet();
+                await api.signOut().catch(() => {}); try { sessionStorage.removeItem('rwb-join'); } catch { /* ignore */ }
+                toast('Your request and sign-in are deleted'); boot();
+            });
+        });
         const I = { pending: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
             hold: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M10 9v6M14 9v6"/></svg>',
             rejected: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.5 9.5l5 5M14.5 9.5l-5 5"/></svg>' };
@@ -705,6 +716,7 @@ async function viewAccess(status, sess, noJump = false) {
             <p class="jx-tip">${tip}</p>
             <div class="jx-actions">${btns}</div>
             <p class="jx-links">${links}</p>
+            <p class="jx-links jx-del"><button class="link-btn" data-act="delreq">Delete my request</button></p>
             <p class="jx-acct"><span class="jx-dot" aria-hidden="true"></span>${esc(sess.email)}</p></section>`;
         return;
     }

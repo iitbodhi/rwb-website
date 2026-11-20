@@ -13,7 +13,7 @@ window.RWB_TNC = {
         'Membership is mainly for owners of a TVS Ronin, including riders whose Ronin is booked and awaiting delivery. RWB admins may, at their sole discretion, also admit riders of other motorcycles.',
         'You must be at least 18 years old and hold a valid driving licence for motorcycles.',
         'Membership is free. RWB never charges a joining or membership fee.',
-        'The only way to join RWB is the official RWB join form on roninwb.in (“Join us”). Registrations made any other way are not accepted.',
+        'The only way to join RWB is the official RWB join form, at roninwb.in/join or in the RWB App. Registrations made any other way are not accepted.',
         'Every registration is reviewed by RWB admins. Approval is at their sole discretion, and they may ask you to confirm your details before approving you. If a registration is not approved, the entry is deleted.',
         'Once approved, you are added to the RWB WhatsApp group by an admin, and you can sign in to the RWB App with the same email address you gave on the join form. Your details from the join form are already in the app.',
         'One person may hold only one membership. Each vehicle registration number (VRN) can belong to only one member at a time.'
