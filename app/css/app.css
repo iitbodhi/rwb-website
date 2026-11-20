@@ -2253,3 +2253,6 @@ img,video,canvas{-webkit-touch-callout:none;-webkit-user-drag:none;-webkit-user-
 .jf ~ .jx-links{margin:16px 0 28px}
 .jf .fq-choice input,.check-row input{min-height:0;padding:0}
 .jf .fq-choice{padding:12px 14px;font-size:.98rem}
+.req-msg{margin:10px 0 2px;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,#2f7de1 9%,transparent);border:1px solid color-mix(in srgb,#2f7de1 22%,transparent)}
+.req-msg span{display:block;font-size:.76rem;font-weight:700;color:#2f7de1;margin-bottom:3px}
+.req-msg p{margin:0;font-size:.92rem;line-height:1.45;color:var(--ink);white-space:pre-line;overflow-wrap:anywhere}

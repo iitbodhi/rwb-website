@@ -431,7 +431,7 @@ const SOCIAL = [
     ['Instagram', 'https://www.instagram.com/ronin_warriors_bengal', /insta|\big\b/i, 'img/social-instagram.png'],
     ['WhatsApp channel', 'https://whatsapp.com/channel/0029VaiK6QHEgGfTItym9t2H', /channel/i, 'img/social-whatsapp.png']];
 const FOLLOW = SOCIAL.filter(x => x[1]);
-const SKIP_Q = /^(timestamp|email( address)?|score|which bike do you ride now\?)$/i;
+const SKIP_Q = /^(timestamp|email( address)?|score|which bike do you ride now\?|where are you with a ronin\?|anything you'd like to tell us\?)$/i;
 const isExtraQ = q => !SKIP_Q.test(String(q).trim()) && !/^\s*[0-9.]*\s*$/.test(String(q)) && !formKey(q);
 const ansText = a => Array.isArray(a) ? a.join(', ') : String(a ?? '').trim();
 /* the join-form answers that don't have their own field in the profile (sticker, social media and so on) */
@@ -471,6 +471,8 @@ const roninAnswer = v => /^(yes|yeah|yep)/i.test(String(v || '').trim()) ? 'TVS 
    Me → More from RWB. Every rider is welcome: Ronin owners, Ronin booked, and riders without a Ronin. */
 const RONIN_Q = 'Do you own a Ronin bike?', R_YES = 'Yeah!', R_BOOKED = 'Booked, waiting for delivery', R_NOT = 'Not yet';
 const OTHER_BIKE_Q = 'Which bike do you ride now?', STICKER_Q = 'Have you received RWB sticker?';
+const PLAN_Q = 'Where are you with a Ronin?', P_BUY = 'Planning to buy one', P_OTHER = 'I ride another bike', P_NONE = 'No bike yet';
+const NOTE_Q = 'Anything you\'d like to tell us?';
 const TNC_Q = 'Please read carefully before proceeding\nRWB Terms & Conditions\nBy choosing “Understood & agreed”, you confirm that:\n• You are 18 or older and hold a valid motorcycle driving licence. Membership is free and mainly for TVS Ronin owners; admins may approve or decline any registration.\n• Your details are true and complete, and the VRN you give is your own. Admins may verify it. One membership per person.\n• You take part in rides and events voluntarily and at your own risk. You will obey traffic laws, wear an ISI-certified helmet and proper gear, keep your papers valid, and never ride drunk, race or perform stunts. RWB, its admins, coordinators and volunteers are not liable for any accident, injury, loss or damage.\n• You will respect every member and the public, and follow ride leads. No harassment, hate, spam, scams or unapproved promotions in RWB groups, the app or at events.\n• RWB is a free, non-profit, volunteer community and is not affiliated with TVS Motor Company.\n• Photos and videos from RWB rides and events may be shared on RWB’s website and social media.\n• Your details are used only to run the community. Other members see only your name, nickname and photo unless you choose to share more. RWB never sells your data.\n• Admins may remove members who break these rules. You can leave any time, and your app data is then deleted. \nFull Terms & Conditions: https://roninwb.in/terms.html\nPrivacy Policy: https://roninwb.in/privacy.html';
 const ronin = a => a[RONIN_Q] || '';
 const DONE = ['Done!', 'Maybe later'];
@@ -478,7 +480,8 @@ const JOIN_DEF = { title: '', description: '', items: [
     { type: 'SECTION_HEADER', title: 'Warm welcome!', help: 'A few details so the RWB team knows you, and can act fast in an emergency on a ride. Every rider is welcome, with or without a Ronin.' },
     { type: 'MULTIPLE_CHOICE', title: RONIN_Q, required: true, choices: [{ value: R_YES }, { value: R_BOOKED }, { value: R_NOT }] },
     { type: 'TEXT', title: 'VRN please', required: true, help: 'Your Ronin\'s registration number, for example WB02AB1234. Not the engine or chassis number. An admin may verify it.', show: a => ronin(a) === R_YES },
-    { type: 'TEXT', title: OTHER_BIKE_Q, help: 'Optional. Leave it blank if you don\'t ride one yet.', show: a => ronin(a) === R_NOT },
+    { type: 'MULTIPLE_CHOICE', title: PLAN_Q, required: true, choices: [{ value: P_BUY }, { value: P_OTHER }, { value: P_NONE }], show: a => ronin(a) === R_NOT },
+    { type: 'TEXT', title: OTHER_BIKE_Q, required: true, help: 'For example, Royal Enfield Hunter 350.', show: a => ronin(a) === R_NOT && a[PLAN_Q] === P_OTHER },
     { type: 'PAGE_BREAK', title: 'About you' },
     { type: 'TEXT', title: 'Full Name', required: true },
     { type: 'DATE', title: 'Date of Birth', required: true, help: 'RWB is for riders aged 18 and over.' },
@@ -489,7 +492,7 @@ const JOIN_DEF = { title: '', description: '', items: [
     { type: 'PAGE_BREAK', title: 'Where you ride from' },
     { type: 'PARAGRAPH_TEXT', title: 'Current Locality', required: true, help: 'Nearest city, town, area or landmark. Not your full address.' },
     { type: 'PARAGRAPH_TEXT', title: 'Permanent Hideout', required: true, help: 'Your hometown: nearest city, town or district. Not your full address.' },
-    { type: 'PAGE_BREAK', title: 'RWB sticker and socials' },
+    { type: 'PAGE_BREAK', title: 'A few more things' },
     { type: 'MULTIPLE_CHOICE', title: STICKER_Q, required: true, choices: [{ value: 'Yeah!' }, { value: 'Not yet...' }], show: a => ronin(a) === R_YES },
     { type: 'MULTIPLE_CHOICE', title: 'Have you fixed the sticker to your bike?', required: true, choices: [{ value: 'Of course!' }, { value: 'Not yet...' }], show: a => ronin(a) === R_YES && a[STICKER_Q] === 'Yeah!' },
     { type: 'MULTIPLE_CHOICE', title: 'Are you willing to collect sticker?', required: true, choices: [{ value: 'Hell yeah!' }, { value: 'Maybe later' }], show: a => ronin(a) === R_YES && a[STICKER_Q] === 'Not yet...' },
@@ -497,6 +500,7 @@ const JOIN_DEF = { title: '', description: '', items: [
     { type: 'MULTIPLE_CHOICE', title: 'Have you joined our FB group (link below)?', required: true, choices: DONE.map(value => ({ value })) },
     { type: 'MULTIPLE_CHOICE', title: 'Are you following us on our Instagram page (link below)?', required: true, choices: DONE.map(value => ({ value })) },
     { type: 'MULTIPLE_CHOICE', title: 'Are you following us on our WhatsApp channel (link below)?', required: true, choices: DONE.map(value => ({ value })) },
+    { type: 'PARAGRAPH_TEXT', title: NOTE_Q, help: 'Optional. For example: thinking of booking a Ronin next month, or how you heard about RWB.', max: 500 },
     { type: 'PAGE_BREAK', title: 'Terms & Conditions' },
     { type: 'MULTIPLE_CHOICE', title: TNC_Q, label: 'RWB Terms & Conditions', help: TNC_Q.split('\n').slice(3, -2).join('\n'), required: true, choices: [{ value: 'Understood & agreed' }] }
 ] };
@@ -505,6 +509,7 @@ function bikeFromJoin(a) {
     const r = ronin(a);
     if (r === R_YES || /^(yes|yeah|yep)/i.test(r)) return 'TVS Ronin 225';
     if (r === R_BOOKED) return 'TVS Ronin 225 (booked)';
+    if (a[PLAN_Q] && a[PLAN_Q] !== P_OTHER) return 'No bike yet';
     return String(a[OTHER_BIKE_Q] || '').trim() || 'No bike yet';
 }
 /* Ronin owner, Ronin booked, or a Non-Ronin rider: from the join answer, else from the bike */
@@ -543,7 +548,7 @@ function formItemHtml(item, i, val) {
     }
     if (item.type === 'LIST') return `<label class="fq" data-i="${i}"${item.show ? ' hidden' : ''}>${head}<select name="${name}"${req}><option value="">Choose</option>${item.choices.map(c => `<option${c.value === val ? ' selected' : ''}>${esc(c.value)}</option>`).join('')}</select></label>`;
     if (item.type === 'DATE') return `<label class="fq" data-i="${i}"${item.show ? ' hidden' : ''}>${head}<input type="date" name="${name}" max="${todayISO()}"${req} value="${esc(val)}"></label>`;
-    if (item.type === 'PARAGRAPH_TEXT') return `<label class="fq" data-i="${i}"${item.show ? ' hidden' : ''}>${head}<textarea name="${name}" rows="3"${req}>${esc(val)}</textarea></label>`;
+    if (item.type === 'PARAGRAPH_TEXT') return `<label class="fq" data-i="${i}"${item.show ? ' hidden' : ''}>${head}<textarea name="${name}" rows="3"${req}${item.max ? ` maxlength="${item.max}"` : ''}>${esc(val)}</textarea></label>`;
     if (item.type === 'SCALE') return `<label class="fq" data-i="${i}"${item.show ? ' hidden' : ''}>${head}<select name="${name}"${req}><option value="">Choose</option>${Array.from({ length: (item.high || 5) - (item.low || 1) + 1 }, (_, j) => (item.low || 1) + j).map(n => `<option${String(n) === val ? ' selected' : ''}>${n}</option>`).join('')}</select></label>`;
     const extra = PHONE_KEYS.includes(k) ? ' inputmode="tel" autocomplete="off"' : k === 'vrn' ? ' autocapitalize="characters"' : k === 'full_name' ? ' autocomplete="name"' : '';
     return `<label class="fq" data-i="${i}"${item.show ? ' hidden' : ''}>${head}<input name="${name}"${extra}${req} value="${esc(val)}"></label>`;
@@ -3552,7 +3557,7 @@ function checksOf(r) {
     const other = [r.answers?.[OTHER_BIKE_Q], kind === 'no' ? r.bike : ''].find(v => !notBike(v)) || '';
     const ronin = kind === 'yes' ? { ok: true, t: 'Owns a Ronin', s: c.ronin ? 'Confirmed' + by('ronin') : `Answer: ${r.answers?.[RONIN_Q] || r.bike || '–'}` }
         : kind === 'booked' ? { ok: true, t: 'Ronin booked', s: 'Delivery pending' + by('ronin') }
-        : { ok: true, t: 'Non-Ronin rider', s: (other ? `Rides: ${other}` : 'No Ronin yet') + by('ronin') + ' · welcome too' };
+        : { ok: true, t: 'Non-Ronin rider', s: (r.answers?.[PLAN_Q] === P_BUY ? 'Planning to buy a Ronin' : other ? `Rides: ${other}` : r.answers?.[PLAN_Q] === P_NONE ? 'No bike yet' : 'No Ronin yet') + by('ronin') + ' · welcome too' };
     const vrn = kind !== 'yes' && !r.vrn_verified ? { ok: true, t: 'No VRN needed', s: kind === 'booked' ? 'They can add it in Me after delivery' : 'Non-Ronin rider' }
         : r.vrn_verified ? { ok: true, t: 'VRN verified', s: (c.vrn === 'ok' ? 'Checked' : 'Ticked') + by('vrn') }
         : c.vrn === 'no' ? { ok: false, t: 'VRN couldn\'t be verified', s: 'Marked' + by('vrn') }
@@ -3576,6 +3581,7 @@ function reqCard(r) {
             ${st === 'rejected' ? `<p class="req-note rej">Rejected${r.decided_by ? ` by ${esc(r.decided_by)}` : ''} ${r.decided_at ? timeAgo(r.decided_at) : ''}${r.spam ? ' · <span class="badge danger-tag">Spam: can\'t apply again</span>' : ''}${r.reject_reason ? `<b>“${esc(r.reject_reason)}”</b>` : ''}</p>` : ''}
             ${st === 'pending' && r.updated_at && Date.now() - Date.parse(r.updated_at) < 3 * 864e5 ? `<span class="upd-tag">✏️ Updated ${timeAgo(r.updated_at)}</span>` : ''}</div>
             <span class="req-score ${all ? 'ok' : ''}">${cks.filter(c => c.ok).length}/4</span></div>
+        ${r.answers?.[NOTE_Q] ? `<div class="req-msg"><span>💬 Message from ${esc(firstName(r))}</span><p>${esc(r.answers[NOTE_Q])}</p></div>` : ''}
         <ul class="checks">${cks.map(c => `<li class="${c.ok ? 'yes' : c.pending ? 'no pend' : c.warn || c.unk ? 'warn' : 'no'} tap-chk" data-act="chk" data-id="${r.id}" data-k="${c.k}" role="button" tabindex="0" aria-label="${esc(c.t)}: change">
             <span class="ci">${ico(c)}</span><span class="grow"><b>${esc(c.t)}</b>${c.k === 'vrn' ? `<small>${c.t === 'No VRN needed' ? '' : `<span class="vrn">${esc(r.vrn || r.member_vrn || 'No VRN given')}</span>`}${c.s ? (c.t === 'No VRN needed' ? '' : ' · ') + esc(c.s) : ''}</small>` : c.s ? `<small>${esc(c.s)}</small>` : ''}</span><span class="chk-edit" aria-hidden="true">›</span>
             ${c.k === 'vrn' && r.vrn && c.t !== 'No VRN needed' ? `<span class="vrn-tools"><button class="link-btn" data-act="copy-vrn" data-v="${esc(r.vrn)}">Copy</button><button class="link-btn" data-act="vrn-sites" data-v="${esc(r.vrn)}">Check VRN ↗</button></span>` : ''}
