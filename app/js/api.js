@@ -3,21 +3,31 @@
    - Supabase (real data) when APP_CONFIG has a URL and key
    - Demo (sample data in this browser) when it does not */
 
+import { withOffline } from './offline.js';
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 const BILL_BUCKET = 'bills', PHOTO_BUCKET = 'motomart';
 const extOf = f => ({ 'application/pdf': 'pdf', 'application/msword': 'doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx', 'image/png': 'png' })[f.type] || 'jpg';
 
 export async function createApi() {
     const c = typeof APP_CONFIG !== 'undefined' ? APP_CONFIG : {};
-    if (c.SUPABASE_URL && c.SUPABASE_ANON_KEY) return supabaseApi(c.SUPABASE_URL, c.SUPABASE_ANON_KEY);
+    if (c.SUPABASE_URL && c.SUPABASE_ANON_KEY) return withOffline(await supabaseApi(c.SUPABASE_URL, c.SUPABASE_ANON_KEY));   /* works without internet: offline.js */
+    /* testing only: the demo behind the offline layer, failing like the real network when the browser is offline */
+    let sim = false; try { sim = localStorage.getItem('rwb-demo-offline') === '1'; } catch { /* ignore */ }
+    if (sim) return withOffline(netSim(demoApi()));
     return demoApi();
+}
+function netSim(api) {
+    const wrap = o => { for (const k of Object.keys(o)) { const f = o[k];
+        if (typeof f === 'function' && !['session', 'signIn', 'signOut', 'onAuthChange', 'resetDemo', 'photoUrl'].includes(k)) o[k] = async (...a) => { if (!navigator.onLine) throw new Error('No internet connection. You\'re offline: try again once you\'re connected.'); return f.apply(o, a); };
+        else if (f && typeof f === 'object' && k === 'admin') wrap(f); } };
+    wrap(api); return api;
 }
 
 /* Turn database errors into a sentence a rider can act on */
 function friendly(error) {
     if (!error) return null;
     const m = error.message || String(error);
-    if (/Failed to fetch|NetworkError|network/i.test(m)) return new Error('No internet connection. Please try again.');
+    if (/Failed to fetch|NetworkError|network|Load failed/i.test(m)) return new Error('No internet connection. You\'re offline: try again once you\'re connected.');
     if (/JWT|session/i.test(m)) return new Error('Your sign-in has expired. Please sign in again.');
     return new Error(m.replace(/^.*?ERROR:\s*/, ''));
 }

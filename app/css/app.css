@@ -2256,3 +2256,10 @@ img,video,canvas{-webkit-touch-callout:none;-webkit-user-drag:none;-webkit-user-
 .req-msg{margin:10px 0 2px;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,#2f7de1 9%,transparent);border:1px solid color-mix(in srgb,#2f7de1 22%,transparent)}
 .req-msg span{display:block;font-size:.76rem;font-weight:700;color:#2f7de1;margin-bottom:3px}
 .req-msg p{margin:0;font-size:.92rem;line-height:1.45;color:var(--ink);white-space:pre-line;overflow-wrap:anywhere}
+
+/* Works offline: the status pill (offline / changes waiting / syncing) */
+#net-pill{position:fixed;left:50%;transform:translateX(-50%);top:calc(max(env(safe-area-inset-top),var(--safe-area-inset-top,0px)) + 70px);z-index:60;display:inline-flex;align-items:center;gap:8px;padding:7px 13px 7px 11px;border:0;border-radius:99px;font:600 .8rem/1 var(--body);color:#fff;background:rgba(28,26,24,.92);box-shadow:0 6px 20px -8px rgba(0,0,0,.5);cursor:pointer;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+#net-pill[hidden]{display:none}
+#net-pill i{width:8px;height:8px;border-radius:50%;background:#f2a33a;flex:none}
+#net-pill.sync i{background:var(--ok,#2e9e5b);animation:netpulse 1.2s ease-in-out infinite}
+@keyframes netpulse{50%{opacity:.35}}

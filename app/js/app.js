@@ -5064,6 +5064,33 @@ function hideBoot() {
     const end = window.INTRO_END ?? (window.BOOT_T || 0) + 900;
     setTimeout(go, Math.max(0, end - performance.now()));
 }
+/* ---------- Works offline (offline.js): a small pill shows when there's no internet or changes are waiting ---------- */
+function initOffline() {
+    const pill = document.createElement('button'); pill.id = 'net-pill'; pill.type = 'button'; pill.hidden = true; document.body.append(pill);
+    let pending = 0;
+    const plural = n => `${n} change${n === 1 ? '' : 's'}`;
+    const draw = () => {
+        const off = !navigator.onLine;
+        pill.hidden = !(off || pending) || !state.me;
+        pill.className = off ? 'off' : 'sync';
+        pill.innerHTML = `<i aria-hidden="true"></i>${off ? `Offline${pending ? ` · ${plural(pending)} waiting` : ''}` : `Syncing ${plural(pending)}…`}`;
+    };
+    pill.onclick = () => toast(navigator.onLine ? 'Sending your changes to RWB…'
+        : 'No internet. You can still see your saved data, and log fuel, services, reminders and parts. They sync by themselves once you\'re back online.');
+    api.offline.pending().then(n => { pending = n; draw(); }).catch(() => {});
+    window.addEventListener('rwb-outbox', e => { pending = e.detail.count; draw(); });
+    window.addEventListener('offline', draw);
+    window.addEventListener('online', () => { draw(); if (state.me && !$('dialog#sheet[open]')) render(); });
+    window.addEventListener('rwb-synced', e => {
+        const { done, failed } = e.detail;
+        if (failed.length) toast(`${failed.length === 1 ? 'A change' : plural(failed.length)} couldn't be saved: ${failed[0]}`, true);
+        else if (done) toast(`✓ ${plural(done)} synced`);
+        Object.assign(state, { services: null, fuel: null, ride: null, docs: null, reminders: undefined });
+        if (state.me && !$('dialog#sheet[open]')) render();
+    });
+    new MutationObserver(draw).observe(document.getElementById('tabbar'), { attributes: true, attributeFilter: ['hidden'] });
+    draw();
+}
 async function boot() {
     try {
         if (await nativeOutdated()) return nativeBlocker();   /* an old RWB Android app: must install the new build first */
@@ -5104,7 +5131,8 @@ async function boot() {
         if (!trk.resumed) { trk.resumed = true; resumeShare(); if (NATIVE) { nativePushOn(false).catch(() => {}); setTimeout(nativeUpdateAsk, 2500); if (sharing()) setTimeout(() => RwbTrack()?.perms?.().then(p => notifCheck({ notif: p?.notifications })).catch(() => {}), 1500); } else setTimeout(appPromo, 1500); }
     } catch (e) {
         tabbar.hidden = true;
-        app.innerHTML = `<section class="signin"><img src="icons/logo-128.png" alt=""><div><h1>Can't connect</h1><p class="lead">${esc(e.message || 'Please check your internet connection.')}</p></div><button class="btn block" onclick="location.reload()">Try again</button></section>`;
+        const off = !navigator.onLine || /offline|internet/i.test(e.message || '');
+        app.innerHTML = `<section class="signin"><img src="icons/logo-128.png" alt=""><div><h1>${off ? 'You\'re offline' : 'Can\'t connect'}</h1><p class="lead">${off ? 'Connect to the internet once, and the RWB App keeps your data on this phone so it opens without internet next time.' : esc(e.message || 'Please check your internet connection.')}</p></div><button class="btn block" onclick="location.reload()">Try again</button></section>`;
     } finally { hideBoot(); }
 }
 
@@ -6194,6 +6222,7 @@ function appPromo() {
     try { api = await createApi(); }
     catch { app.innerHTML = `<section class="signin"><h1>Can't load</h1><p class="lead">Please check your internet connection.</p><button class="btn block" onclick="location.reload()">Try again</button></section>`; return; }
     if (location.hash === '#install') { history.replaceState(null, '', location.pathname); setTimeout(installSheet, 1200); }
+    if (api.offline) initOffline();
     api.onAuthChange(ev => { if (ev === 'SIGNED_OUT') { trk.until = 0; trackSave(null); stopWatch(); trk.resumed = false; if (trk.svc) RwbTrack()?.stop().catch(() => {}); trk.svc = false; } chat.msgs = null; chat.left = null; Object.assign(state, { me: null, fam: null, services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null, board: null, dir: null }); delete document.body.dataset.fam; if (ev === 'SIGNED_OUT') history.replaceState(null, '', location.pathname); boot(); });
     boot();
 })();
