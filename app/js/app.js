@@ -1308,22 +1308,28 @@ async function viewHome() {
 }
 
 /* =================== RWB Gallery (Nov 2026): the same photos as roninwb.in's gallery ===================
-   The list comes from the website's Google Apps Script (SITE.GALLERY_SCRIPT_URL, js/data.js) and the photos
-   from Google (lh3.googleusercontent.com), so the gallery never touches Supabase (no egress, no storage).
+   The list comes from the RWB Gallery Apps Script (SITE.GALLERY_SCRIPT_URL in js/data.js, source tools/gallery.gs) and the
+   photos from Google (lh3.googleusercontent.com), so the gallery never touches Supabase (no egress, no storage).
    The list is kept on the phone (GAL_KEY) and shown at once; a fresh copy is asked for at most every 12 hours.
-   Photos are asked for as small WebP copies: ~420 px tall in the strip, 400 px wide in the grid, 1600 px in the viewer. */
+   Photos are asked for as small WebP copies: ~420 px tall in the strip, 400 px wide in the grid, 1600 px in the viewer.
+   Admins and coordinators add and delete photos (when SITE.GALLERY_EDIT is on): the app gets a one-time pass from
+   Supabase (gallery_ticket, file 80, a few bytes) and sends the photo straight to the script, which saves it in Drive.
+   No saving: photos can't be long-pressed, dragged or right-clicked, and in the Android app (build 25+) screenshots and
+   screen recording are blocked while gallery photos are on screen (RwbTrack.secure → FLAG_SECURE). */
 const GAL_KEY = 'rwb-app-gal-v1', GAL_TTL = 12 * 36e5, GAL_STRIP = 16, GAL_PAGE = 60;
 const galSized = (u, spec) => /^https:\/\/lh3\.googleusercontent\.com\/d\/[\w-]+$/.test(u) ? `${u}=${spec}` : u;
+const galId = it => it.id || (it.url.match(/\/d\/([\w-]{10,})/) || [])[1] || '';
+const galCanEdit = () => isMod() && !isFam() && (!!SITE.GALLERY_EDIT || api.demo);
 const galSaved = () => { try { const s = JSON.parse(localStorage.getItem(GAL_KEY)); return s?.list?.length ? s : null; } catch { return null; } };
+const galKeep = () => { try { localStorage.setItem(GAL_KEY, JSON.stringify({ t: Date.now(), list: state.gal.filter(x => !x.local) })); } catch { /* full */ } };
 let galJob = null;
 function galFetch() {
     if (!SITE.GALLERY_SCRIPT_URL) return Promise.resolve(galSaved()?.list || []);
     return galJob ??= fetch(SITE.GALLERY_SCRIPT_URL).then(r => r.json()).then(a => {
-        const list = (Array.isArray(a) ? a : []).filter(im => /^https:\/\//.test(im?.url || '')).map(({ url, label }) => ({ url, label: label || '' }));
+        const list = (Array.isArray(a) ? a : []).filter(im => /^https:\/\//.test(im?.url || '')).map(({ url, label, id }) => ({ url, label: label || '', ...(id ? { id } : {}) }));
         if (!list.length) throw 0;   /* an empty answer never replaces a saved list */
-        try { localStorage.setItem(GAL_KEY, JSON.stringify({ t: Date.now(), list })); } catch { /* full */ }
-        state.gal = list; return list;
-    }).catch(() => galSaved()?.list || []).finally(() => { galJob = null; });
+        state.gal = list; galKeep(); return list;
+    }).catch(() => state.gal || galSaved()?.list || []).finally(() => { galJob = null; });
 }
 /* cache-first: the saved list now (refreshed quietly in the background when it's old), else wait for the first download */
 function loadGal() {
@@ -1334,17 +1340,25 @@ function loadGal() {
 }
 const galShuffle = a => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
+/* screenshots: Android blocks them while any gallery photo is on screen (the strip in view, the Gallery screen, the viewer) */
+const galSec = new Set(); let galSecOn = false;
+function galSecure(key, on) {
+    if (on) galSec.add(key); else galSec.delete(key);
+    const want = galSec.size > 0; if (want === galSecOn) return; galSecOn = want;
+    RwbTrack()?.secure?.({ on: want }).catch(() => {});   /* older app builds don't have it: nothing happens */
+}
+addEventListener('hashchange', () => { if (!location.hash.startsWith('#gallery')) galSecure('screen', false); });
+
 /* Home (members and RWB FAM): one slow rolling strip of 16 random photos (a fresh pick each time the app opens).
    It can be swiped, sleeps when off screen or when the app is in the background, and pauses while the page scrolls. */
-const galSection = () => `<section class="section" id="home-gal"><h2>RWB Gallery <a href="#gallery">See all</a></h2><div class="gal-mq" aria-label="RWB ride photos"><div class="gal-strip"><div class="gal-skel" aria-hidden="true"><i></i><i></i><i></i></div></div></div></section>`;
+const galSection = () => `<section class="section gal-home" id="home-gal"><h2>RWB Gallery <a href="#gallery">See all</a></h2><div class="gal-mq" aria-label="RWB ride photos"><div class="gal-strip"><div class="gal-skel" aria-hidden="true"><i></i><i></i><i></i></div></div></div></section>`;
 async function bindHomeGallery(n) {
     const list = await loadGal().catch(() => []);
     const box = $('#home-gal'); if (!stillHere(n) || !box) return;
     if (!list.length) { box.remove(); return; }
-    state.galPick ??= galShuffle(list.map((_, i) => i)).slice(0, GAL_STRIP);
-    const pick = state.galPick.filter(i => list[i]);
+    if (!state.galPick || state.galPick.some(i => !list[i])) state.galPick = galShuffle(list.map((_, i) => i)).slice(0, GAL_STRIP);
     const view = box.querySelector('.gal-mq');
-    view.querySelector('.gal-strip').innerHTML = pick.map((i, k) => `<button class="gal-tile" data-gi="${i}" aria-label="Open photo ${k + 1}"><img src="${esc(galSized(list[i].url, 'h420-rw'))}" alt="${esc(list[i].label || 'RWB ride photo')}" ${k < 3 ? '' : 'loading="lazy"'} decoding="async" draggable="false" referrerpolicy="no-referrer" onload="this.classList.add('in')"></button>`).join('');
+    view.querySelector('.gal-strip').innerHTML = state.galPick.map((i, k) => `<button class="gal-tile" data-gi="${i}" aria-label="Open photo ${k + 1}"><img src="${esc(galSized(list[i].url, 'h420-rw'))}" alt="" ${k < 3 ? '' : 'loading="lazy"'} decoding="async" draggable="false" referrerpolicy="no-referrer" onload="this.classList.add('in')"></button>`).join('');
     galRoll(view, i => galViewer(list, i));
 }
 function galRoll(view, onOpen) {
@@ -1367,9 +1381,9 @@ function galRoll(view, onOpen) {
         m.raf = m.seen && !document.hidden ? requestAnimationFrame(frame) : 0;
     }
     const wake = () => { if (!m.raf && m.seen && !document.hidden && view.isConnected) { m.last = performance.now(); m.raf = requestAnimationFrame(frame); } };
-    const io = new IntersectionObserver(e => { m.seen = e[0].isIntersecting; wake(); }, { rootMargin: '80px 0px' }); io.observe(view);
+    const io = new IntersectionObserver(e => { m.seen = e[0].isIntersecting; galSecure('strip', m.seen); wake(); }, { rootMargin: '80px 0px' }); io.observe(view);
     document.addEventListener('visibilitychange', wake);
-    new MutationObserver((_, o) => { if (!view.isConnected) { io.disconnect(); document.removeEventListener('visibilitychange', wake); o.disconnect(); } }).observe(app, { childList: true });
+    new MutationObserver((_, o) => { if (!view.isConnected) { io.disconnect(); galSecure('strip', false); document.removeEventListener('visibilitychange', wake); o.disconnect(); } }).observe(app, { childList: true });
     let sx = 0, sy = 0, lx = 0, lt = 0, vel = 0, id = null, decided = false;
     view.addEventListener('pointerdown', e => { if (e.button > 0) return; id = e.pointerId; sx = lx = e.clientX; sy = e.clientY; lt = performance.now(); vel = 0; decided = false; m.dragged = false; m.held = true; m.v = 0; wake(); });
     view.addEventListener('pointermove', e => {
@@ -1388,41 +1402,80 @@ function galRoll(view, onOpen) {
     measure(); m.cur = still ? 0 : SPEED; wake();
 }
 
-/* Gallery screen (#gallery): every photo in a 3-per-row grid, 60 at a time (more load as you scroll down) */
+/* Gallery screen (#gallery): every photo, newest first, in a mosaic (a big tile every 12 photos), 60 at a time:
+   more load as you scroll down, so the screen opens fast however many photos there are */
 async function viewGallery() {
-    const n = navN;
-    app.innerHTML = top('Gallery') + `<a class="back-link" href="#home">‹ Home</a><p class="small muted gal-sub">Ride photos from the RWB family</p><div id="gal-body">${SKEL(4)}</div>`;
+    const n = navN, edit = galCanEdit();
+    galSecure('screen', true);
+    app.innerHTML = top('RWB Gallery') + `<section class="gal-head"><div class="grow"><p class="gal-sub" id="gal-sub">Moments from RWB rides and meets</p></div>
+            ${edit ? `<button class="btn sm gal-add" data-act="gal-add"><span aria-hidden="true">＋</span> Add photos</button>` : ''}</section>
+        <div id="gal-body">${SKEL(4)}</div>`;
+    actions = { 'gal-add': () => galAddPicker() };
     const list = await loadGal().catch(() => []);
     if (!stillHere(n)) return;
-    const body = $('#gal-body');
-    if (!list.length) { body.innerHTML = '<div class="card empty"><b>Photos will be here soon</b>Ride photos from RWB rides and meets show up here.</div>'; actions = {}; return; }
-    body.innerHTML = `<div class="gal-grid"></div><div class="gal-more" aria-hidden="true"></div><p class="small muted gal-count">${list.length.toLocaleString('en-IN')} photos</p>`;
+    galDrawGrid(list);
+}
+function galDrawGrid(list) {
+    const body = $('#gal-body'); if (!body) return;
+    const sub = $('#gal-sub'); if (sub && list.length) sub.textContent = `${list.length.toLocaleString('en-IN')} photos from RWB rides and meets`;
+    if (!list.length) { body.innerHTML = `<div class="card empty gal-empty"><span class="gal-empty-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M8.5 6l1.5-2.5h4L15.5 6"/></svg></span><b>Photos will be here soon</b>Ride photos from RWB rides and meets show up here.</div>`; return; }
+    body.innerHTML = `<div class="gal-grid"></div><div class="gal-more" aria-hidden="true"></div><p class="gal-end" hidden>That's every photo · ride more, there'll be more 🏍️</p>`;
     const grid = body.querySelector('.gal-grid'), more = body.querySelector('.gal-more');
     let shown = 0;
-    const page = () => {
+    const cell = (im, i) => `<button class="gal-cell${i % 12 === 0 ? ' big' : ''}${i % 24 === 12 ? ' r' : ''}" data-gi="${i}" aria-label="Open photo ${i + 1}"><img src="${esc(galSized(im.url, i % 12 === 0 ? 'w800-rw' : 'w400-rw'))}" alt="" ${i < 9 ? '' : 'loading="lazy"'} decoding="async" draggable="false" referrerpolicy="no-referrer" onload="this.classList.add('in')"></button>`;
+    const io = new IntersectionObserver(e => { if (e[0].isIntersecting) page(); }, { rootMargin: '800px 0px' });
+    function page() {
         const end = Math.min(shown + GAL_PAGE, list.length);
-        grid.insertAdjacentHTML('beforeend', list.slice(shown, end).map((im, k) => `<button class="gal-cell" data-gi="${shown + k}" aria-label="Open photo ${shown + k + 1}"><img src="${esc(galSized(im.url, 'w400-rw'))}" alt="${esc(im.label || 'RWB ride photo')}" loading="lazy" decoding="async" draggable="false" referrerpolicy="no-referrer" onload="this.classList.add('in')"></button>`).join(''));
-        shown = end; if (shown >= list.length) { io.disconnect(); more.remove(); }
-    };
-    const io = new IntersectionObserver(e => { if (e[0].isIntersecting) page(); }, { rootMargin: '600px 0px' });
+        grid.insertAdjacentHTML('beforeend', list.slice(shown, end).map((im, k) => cell(im, shown + k)).join(''));
+        shown = end; if (shown >= list.length) { io.disconnect(); more.remove(); body.querySelector('.gal-end').hidden = false; }
+    }
     page(); if (more.isConnected) io.observe(more);
-    grid.addEventListener('click', e => { const c = e.target.closest('.gal-cell'); if (c) galViewer(list, +c.dataset.gi); });
-    actions = {};
+    grid.onclick = e => { const c = e.target.closest('.gal-cell'); if (c) galViewer(list, +c.dataset.gi); };
 }
 
-/* full-screen viewer: swipe left/right, double-tap to zoom, the phone's Back button closes it.
-   Only the photo on screen and its two neighbours are loaded (the rest load as you swipe). */
+/* full-screen viewer: swipe left or right forever (after the last photo comes the first again), double-tap to zoom,
+   the phone's Back button closes it. Only three slides exist; they are reused as you swipe, so even thousands of
+   photos open instantly. The small grid copy shows at once while the sharp one loads. */
 function galViewer(list, start = 0) {
+    if (!list.length) return;
     const L = gdOverlay('gd-player gd-viewer gal-viewer', 'Photo');
-    L.el.innerHTML = `<div class="gd-hreel">${list.map((im, i) => `<figure class="gd-ph-slide" data-i="${i}"><div class="gd-zoom"><img data-src="${esc(galSized(im.url, 'w1600-rw'))}" alt="${esc(im.label || 'RWB ride photo')}" referrerpolicy="no-referrer" draggable="false" decoding="async"></div></figure>`).join('')}</div>
+    galSecure('viewer', true); L.cleanup.push(() => galSecure('viewer', false));
+    const many = () => list.length > 1, at = i => ((i % list.length) + list.length) % list.length;
+    const slide = () => `<figure class="gd-ph-slide"><div class="gd-zoom"><img alt="" draggable="false" decoding="async" referrerpolicy="no-referrer"></div></figure>`;
+    L.el.innerHTML = `<div class="gd-hreel gal-reel">${slide() + slide() + slide()}</div>
         <div class="gd-ptop"><button class="gd-glass" data-x="close" aria-label="Close">${GD_ICO.close}</button>
-            ${list.length > 1 ? `<span class="gd-count"><b>${start + 1}</b> / ${list.length}</span>` : '<span></span>'}<span></span></div>`;
-    const reel = L.el.querySelector('.gd-hreel'), slides = [...reel.children];
-    const load = i => { const img = slides[i]?.querySelector('img[data-src]'); if (img) { img.src = img.dataset.src; img.removeAttribute('data-src'); } };
-    const show = i => { const c = L.el.querySelector('.gd-count b'); if (c) c.textContent = i + 1; [i, i + 1, i - 1].forEach(load); };
-    show(start);
-    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting && e.intersectionRatio > .6) show(+e.target.dataset.i); }), { root: reel, threshold: [.6] });
-    slides.forEach(s => io.observe(s)); L.cleanup.push(() => io.disconnect());
+            <span class="gd-count"><b></b> / <i></i></span>
+            <span class="gd-pr">${galCanEdit() ? `<button class="gd-glass" data-x="more" aria-label="Photo options">${GD_ICO.more}</button>` : ''}</span></div>`;
+    const reel = L.el.querySelector('.gal-reel');
+    let cur = at(start);
+    const fill = (fig, i) => {
+        const it = list[at(i)], img = fig.querySelector('img'), z = fig.querySelector('.gd-zoom'), u = galSized(it.url, 'w1600-rw');
+        fig.dataset.i = at(i); z.classList.remove('zoomed');
+        if (img.dataset.u === u) return;
+        img.dataset.u = u; img.classList.remove('in'); img.onload = () => img.classList.add('in'); img.src = u;
+        z.style.backgroundImage = `url("${galSized(it.url, 'w400-rw').replace(/"/g, '%22')}")`;
+    };
+    const draw = () => {
+        const [a, b, c] = reel.children; fill(a, cur - 1); fill(b, cur); fill(c, cur + 1);
+        reel.classList.toggle('one', !many());
+        L.el.querySelector('.gd-count b').textContent = cur + 1; L.el.querySelector('.gd-count i').textContent = list.length;
+        L.el.querySelector('.gd-count').hidden = !many();
+        [cur + 2, cur - 2].forEach(k => { const p = new Image(); p.referrerPolicy = 'no-referrer'; p.src = galSized(list[at(k)].url, 'w1600-rw'); });   /* the next ones are ready before the swipe */
+    };
+    const middle = () => { reel.scrollLeft = many() ? reel.clientWidth : 0; };
+    draw(); requestAnimationFrame(middle);
+    /* after each swipe settles: keep the photo in the middle slide and move the spare slide to the other side */
+    const settle = () => {
+        if (!many() || reel.style.overflowX === 'hidden') return;
+        const k = Math.round(reel.scrollLeft / reel.clientWidth); if (k === 1) return;
+        if (k === 2) { cur = at(cur + 1); reel.append(reel.firstElementChild); fill(reel.lastElementChild, cur + 1); }
+        else { cur = at(cur - 1); reel.prepend(reel.lastElementChild); fill(reel.firstElementChild, cur - 1); }
+        middle(); draw();
+    };
+    let st = 0; const onScroll = () => { clearTimeout(st); st = setTimeout(settle, 140); };
+    if ('onscrollend' in window) reel.addEventListener('scrollend', () => { clearTimeout(st); settle(); }); else reel.addEventListener('scroll', onScroll, { passive: true });
+    const onResize = () => middle(); addEventListener('resize', onResize); L.cleanup.push(() => removeEventListener('resize', onResize));
+    /* double-tap zooms into that spot; again zooms out. A single tap hides the buttons */
     let lastTap = 0;
     reel.addEventListener('click', e => {
         const z = e.target.closest('.gd-zoom'); if (!z) return;
@@ -1432,8 +1485,88 @@ function galViewer(list, start = 0) {
         z.classList.toggle('zoomed', on); reel.style.overflowX = on ? 'hidden' : '';
         if (on) requestAnimationFrame(() => { z.scrollLeft = fx * z.scrollWidth - z.clientWidth / 2; z.scrollTop = fy * z.scrollHeight - z.clientHeight / 2; });
     });
-    L.el.addEventListener('click', e => { if (e.target.closest('[data-x=close]')) { e.stopPropagation(); gdClose(); } });
-    requestAnimationFrame(() => { reel.scrollLeft = slides[start].offsetLeft; });
+    L.el.addEventListener('keydown', e => { if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') reel.scrollBy({ left: (e.key === 'ArrowRight' ? 1 : -1) * reel.clientWidth, behavior: 'smooth' }); });
+    L.el.addEventListener('click', e => {
+        const x = e.target.closest('[data-x]'); if (!x) return; e.stopPropagation();
+        if (x.dataset.x === 'close') gdClose();
+        if (x.dataset.x === 'more') galPhotoMenu(list[cur], () => {
+            if (!list.length) return gdClose();
+            cur = at(cur); [...reel.children].forEach(f => { f.querySelector('img').dataset.u = ''; }); draw(); middle();
+        });
+    });
+}
+
+/* ---------- admins and coordinators: add and delete photos ---------- */
+function galPhotoMenu(it, after) {
+    openSheet('Photo', `<div class="gal-menu"><span class="gal-menu-th" style="background-image:url('${esc(galSized(it.url, 'w400-rw'))}')"></span>
+            <p class="small muted">This photo is in the RWB Gallery on the app and on roninwb.in.</p></div>
+        <button class="btn danger block" data-x="del">Delete from the gallery</button>
+        <p class="small muted gal-note">It moves to the bin of the RWB Gallery Google Drive folder, where the RWB super admin can restore it for 30 days.</p>`, body => {
+        body.querySelector('[data-x=del]').onclick = e => {
+            if (!confirmBox('Delete this photo from the RWB Gallery?\n\nIt disappears from the app and roninwb.in.')) return;
+            busy(e.target, async () => { await galDelete(it); closeSheet(); toast('Photo deleted'); after?.(); galRefreshScreens(); });
+        };
+    });
+}
+async function galSend(token, payload) {
+    if (api.demo) return { ok: true, item: payload.data ? { url: 'data:' + payload.type + ';base64,' + payload.data, label: '', id: 'demo' + Date.now() + Math.random().toString(36).slice(2, 8) } : null };
+    let r;
+    try { r = await fetch(SITE.GALLERY_SCRIPT_URL, { method: 'POST', body: JSON.stringify({ token, ...payload }) }); }   /* plain text body: no CORS preflight */
+    catch { throw new Error(navigator.onLine === false ? 'You\'re offline. Connect to the internet and try again.' : 'Couldn\'t reach the RWB Gallery. Please try again.'); }
+    const j = await r.json().catch(() => ({}));
+    if (!j.ok) throw new Error(j.error || 'Couldn\'t update the RWB Gallery. Please try again.');
+    return j;
+}
+async function galDelete(it) {
+    const id = galId(it); if (!id) throw new Error('This photo can\'t be deleted from the app');
+    await galSend(await api.galleryTicket('delete', id), {});
+    const list = state.gal || [], i = list.indexOf(it); if (i >= 0) list.splice(i, 1);
+    state.galPick = null; galKeep();
+}
+const galB64 = blob => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(',')[1]); fr.onerror = rej; fr.readAsDataURL(blob); });
+async function galAddOne(f) {
+    const okType = /^image\/(jpe?g|png|webp|heic|heif)$/i.test(f.type) || (!f.type && /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name));
+    if (!okType) throw new Error('Not a photo');
+    if (f.size > 25 * 1024 * 1024) throw new Error('Over 25 MB');
+    const ph = await compressImage(f, 2048, 900e3);   /* sharp on any phone screen, ~0.5–0.9 MB */
+    const j = await galSend(await api.galleryTicket('add'), { type: 'image/jpeg', data: await galB64(ph) });
+    if (j.item) { (state.gal ??= []).unshift(api.demo ? { ...j.item, local: true } : j.item); state.galPick = null; galKeep(); }
+}
+function galAddPicker() {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
+    inp.onchange = () => { const files = [...inp.files].slice(0, 20); if (files.length) galAddSheet(files); };
+    inp.click();
+}
+function galAddSheet(files) {
+    const urls = files.map(f => URL.createObjectURL(f));
+    openSheet(`Add ${files.length} photo${files.length > 1 ? 's' : ''}`, `<div class="gal-pick">${urls.map((u, i) => `<span class="gal-pick-t" data-i="${i}" style="background-image:url('${u}')"><i></i></span>`).join('')}</div>
+        <div class="gal-rules"><b>Before you add</b><ul>
+            <li>Photos from RWB rides, meets and events only</li>
+            <li>Everyone in them is happy to be on the app and roninwb.in</li>
+            <li>No phone numbers, documents or anything private in the picture</li></ul></div>
+        <button class="btn block" data-x="go">Add to the RWB Gallery</button>
+        <p class="small muted gal-note">They show on the app and roninwb.in for everyone. Photos are made lighter on your phone first (up to 20 at a time).</p>`, body => {
+        const go = body.querySelector('[data-x=go]');
+        go.onclick = async () => {
+            go.disabled = true; let done = 0, bad = 0;
+            for (let i = 0; i < files.length; i++) {
+                const t = body.querySelector(`.gal-pick-t[data-i="${i}"]`); t?.classList.add('busy');
+                go.textContent = `Adding ${i + 1} of ${files.length}…`;
+                try { await galAddOne(files[i]); done++; t?.classList.replace('busy', 'ok'); }
+                catch (e) { bad++; t?.classList.replace('busy', 'bad'); if (/pass|admins|offline|lot of photos/i.test(e.message)) { toast(e.message, true); break; } }
+            }
+            urls.forEach(u => URL.revokeObjectURL(u));
+            if (done) toast(`${done} photo${done > 1 ? 's' : ''} added to the RWB Gallery${bad ? ` · ${bad} couldn't be added` : ''}`, !!bad);
+            else if (!bad) toast('Nothing was added', true);
+            setTimeout(closeSheet, done && !bad ? 400 : 1600); galRefreshScreens();
+        };
+    });
+    sheet.addEventListener('close', () => urls.forEach(u => URL.revokeObjectURL(u)), { once: true });
+}
+/* redraw what's on screen after an add or delete (the phone's list is already updated) */
+function galRefreshScreens() {
+    if (document.body.dataset.route === 'gallery') galDrawGrid(state.gal || []);
+    else if ($('#home-gal')) render();
 }
 
 /* =================== Service records =================== */

@@ -354,6 +354,8 @@ async function supabaseApi(url, key) {
             answer: async (qid, text) => must(await sb.rpc('teach_answer', { p_qid: qid, p_answer: text })),
             stats: async () => must(await sb.rpc('teach_stats')),
         },
+        /* ---- Gallery (setup file 80): a one-time pass for the RWB Gallery script; the photo itself never touches Supabase ---- */
+        galleryTicket: async (action, file) => must(await sb.rpc('gallery_ticket', { p_action: action, p_file: file || null })),
         /* ---- Guides (setup file 66 + the guides-media function: files live on GitHub, served by jsDelivr) ---- */
         async guideItems() {
             const r = await sb.from('guide_items').select('*').order('created_at', { ascending: false }).limit(1000);
@@ -851,6 +853,8 @@ function demoApi() {
                 save(); return wait({ ...this._stats(), live }); },
             stats() { return wait(this._stats()); },
         },
+        /* ---- Gallery (demo: no script; the app keeps added/deleted photos on this phone) ---- */
+        galleryTicket: (action) => { if (!['coordinator', 'admin', 'superadmin'].includes(me().role)) return Promise.reject(new Error('Only RWB admins and coordinators can change the gallery')); return wait('demo-' + action); },
         /* ---- Guides (demo: sample items; uploads stay on this phone until the page reloads) ---- */
         guideItems: () => wait(demoGuides()),
         guideCats: () => wait({ superadmin: ['app', 'maint', 'ride'], admin: ['maint', 'ride'], coordinator: ['ride'] }[me().role] || []),

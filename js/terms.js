@@ -1,6 +1,6 @@
 /* RWB Terms & Conditions: one source for roninwb.in/terms.html and the RWB App */
 window.RWB_TNC = {
-    updated: '15 November 2026',
+    updated: '21 November 2026',
     version: '2.0',
     sections: [
 
@@ -66,7 +66,8 @@ window.RWB_TNC = {
         'Warriorboards (leaderboards), XP and ranks are for fun and have no money value. RWB admins may correct or remove scores, or remove someone from a board, if they look wrong or were gained unfairly (for example fake rides, fake readings or copied answers).'
     ]],
     ['Photos, videos and social media', [
-        'RWB may share photos and videos from rides and events on RWB\'s website, WhatsApp channel and social media pages. If you don\'t want to appear, tell the photographer or an admin, and we will not use, or will remove, images of you on request.',
+        'RWB may share photos and videos from rides and events on RWB\'s website, in the RWB App\'s Gallery, and on RWB\'s WhatsApp channel and social media pages. If you don\'t want to appear, tell the photographer or an admin (or message RWB on Instagram), and we will not use, or will remove, images of you on request.',
+        'Gallery photos are for viewing in the RWB App and on roninwb.in only. Do not download, screenshot, copy or share them outside RWB, and never use them to identify, follow, contact or embarrass anyone. Admins and coordinators add only photos from RWB rides and events that the people in them are happy to share.',
         'When you share RWB rides, use #roninwb, and respect other members\' privacy. Don\'t post anyone\'s vehicle number, home location or personal details without their consent.',
         'Do not use the RWB name or logo for any commercial purpose, or to speak on behalf of RWB, without written permission from the RWB admins.'
     ]],

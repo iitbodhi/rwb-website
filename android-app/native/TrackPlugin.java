@@ -179,6 +179,18 @@ public class TrackPlugin extends Plugin {
     @PluginMethod
     public void status(PluginCall call) { call.resolve(state()); }
 
+    /** Gallery (Nov 2026): while RWB Gallery photos are on screen, Android blocks screenshots and screen recording
+        (and the photos show blank in the Recent apps view). Turned off again as soon as the rider leaves the gallery. */
+    @PluginMethod
+    public void secure(PluginCall call) {
+        final boolean on = Boolean.TRUE.equals(call.getBoolean("on", false));
+        getActivity().runOnUiThread(() -> {
+            if (on) getActivity().getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
+            else getActivity().getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
+            JSObject r = new JSObject(); r.put("on", on); call.resolve(r);
+        });
+    }
+
     /** Ask Android to let RWB run in the background without battery restrictions. */
     @PluginMethod
     public void battery(PluginCall call) {
