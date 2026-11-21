@@ -1,11 +1,14 @@
 // RWB App: "ask-ronin" Supabase Edge Function. The Pookie chatbot.
-// How Pookie answers (v8):
+// How Pookie answers (v8, chat memory + character + RWB notes since pookie-12):
 //  1. It looks up what RWB taught it: approved Teach Pookie answers, admin teachings, the Guides PDFs,
 //     the RWB team list and the RWB gear list. This lookup is our own code: free and unlimited.
 //  2. An AI (Groq first, Gemini as backup) only turns those teachings into a short, friendly reply in Pookie's voice.
 //     It is told to use nothing else. If the teachings don't cover the question, Pookie says
 //     "I don't know that yet…" and the question goes to Teach Pookie marked URGENT.
 //  3. If every AI is down, Pookie still answers from the best matching teaching (or says it doesn't know).
+//  4. Chat memory (pookie-12): the phone keeps the conversation and sends the last 12 messages. Follow-ups ("and how
+//     often?") and Bengali/Hindi/Banglish questions are first turned into one standalone English search line by a
+//     tiny Groq call (free tier), so the right teachings are found. Nothing extra is stored in Supabase.
 // The AI keys stay on the server (private.config), never on phones.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { getDocumentProxy } from "npm:unpdf@^0.12.0";
@@ -27,31 +30,67 @@ const json = (body: unknown, status = 200) =>
 /* ---------------- Who Pookie is ---------------- */
 const PERSONA = `
 You are Pookie, the AI buddy inside the RWB App of Ronin Warriors of Bengal (RWB), a TVS Ronin riding community from
-West Bengal, India (founded 2023, motto: Explore. Evolve. Inspire.). You talk like a fellow RWB warrior at a tea stop:
-warm, friendly, a bit funny, never formal or robotic.
+West Bengal, India (founded 2023, motto: Explore. Evolve. Inspire.). You are a proper Bengali biker dada at the tea stop:
+warm, witty, a little cheeky, quick with a comeback, never formal or robotic.
 Your name comes from Kaustabh "Pookie" Bhattacharjee, an RWB admin famous for riding more than one lakh km. He is the real
 legend; you are the AI. If asked about Pookie the rider, talk about him. If asked who made you: the RWB team.
 
-THE ONE BIG RULE
-Answer ONLY from the TEACHINGS and CORE NOTES below. Teachings are what RWB warriors and admins taught you, plus notes from
-the RWB maintenance guides. Teachings come first. Never use outside knowledge, never guess, never invent numbers,
-prices, part numbers, shops, places or people.
-If the TEACHINGS and CORE NOTES don't answer the question, start your reply with exactly:
+THE ONE BIG RULE (facts)
+For facts (bike, maintenance, parts, prices, routes, shops, the app, RWB and its people) answer ONLY from the TEACHINGS,
+RWB NOTES and CORE NOTES below, and from what you already said earlier in THIS chat. Teachings come first. Never use outside
+knowledge for facts, never guess, never invent numbers, prices, part numbers, shops, places or people.
+If they don't answer a factual question, start your reply with exactly:
 [[DONT_KNOW: <the question rewritten as one short, clear, general question in English, no names or personal details>]]
 and write nothing else, except: if it's about safety (brakes, steering, tyres, fuel leak, smoke, overheating, a warning
 light that stays on), add ONE short line after it telling them to stop if it feels unsafe and get it checked at a TVS service centre.
-Greetings, thanks and small talk ("hi", "who are you", "thanks", "good night") need no teachings: reply in one friendly line.
+NO teachings needed (never DONT_KNOW these): greetings, thanks, small talk, jokes, teasing, banter, "naughty" or silly
+questions, life/love/office/mood talk, riding motivation. Just be fun and human. Keep any facts inside jokes true.
+
+THIS IS A CONVERSATION
+- You remember the chat above. Follow-ups like "and how often?", "why?", "which one is better?", "aur?", "tarpor?",
+  "ar ki?" refer to the earlier messages: answer them in that context, never as a brand-new question.
+- If something the rider said earlier in the chat (their plan, their bike, their problem) matters, use it.
+- If a follow-up is unclear, ask one short question back instead of saying you don't know.
+
+MATCH THE MOOD
+- Serious question → helpful, crisp answer with a light touch.
+- Funny, naughty or flirty question → play along with a cheeky, witty comeback in the same spirit (adda style, double
+  meanings and bike puns welcome), then steer back to riding if it fits. Keep it PG-13: no explicit sexual detail,
+  no slurs, nothing hateful about religion, caste, gender, region or body. No politics (RWB's rule): dodge with a joke.
+- If they roast you, roast back gently. Tease RWB folks only in a friendly way they'd laugh at, never insult anyone.
+- Sad or stressed rider → kind and supportive first, jokes later.
+
+LANGUAGE (follow the rider's LAST message, not the earlier ones)
+- English message → reply in plain English. A single "dada" or "arre" is fine, but no Banglish sentences.
+- Bengali script (বাংলা) → Bengali script. Hindi (देवनागरी) → Hindi.
+- Banglish ("ki korbo dada") → Banglish in Roman (English) letters, NEVER Bengali script. Hinglish ("kya karu bhai") → Hinglish in Roman letters.
+- Use "tumi"/"aap" style politeness by default ("tui" only if the rider uses it first). Teachings are in English: translate them naturally.
 
 HOW YOU TALK
 - Short and crisp: 1 to 4 short lines, about 60 words at most. Steps: at most 4 short bullets. No intro, no essay,
   no "I hope this helps", no "as an AI".
-- Use the rider's name (from ABOUT THIS RIDER) naturally, once, not in every message.
-- Light humour like a riding buddy; at most one emoji. Never make fun of the rider.
-- Reply in the rider's language and style (English, Bengali, Hindi or Banglish).
+- Use the rider's name (from ABOUT THIS RIDER) naturally, once in a while, not in every message.
+- At most one or two emoji.
 - Credit tips casually: a rider's tip ("Arjun from RWB swears by…"), a guide ("the RWB chain guide says…").
 - If two teachings disagree, say so in one line and give both.
 - Never help with illegal mods (silencer or catalytic converter removal, loud exhausts, fancy number plates, blinding aux lights).
-- You can't see members' private data except ABOUT THIS RIDER. Never make up their data.`;
+- You can't see members' private data except ABOUT THIS RIDER. Never make up their data. Never share anyone's phone
+  number, address or private details.`;
+
+const RWB_NOTES = `
+RWB NOTES (from the RWB team)
+- RWB = Ronin Warriors of Bengal: a TVS Ronin riding family from West Bengal, founded in 2023 by Sayantan "Boss" Sarkar
+  with co-founder Arnab "Boro Admin" Das. Motto: Explore. Evolve. Inspire. Website roninwb.in, hashtag #roninwb.
+  Riders of other bikes are welcome too. Members are called warriors. No politics in RWB.
+- Joining: new riders apply in the RWB app or at roninwb.in/join and an admin approves them. Outsiders contact RWB via
+  RWB's Instagram DM, never admins' phone numbers.
+- The team: admins run RWB, co-admins help them, coordinators help with rides, MotoMart and the app. The RWB TEAM
+  teachings list every one of them with their nickname and bike. Talk about them with respect and fun, using their
+  nicknames, like a proud member would ("Pinky rides sweep, nobody gets left behind with him around").
+- OWB: RWB's secret, invite-only WhatsApp group. Only a few chosen, old and trusted members get in, picked by the admins.
+  It's where the unfiltered, no-holds-barred adda happens. You can't apply for it and you don't ask for it: keep riding,
+  stay genuine, be a good warrior, and maybe one day the invite finds you. Never say who is in OWB, never share any link,
+  never reveal what is said there (you don't know, and if you did you wouldn't tell 🤐). Keep it mysterious and fun.`;
 
 const CORE_NOTES = `
 CORE NOTES (checked by the RWB team)
@@ -88,9 +127,27 @@ Bottom tabs: Home, Service, Mileage, Track (middle), MotoMart, Warriors, Events.
 - Coordinators have a Coordinator panel (Home → Coordinator): approve MotoMart posts and Teach Pookie answers, and handle reports.
 - Sign-in trouble: use the Google account from the RWB join form, or send the short request form for an admin to approve.`;
 
-const DONT_KNOW = (name: string) =>
-  `Hmm${name ? ", " + name : ""}… I don't know that yet. Wait for someone to teach that to me first. 🙏\n\n` +
-  `I've put your question in **Teach Pookie** as URGENT, so the warriors can teach me.`;
+/** The rider's language, so "I don't know" comes back in it too: Bengali, Hindi, Banglish, Hinglish or English. */
+type Lang = "en" | "bn" | "hi" | "bn-r" | "hi-r";
+function langOf(t: string): Lang {
+  if (/[\u0980-\u09FF]/.test(t)) return "bn";
+  if (/[\u0900-\u097F]/.test(t)) return "hi";
+  const s = t.toLowerCase().replace(/[^a-z ]+/g, " ");
+  const n = (re: RegExp) => (s.match(re) || []).length;
+  const bn = n(/\b(ki|kemon|korbo|korte|korle|kore|ache|achhe|achi|hobe|hoy|keno|kothay|kotha|bolo|bol|bhalo|amar|amake|tomar|tomake|tumi|ami|ekta|kichu|naki|dada|ekhon|jabo|lagbe|parbo|eta|ota|oi|ke|keu|naa)\b/g);
+  const hi = n(/\b(kya|kaise|kaisa|kitna|kitni|mera|meri|mujhe|kab|kyun|kyu|batao|bata|hai|hain|karu|karun|karna|nahi|nahin|accha|acha|yaar|kaun|kahan|chahiye|sakta|sakte|kar|hoga)\b/g);
+  return bn >= 2 && bn > hi ? "bn-r" : hi >= 2 && hi > bn ? "hi-r" : "en";
+}
+const DONT_KNOW = (name: string, lang: Lang = "en") => {
+  const n = name ? ", " + name : "";
+  return {
+    en: `Hmm${n}… I don't know that yet. Wait for someone to teach that to me first. 🙏\n\nI've put your question in **Teach Pookie** as URGENT, so the warriors can teach me.`,
+    bn: `হুম${n}… এটা আমি এখনও জানি না। আগে কেউ আমাকে শিখিয়ে দিক। 🙏\n\nপ্রশ্নটা **Teach Pookie**-তে URGENT করে রেখে দিলাম, warriors-রা শিখিয়ে দেবে।`,
+    "bn-r": `Hmm${n}… eta ami ekhono jani na. Age keu amake shikhiye dik. 🙏\n\nTomar proshno ta **Teach Pookie**-te URGENT kore rekhe dilam, warriors ra shikhiye debe.`,
+    hi: `हम्म${n}… ये मुझे अभी नहीं पता। पहले कोई मुझे सिखा दे। 🙏\n\nआपका सवाल **Teach Pookie** में URGENT डाल दिया है, warriors मुझे सिखा देंगे।`,
+    "hi-r": `Hmm${n}… ye mujhe abhi nahi pata. Pehle koi mujhe sikha de. 🙏\n\nTumhara sawaal **Teach Pookie** mein URGENT daal diya hai, warriors mujhe sikha denge.`,
+  }[lang];
+};
 const DK = /\[\[\s*DONT[\s_-]?KNOW\s*(?::\s*([\s\S]*?))?\]\]/i;
 
 /* ---------------- Teachings: what Pookie knows ---------------- */
@@ -126,8 +183,19 @@ async function siteRows(): Promise<K[]> {
   try {
     const js = await (await get(`${SITE}/js/data.js`, 3000)).text(); ok = true;
     const url = (k: string) => js.match(new RegExp(k + ":\\s*'([^']+)'"))?.[1];
-    const team = [...js.matchAll(/name:\s*'([^']+)',\s*nickname:\s*'([^']*)',\s*role:\s*'(\w+)',\s*roleLabel:\s*'([^']+)'/g)].map((m) => `${m[1]} ("${m[2]}"): ${m[4]}`);
-    if (team.length) rows.push(prep({ title: "RWB team: admins, co-admins, coordinators, who runs RWB", content: team.join("; "), source: "site" }));
+    /* the RWB team from the website: one teaching per person, plus the whole list grouped by role */
+    const un = (x?: string) => String(x || "").replace(/\\'/g, "'").replace(/\s+/g, " ").trim();
+    const team = [...js.matchAll(/name:\s*'([^']+)',\s*nickname:\s*'([^']*)',\s*role:\s*'(\w+)',\s*roleLabel:\s*'([^']+)'(?:,\s*bike:\s*'((?:[^'\\]|\\.)*)')?(?:[^{}]*?desc:\s*'((?:[^'\\]|\\.)*)')?/g)]
+      .map((m) => ({ name: un(m[1]), nick: un(m[2]), role: m[3], label: un(m[4]), bike: un(m[5]), desc: un(m[6]) }));
+    if (team.length) {
+      const ROLE: Record<string, string> = { admin: "Admins", coadmin: "Co-admins (coadmin)", coordinator: "Coordinators (co-ordinators)" };
+      const groups = Object.keys(ROLE).map((r) => { const ppl = team.filter((t) => t.role === r);
+        return ppl.length ? `${ROLE[r]}: ${ppl.map((t) => `${t.name} "${t.nick}" (${t.label})`).join(", ")}` : ""; }).filter(Boolean);
+      rows.push(prep({ title: "RWB team list: who are the admins, coadmins, co-admins, coordinators, founder, who runs RWB", source: "site",
+        content: `RWB TEAM. ${groups.join(". ")}. Bodhi is also the super admin of the RWB app.` }));
+      for (const t of team) rows.push(prep({ title: `RWB team: ${t.nick} = ${t.name}, ${t.label} of RWB`, source: "site",
+        content: `${t.name}, nickname "${t.nick}", is ${/^[aeiou]/i.test(t.label) ? "an" : "a"} ${t.label} of RWB.${t.bike ? ` Rides: ${t.bike}.` : ""}${t.desc ? ` From the RWB website: ${t.desc}` : ""}` }));
+    }
     const mUrl = url("MAINTENANCE_SCRIPT_URL");
     const [guides] = await Promise.allSettled([mUrl ? get(mUrl).then((r) => r.json()) : Promise.resolve([])]);
     if (guides.status === "fulfilled" && Array.isArray(guides.value)) {
@@ -359,7 +427,38 @@ async function pdfText(bytes: Uint8Array): Promise<string> {
   return pages.join("\n\n").replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-const VERSION = "pookie-11";
+/** Follow-ups ("and how often?") and Bengali/Hindi questions share no words with the English teachings.
+ *  One tiny Groq call (free tier, about half a second) rewrites the rider's last message as a standalone English
+ *  search line using the chat so far. "CHAT" = just banter, no teachings needed. Fails quietly ("" = use the words as typed). */
+// a small model with its own free-tier budget, so the main answer's per-minute token limit isn't used up
+const REWRITE_MODELS = ["qwen/qwen3.8-27b", "openai/gpt-oss-20b"];
+async function standalone(key: string, models: string[], turns: { role: string; text: string }[], log: string[]): Promise<string> {
+  const convo = turns.slice(-7).map((t) => `${t.role === "model" ? "Pookie" : "Rider"}: ${t.text.slice(0, 400)}`).join("\n");
+  const messages = [{ role: "system", content:
+    "You turn the rider's LAST message in a chat with Pookie (the AI of a TVS Ronin motorcycle club, RWB) into ONE short, standalone " +
+    "search question in English. Use the earlier messages to fill in what words like it, that, this one, same, and?, why?, how often?, " +
+    "aur?, tarpor?, ar ki? refer to. Translate Bengali, Hindi, Banglish or Hinglish into English (biker words: borsha/borshay/brishti/baarish = " +
+    "rain or monsoon; gari/gaadi = bike; tel = oil or petrol; chaka/pahiya = wheel or tyre; hawa = tyre pressure; kotobar/kitni baar = how often; " +
+    "dam/daam = price; kothay/kahan = where; bhalo/accha = good). Keep names, nicknames and product names. " +
+    "If the last message is only a greeting, thanks, a joke, teasing, banter or chit-chat with no real question, reply exactly: CHAT. " +
+    "Reply with only the question (or CHAT), nothing else." }, { role: "user", content: convo }];
+  const until = Date.now() + 4500;
+  for (const model of [...new Set([...models, ...REWRITE_MODELS])]) {
+    if (Date.now() > until - 800) break;
+    try {
+      const r = await fetch(`${GROQ}/chat/completions`, { method: "POST", signal: AbortSignal.timeout(Math.min(3000, until - Date.now())),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model, messages, temperature: 0, ...(/gpt-oss/.test(model) ? { max_tokens: 300, reasoning_effort: "low" }
+          : /qwen/.test(model) ? { max_tokens: 60, reasoning_effort: "none" } : { max_tokens: 60 }) }) });   // qwen's free tier counts output tokens per minute
+      if (!r.ok) { log.push(`rewrite ${model} HTTP ${r.status}`); continue; }
+      const t = groqFull(await r.json()).replace(/<think>[\s\S]*?<\/think>/g, "").trim().split("\n")[0].replace(/^["'\s]+|["'\s]+$/g, "").slice(0, 300);
+      if (t) { log.push(`search line (${model}): ${t}`); return t; }
+    } catch (e) { log.push(`rewrite ${model}: ${String(e).slice(0, 60)}`); }
+  }
+  return "";
+}
+
+const VERSION = "pookie-12";
 const list = (s: unknown, dflt: string) => String(s || dflt).split(",").map((x) => x.trim()).filter(Boolean);
 
 /* ---------------- Request ---------------- */
@@ -476,27 +575,37 @@ Deno.serve(async (req) => {
     const cfg = cfgRes.data || {};
     const { messages = [], context = null, image = null, stream = true } = input;
     const live = stream !== false;
-    const turns = (Array.isArray(messages) ? messages : []).slice(-6)
+    const turns = (Array.isArray(messages) ? messages : []).slice(-12)
       .filter((m) => m && typeof m.text === "string" && m.text.trim())
-      .map((m) => ({ role: m.role === "model" ? "model" : "user", text: m.text.replace(/\[\[[^\]]*\]\]/g, "").slice(0, m.role === "model" ? 600 : 1500) }));
+      .map((m) => ({ role: m.role === "model" ? "model" : "user", text: m.text.replace(/\[\[[^\]]*\]\]/g, "").slice(0, m.role === "model" ? 700 : 1500) }));
     if (!turns.length || turns[turns.length - 1].role !== "user") { await refund(); return json({ error: "Please type a question." }, 400); }
     const hasImage = !!(image && typeof image === "string" && image.length < 1_500_000);
     const name = String((context as Record<string, unknown> | null)?.first_name || "").slice(0, 30);
     const lastQ = turns[turns.length - 1].text;
+    const lang = langOf(lastQ);
 
     // what RWB taught Pookie that fits this question (the last question counts most)
     const asked = turns.filter((t) => t.role === "user").slice(-2).map((t) => t.text).join(" ");
     const all = [...lRows, ...sRows];
-    const found = [...match(all, lastQ), ...match(all, asked)].filter((x, i, a) => a.findIndex((y) => y.k === x.k) === i);
+    const direct = match(all, lastQ);
+    // a follow-up, a Bengali/Hindi question, or a weak match → find the teachings with a standalone English search line
+    const prior = turns.length > 1, weak = !direct.length || direct[0].cover < 0.5;
+    const short = words(lastQ).length <= 6 || /\b(it|that|this|those|them|same|also|why|which|aur|ar|tarpor|seta|eta|oita|ota|wo|woh|ye|isko|usko|uska)\b/i.test(lastQ);
+    let line = "";
+    if (cfg.groq_key && !hasImage && (lang !== "en" || (prior && (weak || short)))) {
+      line = await standalone(cfg.groq_key, list(cfg.rewrite_models, ""), turns, log);
+      if (/^CHAT\b/i.test(line)) line = "";
+    }
+    const found = [...(line ? match(all, line) : []), ...direct, ...match(all, asked)].filter((x, i, a) => a.findIndex((y) => y.k === x.k) === i);
 
     // "I don't know" → Pookie's message, the question goes to Teach Pookie as URGENT, and the question is free
     let logged = false;
     const unknown = async (q: string) => { if (logged) return; logged = true; await server.rpc("pookie_log_unknown", { p_question: q }); await refund(); };
-    const dk = (raw: string) => { const m = raw.match(DK); if (!m) return null; const rest = raw.replace(DK, "").trim(); return DONT_KNOW(name) + (rest ? "\n\n" + rest : ""); };
-    const onEnd = async (full: string) => { const m = full.match(DK); if (m) await unknown((m[1] || lastQ).trim()); else if (!full.trim()) await refund(); };
+    const dk = (raw: string) => { const m = raw.match(DK); if (!m) return null; const rest = raw.replace(DK, "").trim(); return DONT_KNOW(name, lang) + (rest ? "\n\n" + rest : ""); };
+    const onEnd = async (full: string) => { const m = full.match(DK); if (m) await unknown((m[1] || line || lastQ).trim()); else if (!full.trim()) await refund(); };
 
     const today = new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "long", year: "numeric" });
-    const system = [PERSONA, `Today's date: ${today}.`, teachingsText(found), CORE_NOTES,
+    const system = [PERSONA, `Today's date: ${today}.`, teachingsText(found), RWB_NOTES, CORE_NOTES,
       context ? "ABOUT THIS RIDER (their own app data; use only if it helps):\n" + JSON.stringify(context).slice(0, 1000) : ""].filter(Boolean).join("\n\n");
 
     let upstream: Response | null = null, pick: (d: never) => string = partsText as never, full: (d: never) => string = partsText as never;
@@ -522,8 +631,8 @@ Deno.serve(async (req) => {
       await refund();
       const plain = plainAnswer(found, name);
       if (plain) return json({ reply: plain, left: quota.data });
-      await unknown(lastQ);
-      return json({ reply: DONT_KNOW(name), left: quota.data });
+      await unknown(line || lastQ);
+      return json({ reply: DONT_KNOW(name, lang), left: quota.data });
     }
     if (!live) {
       const raw = full(await (upstream as Response).json() as never).trim();

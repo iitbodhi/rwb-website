@@ -4708,7 +4708,7 @@ const CHAT_KEY = () => 'rwb-chat-' + (state.me?.id || 'x');
 const chat = { msgs: null, busy: false, image: null, left: null };
 const loadChat = () => { if (chat.msgs) return; try { chat.msgs = JSON.parse(localStorage.getItem(CHAT_KEY())) || []; } catch { chat.msgs = []; } };
 const saveChat = () => { try { localStorage.setItem(CHAT_KEY(), JSON.stringify(chat.msgs.slice(-40))); } catch { /* ignore */ } };
-const SUGGEST = ['Which chain lube works in monsoon?', 'What tyre pressure do RWB riders use?', 'Which engine oil for the Ronin 225?', 'How do I track mileage with Trip A?', 'How do I sell my old helmet on MotoMart?', 'Tips for a ride to the hills'];
+const SUGGEST = ['Which chain lube works in monsoon?', 'What tyre pressure do RWB riders use?', 'Which engine oil for the Ronin 225?', 'Who are the RWB admins?', 'What is OWB? 👀', 'Ronin niye ekta joke bolo 😄'];
 const AI_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/><path d="M9 10h.01M12 10h.01M15 10h.01"/></svg>';
 
 /* tiny, safe markdown: **bold**, *italic*, lists, links, paragraphs */
@@ -4783,7 +4783,7 @@ function drawChat() {
     log.innerHTML = chat.msgs.length ? chat.msgs.map(m => `<div class="msg ${m.role}">${m.img ? `<img src="${esc(m.img)}" alt="" class="msg-img">` : ''}${m.role === 'model' ? md(m.text) : `<p>${esc(m.text).replace(/\n/g, '<br>')}</p>`}${m.err ? '<p class="small" style="margin-top:6px"><button class="btn sm ghost" data-act="retry">Try again</button></p>' : ''}</div>`).join('')
         + (chat.busy ? '<div class="msg model typing"><span></span><span></span><span></span></div>' : '')
         : `<div class="chat-hello"><div class="ai-badge">${AI_ICON}</div><h2>Hey ${esc(firstName(state.me))}, Pookie here 🏍️</h2>
-            <p class="muted">I only know what RWB warriors taught me: Ronin care, tyres, chain, oil, gear, routes and this app. If I don't know something, I'll say so and ask the warriors to teach me.</p>
+            <p class="muted">Ask me about Ronin care, gear, routes, RWB and this app, then keep the chat going with follow-ups. Bangla, Hindi or English, your choice. If I don't know something, I'll ask the warriors to teach me.</p>
             <div class="chips sugg">${SUGGEST.map(s => `<button class="chip" data-act="suggest">${esc(s)}</button>`).join('')}</div></div>`;
     actions.retry = () => { const last = [...chat.msgs].reverse().find(m => m.role === 'user'); chat.msgs = chat.msgs.filter(m => !m.err); if (last) { chat.msgs.pop(); sendChat(last.text); } };
     requestAnimationFrame(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }));
@@ -4810,7 +4810,7 @@ async function sendChat(text) {
         });
     };
     try {
-        const history = chat.msgs.filter(m => !m.err).map(m => ({ role: m.role, text: m.text }));
+        const history = chat.msgs.filter(m => !m.err).slice(-12).map(m => ({ role: m.role, text: m.text }));   /* Pookie remembers the last 12 messages */
         const r = await api.ask(history, riderContext(), imgB64, onText);
         if (live) live.text = r.reply; else chat.msgs.push({ role: 'model', text: r.reply });
         chat.left = r.left;
