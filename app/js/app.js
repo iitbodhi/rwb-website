@@ -1228,9 +1228,11 @@ async function viewHome() {
     const docWarn = docs.map(d => ({ d, st: docStatus(d) })).filter(x => x.st.level === 'bad' || x.st.level === 'warn').sort((a, b) => a.st.days - b.st.days)[0];
     syncKmpl(fuel); whenIdle(() => syncReminders(services, fuel, ride));
     const today = bdays.filter(b => b.day === todayISO());
-    /* Fresh on MotoMart: RWB Merch first, then used, then new accessories (each newest first) */
-    const FRESH_ORDER = { merch: 0, used: 1, new: 2 };
-    const fresh = listings.filter(l => l.status === 'live').map((l, i) => [l, i]).sort((a, b) => (FRESH_ORDER[kindOf(a[0])] ?? 3) - (FRESH_ORDER[kindOf(b[0])] ?? 3) || a[1] - b[1]).map(x => x[0]).slice(0, 8);
+    /* Fresh on MotoMart: the 4 latest Pre-owned posts first, then RWB Merch, then the other Pre-owned posts,
+       then new accessories (the list already comes newest first) */
+    const live = listings.filter(l => l.status === 'live'), ofKind = k => live.filter(l => kindOf(l) === k);
+    const pre = ofKind('used');
+    const fresh = [...pre.slice(0, 4), ...ofKind('merch'), ...pre.slice(4), ...ofKind('new')].slice(0, 10);
     firstNotifAsk();
     let pushAsk = false; try { pushAsk = NATIVE ? !localStorage.getItem(FCM_KEY) && !localStorage.getItem('rwb-push-dismissed') : pushSupported() && Notification.permission === 'default' && !localStorage.getItem('rwb-push-dismissed'); } catch { /* ignore */ }
     const names = today.map(b => b.full_name.split(' ')[0]);
@@ -4209,7 +4211,7 @@ const ICON_CLEAR = '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" 
 const CONDITIONS = ['Brand new (unused)', 'Like new', 'Good', 'Fair', 'Needs repair'];
 const MM_CATS = ['Helmets', 'Riding gear', 'Protection', 'Luggage', 'Navigation & electronics', 'Lights', 'Bike accessories', 'Spare parts'];
 const MERCH_CATS = ['Clothing', 'Stickers', 'Accessories'];
-const MM_KIND = { used: 'Used', new: 'New', merch: 'RWB Merch' };
+const MM_KIND = { used: 'Pre-owned', new: 'New', merch: 'RWB Merch' };
 const SOLD_DAYS = 15;
 const mmState = { branch: 'all', cat: 'all', sort: 'price-asc', q: '', mine: false, review: false, swept: false };
 const price = n => Number(n) === 0 ? 'Free' : '₹' + Number(n).toLocaleString('en-IN');
@@ -4303,7 +4305,7 @@ async function viewMotoMart() {
     const fabLabel = mmState.branch === 'merch' ? 'List merch' : 'List accessory';
     app.innerHTML = top('MotoMart') + `
         <div class="mm-head">
-            <div class="mm-branches" role="tablist" aria-label="Shop">${branchBtn('all', 'All')}${branchBtn('new', 'New')}${branchBtn('used', 'Used')}${branchBtn('merch', 'RWB Merch')}</div>
+            <div class="mm-branches" role="tablist" aria-label="Shop">${branchBtn('all', 'All')}${branchBtn('new', 'New')}${branchBtn('used', 'Pre-owned')}${branchBtn('merch', 'RWB Merch')}</div>
             <button class="mm-search-btn" data-act="search" aria-label="Search MotoMart">${SEARCH_ICO}</button>
         </div>
         ${cats.length > 1 && !mmState.review ? `<div class="mm-cats" role="list">${['all', ...cats].map(c => `<button class="mm-cat" role="listitem" data-act="cat" data-cat="${esc(c)}" aria-pressed="${mmState.cat === c}"><span class="mm-cat-ico">${catIco(c)}</span><span>${c === 'all' ? 'All' : esc(c.replace(' & electronics', ''))}</span></button>`).join('')}</div>` : ''}
@@ -4371,7 +4373,7 @@ function sellPostText(l) {
     const url = `https://roninwb.in/app/#motomart/${l.id}`, k = kindOf(l);
     if (k === 'new') return `🆕 *RWB MOTOMART · New accessory*\n\n${l.product_name}\nCategory: ${catGroup(l)}\nPrice: ${lprice(l)}${l.details ? `\n\n${l.details}` : ''}\n\n👉 See it and open the store page in the RWB App: ${url}`;
     if (k === 'merch') return `🔥 *RWB MERCH*\n\n${l.product_name}\nPrice: ${lprice(l)}${l.details ? `\n${l.details}` : ''}\n\n👉 Order in the RWB App: ${url}`;
-    return `📌 *RWB MOTOMART · Used*\n\nProduct Name: ${l.product_name}\nSize: ${l.size || '–'}\nCategory: ${l.category}\nAge: ${l.age || '–'}\nCondition: ${l.condition || '–'}\nReason for Selling: ${l.reason || '–'}\nSelling Price: ${lprice(l)}\nSeller: ${maskName(l.seller_name)} · ${maskPhone(l.seller_phone)}${l.details ? `\n\n${l.details}` : ''}\n\n🔒 The seller's contact is in the RWB App only.\n👉 Photos & contact: ${url}`;
+    return `📌 *RWB MOTOMART · Pre-owned*\n\nProduct Name: ${l.product_name}\nSize: ${l.size || '–'}\nCategory: ${l.category}\nAge: ${l.age || '–'}\nCondition: ${l.condition || '–'}\nReason for Selling: ${l.reason || '–'}\nSelling Price: ${lprice(l)}\nSeller: ${maskName(l.seller_name)} · ${maskPhone(l.seller_phone)}${l.details ? `\n\n${l.details}` : ''}\n\n🔒 The seller's contact is in the RWB App only.\n👉 Photos & contact: ${url}`;
 }
 async function shareListing(l) {
     const text = sellPostText(l), pics = allPhotos(l).slice(0, 4);
@@ -4384,11 +4386,10 @@ async function shareListing(l) {
     openWA(waShare(text));
 }
 
-/* RWB Merch "Get now": the post's own link (Google Form, store…) first, then the RWB main WhatsApp group
-   if the poster turned on "Direct orders to WhatsApp", otherwise RWB's Instagram. */
+/* RWB Merch "Get now": the post's own link (Google Form, store…) if it has one, otherwise RWB's Instagram DM.
+   (No WhatsApp: the old "Direct orders to WhatsApp" switch was removed in Nov 2026.) */
 const IG_DM = () => SITE.INSTAGRAM_DM_URL || 'https://ig.me/m/ronin_warriors_bengal';
-const merchGo = l => l.link && safeUrl(l.link) !== '#' ? 'link' : l.wa_orders && state.settings?.wa_group_link ? 'group' : 'ig';
-const merchHref = l => ({ link: () => safeUrl(l.link), group: () => state.settings.wa_group_link, ig: IG_DM })[merchGo(l)]();
+const merchHref = l => l.link && safeUrl(l.link) !== '#' ? safeUrl(l.link) : IG_DM();
 
 function listingDetail(l) {
     if (!l) return toast('That post is no longer available', true);
@@ -4412,7 +4413,7 @@ function listingDetail(l) {
         <div class="list">
             ${k === 'new' && l.link && !sold ? `<a class="btn block mm-cta" href="${esc(safeUrl(l.link))}" target="_blank" rel="noopener noreferrer">Check product ↗</a><p class="small muted" style="text-align:center;margin-top:-4px">Sold by ${esc(hostOf(l.link) || 'the store')}, not by RWB. Price and stock can change.</p>` : ''}
             ${k === 'merch' && !sold && soon(l) ? `<span class="btn block mm-soon" role="note">Coming Soon</span>` : ''}
-            ${k === 'merch' && !sold && !soon(l) ? `<a class="btn block mm-cta" href="${esc(merchHref(l))}" target="_blank" rel="noopener noreferrer"${merchGo(l) === 'group' ? ' data-x="getnow"' : ''}>Get now</a>` : ''}
+            ${k === 'merch' && !sold && !soon(l) ? `<a class="btn block mm-cta" href="${esc(merchHref(l))}" target="_blank" rel="noopener noreferrer">Get now</a>` : ''}
             ${k === 'used' && !own && l.status === 'live' ? `<a class="btn wa block" href="${waTo(l.seller_phone, contact)}" target="_blank" rel="noopener">Message seller on WhatsApp</a>` : ''}
             ${judge && l.status === 'pending' ? `<div class="btns"><button class="btn ghost" data-x="reject">Reject</button><button class="btn" data-x="approve">Approve</button></div>` : ''}
             ${l.status === 'live' && (!soon(l) || adm) ? '<button class="btn ghost block" data-x="share">Share to WhatsApp</button>' : ''}
@@ -4428,7 +4429,6 @@ function listingDetail(l) {
         on('reject', b => { const r = window.prompt('Reason (the seller will see this):', 'Please add clearer photos'); if (r === null) return; busy(b, async () => { await api.setListingStatus(l.id, 'rejected', r.trim() || null); await after('Rejected'); }); });
         on('toggle', b => busy(b, async () => { await api.setListingStatus(l.id, l.status === 'live' ? 'sold' : 'live'); await after(l.status === 'live' ? (team ? 'Marked as sold out' : `Marked as sold 🎉 It’s removed after ${SOLD_DAYS} days.`) : 'Back on sale'); }));
         on('share', b => busy(b, () => shareListing(l)));
-        const gn = body.querySelector('[data-x=getnow]'); if (gn) gn.onclick = e => { e.preventDefault(); openWA(gn.href); };
         on('edit', () => team ? teamForm(l, k) : listingForm(l));
         on('del', b => { if (confirmBox('Delete this post and its photos?')) busy(b, async () => { await api.deleteListing(l); await after('Deleted'); }); });
     });
@@ -4556,8 +4556,6 @@ function teamForm(l = null, kind = 'new') {
         <label class="switch tf-free"><span>Free<span class="hint" style="display:block">Given away at no cost. Shown as “Free” instead of a price.</span></span><input type="checkbox" name="free"${l && kindOf(l) === 'merch' && !soon(l) && Number(l.price) === 0 ? ' checked' : ''}></label>
         <label id="tf-price">Price (₹)<input name="price" type="number" required min="0" step="1" inputmode="numeric" value="${esc(l && soon(l) ? '' : l?.price ?? '')}"></label>
         <label>Description <span class="hint">optional</span><textarea name="details" maxlength="1000" placeholder="Fits Ronin 225? Colour, sizes, offer…">${esc(l?.details || '')}</textarea></label>
-        <div class="tf-merch">
-            <label class="switch"><span>Direct orders to WhatsApp<span class="hint" style="display:block">“Get now” opens the RWB main group. Off: it opens RWB’s Instagram. A link above always comes first.</span></span><input type="checkbox" name="wa_orders"${l?.wa_orders ? ' checked' : ''}></label></div>
         <fieldset><legend>Photo <span class="hint muted small" id="ph-hint"></span></legend>
             <div class="thumbs" id="thumbs"></div>
             <label class="file-pick"><input type="file" accept="${MM_ACCEPT}" multiple id="pics"><span>📷 Add photo or screenshot</span></label></fieldset>
@@ -4586,7 +4584,6 @@ function teamForm(l = null, kind = 'new') {
             const m = k === 'merch', sn = m && f.soon.checked, fr = m && !sn && f.free.checked;
             body.querySelector('.tf-soon').hidden = !m;
             body.querySelector('.tf-free').hidden = !m || sn;
-            body.querySelector('.tf-merch').hidden = !m || sn;
             body.querySelector('#tf-price').hidden = sn || fr; f.price.required = !(sn || fr);
         };
         f.free.onchange = f.soon.onchange = freeUI;
@@ -4596,7 +4593,7 @@ function teamForm(l = null, kind = 'new') {
             const when = isAdmin() ? 'It goes live at once' : 'An admin or another coordinator approves it, then it goes live';
             body.querySelector('#tf-help').textContent = k === 'new' ? `A new accessory from a store. ${when} on the app and roninwb.in. Members tap “Check product” to open the store page.`
                 : `RWB merch. ${when} on the app and roninwb.in, and members get a notification.`;
-            body.querySelector('#link-l').innerHTML = k === 'new' ? 'Product link <span class="hint">the store page</span>' : 'Order link <span class="hint">optional · Google Form or any website. “Get now” opens it</span>';
+            body.querySelector('#link-l').innerHTML = k === 'new' ? 'Product link <span class="hint">the store page</span>' : 'Order link <span class="hint">optional · Google Form or any website. “Get now” opens it; with no link it opens RWB’s Instagram DM</span>';
             link.required = k === 'new';
             freeUI();
             const cur = l?.category || ''; const list = k === 'merch' ? MERCH_CATS : MM_CATS;
@@ -4617,7 +4614,7 @@ function teamForm(l = null, kind = 'new') {
             const category = catValue(d); if (!category) return toast('Type the new category', true);
             const rec = { id: l?.id, kind: k, photos: kept.concat(removed), product_name: d.product_name.trim(), category, price: k === 'merch' && (f.soon.checked || f.free.checked) ? 0 : Number(d.price), coming_soon: k === 'merch' && f.soon.checked,
                 details: d.details.trim() || null, link: d.link.trim() || null, image_url: image_url || null,
-                seller_name: null, seller_phone: null, wa_orders: k === 'merch' && f.wa_orders.checked,
+                seller_name: null, seller_phone: null, wa_orders: false,
                 size: null, age: null, condition: null, reason: null };
             busy(e.submitter, async () => {
                 await api.saveListing(rec, added.map(a => a.file), removed);

@@ -75,13 +75,13 @@ Bottom tabs: Home, Service, Mileage, Track (middle), MotoMart, Warriors, Events.
 - Mileage: "+ Add fuel" after each fill. Fill to full and reset Trip A; next time fill to full, enter litres and Trip A km.
   Top-ups: turn "Full tank" off and don't reset Trip A.
 - Track: live location on group rides and SOS to the RWB team.
-- MotoMart: one shop with tabs All, New, Used and RWB Merch, round category buttons, a search icon (top right) and sort
-  (price low to high by default). Used = members sell their own gear: "+ Sell something", live after an admin or coordinator
+- MotoMart: one shop with tabs All, New, Pre-owned and RWB Merch, round category buttons, a search icon (top right) and sort
+  (price low to high by default). Pre-owned (used) = members sell their own gear: "+ Sell something", live after an admin or coordinator
   approves it (an admin's own post goes live at once), buyers message the seller on WhatsApp; mark it sold and it greys out, then it's deleted after 15 days.
   WhatsApp shares hide the seller's name and number (contact only inside the app). New = new accessories listed by admins
   and coordinators ("+ List accessory"; a coordinator's listing is approved by an admin or another coordinator); "Check product" opens the store page; RWB doesn't sell them. RWB Merch = official
-  RWB jerseys, stickers etc., listed by the team; "Get now" opens the order form or link, the RWB WhatsApp group or
-  RWB's Instagram. Some merch is free. "Coming Soon" merch is a teaser: no price yet and no way to order until it launches. New accessories and merch also show on roninwb.in.
+  RWB jerseys, stickers etc., listed by the team; "Get now" opens the order form or link posted on it,
+  or else RWB's Instagram DM. Some merch is free. "Coming Soon" merch is a teaser: no price yet and no way to order until it launches. New accessories and merch also show on roninwb.in.
 - Warriors: members and leaderboards. Events: rides, RSVPs and shared expenses.
 - Me: profile, bikes (up to 3), notifications, what other members can see, sign out.
 - Teach Pookie: answer Pookie's questions, earn XP; admins or coordinators check answers before Pookie uses them.
@@ -359,7 +359,7 @@ async function pdfText(bytes: Uint8Array): Promise<string> {
   return pages.join("\n\n").replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-const VERSION = "pookie-10";
+const VERSION = "pookie-11";
 const list = (s: unknown, dflt: string) => String(s || dflt).split(",").map((x) => x.trim()).filter(Boolean);
 
 /* ---------------- Request ---------------- */

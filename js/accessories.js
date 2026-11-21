@@ -126,7 +126,7 @@ $('#acc-clear').addEventListener('click', () => { view.category = 'all'; view.so
         const d = await loadMotomart();
         items = d.items.filter(i => i.kind === 'new');
         const used = $('#acc-used');
-        if (used && d.used) { used.innerHTML = `<b>${d.used}</b> used item${d.used === 1 ? '' : 's'} for sale by members right now in <a href="app/#motomart/used">MotoMart in the RWB App</a>.`; used.hidden = false; }
+        if (used && d.used) { used.innerHTML = `<b>${d.used}</b> pre-owned item${d.used === 1 ? '' : 's'} for sale by members right now in <a href="app/#motomart/used">MotoMart in the RWB App</a>.`; used.hidden = false; }
         show(); return;
     } catch { list.innerHTML = '<p class="muted">Accessories could not be loaded. Please try again later.</p>'; }
 })();
