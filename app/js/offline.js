@@ -43,6 +43,10 @@ async function kvSet(k, v) {
     return new Promise(res => { try { const t = db.transaction(STORE, 'readwrite'); t.objectStore(STORE).put(v, k); t.oncomplete = () => res(); t.onerror = () => res(); } catch { res(); } });
 }
 
+/* for api.js: data the app keeps on the phone between visits (e.g. the admin member list, file 79). Cleared on sign-out. */
+export const savedGet = k => kvGet('keep|' + k).catch(() => undefined);
+export const savedSet = (k, v) => kvSet('keep|' + k, v).catch(() => {});
+
 /* ---- what can be read offline (the saved copy) ---- */
 const READS = ['linkAccount', 'settings', 'myPrefill', 'myChanges', 'me', 'birthdays', 'directory', 'rwbAdmins', 'joinHelpAdmins', 'famMe', 'myFam',
     'gpsBoard', 'pookieBoard', 'myBikes', 'leaderboard', 'boards', 'centres', 'services', 'events', 'eventCounts', 'myRsvps', 'eventPeople', 'expenses',

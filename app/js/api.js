@@ -3,7 +3,7 @@
    - Supabase (real data) when APP_CONFIG has a URL and key
    - Demo (sample data in this browser) when it does not */
 
-import { withOffline } from './offline.js';
+import { withOffline, savedGet, savedSet } from './offline.js';
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 const BILL_BUCKET = 'bills', PHOTO_BUCKET = 'motomart';
 const extOf = f => ({ 'application/pdf': 'pdf', 'application/msword': 'doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx', 'image/png': 'png' })[f.type] || 'jpg';
@@ -467,7 +467,31 @@ async function supabaseApi(url, key) {
             decideChange: async (id, ok, reason = '') => must(await sb.rpc('admin_decide_change', { p_id: id, p_approve: ok, p_reason: reason || null })),
             setReqVrn: async (id, v) => must(await sb.rpc('admin_set_request_vrn', { p_request_id: id, p_verified: v })),
             setVrnVerified: async (memberId, slot, v) => must(await sb.rpc('admin_set_vrn_verified', { p_member_id: memberId, p_slot: slot, p_verified: v })),
+            /* setup file 79: the phone keeps the member list and downloads only members added, edited or removed since
+               the last visit (a few KB instead of ~1.5 MB). A full download once a week keeps the copy honest. */
             async members() {
+                const me = await uid(), K = 'admin-members|' + me;
+                const saved = me ? await savedGet(K) : null;
+                const fresh = !saved?.at || !Array.isArray(saved.rows) || Date.now() - (saved.full || 0) > 7 * 864e5;
+                const since = fresh ? null : new Date(new Date(saved.at).getTime() - 120e3).toISOString();   /* 2 min overlap: never miss a slow save */
+                const r = await sb.rpc('admin_members_since', { p_since: since });
+                if (!r.error) {
+                    const d = r.data || {};
+                    let rows = d.rows || [];
+                    if (!fresh) {
+                        const byId = new Map(saved.rows.map(x => [x.id, x]));
+                        for (const id of d.deleted || []) byId.delete(id);
+                        for (const x of rows) byId.set(x.id, x);
+                        rows = [...byId.values()];
+                    }
+                    rows.sort((a, b) => String(a.full_name || '').localeCompare(String(b.full_name || ''), 'en', { sensitivity: 'base' }));
+                    if (me && d.now) savedSet(K, { at: d.now, full: fresh ? Date.now() : saved.full, rows });
+                    return rows;
+                }
+                if (!/could not find|function|schema cache/i.test(r.error.message || '')) throw new Error(r.error.message);
+                return this.membersAll();   /* before setup file 79 */
+            },
+            async membersAll() {
                 const all = []; let from = 0;
                 for (;;) {   /* fetch in pages of 1000 (Supabase's default limit) */
                     let res = await sb.from('members').select('*, member_bikes(slot, vrn, model, verified)').order('full_name').range(from, from + 999);
@@ -909,6 +933,7 @@ function demoApi() {
             async setReqVrn(id, v) { const r = db.requests.find(x => x.id === id); if (r) r.vrn_verified = v; save(); return v; },
             async setVrnVerified(mid, slot, v) { const m = db.members.find(x => x.id === mid); if (slot === 1) m.vrn_verified = v; else { const b = (m.member_bikes || []).find(x => x.slot === slot); if (b) b.verified = v; } save(); return v; },
             members: () => wait([...db.members].sort((a, b) => a.full_name.localeCompare(b.full_name))),
+            membersAll() { return this.members(); },
             async update(id, p) { Object.assign(db.members.find(m => m.id === id), p); save(); return 'saved'; },
             async setRole(id, role) { db.members.find(m => m.id === id).role = role; save(); return role; },
             async remove(id, userId, reason = 'removed', note = '') {
