@@ -3,8 +3,8 @@
 
    SET UP (once, by Bodhi):
    1. script.google.com → New project → name it "RWB Gallery" → paste this whole file over the sample code.
-   2. Fill in GALLERY_FOLDER_ID below: open the gallery folder in Google Drive; the ID is the last part of the
-      address (drive.google.com/drive/folders/THIS-PART).
+   2. GALLERY_FOLDER_ID below is already filled in (the "RWB Gallery" folder in My Drive → RWB). Only change it if
+      the gallery moves to a different folder: the ID is the part of the folder's address after /folders/.
    3. Deploy → New deployment → type "Web app" → Execute as: Me → Who has access: Anyone → Deploy → allow access.
    4. Copy the Web app URL (ends in /exec) and send it to Claude.
    To change this file later: paste the new version, then Deploy → Manage deployments → ✏️ → Version: New version → Deploy
@@ -14,9 +14,9 @@
    - Listing photos is public (the website shows them anyway).
    - Adding or deleting needs a one-time pass from the RWB App (Supabase gallery_ticket, file 80). Only active
      admins and coordinators get passes; each works once, for 15 minutes, for one action (and, for a delete, one photo).
-   - Only photos inside the gallery folder can be deleted. Deleted photos go to Drive's Bin (recoverable for 30 days).
+   - Only photos inside the gallery folder (or folders inside it) can be deleted. New photos go into the gallery folder itself. Deleted photos go to Drive's Bin (recoverable for 30 days).
 */
-const GALLERY_FOLDER_ID = 'PASTE-THE-FOLDER-ID-HERE';
+const GALLERY_FOLDER_ID = '1YAcK37FXENO-vwc6VaNw6bytjxHy5r66';
 const SUPABASE_URL = 'https://hcowcybshljgkeixudry.supabase.co';
 /* the app's public "anon" key (already public in roninwb.in/app/config.js; it is not a secret) */
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhjb3djeWJzaGxqZ2tlaXh1ZHJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3NDI2MjMsImV4cCI6MjEwODMxODYyM30.LLYjaairRQZ3-Ddwo9kschTeVXjEv84n45RrqEUhi0g';
@@ -34,18 +34,29 @@ function list_() {
     const text = Array.from({ length: n }, (_, i) => parts[CACHE_KEY + ':' + i]).join('');
     if (text.length && parts[CACHE_KEY + ':' + (n - 1)] != null) { try { return JSON.parse(text); } catch (e) { /* rebuild */ } }
   }
-  const out = [], files = DriveApp.getFolderById(GALLERY_FOLDER_ID).getFiles();
-  while (files.hasNext()) {
-    const f = files.next();
-    if (f.isTrashed() || !/^image\//.test(f.getMimeType())) continue;
-    out.push({ t: f.getDateCreated().getTime(), id: f.getId(), label: f.getName().replace(/\.[^.]+$/, '') });
-  }
+  const out = [];
+  galleryFolders_().forEach(folder => {   /* the gallery folder and any folders inside it (e.g. one per ride) */
+    const files = folder.getFiles();
+    while (files.hasNext()) {
+      const f = files.next();
+      if (f.isTrashed() || !/^image\//.test(f.getMimeType())) continue;
+      out.push({ t: f.getDateCreated().getTime(), id: f.getId(), label: f.getName().replace(/\.[^.]+$/, '') });
+    }
+  });
   out.sort((a, b) => b.t - a.t);
   const list = out.map(x => ({ url: 'https://lh3.googleusercontent.com/d/' + x.id, label: x.label, id: x.id }));
   const text = JSON.stringify(list), size = 90000, chunks = {};
   for (let i = 0; i * size < text.length; i++) chunks[CACHE_KEY + ':' + i] = text.slice(i * size, (i + 1) * size);
   try { chunks[CACHE_KEY + ':n'] = String(Object.keys(chunks).length); cache.putAll(chunks, CACHE_SECONDS); } catch (e) { /* too big to cache: fine */ }
   return list;
+}
+function galleryFolders_() {
+  const all = [], queue = [DriveApp.getFolderById(GALLERY_FOLDER_ID)];
+  while (queue.length && all.length < 200) {
+    const f = queue.shift(); if (f.isTrashed()) continue; all.push(f);
+    const subs = f.getFolders(); while (subs.hasNext()) queue.push(subs.next());
+  }
+  return all;
 }
 function clearCache_() { CacheService.getScriptCache().remove(CACHE_KEY + ':n'); }
 
@@ -69,8 +80,8 @@ function doPost(e) {
     }
     if (pass.action === 'delete') {
       let file; try { file = DriveApp.getFileById(pass.file); } catch (err) { clearCache_(); return json_({ ok: true, gone: true }); }
-      const inFolder = file.getParents(); let ok = false;
-      while (inFolder.hasNext()) if (inFolder.next().getId() === GALLERY_FOLDER_ID) ok = true;
+      const ids = galleryFolders_().map(f => f.getId()), inFolder = file.getParents(); let ok = false;
+      while (inFolder.hasNext()) if (ids.indexOf(inFolder.next().getId()) >= 0) ok = true;
       if (!ok) return json_({ ok: false, error: 'That photo isn\'t in the RWB Gallery' });
       file.setTrashed(true);   /* Drive's Bin keeps it 30 days */
       clearCache_();
