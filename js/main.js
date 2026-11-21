@@ -134,9 +134,12 @@ dialog.addEventListener('close', () => { galA.pause(false); galB.pause(false); w
 /* Google Photos/Drive links (lh3.googleusercontent.com/d/ID) can be asked for a smaller WebP copy: about 5x lighter */
 const gSized = (u, spec) => /^https:\/\/lh3\.googleusercontent\.com\/d\/[\w-]+$/.test(u) ? `${u}=${spec}` : u;
 const GAL_KEY = 'rwb-gal-v1', GAL_ROW = 22;   /* photos per moving row (a fresh random pick on every visit) */
+/* sizes that match the screen: phones show ~150 px tall strips, so h400 (~45 KB) is sharp there; big screens keep h560.
+   The viewer gets 1080 px wide on phones (~250 KB) and 1920 on computers. */
+const DPW = innerWidth * (devicePixelRatio || 1), G_STRIP = innerWidth < 760 ? 'h400-rw' : 'h560-rw', G_BIG = DPW <= 1240 ? 'w1080-rw' : 'w1920-rw';
 const shuffle = a => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
 function showGallery(imgs) {
-    const tile = (im, i, k) => `<button class="g-item" data-i="${i}" aria-label="Open photo ${i + 1}"><img src="${esc(gSized(im.url, 'h560-rw'))}" alt="${esc(im.label || 'RWB ride photo')}" ${k < 5 ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async" draggable="false"></button>`;
+    const tile = (im, i, k) => `<button class="g-item" data-i="${i}" aria-label="Open photo ${i + 1}"><img src="${esc(gSized(im.url, G_STRIP))}" alt="${esc(im.label || 'RWB ride photo')}" ${k < 5 ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async" draggable="false"></button>`;
     const pick = shuffle(imgs.map((_, i) => i)), few = imgs.length < 2 * GAL_ROW;
     const rowA = few ? pick.slice(0, GAL_ROW) : pick.slice(0, GAL_ROW), rowB = few ? [...pick].reverse().slice(0, GAL_ROW) : pick.slice(GAL_ROW, 2 * GAL_ROW);
     galA.set(rowA.map((i, k) => tile(imgs[i], i, k)).join(''));
@@ -146,7 +149,7 @@ function showGallery(imgs) {
     gal.list = imgs;
 }
 const gal = { list: [] };
-const galBig = i => gSized(gal.list[i].url, 'w1920-rw');
+const galBig = i => gSized(gal.list[i].url, G_BIG);
 function galShow(i) {
     const imgs = gal.list; i = (i + imgs.length) % imgs.length;
     const body = $('#dialog-body');

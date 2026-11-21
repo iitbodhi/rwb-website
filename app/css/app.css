@@ -2323,3 +2323,6 @@ html.lite .gal-skel i{animation:none}
 .gal-note{margin:10px 2px 0;text-align:center}
 .gal-menu{display:flex;gap:12px;align-items:center;margin-bottom:14px}
 .gal-menu-th{flex:none;width:72px;height:72px;border-radius:14px;background:var(--line) center/cover no-repeat}
+/* RWB FAM bottom bar (Nov 2026): Home · Gallery · Track · Warriors · Events, so Track sits in the middle. Members don't see it */
+.tabbar a.tab-gal{display:none}
+body[data-fam] .tabbar a.tab-gal{display:flex}

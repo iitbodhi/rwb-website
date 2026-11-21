@@ -1311,12 +1311,15 @@ async function viewHome() {
    The list comes from the RWB Gallery Apps Script (SITE.GALLERY_SCRIPT_URL in js/data.js, source tools/gallery.gs) and the
    photos from Google (lh3.googleusercontent.com), so the gallery never touches Supabase (no egress, no storage).
    The list is kept on the phone (GAL_KEY) and shown at once; a fresh copy is asked for at most every 12 hours.
-   Photos are asked for as small WebP copies: ~420 px tall in the strip, 400 px wide in the grid, 1600 px in the viewer.
+   Photos are asked for as small WebP copies: ~420 px tall in the strip, 400 px wide in the grid, 1080 px (phones) or 1600 px in the viewer;
+   sw.js keeps them on the phone (rwb-gal-img-v1 / rwb-gal-big-v1), so the second look is instant and works offline.
    Admins and coordinators add and delete photos (when SITE.GALLERY_EDIT is on): the app gets a one-time pass from
    Supabase (gallery_ticket, file 80, a few bytes) and sends the photo straight to the script, which saves it in Drive.
    No saving: photos can't be long-pressed, dragged or right-clicked, and in the Android app (build 25+) screenshots and
    screen recording are blocked while gallery photos are on screen (RwbTrack.secure → FLAG_SECURE). */
 const GAL_KEY = 'rwb-app-gal-v2', GAL_TTL = 12 * 36e5, GAL_STRIP = 16, GAL_PAGE = 60;
+/* the sharp viewer copy: 1080 px wide is pin-sharp on any phone (~250 KB, half of 1600 px); tablets/computers get 1600 */
+const GAL_BIG = (innerWidth * (devicePixelRatio || 1)) <= 1240 ? 'w1080-rw' : 'w1600-rw';
 const galSized = (u, spec) => /^https:\/\/lh3\.googleusercontent\.com\/d\/[\w-]+$/.test(u) ? `${u}=${spec}` : u;
 const galId = it => it.id || (it.url.match(/\/d\/([\w-]{10,})/) || [])[1] || '';
 const galCanEdit = () => isMod() && !isFam() && (!!SITE.GALLERY_EDIT || api.demo);
@@ -1449,7 +1452,7 @@ function galViewer(list, start = 0) {
     const reel = L.el.querySelector('.gal-reel');
     let cur = at(start);
     const fill = (fig, i) => {
-        const it = list[at(i)], img = fig.querySelector('img'), z = fig.querySelector('.gd-zoom'), u = galSized(it.url, 'w1600-rw');
+        const it = list[at(i)], img = fig.querySelector('img'), z = fig.querySelector('.gd-zoom'), u = galSized(it.url, GAL_BIG);
         fig.dataset.i = at(i); z.classList.remove('zoomed');
         if (img.dataset.u === u) return;
         img.dataset.u = u; img.classList.remove('in'); img.onload = () => img.classList.add('in'); img.src = u;
@@ -1460,7 +1463,7 @@ function galViewer(list, start = 0) {
         reel.classList.toggle('one', !many());
         L.el.querySelector('.gd-count b').textContent = cur + 1; L.el.querySelector('.gd-count i').textContent = list.length;
         L.el.querySelector('.gd-count').hidden = !many();
-        [cur + 2, cur - 2].forEach(k => { const p = new Image(); p.referrerPolicy = 'no-referrer'; p.src = galSized(list[at(k)].url, 'w1600-rw'); });   /* the next ones are ready before the swipe */
+        [cur + 2, cur - 2].forEach(k => { const p = new Image(); p.referrerPolicy = 'no-referrer'; p.src = galSized(list[at(k)].url, GAL_BIG); });   /* the next ones are ready before the swipe */
     };
     const middle = () => { reel.scrollLeft = many() ? reel.clientWidth : 0; };
     draw(); requestAnimationFrame(middle);

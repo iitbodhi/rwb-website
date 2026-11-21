@@ -1,6 +1,6 @@
 /* RWB App service worker: keeps the app shell available offline and loads it fast.
    Bump VERSION whenever app files change so phones pick up the new version. */
-const VERSION = 'rwb-app-v200';
+const VERSION = 'rwb-app-v201';
 const SHELL = ['./', 'index.html', 'config.js', 'css/app.css', 'js/app.js', 'js/api.js', 'js/offline.js', '../js/data.js', '../js/terms.js', '../js/pdfview.js',
     'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
@@ -13,8 +13,18 @@ function trimImages(c) {   /* keep the newest 600 photos (about 25 MB) */
     if (trimming) return; trimming = true;
     c.keys().then(ks => Promise.all(ks.slice(0, Math.max(0, ks.length - 600)).map(k => c.delete(k)))).finally(() => { trimming = false; });
 }
+/* RWB Gallery photos (Google Drive via lh3.googleusercontent.com, Nov 2026): kept on the phone so they open instantly
+   next time and work offline. Google allows this (it sends Access-Control-Allow-Origin: *), so they're fetched as CORS
+   and stored at their real size. Small copies (grid/strip, ~40-70 KB) and big viewer copies (~250 KB) have separate
+   limits, and a separate cache from the members' photos above so neither pushes the other out. */
+const GAL_IMG = 'rwb-gal-img-v1', GAL_BIG = 'rwb-gal-big-v1';
+const trimBusy = {};
+function trimTo(c, name, max) {
+    if (trimBusy[name]) return; trimBusy[name] = true;
+    c.keys().then(ks => Promise.all(ks.slice(0, Math.max(0, ks.length - max)).map(k => c.delete(k)))).finally(() => { trimBusy[name] = false; });
+}
 self.addEventListener('activate', e => {
-    e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION && k !== IMG).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+    e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => ![VERSION, IMG, GAL_IMG, GAL_BIG].includes(k)).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', e => {
     const url = new URL(e.request.url);
@@ -28,6 +38,15 @@ self.addEventListener('fetch', e => {
             if (r.ok) { const copy = r.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
             return r;
         }).catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('index.html'))));
+        return;
+    }
+    /* RWB Gallery photos: cache first (a Drive photo's address never changes; a deleted one simply stops being listed) */
+    if (url.hostname === 'lh3.googleusercontent.com' && url.pathname.startsWith('/d/')) {
+        const big = /=w(1080|1600|1920)/.test(url.pathname), name = big ? GAL_BIG : GAL_IMG, key = e.request.url;
+        e.respondWith(caches.open(name).then(c => c.match(key).then(hit => hit || fetch(key, { mode: 'cors', credentials: 'omit', referrerPolicy: 'no-referrer' }).then(res => {
+            if (res.ok) { c.put(key, res.clone()); trimTo(c, name, big ? 120 : 800); }   /* ~30 MB + ~40 MB at most */
+            return res;
+        }).catch(() => fetch(e.request)))));
         return;
     }
     /* Guides files on GitHub (served by jsDelivr, setup file 66): videos and PDFs stream straight from the CDN
