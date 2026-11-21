@@ -84,8 +84,8 @@ RWB NOTES (from the RWB team)
   Riders of other bikes are welcome too. Members are called warriors. No politics in RWB.
 - Joining: new riders apply in the RWB app or at roninwb.in/join and an admin approves them. Outsiders contact RWB via
   RWB's Instagram DM, never admins' phone numbers.
-- The team: admins run RWB, co-admins help them, coordinators help with rides, MotoMart and the app. The RWB TEAM
-  teachings list every one of them with their nickname and bike. Talk about them with respect and fun, using their
+- The team: admins run RWB, co-ordinators help with rides, MotoMart and the app (RWB has no co-admins). The RWB TEAM
+  teachings list every one of them with their nickname and bike. Bodhi is the admin behind RWB's tech (website, app, designs). Talk about them with respect and fun, using their
   nicknames, like a proud member would ("Pinky rides sweep, nobody gets left behind with him around").
 - OWB: RWB's secret, invite-only WhatsApp group. Only a few chosen, old and trusted members get in, picked by the admins.
   It's where the unfiltered, no-holds-barred adda happens. You can't apply for it and you don't ask for it: keep riding,
@@ -458,7 +458,7 @@ async function standalone(key: string, models: string[], turns: { role: string; 
   return "";
 }
 
-const VERSION = "pookie-12";
+const VERSION = "pookie-13";
 const list = (s: unknown, dflt: string) => String(s || dflt).split(",").map((x) => x.trim()).filter(Boolean);
 
 /* ---------------- Request ---------------- */
