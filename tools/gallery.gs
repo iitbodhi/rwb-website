@@ -11,7 +11,9 @@
    (the URL stays the same).
 
    HOW IT STAYS SAFE
-   - Listing photos is public (the website shows them anyway).
+   - Without a pass (roninwb.in, or anyone who finds this link) the list is only 30 photos, a new random pick every
+     day (India time). The full list needs a one-time "view" pass that only signed-in members and RWB FAM get in the
+     app (Supabase gallery_ticket('view'), file 81).
    - Adding or deleting needs a one-time pass from the RWB App (Supabase gallery_ticket, file 80). Only active
      admins and coordinators get passes; each works once, for 15 minutes, for one action (and, for a delete, one photo).
    - Only photos inside the gallery folder (or folders inside it) can be deleted. New photos go into the gallery folder itself. Deleted photos go to Drive's Bin (recoverable for 30 days).
@@ -25,8 +27,23 @@ const CACHE_KEY = 'gal-list-v1', CACHE_SECONDS = 600;
 
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 
-/* ---------- the list: [{ url, label, id }], newest first, kept 10 minutes in the script's cache ---------- */
-function doGet() { return json_(list_()); }
+const PUBLIC_COUNT = 30;
+/* ---------- the list ----------
+   with a member/FAM pass (?pass=…): { full: true, list: [{ url, label, id }] }, newest first
+   without:                         [{ url, label }] — 30 photos, the same random pick for everyone all day */
+function doGet(e) {
+  const pass = e && e.parameter && e.parameter.pass;
+  if (pass) { const p = usePass_(pass); if (p.ok && p.action === 'view') return json_({ full: true, list: list_() }); }
+  return json_(daily_());
+}
+function daily_() {
+  const all = list_(), day = Utilities.formatDate(new Date(), 'Asia/Kolkata', 'yyyy-MM-dd');
+  let seed = 0; for (let i = 0; i < day.length; i++) seed = (seed * 31 + day.charCodeAt(i)) | 0;
+  const rnd = () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const a = all.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); const x = a[i]; a[i] = a[j]; a[j] = x; }
+  return a.slice(0, PUBLIC_COUNT).map(x => ({ url: x.url, label: '' }));
+}
+/* the full list, newest first, kept 10 minutes in the script's cache */
 function list_() {
   const cache = CacheService.getScriptCache(), n = Number(cache.get(CACHE_KEY + ':n') || 0);
   if (n) {

@@ -133,15 +133,17 @@ const galA = marquee($('#gallery-a'), { speed: 22, dir: -1 }), galB = marquee($(
 dialog.addEventListener('close', () => { galA.pause(false); galB.pause(false); warMq.pause(false); });
 /* Google Photos/Drive links (lh3.googleusercontent.com/d/ID) can be asked for a smaller WebP copy: about 5x lighter */
 const gSized = (u, spec) => /^https:\/\/lh3\.googleusercontent\.com\/d\/[\w-]+$/.test(u) ? `${u}=${spec}` : u;
-const GAL_KEY = 'rwb-gal-v1', GAL_ROW = 22;   /* photos per moving row (a fresh random pick on every visit) */
+try { localStorage.removeItem('rwb-gal-v1'); } catch { /* ignore */ }   /* the old saved list had every photo */
+const GAL_KEY = 'rwb-gal-v2';   /* the RWB Gallery script gives the website 30 photos a day (a new random pick daily); members see them all in the app */
 /* sizes that match the screen: phones show ~150 px tall strips, so h400 (~45 KB) is sharp there; big screens keep h560.
    The viewer gets 1080 px wide on phones (~250 KB) and 1920 on computers. */
 const DPW = innerWidth * (devicePixelRatio || 1), G_STRIP = innerWidth < 760 ? 'h400-rw' : 'h560-rw', G_BIG = DPW <= 1240 ? 'w1080-rw' : 'w1920-rw';
 const shuffle = a => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
 function showGallery(imgs) {
-    const tile = (im, i, k) => `<button class="g-item" data-i="${i}" aria-label="Open photo ${i + 1}"><img src="${esc(gSized(im.url, G_STRIP))}" alt="${esc(im.label || 'RWB ride photo')}" ${k < 5 ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async" draggable="false"></button>`;
-    const pick = shuffle(imgs.map((_, i) => i)), few = imgs.length < 2 * GAL_ROW;
-    const rowA = few ? pick.slice(0, GAL_ROW) : pick.slice(0, GAL_ROW), rowB = few ? [...pick].reverse().slice(0, GAL_ROW) : pick.slice(GAL_ROW, 2 * GAL_ROW);
+    /* photos only roll: they don't open when tapped (the full gallery is in the RWB App, for members and RWB FAM) */
+    const tile = (im, i, k) => `<span class="g-item g-still"><img src="${esc(gSized(im.url, G_STRIP))}" alt="RWB ride photo" ${k < 5 ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async" draggable="false"></span>`;
+    const pick = shuffle(imgs.map((_, i) => i)).slice(0, 30), half = Math.ceil(pick.length / 2);
+    const rowA = pick.length < 12 ? pick : pick.slice(0, half), rowB = pick.length < 12 ? [...pick].reverse() : pick.slice(half);
     galA.set(rowA.map((i, k) => tile(imgs[i], i, k)).join(''));
     galB.set(rowB.map((i, k) => tile(imgs[i], i, k)).join(''));
     $('#gallery-b').hidden = false;
@@ -159,10 +161,7 @@ function galShow(i) {
         $('#dialog-body').dataset.i = i; }
     [i + 1, i - 1].forEach(k => { const n = new Image(); n.decoding = 'async'; n.src = galBig((k + imgs.length) % imgs.length); });   /* the next and previous photos are ready before the swipe */
 }
-$('.mq-stack').addEventListener('click', e => {
-    const b = e.target.closest('.g-item'); if (!b || !gal.list.length) return;
-    galA.pause(true); galB.pause(true); galShow(+b.dataset.i);
-});
+
 dialog.addEventListener('click', e => { const n = e.target.closest('.lb-nav'); if (n) { e.stopPropagation(); galShow(+$('#dialog-body').dataset.i + (n.classList.contains('next') ? 1 : -1)); } });
 dialog.addEventListener('keydown', e => { if (!$('#dialog-body').classList.contains('lb')) return; if (e.key === 'ArrowRight') galShow(+$('#dialog-body').dataset.i + 1); if (e.key === 'ArrowLeft') galShow(+$('#dialog-body').dataset.i - 1); });
 let galTx = null; dialog.addEventListener('touchstart', e => { galTx = e.touches[0].clientX; }, { passive: true });
@@ -172,10 +171,10 @@ async function loadGallery() {
     let saved = null; try { saved = JSON.parse(localStorage.getItem(GAL_KEY)); } catch { /* ignore */ }
     if (saved?.length) showGallery(saved);
     try {
-        const imgs = (await (await fetch(CONFIG.GALLERY_SCRIPT_URL)).json()).filter(im => im?.url);
+        const got = await (await fetch(CONFIG.GALLERY_SCRIPT_URL)).json(), imgs = (Array.isArray(got) ? got : []).filter(im => im?.url).slice(0, 30);
         if (!imgs.length) throw 0;
-        try { localStorage.setItem(GAL_KEY, JSON.stringify(imgs.map(({ url, label }) => ({ url, label })))); } catch { /* full */ }
-        if (!saved?.length) showGallery(imgs);   /* already showing the saved list: the new one is used from the next visit */
+        try { localStorage.setItem(GAL_KEY, JSON.stringify(imgs.slice(0, 30).map(({ url }) => ({ url })))); } catch { /* full */ }
+        if (!saved?.length || saved.map(x => x.url).join() !== imgs.map(x => x.url).join()) showGallery(imgs);   /* a new day's pick shows at once */
     } catch { if (!saved?.length) { $('#gallery-a .mq-strip').innerHTML = '<p class="muted mq-wait">Photos will be here soon.</p>'; $('#gallery-b').hidden = true; } }
 }
 loadGallery();

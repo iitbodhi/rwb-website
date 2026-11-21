@@ -753,3 +753,7 @@ html.lite .ev,html.lite .prod,html.lite .post,html.lite .acc,html.lite .tile,htm
 html.lite .ev,html.lite .prod,html.lite .post,html.lite .tile{background:rgba(255,255,255,.86)}
 html.lite .tabs button:not(.active),html.lite .btn-ghost,html.lite .social a{background:rgba(255,255,255,.7)}
 html.lite .dark .tabs button:not(.active){background:rgba(255,255,255,.06)}
+
+/* gallery photos roll but don't open (Nov 2026): the full gallery is in the RWB App */
+.mq-gal .g-item.g-still{display:block;cursor:default}
+.mq-gal .g-item.g-still img{pointer-events:none;-webkit-touch-callout:none;user-select:none}

@@ -1308,6 +1308,7 @@ async function viewHome() {
 }
 
 /* =================== RWB Gallery (Nov 2026): the same photos as roninwb.in's gallery ===================
+   Only members and RWB FAM get the full list (a "view" pass, file 81); the website and everyone else get 30 a day.
    The list comes from the RWB Gallery Apps Script (SITE.GALLERY_SCRIPT_URL in js/data.js, source tools/gallery.gs) and the
    photos from Google (lh3.googleusercontent.com), so the gallery never touches Supabase (no egress, no storage).
    The list is kept on the phone (GAL_KEY) and shown at once; a fresh copy is asked for at most every 12 hours.
@@ -1328,9 +1329,16 @@ const galKeep = () => { try { localStorage.setItem(GAL_KEY, JSON.stringify({ t: 
 let galJob = null;
 function galFetch() {
     if (!SITE.GALLERY_SCRIPT_URL) return Promise.resolve(galSaved()?.list || []);
-    return galJob ??= fetch(SITE.GALLERY_SCRIPT_URL).then(r => r.json()).then(a => {
-        const list = (Array.isArray(a) ? a : []).filter(im => /^https:\/\//.test(im?.url || '')).map(({ url, label, id }) => ({ url, label: label || '', ...(id ? { id } : {}) }));
+    /* the full list needs a one-time "view" pass (members and RWB FAM, file 81); without one the script gives only
+       the public pick of 30, which never replaces a bigger saved list */
+    return galJob ??= (api.demo ? Promise.resolve('') : api.galleryTicket('view').catch(() => ''))
+        .then(pass => fetch(SITE.GALLERY_SCRIPT_URL + (pass ? '?pass=' + encodeURIComponent(pass) : '')))
+        .then(r => r.json()).then(a => {
+        const full = !!a?.full, raw = full ? a.list : a;
+        const list = (Array.isArray(raw) ? raw : []).filter(im => /^https:\/\//.test(im?.url || '')).map(({ url, label, id }) => ({ url, label: label || '', ...(id ? { id } : {}) }));
         if (!list.length) throw 0;   /* an empty answer never replaces a saved list */
+        const had = state.gal?.length || galSaved()?.list?.length || 0;
+        if (!full && list.length < had) throw 0;
         state.gal = list; galKeep(); return list;
     }).catch(() => state.gal || galSaved()?.list || []).finally(() => { galJob = null; });
 }
