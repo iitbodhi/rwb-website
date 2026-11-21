@@ -5,10 +5,10 @@ const CONFIG = {
     APP_SUPABASE_URL: 'https://hcowcybshljgkeixudry.supabase.co',
     APP_SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhjb3djeWJzaGxqZ2tlaXh1ZHJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3NDI2MjMsImV4cCI6MjEwODMxODYyM30.LLYjaairRQZ3-Ddwo9kschTeVXjEv84n45RrqEUhi0g',
     EVENTS_SHEET_URL: 'https://docs.google.com/spreadsheets/d/13qt3ZmYHX1EILkQzqo9TzLWKfKmuAd_QwYzStDTLEzU/export?format=csv&gid=0',
-    GALLERY_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbzrswFdnP-IjFNdXedZDnc9aqg63sOqoLaVCkPC6p2sOzBzKNrjg0ryiYVphZgFlt29YA/exec',
-    /* RWB App: admins and coordinators add/delete gallery photos. Turn on once GALLERY_SCRIPT_URL is the new
-       RWB Gallery script (tools/gallery.gs); the old list-only script can't save photos. */
-    GALLERY_EDIT: false,
+    GALLERY_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbwTNLg43T131BwLCqZ1Lk12eL5lohygAa_Hmfa8FtPy7q0oZtEuQdvM3NHKXc5OPNuf/exec',
+    /* RWB App: admins and coordinators add/delete gallery photos (GALLERY_SCRIPT_URL is the RWB Gallery script,
+       tools/gallery.gs, deployed by Bodhi on 21 Nov 2026; the old list-only script can't save photos). */
+    GALLERY_EDIT: true,
     CORS_PROXY: 'https://api.allorigins.win/raw?url=',
     INSTAGRAM_URL: 'https://www.instagram.com/ronin_warriors_bengal',
     /* Opens a direct message to RWB on Instagram (used by "Contact to order") */

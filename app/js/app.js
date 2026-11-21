@@ -1316,7 +1316,7 @@ async function viewHome() {
    Supabase (gallery_ticket, file 80, a few bytes) and sends the photo straight to the script, which saves it in Drive.
    No saving: photos can't be long-pressed, dragged or right-clicked, and in the Android app (build 25+) screenshots and
    screen recording are blocked while gallery photos are on screen (RwbTrack.secure → FLAG_SECURE). */
-const GAL_KEY = 'rwb-app-gal-v1', GAL_TTL = 12 * 36e5, GAL_STRIP = 16, GAL_PAGE = 60;
+const GAL_KEY = 'rwb-app-gal-v2', GAL_TTL = 12 * 36e5, GAL_STRIP = 16, GAL_PAGE = 60;
 const galSized = (u, spec) => /^https:\/\/lh3\.googleusercontent\.com\/d\/[\w-]+$/.test(u) ? `${u}=${spec}` : u;
 const galId = it => it.id || (it.url.match(/\/d\/([\w-]{10,})/) || [])[1] || '';
 const galCanEdit = () => isMod() && !isFam() && (!!SITE.GALLERY_EDIT || api.demo);
