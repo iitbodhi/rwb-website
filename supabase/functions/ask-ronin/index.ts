@@ -181,7 +181,7 @@ async function siteRows(): Promise<K[]> {
   if (site && Date.now() - site.at < site.ttl) return site.rows;
   const rows: K[] = []; let ok = false;
   try {
-    const js = await (await get(`${SITE}/js/data.js`, 3000)).text(); ok = true;
+    const js = await (await get(`${SITE}/js/data.js?t=${Date.now()}`, 3000)).text(); ok = true;   // ?t= skips stale CDN copies
     const url = (k: string) => js.match(new RegExp(k + ":\\s*'([^']+)'"))?.[1];
     /* the RWB team from the website: one teaching per person, plus the whole list grouped by role */
     const un = (x?: string) => String(x || "").replace(/\\'/g, "'").replace(/\s+/g, " ").trim();
