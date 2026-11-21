@@ -51,6 +51,7 @@
 - **The shell can't reach Supabase or roninwb.in.** For live data, use the Supabase connector (`execute_sql`, `query_logs`) if it's connected in the chat; otherwise ask Bodhi to run SQL in the SQL Editor and send a screenshot. Read-only checks are fine; tell Bodhi before changing live data.
 
 ## Status (Nov 2026)
-- **Play closed test:** live. Build 24 is the current upload. Bodhi's account needs 12+ testers for 14 days, then he can apply for production.
+- **Play closed test:** live. Build 25 (gallery screenshot block, `RwbTrack.secure`) is the current upload (Nov 21 2026). Bodhi's account needs 12+ testers for 14 days, then he can apply for production.
 - **After production approval:** switch the website download buttons, /get and the FAM links to Play, and set `PLAY_TRACK` to production.
 - **Admin → App copies** shows who uses the Play, APK or browser copy.
+- **Gallery (Nov 21 2026):** Bodhi deployed the updated `tools/gallery.gs` (checked: no pass → 30 photos). Bodhi tried to archive the OLD list-only gallery script (`AKfycbzrswFdnP-IjFNdXedZDnc9aqg63sOqoLaVCkPC6p2sOzBzKNrjg0ryiYVphZgFlt29YA`), but at 23:40 IST it still returned all 264 photo links: check it again with `net.http_get` and, if it still answers, help him find that project (script.google.com → My projects, or Drive search for the script) and archive the deployment or delete the project. The folder sharing should be "Anyone with the link: Viewer" (it was Editor; Bodhi was asked to change it).
