@@ -170,7 +170,7 @@ function mileageStats(logs) {
 }
 
 /* ---------- router ---------- */
-const ROUTES = { calendar: viewCalendar, docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotoMart, guides: viewGuides, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, teach: viewTeach, ride: viewRide, crew: viewCrew, members: viewMembers, events: viewEvents, terms: viewTerms, track: viewTrack };
+const ROUTES = { calendar: viewCalendar, docs: viewDocs, home: viewHome, service: viewService, mileage: viewMileage, motomart: viewMotoMart, guides: viewGuides, gallery: viewGallery, me: viewMe, admin: viewAdmin, news: viewNews, chat: viewChat, teach: viewTeach, ride: viewRide, crew: viewCrew, members: viewMembers, events: viewEvents, terms: viewTerms, track: viewTrack };
 /* roninwb.in/app/#terms: Me screen with the Terms & Conditions open, ready to agree */
 function viewTerms() {
     history.replaceState(null, '', '#me'); document.body.dataset.route = 'me';
@@ -1272,6 +1272,7 @@ async function viewHome() {
         ${feed.length ? `<section class="section"><h2>Latest from RWB <span class="h-acts"><button data-act="clear-feed">Clear</button><a href="#news">See all</a></span></h2><div class="group news-mini">${feed.slice(0, 3).map(n => newsRow(n, false, true)).join('')}</div></section>` : ''}
         <section class="section"><h2>Fresh on MotoMart <a href="#motomart">See all</a></h2>
             ${fresh.length ? `<div class="strip">${fresh.map(listingCard).join('')}</div>` : `<a class="group-row-card" href="#motomart"><span class="g-ico">${ICON.tag}</span><span class="grow"><b>Nothing for sale yet</b><span class="small muted">Selling old gear? Post it here for fellow riders.</span></span>${ICON.chev}</a>`}</section>
+        ${galSection()}
         <section class="section"><h2>Explore</h2><div class="group">
             <a href="#teach"><span class="g-ico">${ICON.chat}</span><span class="grow"><b>Teach Pookie</b><span class="small muted" id="teach-sub">Answer Pookie's Ronin questions, earn XP and help every rider</span></span>${ICON.chev}</a>
             <a href="#guides/maint"><span class="g-ico">${ICON.book}</span><span class="grow"><b>Maintenance guides</b><span class="small muted">Short videos, PDFs and pictures from the RWB team</span></span>${ICON.chev}</a>
@@ -1279,7 +1280,7 @@ async function viewHome() {
             <a href="https://roninwb.in" target="_blank" rel="noopener"><span class="g-ico">${ICON.globe}</span><span class="grow"><b>roninwb.in</b><span class="small muted">Rides, events, gallery and the team</span></span>${ICON.out}</a>
         </div></section>`;
     swipeToDismiss(app, () => { if (!app.querySelector('.news-mini [data-swipe]')) render(); });
-    bindVrnCheck(); bindRideWidget(); teachUrgent('#teach-sub'); watchPreviews(app);
+    bindVrnCheck(); bindRideWidget(); teachUrgent('#teach-sub'); watchPreviews(app); bindHomeGallery(navN);
     actions = {
         evt: el => location.hash = '#events/' + el.dataset.id,
         'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); render(); }),
@@ -1304,6 +1305,135 @@ async function viewHome() {
             const dock = app.querySelector('.admin-dock'); if (dock) dock.classList.toggle('busy', !!(s.pending || mm || state.dupes?.length));
         }).catch(() => {});
     }
+}
+
+/* =================== RWB Gallery (Nov 2026): the same photos as roninwb.in's gallery ===================
+   The list comes from the website's Google Apps Script (SITE.GALLERY_SCRIPT_URL, js/data.js) and the photos
+   from Google (lh3.googleusercontent.com), so the gallery never touches Supabase (no egress, no storage).
+   The list is kept on the phone (GAL_KEY) and shown at once; a fresh copy is asked for at most every 12 hours.
+   Photos are asked for as small WebP copies: ~420 px tall in the strip, 400 px wide in the grid, 1600 px in the viewer. */
+const GAL_KEY = 'rwb-app-gal-v1', GAL_TTL = 12 * 36e5, GAL_STRIP = 16, GAL_PAGE = 60;
+const galSized = (u, spec) => /^https:\/\/lh3\.googleusercontent\.com\/d\/[\w-]+$/.test(u) ? `${u}=${spec}` : u;
+const galSaved = () => { try { const s = JSON.parse(localStorage.getItem(GAL_KEY)); return s?.list?.length ? s : null; } catch { return null; } };
+let galJob = null;
+function galFetch() {
+    if (!SITE.GALLERY_SCRIPT_URL) return Promise.resolve(galSaved()?.list || []);
+    return galJob ??= fetch(SITE.GALLERY_SCRIPT_URL).then(r => r.json()).then(a => {
+        const list = (Array.isArray(a) ? a : []).filter(im => /^https:\/\//.test(im?.url || '')).map(({ url, label }) => ({ url, label: label || '' }));
+        if (!list.length) throw 0;   /* an empty answer never replaces a saved list */
+        try { localStorage.setItem(GAL_KEY, JSON.stringify({ t: Date.now(), list })); } catch { /* full */ }
+        state.gal = list; return list;
+    }).catch(() => galSaved()?.list || []).finally(() => { galJob = null; });
+}
+/* cache-first: the saved list now (refreshed quietly in the background when it's old), else wait for the first download */
+function loadGal() {
+    if (state.gal?.length) return Promise.resolve(state.gal);
+    const s = galSaved();
+    if (s) { state.gal = s.list; if (Date.now() - (s.t || 0) > GAL_TTL) whenIdle(galFetch); return Promise.resolve(s.list); }
+    return galFetch();
+}
+const galShuffle = a => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+/* Home (members and RWB FAM): one slow rolling strip of 16 random photos (a fresh pick each time the app opens).
+   It can be swiped, sleeps when off screen or when the app is in the background, and pauses while the page scrolls. */
+const galSection = () => `<section class="section" id="home-gal"><h2>RWB Gallery <a href="#gallery">See all</a></h2><div class="gal-mq" aria-label="RWB ride photos"><div class="gal-strip"><div class="gal-skel" aria-hidden="true"><i></i><i></i><i></i></div></div></div></section>`;
+async function bindHomeGallery(n) {
+    const list = await loadGal().catch(() => []);
+    const box = $('#home-gal'); if (!stillHere(n) || !box) return;
+    if (!list.length) { box.remove(); return; }
+    state.galPick ??= galShuffle(list.map((_, i) => i)).slice(0, GAL_STRIP);
+    const pick = state.galPick.filter(i => list[i]);
+    const view = box.querySelector('.gal-mq');
+    view.querySelector('.gal-strip').innerHTML = pick.map((i, k) => `<button class="gal-tile" data-gi="${i}" aria-label="Open photo ${k + 1}"><img src="${esc(galSized(list[i].url, 'h420-rw'))}" alt="${esc(list[i].label || 'RWB ride photo')}" ${k < 3 ? '' : 'loading="lazy"'} decoding="async" draggable="false" referrerpolicy="no-referrer" onload="this.classList.add('in')"></button>`).join('');
+    galRoll(view, i => galViewer(list, i));
+}
+function galRoll(view, onOpen) {
+    const strip = view.querySelector('.gal-strip'), still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const n = strip.children.length;
+    [...strip.children].forEach(k => { const d = k.cloneNode(true); d.setAttribute('aria-hidden', 'true'); d.tabIndex = -1; strip.append(d); });   /* a second copy so it loops without a gap */
+    const m = { x: 0, cur: 0, v: 0, period: 0, held: false, seen: false, raf: 0, last: 0, dragged: false };
+    const SPEED = -20, root = document.documentElement;
+    const measure = () => { m.period = strip.children[n] ? strip.children[n].offsetLeft - strip.children[0].offsetLeft : 0; };
+    const wrap = () => { if (m.period) { m.x %= m.period; if (m.x > 0) m.x -= m.period; } };
+    const place = () => { strip.style.transform = `translate3d(${m.x.toFixed(1)}px,0,0)`; };
+    function frame(now) {
+        if (!view.isConnected) { m.raf = 0; return; }
+        const dt = Math.min(now - m.last, 64) / 1000; m.last = now;
+        const target = m.held || still || root.classList.contains('scrolling') || gdLayer ? 0 : SPEED;
+        m.cur += (target - m.cur) * (1 - Math.exp(-dt * 2.6));
+        if (!m.held) { m.x += (m.cur + m.v) * dt; m.v *= Math.exp(-dt * 3.2); if (Math.abs(m.v) < 2) m.v = 0; }
+        if (!m.period) measure();
+        wrap(); place();
+        m.raf = m.seen && !document.hidden ? requestAnimationFrame(frame) : 0;
+    }
+    const wake = () => { if (!m.raf && m.seen && !document.hidden && view.isConnected) { m.last = performance.now(); m.raf = requestAnimationFrame(frame); } };
+    const io = new IntersectionObserver(e => { m.seen = e[0].isIntersecting; wake(); }, { rootMargin: '80px 0px' }); io.observe(view);
+    document.addEventListener('visibilitychange', wake);
+    new MutationObserver((_, o) => { if (!view.isConnected) { io.disconnect(); document.removeEventListener('visibilitychange', wake); o.disconnect(); } }).observe(app, { childList: true });
+    let sx = 0, sy = 0, lx = 0, lt = 0, vel = 0, id = null, decided = false;
+    view.addEventListener('pointerdown', e => { if (e.button > 0) return; id = e.pointerId; sx = lx = e.clientX; sy = e.clientY; lt = performance.now(); vel = 0; decided = false; m.dragged = false; m.held = true; m.v = 0; wake(); });
+    view.addEventListener('pointermove', e => {
+        if (e.pointerId !== id) return;
+        if (!decided) { const dx = Math.abs(e.clientX - sx), dy = Math.abs(e.clientY - sy); if (dx < 6 && dy < 6) return; decided = true;
+            if (dy > dx) { id = null; m.held = false; return; } m.dragged = true; view.setPointerCapture(id); }
+        const now = performance.now(), dx = e.clientX - lx; m.x += dx; if (!m.period) measure(); wrap(); place();
+        vel = .8 * (dx / Math.max(now - lt, 1) * 1000) + .2 * vel; lx = e.clientX; lt = now;
+    });
+    const up = e => { if (e.pointerId !== id) return; id = null; m.held = false; if (m.dragged) { m.v = Math.max(-2400, Math.min(2400, vel)); m.cur = 0; } wake(); };
+    view.addEventListener('pointerup', up); view.addEventListener('pointercancel', up);
+    view.addEventListener('click', e => {
+        if (m.dragged) { e.preventDefault(); e.stopPropagation(); m.dragged = false; return; }
+        const t = e.target.closest('.gal-tile'); if (t) onOpen(+t.dataset.gi);
+    });
+    measure(); m.cur = still ? 0 : SPEED; wake();
+}
+
+/* Gallery screen (#gallery): every photo in a 3-per-row grid, 60 at a time (more load as you scroll down) */
+async function viewGallery() {
+    const n = navN;
+    app.innerHTML = top('Gallery') + `<a class="back-link" href="#home">‹ Home</a><p class="small muted gal-sub">Ride photos from the RWB family</p><div id="gal-body">${SKEL(4)}</div>`;
+    const list = await loadGal().catch(() => []);
+    if (!stillHere(n)) return;
+    const body = $('#gal-body');
+    if (!list.length) { body.innerHTML = '<div class="card empty"><b>Photos will be here soon</b>Ride photos from RWB rides and meets show up here.</div>'; actions = {}; return; }
+    body.innerHTML = `<div class="gal-grid"></div><div class="gal-more" aria-hidden="true"></div><p class="small muted gal-count">${list.length.toLocaleString('en-IN')} photos</p>`;
+    const grid = body.querySelector('.gal-grid'), more = body.querySelector('.gal-more');
+    let shown = 0;
+    const page = () => {
+        const end = Math.min(shown + GAL_PAGE, list.length);
+        grid.insertAdjacentHTML('beforeend', list.slice(shown, end).map((im, k) => `<button class="gal-cell" data-gi="${shown + k}" aria-label="Open photo ${shown + k + 1}"><img src="${esc(galSized(im.url, 'w400-rw'))}" alt="${esc(im.label || 'RWB ride photo')}" loading="lazy" decoding="async" draggable="false" referrerpolicy="no-referrer" onload="this.classList.add('in')"></button>`).join(''));
+        shown = end; if (shown >= list.length) { io.disconnect(); more.remove(); }
+    };
+    const io = new IntersectionObserver(e => { if (e[0].isIntersecting) page(); }, { rootMargin: '600px 0px' });
+    page(); if (more.isConnected) io.observe(more);
+    grid.addEventListener('click', e => { const c = e.target.closest('.gal-cell'); if (c) galViewer(list, +c.dataset.gi); });
+    actions = {};
+}
+
+/* full-screen viewer: swipe left/right, double-tap to zoom, the phone's Back button closes it.
+   Only the photo on screen and its two neighbours are loaded (the rest load as you swipe). */
+function galViewer(list, start = 0) {
+    const L = gdOverlay('gd-player gd-viewer gal-viewer', 'Photo');
+    L.el.innerHTML = `<div class="gd-hreel">${list.map((im, i) => `<figure class="gd-ph-slide" data-i="${i}"><div class="gd-zoom"><img data-src="${esc(galSized(im.url, 'w1600-rw'))}" alt="${esc(im.label || 'RWB ride photo')}" referrerpolicy="no-referrer" draggable="false" decoding="async"></div></figure>`).join('')}</div>
+        <div class="gd-ptop"><button class="gd-glass" data-x="close" aria-label="Close">${GD_ICO.close}</button>
+            ${list.length > 1 ? `<span class="gd-count"><b>${start + 1}</b> / ${list.length}</span>` : '<span></span>'}<span></span></div>`;
+    const reel = L.el.querySelector('.gd-hreel'), slides = [...reel.children];
+    const load = i => { const img = slides[i]?.querySelector('img[data-src]'); if (img) { img.src = img.dataset.src; img.removeAttribute('data-src'); } };
+    const show = i => { const c = L.el.querySelector('.gd-count b'); if (c) c.textContent = i + 1; [i, i + 1, i - 1].forEach(load); };
+    show(start);
+    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting && e.intersectionRatio > .6) show(+e.target.dataset.i); }), { root: reel, threshold: [.6] });
+    slides.forEach(s => io.observe(s)); L.cleanup.push(() => io.disconnect());
+    let lastTap = 0;
+    reel.addEventListener('click', e => {
+        const z = e.target.closest('.gd-zoom'); if (!z) return;
+        const now = Date.now(); if (now - lastTap > 320) { lastTap = now; L.el.classList.toggle('chrome-off'); return; }
+        lastTap = 0; L.el.classList.remove('chrome-off');
+        const on = !z.classList.contains('zoomed'), img = z.querySelector('img'), r = img.getBoundingClientRect(), fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+        z.classList.toggle('zoomed', on); reel.style.overflowX = on ? 'hidden' : '';
+        if (on) requestAnimationFrame(() => { z.scrollLeft = fx * z.scrollWidth - z.clientWidth / 2; z.scrollTop = fy * z.scrollHeight - z.clientHeight / 2; });
+    });
+    L.el.addEventListener('click', e => { if (e.target.closest('[data-x=close]')) { e.stopPropagation(); gdClose(); } });
+    requestAnimationFrame(() => { reel.scrollLeft = slides[start].offsetLeft; });
 }
 
 /* =================== Service records =================== */
@@ -5891,7 +6021,7 @@ function rideLive(e) {
 const FAM_MAX = 3;
 const isFam = () => state.me?.role === 'fam';
 const famOn = () => isFam() && state.fam?.approved !== false && state.fam?.active !== false;
-const FAM_ROUTES = ['home', 'track', 'events', 'me', 'news', 'crew', 'members', 'videos', 'guides'];
+const FAM_ROUTES = ['home', 'track', 'events', 'me', 'news', 'crew', 'members', 'videos', 'guides', 'gallery'];
 const FAM_CODE_KEY = 'rwb-fam-code';
 const FAM_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M12 21.2s-2.6-1.6-2.6-3.3a1.4 1.4 0 0 1 2.6-.7 1.4 1.4 0 0 1 2.6.7c0 1.7-2.6 3.3-2.6 3.3z"/><circle cx="8" cy="7.5" r="2.6"/><circle cx="16.5" cy="8.5" r="2.1"/><path d="M3.5 19c.4-3.4 2.2-5.6 4.5-5.6s4.1 2.2 4.5 5.6M13.4 14.6c.8-.9 1.8-1.4 3.1-1.4 2 0 3.5 1.7 3.9 4.6"/><path d="M12 21.2s-2.6-1.6-2.6-3.3a1.4 1.4 0 0 1 2.6-.7 1.4 1.4 0 0 1 2.6.7c0 1.7-2.6 3.3-2.6 3.3z"/></svg>';
 const famCodeNorm = c => { const t = String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return t ? 'RWB-' + t.replace(/^RWB/, '').slice(0, 8) : ''; };
@@ -5969,11 +6099,12 @@ async function viewFamHome() {
         ${vrnCheckCard()}
         ${up.length ? `<section class="section"><h2>RWB events <a href="#events">See all</a></h2><div class="list home-evt">${up.map(e => eventCard(e, evd)).join('')}</div></section>` : ''}
         ${feed.length ? `<section class="section"><h2>Important updates <span class="h-acts"><a href="#news">See all</a></span></h2><div class="group news-mini">${feed.slice(0, 3).map(n => newsRow(n, false, true)).join('')}</div></section>` : ''}
+        ${galSection()}
         <section class="section"><h2>Explore</h2><div class="group">
             <a href="https://roninwb.in" target="_blank" rel="noopener"><span class="g-ico">${ICON.globe}</span><span class="grow"><b>roninwb.in</b><span class="small muted">Rides, events, gallery and the team</span></span>${ICON.out}</a>
         </div></section>`;
     swipeToDismiss(app, () => { if (!app.querySelector('.news-mini [data-swipe]')) render(); });
-    bindVrnCheck();
+    bindVrnCheck(); bindHomeGallery(navN);
     actions = {
         evt: el => location.hash = '#events/' + el.dataset.id,
         'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); render(); }),
