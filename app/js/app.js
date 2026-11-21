@@ -4209,8 +4209,81 @@ const ICON_CLEAR = '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" 
    - merch: RWB merch listed by admins/coordinators
    Sold used posts are greyed out and deleted (with photos) 15 days later. roninwb.in shows new accessories and merch. */
 const CONDITIONS = ['Brand new (unused)', 'Like new', 'Good', 'Fair', 'Needs repair'];
-const MM_CATS = ['Helmets', 'Riding gear', 'Protection', 'Luggage', 'Navigation & electronics', 'Lights', 'Bike accessories', 'Spare parts'];
-const MERCH_CATS = ['Clothing', 'Stickers', 'Accessories'];
+/* MotoMart categories (Nov 21 2026): one fixed list in groups, each with its own icon. No "Other": every post picks one of these.
+   [name, short name for the round tiles (blank = the part before " and " or ","), icon] */
+const MM_GROUPS = [
+    ['Helmets and riding gear', [
+        ['Helmets', '', '<path d="M3.5 15.5a8.5 8.5 0 0 1 17 0v1.5h-17z"/><path d="M12 7v5.5h8.3M3.5 17l1 2.5h7"/>'],
+        ['Visors, pinlocks and helmet parts', '', '<path d="M4 14a8 8 0 0 1 16 0"/><path d="M6.5 11.5h11a1.5 1.5 0 0 1 0 3h-11a1.5 1.5 0 0 1 0-3z"/>'],
+        ['Riding jackets', '', '<path d="M8.5 3.5 12 6l3.5-2.5L20 6.5 18 11l-1.5-.8V20.5h-9V10.2L6 11 4 6.5z"/><path d="M12 6v14.5"/>'],
+        ['Riding pants', '', '<path d="M7 3h10l1 18h-4.5L12 10l-1.5 11H6z"/><path d="M7 6.5h10"/>'],
+        ['Riding gloves', '', '<path d="M8 21v-3.5L5.6 14a1.5 1.5 0 0 1 2.3-1.9L9 13.3V5.5a1.3 1.3 0 0 1 2.6 0V11V4.3a1.3 1.3 0 0 1 2.6 0V11V5.3a1.3 1.3 0 0 1 2.6 0V12V8.5a1.3 1.3 0 0 1 2.6 0v5.5c0 3-1.5 4.8-3.5 5.8V21z"/>'],
+        ['Riding boots', '', '<path d="M6 3h7v9.5l5.5 3a2.5 2.5 0 0 1 1.5 2.3V20H6z"/><path d="M6 17h14M6 7h7"/>'],
+        ['Rain gear', '', '<path d="M3 12a9 9 0 0 1 18 0z"/><path d="M12 12v6.5a2 2 0 0 1-4 0M12 3v-.5"/>'],
+        ['Base layers and balaclavas', '', '<path d="M12 3a7 7 0 0 0-7 7v6c0 2.8 3 5 7 5s7-2.2 7-5v-6a7 7 0 0 0-7-7z"/><path d="M7.5 10.5h9v2.5h-9z"/>'],
+        ['Body armour and knee guards', '', '<path d="M8 3h8v6a4 4 0 0 1-8 0z"/><path d="M8.5 13.5 8 21h8l-.5-7.5"/><circle cx="12" cy="8.5" r="1.8"/>']]],
+    ['Communication and electronics', [
+        ['Mesh intercoms', '', '<rect x="8" y="10" width="8" height="10" rx="2"/><path d="M12 13.5v3.5M8.5 7a5 5 0 0 1 7 0M5.5 4.5a9 9 0 0 1 13 0"/>'],
+        ['Bluetooth headsets', '', '<path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/>'],
+        ['Navigation screens and GPS', '', '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="m10 12.5 5-3-2 4.5-.8-1.7z"/><path d="M12 16v4M8.5 20h7"/>'],
+        ['Phone mounts', '', '<rect x="7.5" y="3.5" width="9" height="15" rx="1.8"/><path d="M5 7V5a2 2 0 0 1 2-2M19 7V5a2 2 0 0 0-2-2M5 15v2a2 2 0 0 0 2 2M19 15v2a2 2 0 0 1-2 2M12 19v2.5M8 21.5h8M10.5 16h3"/>'],
+        ['Chargers and USB sockets', '', '<path d="M9 3v4M15 3v4M6.5 7h11v3a5.5 5.5 0 0 1-11 0z"/><path d="M12 15.5V21"/>'],
+        ['Action cameras and dashcams', '', '<rect x="3" y="7" width="18" height="12" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M7 7l1.5-2.5h4L14 7"/>'],
+        ['Tyre pressure monitors (TPMS)', 'TPMS', '<path d="M4.5 17a8.5 8.5 0 1 1 15 0"/><path d="m12 13 3.5-4"/><circle cx="12" cy="13" r="1.3"/><path d="M8 20h8"/>'],
+        ['GPS trackers and alarms', '', '<path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>']]],
+    ['Bike protection', [
+        ['Crash guards', '', '<path d="M12 3 5 6v5.5c0 4.4 3 8 7 9.5 4-1.5 7-5.1 7-9.5V6z"/><path d="m9 12 2 2 4-4"/>'],
+        ['Bash plates and sump guards', '', '<path d="M3 9h18l-2.5 7.5a2 2 0 0 1-1.9 1.5H7.4a2 2 0 0 1-1.9-1.5z"/><path d="M8 12.5h.01M12 12.5h.01M16 12.5h.01"/>'],
+        ['Frame and engine sliders', 'Sliders', '<ellipse cx="12" cy="7.5" rx="6" ry="2.5"/><path d="M6 7.5v8.5c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V7.5M12 10v11"/>'],
+        ['Radiator and headlight grills', 'Grills', '<rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M4 9.3h16M4 14.6h16M9.3 4v16M14.6 4v16"/>'],
+        ['Tank pads and tank grips', '', '<path d="M5 9c0-3 3-5 7-5s7 2 7 5c0 6-3.5 11-7 11S5 15 5 9z"/><path d="M9 8.5v6M12 8v8M15 8.5v6"/>'],
+        ['Bike covers', '', '<path d="M3 18c0-6 4-11 9-11s9 5 9 11z"/><path d="M3 18h18M12 7V4.5"/>']]],
+    ['Luggage and touring', [
+        ['Saddle bags and saddle stays', '', '<rect x="3" y="8" width="7" height="11" rx="2"/><rect x="14" y="8" width="7" height="11" rx="2"/><path d="M10 10h4M3 12.5h7M14 12.5h7"/>'],
+        ['Tail bags', '', '<rect x="3" y="9" width="18" height="10" rx="3"/><path d="M8 9V6.5h8V9M9 9v10M15 9v10"/>'],
+        ['Tank and handlebar bags', 'Tank bags', '<path d="M5 10a7 3 0 0 1 14 0v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z"/><path d="M8 13.5h8M12 10V7"/>'],
+        ['Top boxes and top racks', '', '<rect x="4" y="4" width="16" height="11" rx="3"/><path d="M4 9h16M10.5 11.5h3M7 15v4M17 15v4M5 19h14"/>'],
+        ['Backpacks and hydration packs', '', '<path d="M6 10a6 6 0 0 1 12 0v9a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z"/><path d="M9 4.5V3h6v1.5M9 14h6v4H9z"/>'],
+        ['Bungee cords and cargo nets', '', '<path d="M7 3v3a2 2 0 0 1-4 0M17 21v-3a2 2 0 0 1 4 0M7 6c0 6 10 6 10 12"/>'],
+        ['Jerry cans and fuel bottles', '', '<path d="M6 6h7l5 5v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z"/><path d="M15 3h3v3M9 11l5 5M14 11l-5 5"/>']]],
+    ['Lights and horns', [
+        ['Fog and auxiliary lights', 'Fog lights', '<circle cx="9" cy="12" r="5.5"/><path d="M17 8.5h4M17 12h4M17 15.5h4"/>'],
+        ['Headlight and indicator bulbs', 'Bulbs', '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'],
+        ['Horns', '', '<path d="M3 10v4h3l9 5V5L6 10z"/><path d="M18.5 9a4 4 0 0 1 0 6"/>']]],
+    ['Comfort and controls', [
+        ['Handlebars and risers', '', '<path d="M3 8c2 0 3 1 4 3h10c1-2 2-3 4-3"/><path d="M10 11v4h4v-4M12 15v5"/>'],
+        ['Grips and bar-end weights', '', '<rect x="3" y="9" width="12" height="6" rx="2"/><path d="M6.5 9v6M9 9v6M11.5 9v6M15 12h3"/><rect x="18" y="10" width="3" height="4" rx="1"/>'],
+        ['Seats and seat covers', '', '<path d="M3 13c2-3 5-3 8-2s6 1 10 0c0 3-2 5-5 5H7c-2.5 0-4-1.3-4-3z"/><path d="M7 16v3M16 16v3"/>'],
+        ['Windscreens and wind visors', '', '<path d="M7 21 5 8c0-3 3-5 7-5s7 2 7 5l-2 13z"/><path d="M8.5 8.5c1-1.5 2.3-2 3.5-2"/>'],
+        ['Footpegs and foot rests', '', '<rect x="3" y="10" width="13" height="4" rx="2"/><path d="M6.5 10v4M9.5 10v4M12.5 10v4M16 12h5M19 9v6"/>'],
+        ['Mirrors', '', '<ellipse cx="14" cy="8" rx="6" ry="4.5"/><path d="M10 11.5 5 20M3.5 20h3"/>'],
+        ['Levers', '', '<path d="M3 9h6l11 4.5a1.5 1.5 0 0 1-.6 2.9L8 14H3z"/><circle cx="6" cy="11.5" r="1"/>'],
+        ['Throttle locks and cruise control', '', '<circle cx="12" cy="12" r="8.5"/><path d="M12 12 8.5 8.5M12 3.5v2M20.5 12h-2M3.5 12h2"/><circle cx="12" cy="12" r="1"/>']]],
+    ['Looks', [
+        ['Stickers and decals', '', '<path d="M20 12.5V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h7.5z"/><path d="M12.5 20c0-4.1 3.4-7.5 7.5-7.5"/>'],
+        ['Number plates and frames', '', '<rect x="2.5" y="7" width="19" height="10" rx="2"/><path d="M6 12h3M11 12h2.5M15.5 12h2.5"/>']]],
+    ['Maintenance and spares', [
+        ['Tyres and tubes', '', '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/><path d="M12 3.5V8M12 16v4.5M3.5 12H8M16 12h4.5"/>'],
+        ['Chain and sprockets', '', '<circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><path d="M12 2.5V6M12 18v3.5M2.5 12H6M18 12h3.5M5.3 5.3l2.5 2.5M16.2 16.2l2.5 2.5M5.3 18.7l2.5-2.5M16.2 7.8l2.5-2.5"/>'],
+        ['Brake pads and discs', '', '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.5"/><path d="M12 6.2h.01M17.8 12h.01M12 17.8h.01M6.2 12h.01"/>'],
+        ['Engine oil and filters', '', '<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/><path d="M9.5 15a2.5 2.5 0 0 0 2.5 2.5"/>'],
+        ['Batteries', '', '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M6.5 7V5h3v2M14.5 7V5h3v2M6.5 13.5h3M15 12v3M13.5 13.5h3"/>'],
+        ['Exhausts', '', '<rect x="6" y="8.5" width="13" height="7" rx="3.5"/><path d="M2.5 14H6M19 12h2.5M10 8.5v7"/>'],
+        ['Cleaning and care', '', '<path d="M9 9h5v2.5a2 2 0 0 0 1 1.7 2 2 0 0 1 1 1.8V20a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-5a2 2 0 0 1 1-1.8 2 2 0 0 0 1-1.7z"/><path d="M9 9V6h6l-2 3M18 5h.01M20 7h.01M18 9h.01"/>'],
+        ['Tools and puncture kits', '', '<path d="M14.7 6.3a4 4 0 0 1 5.2-1.6L17 7.6 18.4 9l2.9-2.9a4 4 0 0 1-5.6 5.2L7 20a2 2 0 0 1-3-3l8.7-8.7a4 4 0 0 1 2-2z"/>'],
+        ['Locks and security', '', '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11M12 15v2"/>'],
+        ['First aid kits', '', '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5h6v2M12 10.5v6M9 13.5h6"/>'],
+        ['Paddock stands', '', '<path d="M4 20 8 8h8l4 12M8 8V5M16 8V5M6 14h12"/>'],
+        ['Other spare parts', '', '<path d="M12 3 19.8 7.5v9L12 21l-7.8-4.5v-9z"/><circle cx="12" cy="12" r="3"/>']]]
+];
+const MERCH_GROUP = [
+    ['Clothing', '', '<path d="M8.5 3.5 12 5l3.5-1.5L21 7l-2 4-2-1v10.5H7V10l-2 1-2-4z"/>'],
+    ['Stickers', '', '<path d="M20 12.5V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h7.5z"/><path d="M12.5 20c0-4.1 3.4-7.5 7.5-7.5"/>'],
+    ['Keychains and patches', '', '<circle cx="8" cy="15" r="4.5"/><path d="M11.2 11.8 19 4M16 7l2 2M14 9l1.5 1.5"/>'],
+    ['Accessories', '', '<path d="M3.5 11.6V4.5a1 1 0 0 1 1-1h7.1l8.9 8.9-8.1 8.1z"/><circle cx="8" cy="8" r="1.5"/>']];
+const MM_CATS = MM_GROUPS.flatMap(([, items]) => items.map(i => i[0]));
+const MERCH_CATS = MERCH_GROUP.map(i => i[0]);
+const MM_SHORT = Object.fromEntries([...MM_GROUPS.flatMap(([, items]) => items), ...MERCH_GROUP].map(([n, s]) => [n, s || n.split(/ and |, /)[0]]));
 const MM_KIND = { used: 'Pre-owned', new: 'New', merch: 'RWB Merch' };
 const SOLD_DAYS = 15;
 const mmState = { branch: 'all', cat: 'all', sort: 'price-asc', q: '', mine: false, review: false, swept: false };
@@ -4227,37 +4300,37 @@ const goneOn = l => new Date(soldAt(l).getTime() + SOLD_DAYS * 864e5);
 const expired = l => kindOf(l) === 'used' && l.status === 'sold' && goneOn(l) < new Date();
 const hostOf = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
 
-/* Old and new category names fold into a few simple groups, like big shops do. A team member's own new category stays as typed. */
+/* Every post's category is one of MM_CATS (merch: MERCH_CATS). Old posts with older names are shown under the closest new one. */
+const CAT_OLD = [[/mesh/, 'Mesh intercoms'], [/headset|bluetooth/, 'Bluetooth headsets'], [/intercom/, 'Mesh intercoms'], [/visor|pinlock/, 'Visors, pinlocks and helmet parts'], [/helmet/, 'Helmets'],
+    [/pant|trouser/, 'Riding pants'], [/glove/, 'Riding gloves'], [/boot|shoe/, 'Riding boots'], [/rain/, 'Rain gear'], [/balaclava|base layer/, 'Base layers and balaclavas'], [/armou?r|knee|elbow/, 'Body armour and knee guards'],
+    [/jacket|riding gear|apparel|suit|jersey/, 'Riding jackets'], [/tracker|alarm/, 'GPS trackers and alarms'], [/navig|gps|electr/, 'Navigation screens and GPS'], [/mount|phone/, 'Phone mounts'], [/charg|usb/, 'Chargers and USB sockets'],
+    [/camera|dashcam/, 'Action cameras and dashcams'], [/tpms|pressure/, 'Tyre pressure monitors (TPMS)'], [/cover/, 'Bike covers'], [/bash|sump/, 'Bash plates and sump guards'], [/slider/, 'Frame and engine sliders'],
+    [/grill/, 'Radiator and headlight grills'], [/tank ?(pad|grip)/, 'Tank pads and tank grips'], [/crash|guard|protect|frame/, 'Crash guards'], [/saddle|pannier/, 'Saddle bags and saddle stays'], [/tank ?bag|handlebar bag|bar bag/, 'Tank and handlebar bags'],
+    [/top ?box|rack/, 'Top boxes and top racks'], [/backpack|hydration/, 'Backpacks and hydration packs'], [/bungee|cargo|net\b/, 'Bungee cords and cargo nets'], [/jerry|fuel/, 'Jerry cans and fuel bottles'],
+    [/fog|aux/, 'Fog and auxiliary lights'], [/light|lamp|bulb|indicator/, 'Headlight and indicator bulbs'], [/horn/, 'Horns'], [/handle ?bar|riser/, 'Handlebars and risers'], [/grip|bar.?end/, 'Grips and bar-end weights'],
+    [/seat/, 'Seats and seat covers'], [/windscreen|windshield/, 'Windscreens and wind visors'], [/peg|foot/, 'Footpegs and foot rests'], [/mirror/, 'Mirrors'], [/lever/, 'Levers'], [/throttle|cruise/, 'Throttle locks and cruise control'],
+    [/sticker|decal/, 'Stickers and decals'], [/number|plate/, 'Number plates and frames'], [/tyre|tire|tube/, 'Tyres and tubes'], [/chain|sprocket/, 'Chain and sprockets'], [/brake|disc/, 'Brake pads and discs'],
+    [/oil|filter/, 'Engine oil and filters'], [/batter/, 'Batteries'], [/exhaust|silencer/, 'Exhausts'], [/clean|wash|polish|lube/, 'Cleaning and care'], [/tool|puncture/, 'Tools and puncture kits'], [/lock/, 'Locks and security'],
+    [/first aid/, 'First aid kits'], [/stand/, 'Paddock stands'], [/luggage|bag/, 'Tail bags'], [/spare|part|accessor/, 'Other spare parts']];
 function catGroup(l) {
     const c = String(typeof l === 'string' ? l : l.category || '').trim();
-    if (typeof l !== 'string' && kindOf(l) === 'merch') return c || 'Other';
     const k = c.toLowerCase();
-    const hit = [[/helmet/, 'Helmets'], [/jacket|pant|boot|shoe|glove|riding gear|jersey|apparel|suit/, 'Riding gear'], [/protect|guard|bash|slider|crash|frame/, 'Protection'],
-        [/luggage|bag|rack|saddle|top ?box|pannier/, 'Luggage'], [/navig|electr|mount|phone|charg|intercom|camera|gps|usb/, 'Navigation & electronics'],
-        [/light|lamp|fog|aux/, 'Lights'], [/spare|part|tyre|tire|chain|brake|filter|oil/, 'Spare parts'], [/accessor/, 'Bike accessories']].find(([re]) => re.test(k));
-    return hit ? hit[1] : c || 'Other';
+    if (typeof l !== 'string' && kindOf(l) === 'merch') return MERCH_CATS.find(x => x.toLowerCase() === k) || (/key|patch/.test(k) ? 'Keychains and patches' : c || 'Accessories');
+    return MM_CATS.find(x => x.toLowerCase() === k) || CAT_OLD.find(([re]) => re.test(k))?.[1] || c || 'Other spare parts';
 }
 const S = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
 const CAT_ICO = {
     all: S('<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>'),
-    Helmets: S('<path d="M3.5 15.5a8.5 8.5 0 0 1 17 0v1.5h-17z"/><path d="M12 7v5.5h8.3M3.5 17l1 2.5h7"/>'),
-    'Riding gear': S('<path d="M8.5 3.5 12 6l3.5-2.5L20 6.5 18 11l-1.5-.8V20.5h-9V10.2L6 11 4 6.5z"/><path d="M12 6v14.5"/>'),
-    Protection: S('<path d="M12 3 5 6v5.5c0 4.4 3 8 7 9.5 4-1.5 7-5.1 7-9.5V6z"/><path d="m9 12 2 2 4-4"/>'),
-    Luggage: S('<rect x="4" y="7.5" width="16" height="12.5" rx="2"/><path d="M9 7.5V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5v2M4 12.5h16"/>'),
-    'Navigation & electronics': S('<rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="m10 11 4.5-2-2 4.5-.7-1.8z"/>'),
-    Lights: S('<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'),
-    'Bike accessories': S('<circle cx="6" cy="16.5" r="3.5"/><circle cx="18" cy="16.5" r="3.5"/><path d="M6 16.5 9.5 9h5l3.5 7.5M9.5 9 12 16.5h-6M14.5 9 16 6h2.5"/>'),
-    'Spare parts': S('<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>'),
-    Clothing: S('<path d="M8.5 3.5 12 5l3.5-1.5L21 7l-2 4-2-1v10.5H7V10l-2 1-2-4z"/>'),
-    Stickers: S('<path d="M20 12.5V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h7.5z"/><path d="M12.5 20c0-4.1 3.4-7.5 7.5-7.5"/>'),
-    other: S('<path d="M3.5 11.6V4.5a1 1 0 0 1 1-1h7.1l8.9 8.9-8.1 8.1z"/><circle cx="8" cy="8" r="1.5"/>')
+    other: S('<path d="M3.5 11.6V4.5a1 1 0 0 1 1-1h7.1l8.9 8.9-8.1 8.1z"/><circle cx="8" cy="8" r="1.5"/>'),
+    ...Object.fromEntries([...MM_GROUPS.flatMap(([, items]) => items), ...MERCH_GROUP].map(([n, , p]) => [n, S(p)]))
 };
 const catIco = c => CAT_ICO[c] || CAT_ICO.other;
 const SEARCH_ICO = S('<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>');
 
 function listingCard(l) {
     const img = photo(l), k = kindOf(l), sold = l.status === 'sold';
-    const sub = k === 'new' ? [catGroup(l), hostOf(l.link)].filter(Boolean).join(' · ') : k === 'merch' ? catGroup(l) : [l.condition, l.size && 'Size ' + l.size].filter(Boolean).join(' · ') || catGroup(l);
+    const cs = MM_SHORT[catGroup(l)] || catGroup(l);
+    const sub = k === 'new' ? [cs, hostOf(l.link)].filter(Boolean).join(' · ') : k === 'merch' ? cs : [l.condition, l.size && 'Size ' + l.size].filter(Boolean).join(' · ') || cs;
     const flag = { pending: 'Waiting for approval', rejected: 'Not approved' }[l.status];
     return `<button class="mm-card tap${sold ? ' is-sold' : ''}" data-act="listing" data-id="${l.id}">
         <div class="mm-img"${!img && l.link ? ` data-link="${esc(safeUrl(l.link))}"` : ''}>${img ? `<img src="${esc(img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span class="mm-ph">${catIco(catGroup(l))}</span>
@@ -4308,7 +4381,7 @@ async function viewMotoMart() {
             <div class="mm-branches" role="tablist" aria-label="Shop">${branchBtn('all', 'All')}${branchBtn('new', 'New')}${branchBtn('used', 'Pre-owned')}${branchBtn('merch', 'RWB Merch')}</div>
             <button class="mm-search-btn" data-act="search" aria-label="Search MotoMart">${SEARCH_ICO}</button>
         </div>
-        ${cats.length > 1 && !mmState.review ? `<div class="mm-cats" role="list">${['all', ...cats].map(c => `<button class="mm-cat" role="listitem" data-act="cat" data-cat="${esc(c)}" aria-pressed="${mmState.cat === c}"><span class="mm-cat-ico">${catIco(c)}</span><span>${c === 'all' ? 'All' : esc(c.replace(' & electronics', ''))}</span></button>`).join('')}</div>` : ''}
+        ${cats.length > 1 && !mmState.review ? `<div class="mm-cats" role="list">${['all', ...cats].map(c => `<button class="mm-cat" role="listitem" data-act="cat" data-cat="${esc(c)}" aria-pressed="${mmState.cat === c}"><span class="mm-cat-ico">${catIco(c)}</span><span>${c === 'all' ? 'All' : esc(MM_SHORT[c] || c)}</span></button>`).join('')}</div>` : ''}
         ${q ? `<div class="mm-qbar"><span>${shown.length} result${shown.length === 1 ? '' : 's'} for <b>“${esc(q)}”</b></span><button class="linkish" data-act="q-clear">Clear ✕</button></div>` : ''}
         <div class="mm-tools">
             ${mmState.review ? '' : `<label class="mm-sort"><span class="sr-only">Sort</span><select id="mms">${[['price-asc', 'Price: low to high'], ['price-desc', 'Price: high to low'], ['newest', 'Newest first']].map(([k, v]) => `<option value="${k}"${mmState.sort === k ? ' selected' : ''}>${v}</option>`).join('')}</select></label>`}
@@ -4434,17 +4507,13 @@ function listingDetail(l) {
     });
 }
 
-/* category picker: the simple groups, or "Other" to type a new one (it then shows up as its own category) */
+/* category picker: the fixed list, in groups (no "Other"). An old post keeps its old name until it's re-saved. */
 function catField(list, cur) {
-    const other = !!cur && !list.includes(cur);
-    return `<label>Category<select name="category" required><option value="">Choose…</option>${list.map(c => `<option${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('')}<option value="__other"${other ? ' selected' : ''}>Other (type a new one)</option></select></label>
-        <label class="cat-other"${other ? '' : ' hidden'}>New category<input name="category_other" maxlength="40" placeholder="e.g. Cleaning & care" value="${other ? esc(cur) : ''}"></label>`;
+    const opt = c => `<option${c === cur ? ' selected' : ''}>${esc(c)}</option>`;
+    const body = list === MM_CATS ? MM_GROUPS.map(([g, items]) => `<optgroup label="${esc(g)}">${items.map(i => opt(i[0])).join('')}</optgroup>`).join('') : list.map(opt).join('');
+    return `<label>Category<select name="category" required><option value="">Choose…</option>${cur && !list.includes(cur) ? opt(cur) : ''}${body}</select></label>`;
 }
-function bindCatField(body) {
-    const sel = body.querySelector('[name=category]'), box = body.querySelector('.cat-other');
-    sel.onchange = () => { box.hidden = sel.value !== '__other'; box.querySelector('input').required = !box.hidden; if (!box.hidden) box.querySelector('input').focus(); };
-}
-const catValue = d => d.category === '__other' ? String(d.category_other || '').trim().replace(/\s+/g, ' ').replace(/^./, c => c.toUpperCase()) : d.category;
+const catValue = d => d.category;
 
 /* photos: up to MAX, shown as small tiles you can remove */
 function photoPicker(body, kept, removed, added, MAX, onChange = () => {}) {
@@ -4493,7 +4562,7 @@ function listingForm(l = null) {
             <div class="thumbs" id="thumbs"></div>
             <label class="file-pick"><input type="file" accept="${MM_ACCEPT}" multiple id="pics"><span>📷 Add photos</span></label></fieldset>
         <label>Product name<input name="product_name" required maxlength="120" placeholder="e.g. Axor Apex helmet, matte black" value="${esc(r.product_name || '')}"></label>
-        ${catField(MM_CATS, MM_CATS.includes(cur) ? cur : l?.category || '')}
+        ${catField(MM_CATS, cur)}
         <div class="grid2">
             <label>Size<input name="size" maxlength="60" placeholder="L / 42 / Free size" value="${esc(r.size || '')}"></label>
             <label>Age<input name="age" maxlength="60" placeholder="e.g. 8 months" value="${esc(r.age || '')}"></label>
@@ -4510,14 +4579,13 @@ function listingForm(l = null) {
         <button class="btn block">${l ? (l.status === 'rejected' ? 'Save and send for approval' : 'Save changes') : isAdmin() ? 'Publish' : 'Send for approval'}</button>
     </form>`, body => {
         photoPicker(body, kept, removed, added, MAX);
-        bindCatField(body);
         body.querySelector('#lf').onsubmit = e => {
             e.preventDefault();
             if (kept.length + added.length === 0) return toast('Please add at least one photo', true);
             const d = Object.fromEntries(new FormData(e.target));
             const phone = d.seller_phone.replace(/\D/g, '').slice(-10);
             if (phone.length !== 10) return toast('Seller WhatsApp needs 10 digits', true);
-            const category = catValue(d); if (!category) return toast('Type the new category', true);
+            const category = catValue(d); if (!category) return toast('Choose a category', true);
             const rec = { id: l?.id, kind: 'used', photos: kept.concat(removed), product_name: d.product_name.trim(), category, size: d.size.trim() || null, age: d.age.trim() || null,
                 condition: d.condition, reason: d.reason.trim() || null, price: Number(d.price), details: d.details.trim() || null, seller_name: d.seller_name.trim(), seller_phone: phone };
             busy(e.submitter, async () => {
@@ -4597,8 +4665,7 @@ function teamForm(l = null, kind = 'new') {
             link.required = k === 'new';
             freeUI();
             const cur = l?.category || ''; const list = k === 'merch' ? MERCH_CATS : MM_CATS;
-            body.querySelector('#tf-cat').innerHTML = catField(list, l ? (k === 'merch' ? cur : (MM_CATS.includes(catGroup(cur)) ? catGroup(cur) : cur)) : '');
-            bindCatField(body);
+            body.querySelector('#tf-cat').innerHTML = catField(list, l ? catGroup({ ...l, kind: k }) : '');
         };
         body.querySelectorAll('.seg [data-k]').forEach(b => b.onclick = () => setKind(b.dataset.k));
         setKind(k);
@@ -4611,7 +4678,7 @@ function teamForm(l = null, kind = 'new') {
             const d = Object.fromEntries(new FormData(f));
             if (pvBox.classList.contains('busy')) return toast('One moment, still reading the website…');
             if (needPhoto()) return toast('Add one photo or a screenshot of the product', true);
-            const category = catValue(d); if (!category) return toast('Type the new category', true);
+            const category = catValue(d); if (!category) return toast('Choose a category', true);
             const rec = { id: l?.id, kind: k, photos: kept.concat(removed), product_name: d.product_name.trim(), category, price: k === 'merch' && (f.soon.checked || f.free.checked) ? 0 : Number(d.price), coming_soon: k === 'merch' && f.soon.checked,
                 details: d.details.trim() || null, link: d.link.trim() || null, image_url: image_url || null,
                 seller_name: null, seller_phone: null, wa_orders: false,
