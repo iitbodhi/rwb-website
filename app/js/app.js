@@ -6320,6 +6320,7 @@ if (NATIVE) try {
     App.getLaunchUrl?.().then(r => { if (r?.url?.startsWith('https://roninwb.in/app')) appLink(r.url); }).catch(() => {});
     App.addListener('backButton', ({ canGoBack }) => {
         if (document.body.classList.contains('blocked')) return App.minimizeApp();
+        if (gdLayer) return gdClose();   /* a photo, video or PDF open full screen: back closes it (on Home it used to close the app) */
         if (document.querySelector('dialog#sheet[open]')) return closeSheet();
         if (document.querySelector('.mm-search')) return closeMmSearch();   /* MotoMart search open: back closes it */
         if (document.querySelector('.sos-alarm')) return document.querySelector('.sos-alarm').remove();
