@@ -800,6 +800,7 @@ const ICON = {
     cake: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M5 14a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1.5c-1.2 1-2.3 1-3.5 0s-2.3-1-3.5 0-2.3 1-3.5 0-2.3-1-3.5 0z"/><path d="M4 20.5h16M5 20.5V14a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6.5M5 15.5c1.2-1 2.3-1 3.5 0s2.3 1 3.5 0 2.3-1 3.5 0 2.3 1 3.5 0M8 12V9.5M12 12V9.5M16 12V9.5M8 7.2c-.7-.6-.7-1.5 0-2.2.7.7.7 1.6 0 2.2zM12 7.2c-.7-.6-.7-1.5 0-2.2.7.7.7 1.6 0 2.2zM16 7.2c-.7-.6-.7-1.5 0-2.2.7.7.7 1.6 0 2.2z"/></svg>',
     mega: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M4 10v4h3l7 4V6L7 10z"/><path d="M4 10v4h3l7 4V6L7 10zM17.5 9a4 4 0 0 1 0 6M8 14.5l1.2 4.5"/></svg>',
     bike: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle class="ac" cx="6" cy="16" r="3.4"/><circle cx="6" cy="16" r="3.4"/><circle cx="18" cy="16" r="3.4"/><path d="m6 16 4-6h4.5l3.5 6M10 10 8.6 7H6.5M14.5 10l1.6-3H19"/></svg>',
+    pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg>',
     alert: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M12 3.8 2.8 19.5h18.4z"/><path d="M12 3.8 2.8 19.5h18.4zM12 10v4.2M12 16.9v.1"/></svg>',
     bell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M6 16.5V11a6 6 0 0 1 12 0v5.5z"/><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0"/></svg>',
     file: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M13.5 3v4.5H18z"/><path d="M6.5 3h7L18 7.5V20a1 1 0 0 1-1 1H6.5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM13.5 3v4.5H18M8.5 12.5h7M8.5 16h5"/></svg>',
@@ -3593,7 +3594,7 @@ function viewMe() {
         <h2 class="group-title">Notifications</h2>
         <div class="card" id="notif-card"><p id="push-state">Checking…</p><div id="push-btn" style="margin-top:10px"></div></div>
         <div class="group" style="margin-top:10px">
-            ${[...(isMod() ? [['birthday', 'Birthdays']] : []), ['reminder', 'Renewal, service and my reminders'], ['motomart', 'New MotoMart posts'], ['member', 'New members on the app']].map(([k, l]) => `<label class="toggle-row"><span class="grow">${l}</span><span class="switch-only"><input type="checkbox" data-pref="${k}"${(m.notify || {})[k] !== false ? ' checked' : ''}></span></label>`).join('')}
+            ${[...(isMod() ? [['birthday', 'Birthdays']] : []), ['reminder', 'Renewal, service and my reminders'], ['track', 'Riders who start sharing on Track'], ['motomart', 'New MotoMart posts'], ['member', 'New members on the app']].map(([k, l]) => `<label class="toggle-row"><span class="grow">${l}</span><span class="switch-only"><input type="checkbox" data-pref="${k}"${(m.notify || {})[k] !== false ? ' checked' : ''}></span></label>`).join('')}
         </div>
         <p class="small muted" style="margin:8px 4px 0">RWB announcements always come through.</p>
 
@@ -3636,7 +3637,7 @@ function viewMe() {
         })
     };
     app.querySelectorAll('[data-pref]').forEach(cb => cb.onchange = async () => {
-        const notify = { birthday: true, reminder: true, motomart: true, member: true, ...(state.me.notify || {}), [cb.dataset.pref]: cb.checked };
+        const notify = { birthday: true, reminder: true, track: true, motomart: true, member: true, ...(state.me.notify || {}), [cb.dataset.pref]: cb.checked };
         try { state.me = await api.updateMe({ notify }); toast('Saved'); } catch (e) { cb.checked = !cb.checked; toast(e.message, true); }
     });
     const wa = $('#wa-app'); if (wa) wa.onchange = () => { try { localStorage.setItem('rwb-wa-app', wa.value); } catch { /* ignore */ } toast(`WhatsApp links open in ${WA_APPS[wa.value][0] === 'Let my phone decide' ? 'whichever app your phone picks' : WA_APPS[wa.value][0]}`); };
@@ -4430,7 +4431,7 @@ async function drawPushState() {
 
 /* =================== Announcements =================== */
 const STICKY = n => n.kind === 'announcement' || n.kind === 'event';   /* only admins can remove these */
-const KIND_ICON = { event: ICON.cal, announcement: ICON.mega, birthday: ICON.cake, motomart: ICON.cart, member: ICON.bike, admin: ICON.approve, personal: ICON.profile, sos: ICON.alert, reminder: ICON.cal };
+const KIND_ICON = { event: ICON.cal, announcement: ICON.mega, birthday: ICON.cake, motomart: ICON.cart, member: ICON.bike, admin: ICON.approve, personal: ICON.profile, sos: ICON.alert, reminder: ICON.cal, track: ICON.pin };
 function shortAgo(iso) {
     const s = (Date.now() - new Date(iso)) / 1000;
     if (s < 60) return 'now'; if (s < 3600) return Math.floor(s / 60) + 'm'; if (s < 86400) return Math.floor(s / 3600) + 'h';
@@ -5939,7 +5940,7 @@ const eventsNow = () => { const t = Date.now(); return (state.evd?.events || [])
 function shareSheet(eventId = null, eventTitle = '') {
     const on = sharing();
     openSheet(on ? 'Sharing your location' : 'Share live location', `${on ? `<div class="trk-live"><span class="dot"></span><span class="grow"><b>You're sharing live</b><span class="small muted">${esc(leftTxt(trk.until))}${trk.event ? ' · for an event ride' : ''}</span></span></div>
-            <button class="btn danger block" data-x="stop" style="margin:12px 0 18px">Stop sharing</button><p class="small muted" style="margin-bottom:8px">Or share for:</p>` : `<p class="small muted" style="margin-bottom:12px">Every RWB member on the app can see you on the Track map while you share.${eventTitle ? ` You'll show as riding <b>${esc(eventTitle)}</b>.` : ''}</p>`}
+            <button class="btn danger block" data-x="stop" style="margin:12px 0 18px">Stop sharing</button><p class="small muted" style="margin-bottom:8px">Or share for:</p>` : `<p class="small muted" style="margin-bottom:12px">Every RWB member on the app can see you on the Track map while you share, and gets a notification that you've started riding.${eventTitle ? ` You'll show as riding <b>${esc(eventTitle)}</b>.` : ''}</p>`}
         <div class="trk-evpick" id="trk-evpick" hidden></div>
         <label class="trk-note">Add a note <span class="muted small">(optional)</span><input id="trk-note" maxlength="${TRACK_NOTE_MAX}" placeholder="e.g. towards Simlipal!" value="${esc(on ? trk.note || '' : '')}" autocomplete="off"><small class="hint"><span id="trk-note-n">${on ? (trk.note || '').length : 0}</span>/${TRACK_NOTE_MAX} · shows next to your name on the map</small></label>
         <div class="trk-hours">${TRACK_HOURS.map(([h, t]) => `<button type="button" class="chip" data-h="${h}">${t}</button>`).join('')}</div>
@@ -6036,17 +6037,20 @@ function loadLeaflet() {
 const darkMode = () => document.documentElement.dataset.theme === 'dark' || (document.documentElement.dataset.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
 /* map styles: Clean (CARTO, has a real night map), Street (OpenStreetMap), Satellite (Esri + place names) */
 const TRK_STYLE_KEY = 'rwb-trk-style';
-const TRK_STYLES = [['clean', 'Clean', 'Easy to read, with a proper night map'], ['street', 'Street', 'Every lane and landmark'], ['satellite', 'Satellite', 'Real photos from above']];
-const trkStyle = () => { try { const s = localStorage.getItem(TRK_STYLE_KEY); return TRK_STYLES.some(x => x[0] === s) ? s : 'clean'; } catch { return 'clean'; } };
+const TRK_STYLES = [['street', 'Street', 'Every lane and landmark'], ['clean', 'Clean', 'Softer colours, a proper night map'], ['satellite', 'Satellite', 'Real photos from above']];
+const trkStyle = () => { try { const s = localStorage.getItem(TRK_STYLE_KEY); return TRK_STYLES.some(x => x[0] === s) ? s : 'street'; } catch { return 'street'; } };
 const OSM_ATTR = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+const ESRI = n => `https://server.arcgisonline.com/ArcGIS/rest/services/${n}/MapServer/tile/{z}/{y}/{x}`;
 function trkTiles(L, map) {
     (trk.tiles || []).forEach(t => map.removeLayer(t)); trk.tiles = [];
     const s = trkStyle(), dark = darkMode(), add = (url, o) => trk.tiles.push(L.tileLayer(url, { maxZoom: 19, ...o }).addTo(map));
-    if (s === 'street') add('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { className: dark ? 'trk-tiles-dark' : '', attribution: OSM_ATTR });
-    else if (s === 'satellite') {
-        add('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 18, attribution: 'Imagery © Esri, Maxar, Earthstar Geographics' });
-        add('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', className: 'trk-labels', attribution: `${OSM_ATTR} © <a href="https://carto.com/attributions">CARTO</a>` });
-    } else add(`https://{s}.basemaps.cartocdn.com/${dark ? 'dark_all' : 'rastertiles/voyager'}/{z}/{x}/{y}{r}.png`, { subdomains: 'abcd', attribution: `${OSM_ATTR} © <a href="https://carto.com/attributions">CARTO</a>` });
+    if (s === 'satellite') {
+        add(ESRI('World_Imagery'), { maxNativeZoom: 18, attribution: 'Imagery © Esri, Maxar, Earthstar Geographics' });
+        add(ESRI('Reference/World_Boundaries_and_Places'), { maxNativeZoom: 18, className: 'trk-labels' });
+    } else if (s === 'clean') {
+        if (dark) { add(ESRI('Canvas/World_Dark_Gray_Base'), { maxNativeZoom: 16, attribution: 'Tiles © Esri, HERE, Garmin, © OpenStreetMap contributors' }); add(ESRI('Canvas/World_Dark_Gray_Reference'), { maxNativeZoom: 16 }); }
+        else add(ESRI('World_Street_Map'), { maxNativeZoom: 18, attribution: 'Tiles © Esri, HERE, Garmin, © OpenStreetMap contributors' });
+    } else add('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { className: dark ? 'trk-tiles-dark' : '', attribution: OSM_ATTR });
     map.getContainer().dataset.style = s;
 }
 function layersSheet() {

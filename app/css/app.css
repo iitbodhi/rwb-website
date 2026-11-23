@@ -2422,7 +2422,7 @@ html.lite .trk-me-dot{animation:none}
 .trk-style.on{border-color:var(--orange)}
 .trk-style b{font-size:.9rem}.trk-style small{font-size:.72rem;color:var(--muted);line-height:1.25}
 .ts-prev{height:66px;border-radius:10px;margin-bottom:4px;background-color:#f2efe9}
-.ts-prev.clean{background:linear-gradient(90deg,transparent 46%,#fff 46% 54%,transparent 54%),linear-gradient(0deg,transparent 40%,#fcd9a8 40% 50%,transparent 50%),radial-gradient(circle at 78% 24%,#cde9c4 18%,transparent 19%),#f4f1ec}
+.ts-prev.clean{background:linear-gradient(90deg,transparent 46%,#fff 46% 54%,transparent 54%),linear-gradient(0deg,transparent 40%,#f5e7a8 40% 50%,transparent 50%),radial-gradient(circle at 78% 24%,#d3e6c9 18%,transparent 19%),#f2f0eb}
 .ts-prev.street{background:linear-gradient(90deg,transparent 30%,#f8c98a 30% 36%,transparent 36%),linear-gradient(0deg,transparent 60%,#fff 60% 66%,transparent 66%),linear-gradient(35deg,transparent 48%,#aad3df 48% 58%,transparent 58%),#efe9df}
 .ts-prev.satellite{background:radial-gradient(circle at 30% 30%,#5f7f43 20%,transparent 40%),radial-gradient(circle at 75% 70%,#3d5a2c 18%,transparent 40%),linear-gradient(120deg,transparent 45%,#a89f8c 45% 50%,transparent 50%),#4b6436}
 /* share sheet: pick the event you're riding */
