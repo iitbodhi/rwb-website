@@ -2326,3 +2326,106 @@ html.lite .gal-skel i{animation:none}
 /* RWB FAM bottom bar (Nov 2026): Home · Gallery · Track · Warriors · Events, so Track sits in the middle. Members don't see it */
 .tabbar a.tab-gal{display:none}
 body[data-fam] .tabbar a.tab-gal{display:flex}
+
+/* ===== Track v2 (Nov 2026): bigger map with floating glass controls, map styles, your speed, rider states, event chips ===== */
+.trk-map-box{position:relative;border-radius:22px;overflow:hidden;border:1px solid var(--line);box-shadow:var(--shadow);isolation:isolate}
+.trk-map{height:clamp(340px,60dvh,640px);border:0;border-radius:0}
+.trk-map .leaflet-control-attribution{font-size:.6rem;line-height:1.5;padding:1px 6px;background:color-mix(in srgb,var(--card) 75%,transparent);color:var(--muted);border-radius:8px 0 0 0}
+.trk-map .leaflet-control-attribution a{color:inherit}
+.trk-map-box.full{position:fixed;inset:0;z-index:60;border-radius:0;border:0}
+.trk-map-box.full .trk-map{height:100dvh}
+.trk-map-box.full .trk-chips,.trk-map-box.full .trk-fab{top:calc(10px + max(env(safe-area-inset-top),var(--safe-area-inset-top,0px)))}
+.trk-map-box.full .trk-hud,.trk-map-box.full .trk-fab{bottom:calc(26px + max(env(safe-area-inset-bottom),var(--safe-area-inset-bottom,0px)))}
+body.trk-full-on{overflow:hidden}
+.trk-glass,.tc,.tf,.trk-hud,.trk-follow{background:color-mix(in srgb,var(--card) 84%,transparent);backdrop-filter:saturate(1.5) blur(14px);-webkit-backdrop-filter:saturate(1.5) blur(14px);border:1px solid color-mix(in srgb,var(--line) 80%,transparent);box-shadow:0 4px 16px rgba(0,0,0,.14)}
+html.lite .tc:not(.on),html.lite .tf:not(.on),html.lite .trk-hud,html.lite .trk-follow{backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--card)}
+/* event chips across the top */
+.trk-chips{position:absolute;top:10px;left:10px;right:62px;z-index:500;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px}
+.trk-chips::-webkit-scrollbar{display:none}
+.tc{flex:none;display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:99px;font:600 .8rem/1.1 var(--body);color:var(--ink);cursor:pointer;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tc b{font-size:.72rem;min-width:20px;padding:2px 6px;border-radius:99px;background:var(--paper-2);text-align:center}
+.tc.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}.tc.on b{background:color-mix(in srgb,var(--paper) 22%,transparent)}
+.tc.ev.on{background:var(--orange);border-color:var(--orange);color:#fff}
+/* round buttons down the right side: full screen + style at the top, zoom + show all + me at the bottom */
+.trk-fab{position:absolute;top:10px;bottom:26px;right:10px;z-index:500;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.tf{pointer-events:auto;width:42px;height:42px;border-radius:14px;display:grid;place-items:center;color:var(--ink);cursor:pointer;padding:0}
+.tf svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tf svg .fill{fill:currentColor;stroke:none}
+.tf-zoom{margin-top:auto;display:grid;pointer-events:auto;border-radius:14px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.14)}
+.tf-zoom .tf{border-radius:0;box-shadow:none}.tf-zoom .tf+.tf{border-top:0}
+.tf.me{color:#2563eb}:root[data-theme=dark] .tf.me{color:#60a5fa}
+.tf.me.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.tf.busy{opacity:.55}
+/* your speed */
+.trk-hud{position:absolute;left:10px;bottom:26px;z-index:500;border-radius:16px;padding:6px 12px 7px;display:grid;gap:0}
+.hud-spd{display:flex;align-items:baseline;gap:5px}
+.hud-spd b{font:800 2.2rem/1 var(--display);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.hud-spd small{font:700 .75rem var(--body);color:var(--muted)}
+.hud-sub{display:flex;align-items:center;gap:6px;font-size:.72rem;font-weight:600;color:var(--muted);white-space:nowrap}
+.hud-sub .dot{width:7px;height:7px;border-radius:50%;background:#22c55e;flex:none}
+.trk-follow{position:absolute;top:56px;left:50%;transform:translateX(-50%);z-index:500;display:flex;align-items:center;gap:8px;padding:5px 6px 5px 14px;border-radius:99px;font-size:.82rem;white-space:nowrap}
+.trk-follow button{border:0;background:var(--paper-2);color:var(--ink);width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:.75rem}
+.trk-signal{top:56px;right:62px}
+/* you on the map */
+.trk-me-wrap{background:none;border:0}
+.trk-me-dot{display:block;width:18px;height:18px;margin:2px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-shadow:0 0 0 0 rgba(37,99,235,.45),0 2px 6px rgba(0,0,0,.3);animation:me-pulse 2s ease-out infinite}
+@keyframes me-pulse{0%{box-shadow:0 0 0 0 rgba(37,99,235,.45),0 2px 6px rgba(0,0,0,.3)}100%{box-shadow:0 0 0 14px rgba(37,99,235,0),0 2px 6px rgba(0,0,0,.3)}}
+html.lite .trk-me-dot{animation:none}
+.trk-me-wrap.hide,.trk-acc.hide{display:none}
+/* rider pins: ring colour = moving / stopped / no signal; arrow = direction; speed on the name */
+.trk-pin{display:flex;flex-direction:column;align-items:center;gap:3px;filter:drop-shadow(0 3px 6px rgba(0,0,0,.35))}
+.trk-ring{position:relative;width:44px;height:44px;margin-top:4px}
+.trk-ring .trk-face{position:absolute;inset:2px;width:auto;height:auto}
+.trk-pin.move .trk-face{border-color:#22c55e}
+.trk-pin.stop .trk-face{border-color:#f59e0b}
+.trk-pin.me .trk-face{border-color:var(--orange)}
+.trk-pin.sos .trk-face{border-color:#dc2626}
+.trk-hdg{position:absolute;inset:-8px;transform:rotate(var(--h));pointer-events:none}
+.trk-hdg::before{content:'';position:absolute;left:50%;top:0;margin-left:-6px;border:6px solid transparent;border-top:0;border-bottom:9px solid #22c55e}
+.trk-pin.me .trk-hdg::before{border-bottom-color:var(--orange)}
+.trk-pin em{display:inline-flex;align-items:center;gap:4px;max-width:96px;padding:2px 6px}
+.trk-pin em small{font:800 .6rem/1 var(--body);color:#fff;background:#16a34a;border-radius:4px;padding:2px 3px}
+.trk-pin.dim{opacity:.45}
+/* numbers at a glance */
+.trk-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.trk-stats:empty{display:none}
+.ts{display:grid;gap:2px;padding:10px 12px;border-radius:14px;background:var(--card);border:1px solid var(--line)}
+.ts b{font:800 1.45rem/1 var(--display);font-variant-numeric:tabular-nums}
+.ts small{font-size:.72rem;color:var(--muted);line-height:1.2}
+/* the rider list */
+.trk-row{gap:12px;padding:10px 12px}
+.tr-face{flex:none;border-radius:50%;box-shadow:0 0 0 2.5px var(--line);display:grid}
+.trk-row.move .tr-face{box-shadow:0 0 0 2.5px #22c55e}.trk-row.stop .tr-face{box-shadow:0 0 0 2.5px #f59e0b}.trk-row.sos .tr-face{box-shadow:0 0 0 2.5px #dc2626}
+.trk-row.stale .tr-face{opacity:.6}
+.trk-row .grow{flex:1}
+.tr-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr-ev{font-size:.78rem;font-weight:700;color:var(--orange);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr-meta{font-size:.8rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr-spd{flex:none;display:grid;justify-items:end;line-height:1}
+.tr-spd b{font:800 1.6rem/1 var(--display);color:#16a34a;font-variant-numeric:tabular-nums}:root[data-theme=dark] .tr-spd b{color:#4ade80}
+.tr-spd small{font-size:.66rem;color:var(--muted);font-weight:600}
+.trk-row.dim{opacity:.62}
+.trk-sub{font:700 .78rem var(--body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:8px 2px 0}
+.trk-empty{padding:4px 2px}
+/* the rider sheet */
+.rs-ev{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:14px;background:var(--orange-soft);color:var(--ink);text-decoration:none;margin-bottom:12px;font-size:1.2rem}
+.rs-ev .grow{display:grid;font-size:1rem}.rs-ev small{font-size:.72rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.rs-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.rs{display:grid;gap:2px;padding:10px;border-radius:12px;background:var(--paper-2)}
+.rs b{font:800 1.25rem/1.05 var(--display);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rs small{font-size:.7rem;color:var(--muted)}
+.rs-state{font-weight:700}.rs-state.move{color:#16a34a}.rs-state.stop{color:#d97706}.rs-state.stale{color:var(--muted)}
+.rs-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.rs-btns .btn{flex:1 1 30%;white-space:nowrap;padding-left:10px;padding-right:10px}
+/* map style picker */
+.trk-styles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.trk-style{display:grid;gap:3px;text-align:left;padding:8px;border-radius:16px;border:2px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+.trk-style.on{border-color:var(--orange)}
+.trk-style b{font-size:.9rem}.trk-style small{font-size:.72rem;color:var(--muted);line-height:1.25}
+.ts-prev{height:66px;border-radius:10px;margin-bottom:4px;background-color:#f2efe9}
+.ts-prev.clean{background:linear-gradient(90deg,transparent 46%,#fff 46% 54%,transparent 54%),linear-gradient(0deg,transparent 40%,#fcd9a8 40% 50%,transparent 50%),radial-gradient(circle at 78% 24%,#cde9c4 18%,transparent 19%),#f4f1ec}
+.ts-prev.street{background:linear-gradient(90deg,transparent 30%,#f8c98a 30% 36%,transparent 36%),linear-gradient(0deg,transparent 60%,#fff 60% 66%,transparent 66%),linear-gradient(35deg,transparent 48%,#aad3df 48% 58%,transparent 58%),#efe9df}
+.ts-prev.satellite{background:radial-gradient(circle at 30% 30%,#5f7f43 20%,transparent 40%),radial-gradient(circle at 75% 70%,#3d5a2c 18%,transparent 40%),linear-gradient(120deg,transparent 45%,#a89f8c 45% 50%,transparent 50%),#4b6436}
+/* share sheet: pick the event you're riding */
+.trk-evpick{margin-bottom:12px}.trk-evpick p{margin-bottom:6px}
+.trk-evs{display:flex;flex-wrap:wrap;gap:6px}
+.trk-evs .chip{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}

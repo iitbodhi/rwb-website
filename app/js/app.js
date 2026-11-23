@@ -5658,14 +5658,14 @@ async function notifCheck(perm) {
     });
 }
 async function startShare(hours, eventId = null, note = '') {
-    const perm = await nativeTrackPerms();
+    const wasOn = sharing(), perm = await nativeTrackPerms();
     if (!perm.ok) throw new Error('RWB needs your location to share it. Tap Share again and allow location.');
     if (!(await locationOn())) throw new Error('Location is off. Turn on Location to share your live location.');
     try { localStorage.removeItem(STOP_KEY); } catch { /* ignore */ }
     const p = await quickStartFix();
     note = String(note || '').replace(/\s+/g, ' ').trim().slice(0, TRACK_NOTE_MAX);
     const until = await api.trackStart(p.lat, p.lng, p.acc, hours, eventId, note);
-    trk.until = Date.parse(until) || Date.now() + hours * 36e5; trk.event = eventId; trk.note = note; trk.sent = p; trk.sentAt = Date.now(); trk.last = p;
+    trk.until = Date.parse(until) || Date.now() + hours * 36e5; if (!wasOn) trk.myTop = 0; trk.event = eventId; trk.note = note; trk.sent = p; trk.sentAt = Date.now(); trk.last = p;
     trk.svc = false; let svc = null;
     if (await hasSvc()) svc = await svcStart().catch(e => { svcErr = String(e?.message || e); toast(`Background sharing couldn't start: ${svcErr}. Sharing works while the app is open.`, true); return null; });
     trackSave({ until: trk.until, event: eventId, note, svc: trk.svc });
@@ -5933,18 +5933,33 @@ function trackMenu() {
         body.querySelector('[data-x=sos]').onclick = () => sosSheet();
     });
 }
+/* RWB events on right now (from 3 hours before the start to 3 hours after the end) */
+const eventsNow = () => { const t = Date.now(); return (state.evd?.events || []).filter(e => e.status === 'live' && t >= Date.parse(e.starts_at) - 3 * 36e5
+    && t <= (e.ends_at ? Date.parse(e.ends_at) : Date.parse(e.starts_at) + 12 * 36e5) + 3 * 36e5); };
 function shareSheet(eventId = null, eventTitle = '') {
     const on = sharing();
     openSheet(on ? 'Sharing your location' : 'Share live location', `${on ? `<div class="trk-live"><span class="dot"></span><span class="grow"><b>You're sharing live</b><span class="small muted">${esc(leftTxt(trk.until))}${trk.event ? ' · for an event ride' : ''}</span></span></div>
             <button class="btn danger block" data-x="stop" style="margin:12px 0 18px">Stop sharing</button><p class="small muted" style="margin-bottom:8px">Or share for:</p>` : `<p class="small muted" style="margin-bottom:12px">Every RWB member on the app can see you on the Track map while you share.${eventTitle ? ` You'll show as riding <b>${esc(eventTitle)}</b>.` : ''}</p>`}
+        <div class="trk-evpick" id="trk-evpick" hidden></div>
         <label class="trk-note">Add a note <span class="muted small">(optional)</span><input id="trk-note" maxlength="${TRACK_NOTE_MAX}" placeholder="e.g. towards Simlipal!" value="${esc(on ? trk.note || '' : '')}" autocomplete="off"><small class="hint"><span id="trk-note-n">${on ? (trk.note || '').length : 0}</span>/${TRACK_NOTE_MAX} · shows next to your name on the map</small></label>
         <div class="trk-hours">${TRACK_HOURS.map(([h, t]) => `<button type="button" class="chip" data-h="${h}">${t}</button>`).join('')}</div>
         ${NativeGeo() ? '<p class="small muted" style="margin-top:12px">Keeps sharing with the screen locked. A small notification shows while it runs.</p>'
             : '<p class="small muted trk-tip" style="margin-top:12px">💡 Keep the RWB App open on your phone mount: we keep the screen awake. If you lock the phone or switch apps, sharing pauses until you come back. Plug in a charger for long rides.</p>' + (/android/i.test(navigator.userAgent) ? '<p class="small" style="margin-top:8px">📲 <a href="' + apkUrl() + '"><b>Get the RWB Android app</b></a> to keep sharing with the screen locked.</p>' : '')}`, body => {
         body.querySelector('[data-x=stop]')?.addEventListener('click', () => { closeSheet(); stopShare(); });
         const note = body.querySelector('#trk-note'); note.oninput = () => { body.querySelector('#trk-note-n').textContent = note.value.length; };
+        /* riding an RWB event that's on now? pick it, so you show under it on the map (Going to one picks it for you) */
+        let pick = eventId ?? (on ? trk.event : null);
+        const evBox = body.querySelector('#trk-evpick'), drawEv = () => {
+            const list = eventsNow(); if (pick && !list.some(e => e.id === pick)) { const e = (state.evd?.events || []).find(x => x.id === pick); if (e) list.unshift(e); }
+            if (!list.length || isFam()) { evBox.hidden = true; return; }
+            if (pick == null && !on) { const going = list.find(e => state.evd?.mine?.[e.id]?.status === 'going'); if (going) pick = going.id; }
+            evBox.hidden = false;
+            evBox.innerHTML = `<p class="small muted">Riding an RWB event?</p><div class="trk-evs"><button type="button" class="chip" aria-pressed="${!pick}" data-ev="">No event</button>${list.map(e => `<button type="button" class="chip" aria-pressed="${e.id === pick}" data-ev="${e.id}">🏍️ ${esc(e.title)}</button>`).join('')}</div>`;
+            evBox.querySelectorAll('[data-ev]').forEach(c => c.onclick = () => { pick = c.dataset.ev ? Number(c.dataset.ev) : null; drawEv(); });
+        };
+        drawEv(); if (!isFam()) loadEvents().then(() => { if (evBox.isConnected) drawEv(); }).catch(() => {});
         body.querySelectorAll('[data-h]').forEach(b => b.onclick = () => busy(b, async () => {
-            await startShare(Number(b.dataset.h), eventId ?? (on ? trk.event : null), note.value); closeSheet();
+            await startShare(Number(b.dataset.h), pick, note.value); closeSheet();
             if (!location.hash.startsWith('#track') && !location.hash.startsWith('#events/')) location.hash = '#track'; else refreshTrack();
         }));
     });
@@ -6019,94 +6034,269 @@ function loadLeaflet() {
     });
 }
 const darkMode = () => document.documentElement.dataset.theme === 'dark' || (document.documentElement.dataset.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
-function riderIcon(L, r, sos = false) {
-    const stale = !sos && Date.now() - Date.parse(r.at) > 5 * 6e4;
-    const pic = r.avatar ? `<img src="${esc(r.avatar)}" alt="" onerror="this.remove()">` : '';
-    return L.divIcon({ className: 'trk-pin-wrap', iconSize: [46, 58], iconAnchor: [23, 50],
-        html: `<div class="trk-pin${r.me ? ' me' : ''}${stale ? ' stale' : ''}${sos ? ' sos' : ''}"><span class="trk-face">${pic}<i>${esc(initials({ full_name: r.name }))}</i></span>${sos ? '<em>SOS</em>' : `<em>${esc(r.nick || r.name.split(' ')[0])}</em>`}</div>` });
+/* map styles: Clean (CARTO, has a real night map), Street (OpenStreetMap), Satellite (Esri + place names) */
+const TRK_STYLE_KEY = 'rwb-trk-style';
+const TRK_STYLES = [['clean', 'Clean', 'Easy to read, with a proper night map'], ['street', 'Street', 'Every lane and landmark'], ['satellite', 'Satellite', 'Real photos from above']];
+const trkStyle = () => { try { const s = localStorage.getItem(TRK_STYLE_KEY); return TRK_STYLES.some(x => x[0] === s) ? s : 'clean'; } catch { return 'clean'; } };
+const OSM_ATTR = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+function trkTiles(L, map) {
+    (trk.tiles || []).forEach(t => map.removeLayer(t)); trk.tiles = [];
+    const s = trkStyle(), dark = darkMode(), add = (url, o) => trk.tiles.push(L.tileLayer(url, { maxZoom: 19, ...o }).addTo(map));
+    if (s === 'street') add('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { className: dark ? 'trk-tiles-dark' : '', attribution: OSM_ATTR });
+    else if (s === 'satellite') {
+        add('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 18, attribution: 'Imagery © Esri, Maxar, Earthstar Geographics' });
+        add('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', className: 'trk-labels', attribution: `${OSM_ATTR} © <a href="https://carto.com/attributions">CARTO</a>` });
+    } else add(`https://{s}.basemaps.cartocdn.com/${dark ? 'dark_all' : 'rastertiles/voyager'}/{z}/{x}/{y}{r}.png`, { subdomains: 'abcd', attribution: `${OSM_ATTR} © <a href="https://carto.com/attributions">CARTO</a>` });
+    map.getContainer().dataset.style = s;
+}
+function layersSheet() {
+    const cur = trkStyle();
+    openSheet('Map style', `<div class="trk-styles">${TRK_STYLES.map(([k, t, s]) => `<button type="button" class="trk-style${k === cur ? ' on' : ''}" data-s="${k}"><span class="ts-prev ${k}"></span><b>${t}</b><small>${s}</small></button>`).join('')}</div>`, body => {
+        body.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { try { localStorage.setItem(TRK_STYLE_KEY, b.dataset.s); } catch { /* ignore */ } if (trk.map) trkTiles(trk.L, trk.map); closeSheet(); });
+    });
+}
+
+/* ---------- what each rider is doing right now ---------- */
+const kmhOf = r => (r.spd != null && r.spd >= 0 ? r.spd * 3.6 : null);
+const durTxt = ms => { const m = Math.max(1, Math.round(ms / 6e4)); return m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ' ' + (m % 60) + ' min' : ''}` : `${m} min`; };
+function rState(r) {
+    const now = Date.now(), age = now - Date.parse(r.at);
+    if (age > SIG_STALE) return { k: 'stale', txt: `Last seen ${timeAgo(r.at)}` };
+    const kmh = kmhOf(r), still = r.moved_at ? now - Date.parse(r.moved_at) : 0;
+    if (kmh != null && kmh >= 4 && still < 150000) return { k: 'move', kmh: Math.round(kmh), txt: `${Math.round(kmh)} km/h` };
+    return { k: 'stop', txt: still > 150000 ? `Stopped · ${durTxt(still)}` : 'Stopped' };
+}
+const evName = r => r.event || (r.event_id ? (state.evd?.events || []).find(e => e.id === r.event_id)?.title : '') || '';
+const rideKm = r => (r.ride_km > 0 ? `${Number(r.ride_km).toLocaleString('en-IN', { maximumFractionDigits: 1 })} km` : '');
+const distTxt = m => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`);
+
+const TI = {   /* small line icons for the map buttons */
+    layers: '<svg viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/></svg>',
+    fit: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.5-3.6 3-5.6 6-5.6s5.5 2 6 5.6"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.4c2.6.1 4.2 1.8 4.5 4.6"/></svg>',
+    me: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.6" class="fill"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>',
+    full: '<svg viewBox="0 0 24 24"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></svg>',
+    shrink: '<svg viewBox="0 0 24 24"><path d="M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5"/></svg>',
+    plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>', minus: '<svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>'
+};
+function riderIcon(L, r, sos = false, dim = false) {
+    const st = sos ? { k: 'sos' } : rState(r), pic = r.avatar ? `<img src="${esc(r.avatar)}" alt="" onerror="this.remove()">` : '';
+    const arrow = st.k === 'move' && r.hdg != null ? `<b class="trk-hdg" style="--h:${Math.round(r.hdg)}deg"></b>` : '';
+    const label = sos ? 'SOS' : esc(r.nick || r.name.split(' ')[0]);
+    const html = `<div class="trk-pin ${st.k}${r.me ? ' me' : ''}${sos ? ' sos' : ''}${dim ? ' dim' : ''}"><span class="trk-ring">${arrow}<span class="trk-face">${pic}<i>${esc(initials({ full_name: r.name }))}</i></span></span><em>${label}${st.k === 'move' ? `<small>${st.kmh}</small>` : ''}</em></div>`;
+    return { html, icon: () => L.divIcon({ className: 'trk-pin-wrap', iconSize: [56, 62], iconAnchor: [28, 26], html }) };
 }
 async function viewTrack() {
     const param = state.param || '';
     trk.filter = /^e\d+$/.test(param) ? Number(param.slice(1)) : null;
+    if (isFam()) trk.filter = null;
     app.innerHTML = top('Track') + `<section class="trk-wrap">
-        <div class="trk-map-box"><div id="trk-map" class="trk-map"><p class="muted" style="padding:20px">Loading the map…</p></div><div class="trk-signal" id="trk-signal" role="status" hidden></div>
-</div>
+        <div class="trk-map-box" id="trk-box"><div id="trk-map" class="trk-map"></div>
+            <div class="trk-chips" id="trk-chips"></div>
+            <div class="trk-fab"><button type="button" class="tf" data-act="trk-full" aria-label="Full screen" id="trk-fullb">${TI.full}</button><button type="button" class="tf" data-act="trk-layers" aria-label="Map style">${TI.layers}</button>
+                <span class="tf-zoom"><button type="button" class="tf" data-act="trk-zin" aria-label="Zoom in">${TI.plus}</button><button type="button" class="tf" data-act="trk-zout" aria-label="Zoom out">${TI.minus}</button></span>
+                <button type="button" class="tf" data-act="trk-fit" aria-label="Show everyone">${TI.fit}</button><button type="button" class="tf me" data-act="trk-me" aria-label="Centre on me" id="trk-meb">${TI.me}</button></div>
+            <div class="trk-hud" id="trk-hud" hidden></div>
+            <div class="trk-follow" id="trk-follow" hidden></div>
+            <div class="trk-signal" id="trk-signal" role="status" hidden></div>
+        </div>
         <div class="trk-bar">
             <div class="trk-status" id="trk-status"></div>
             <div class="trk-actions"${isFam() ? ' hidden' : ''}><button class="btn" data-act="trk-share" id="trk-share"></button><button class="btn sos-btn" data-act="trk-sos">🆘 SOS</button></div>
         </div>
-        <div id="trk-list" class="trk-list"></div></section>`;
+        <div class="trk-stats" id="trk-stats"></div>
+        <div id="trk-list" class="trk-list">${SKEL(3)}</div></section>`;
     actions = { 'trk-share': () => shareSheet(trk.filter, trk.filter ? (state.evd?.events || []).find(e => e.id === trk.filter)?.title : ''), 'trk-sos': () => sosSheet(),
-        'trk-all': () => { location.hash = '#track'; }, 'trk-rider': el => openRider(el.dataset.k), 'trk-fit': () => fitAll(true) };
-    if (isFam()) trk.filter = null;
-    trk.fitted = false; trk.sosFocused = false; trk.focus = null; trk.markers.clear(); trk.sosMarkers.clear(); trk.map = null;
+        'trk-all': () => setFilter(null), 'trk-ev': el => setFilter(Number(el.dataset.e)), 'trk-rider': el => openRider(el.dataset.k), 'trk-fit': () => { trkFollow(null); fitAll(true); },
+        'trk-me': () => centreMe(), 'trk-layers': () => layersSheet(), 'trk-full': () => trkFull(), 'trk-zin': () => trk.map?.zoomIn(), 'trk-zout': () => trk.map?.zoomOut(),
+        'trk-unfollow': () => trkFollow(null) };
+    $('#trk-box').addEventListener('click', e => {   /* full screen: the box sits outside the page, so its buttons need their own listener */
+        if (app.contains(e.currentTarget)) return;
+        const el = e.target.closest('[data-act]'), fn = el && actions[el.dataset.act]; if (fn) { e.preventDefault(); fn(el); }
+    });
+    trk.fitted = false; trk.sosFocused = false; trk.focus = null; trk.follow = null; trk.markers.clear(); trk.sosMarkers.clear(); trk.map = null; trk.meDot = null; trk.tiles = []; document.querySelectorAll('body > .trk-map-box').forEach(b => b.remove()); trk.boxHome = null; document.body.classList.remove('trk-full-on');
     let L; try { L = trk.L = await loadLeaflet(); } catch (e) { $('#trk-map').innerHTML = `<p class="warn" style="margin:16px">${esc(e.message)}</p>`; }
     if (L && $('#trk-map')) {
-        $('#trk-map').innerHTML = '';
-        const map = trk.map = L.map('trk-map', { zoomControl: false, attributionControl: true }).setView([22.5726, 88.3639], 11);
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: darkMode() ? 'trk-tiles-dark' : '',
-            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map);
-        L.control.zoom({ position: 'topright' }).addTo(map);
-        const fit = L.control({ position: 'topright' }); fit.onAdd = () => { const d = L.DomUtil.create('button', 'trk-fit'); d.type = 'button'; d.title = 'Show everyone'; d.innerHTML = '⤢'; d.onclick = () => fitAll(true); return d; }; fit.addTo(map);
+        const map = trk.map = L.map('trk-map', { zoomControl: false, attributionControl: true, zoomSnap: 0.5 }).setView([22.5726, 88.3639], 11);
+        map.attributionControl.setPrefix(false); map.attributionControl.setPosition('bottomright');
+        trkTiles(L, map);
+        map.on('dragstart', () => { if (trk.follow) trkFollow(null); });
     }
+    if (!isFam()) loadEvents().then(() => { if (location.hash.startsWith('#track')) refreshTrack(true); }).catch(() => {});
     await refreshTrack();
+    viewWatch(true);
     clearInterval(trk.poll);
-    trk.poll = setInterval(() => { if (!location.hash.startsWith('#track')) return clearInterval(trk.poll); if (document.visibilityState === 'visible') refreshTrack(); }, 15000);
+    trk.poll = setInterval(() => { if (!location.hash.startsWith('#track')) { viewWatch(false); return clearInterval(trk.poll); } if (document.visibilityState === 'visible') refreshTrack(); }, 15000);
     clearInterval(trk.sigTick);
-    trk.sigTick = setInterval(() => { if (!location.hash.startsWith('#track')) return clearInterval(trk.sigTick); trackSignal(); }, 7000);
+    trk.sigTick = setInterval(() => { if (!location.hash.startsWith('#track')) return clearInterval(trk.sigTick); trackSignal(); hud(); }, 7000);
 }
-async function refreshTrack() {
+function setFilter(id) {
+    trk.filter = id || null; trk.fitted = false;
+    history.replaceState(null, '', id ? `#track/e${id}` : '#track');
+    refreshTrack(true);
+}
+/* full-screen map (the phone's Back button or the button again closes it) */
+function trkFull(on) {
+    const box = $('#trk-box'); if (!box) return;
+    on = on ?? !box.classList.contains('full');
+    /* moved to <body> while full screen: the screen's own entrance effect would otherwise keep it inside the page */
+    if (on && !trk.boxHome) { trk.boxHome = document.createComment('trk-box'); box.before(trk.boxHome); document.body.append(box); }
+    if (!on && trk.boxHome) { trk.boxHome.isConnected ? trk.boxHome.replaceWith(box) : box.remove(); trk.boxHome = null; }
+    box.classList.toggle('full', on); document.body.classList.toggle('trk-full-on', on);
+    const b = $('#trk-fullb'); if (b) { b.innerHTML = on ? TI.shrink : TI.full; b.setAttribute('aria-label', on ? 'Exit full screen' : 'Full screen'); }
+    setTimeout(() => trk.map?.invalidateSize(), 30);
+}
+addEventListener('hashchange', () => { if (!location.hash.startsWith('#track')) { if (trk.boxHome) trkFull(false); document.body.classList.remove('trk-full-on'); viewWatch(false); } });
+document.addEventListener('visibilitychange', () => { if (location.hash.startsWith('#track') && trk.map) viewWatch(document.visibilityState === 'visible'); });
+
+/* ---------- your own position on the map, live speed (only while the Track screen is open) ---------- */
+async function viewWatch(on) {
+    if (!on || !('geolocation' in navigator)) { if (trk.vw != null) { navigator.geolocation.clearWatch(trk.vw); trk.vw = null; } return; }
+    if (trk.vw != null) return;
+    if (!NATIVE && !trk.vfix) {   /* don't pop the browser's location question just for looking at the map */
+        try { const p = await navigator.permissions?.query({ name: 'geolocation' }); if (p && p.state !== 'granted') return; } catch { /* unknown: carry on */ }
+    }
+    trk.vw = navigator.geolocation.watchPosition(p => onViewFix(posOf(p)), () => {}, { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
+}
+function onViewFix(p) {
+    const prev = trk.vfix; let spd = p.spd;
+    if ((spd == null || Number.isNaN(spd)) && prev) { const dt = (p.t - prev.t) / 1000; if (dt > 0.5 && dt < 20) spd = distM(prev, p) / dt; }
+    p.kmh = spd != null && p.acc <= 60 ? spd * 3.6 : null;
+    if (p.kmh != null && p.kmh < 3) p.kmh = 0;
+    if (sharing() && p.kmh) trk.myTop = Math.max(trk.myTop || 0, p.kmh);
+    trk.vfix = p; onFix(p);
+    if (!prev && trk.data) refreshTrack(true);   /* first fix: distances in the list */
+    drawMe(); hud();
+    if (trk.follow === 'me' && trk.map) trk.map.panTo([p.lat, p.lng], { animate: true, duration: 0.4 });
+}
+function drawMe() {
+    const L = trk.L, map = trk.map, p = trk.vfix; if (!L || !map || !p) return;
+    const mine = trk.data?.riders.find(r => r.me), mk = mine && trk.markers.get(mine.id);
+    if (mk) mk.setLatLng([p.lat, p.lng]);   /* sharing: your pin follows your phone, not the last sent spot */
+    if (!trk.meDot) {
+        trk.meAcc = L.circle([p.lat, p.lng], { radius: p.acc || 30, className: "trk-acc", color: "#3b82f6", weight: 1, opacity: .35, fillOpacity: .12, interactive: false }).addTo(map);
+        trk.meDot = L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'trk-me-wrap', iconSize: [22, 22], iconAnchor: [11, 11], html: '<span class="trk-me-dot"></span>' }), interactive: false, zIndexOffset: 400 }).addTo(map);
+    }
+    trk.meDot.setLatLng([p.lat, p.lng]); trk.meAcc.setLatLng([p.lat, p.lng]).setRadius(Math.min(p.acc || 30, 300));
+    trk.meDot.getElement()?.classList.toggle('hide', !!mk); trk.meAcc.getElement?.()?.classList.toggle('hide', !!mk);
+}
+function hud() {
+    const el = $('#trk-hud'); if (!el) return;
+    const p = trk.vfix, fresh = p && Date.now() - p.t < 30000;
+    if (!fresh || isFam()) { el.hidden = true; return; }
+    const mine = trk.data?.riders.find(r => r.me), top = Math.round(Math.max(mine?.top_spd ? mine.top_spd * 3.6 : 0, trk.myTop || 0));
+    el.hidden = false;
+    el.innerHTML = `<span class="hud-spd"><b>${p.kmh == null ? '–' : Math.round(p.kmh)}</b><small>km/h</small></span><span class="hud-sub">${sharing()
+        ? `<span class="dot"></span>${mine && rideKm(mine) ? `${rideKm(mine)} this ride` : 'Live'}${top ? ` · top ${top}` : ''}`
+        : 'Your speed'}${p.acc > 60 ? ' · weak GPS' : ''}</span>`;
+}
+async function centreMe() {
+    const map = trk.map; if (!map) return;
+    const b = $('#trk-meb');
+    if (trk.follow === 'me') { trkFollow(null); return; }
+    let p = trk.vfix && Date.now() - trk.vfix.t < 30000 ? trk.vfix : null;
+    if (!p) { b?.classList.add('busy'); try { p = await gpsFix(10000); onViewFix(p); viewWatch(true); } catch (e) { toast(e.message, true); return; } finally { b?.classList.remove('busy'); } }
+    map.setView([p.lat, p.lng], Math.max(map.getZoom(), 16), { animate: true });
+    trkFollow('me');
+}
+/* keep the map on you or on one rider as they move; dragging the map stops it */
+function trkFollow(who) {
+    trk.follow = who;
+    $('#trk-meb')?.classList.toggle('on', who === 'me');
+    const el = $('#trk-follow'); if (!el) return;
+    const r = who && who !== 'me' ? trk.data?.riders.find(x => x.id === who) : null;
+    el.hidden = !r;
+    if (r) el.innerHTML = `<span>Following <b>${esc(r.nick || firstName({ full_name: r.name }))}</b></span><button type="button" data-act="trk-unfollow" aria-label="Stop following">✕</button>`;
+}
+async function refreshTrack(redraw) {
     if (!$('#trk-status')) return;
-    let d; try { d = trk.data = await api.trackView(); } catch (e) { $('#trk-status').innerHTML = `<span class="warn small">${esc(e.message)}</span>`; return; }
-    const riders = trk.filter ? d.riders.filter(r => r.event_id === trk.filter) : d.riders;
-    const ev = trk.filter ? (state.evd?.events || []).find(e => e.id === trk.filter) : null;
-    const rider = d.fam ? riders.find(r => r.mine) : null, rName = esc(firstName(state.fam?.member));
+    let d = trk.data;
+    if (!redraw || !d) { try { d = trk.data = await api.trackView(); } catch (e) { $('#trk-status').innerHTML = `<span class="warn small">${esc(e.message)}</span>`; if ($('#trk-list .skel')) $('#trk-list').innerHTML = ''; return; } }
+    if (!$('#trk-status')) return;
+    const f = trk.filter, onEv = r => f && r.event_id === f;
+    const ev = f ? (state.evd?.events || []).find(e => e.id === f) || { title: d.riders.find(onEv)?.event || 'this ride' } : null;
+    const rider = d.fam ? d.riders.find(r => r.mine) : null, rName = esc(firstName(state.fam?.member));
     if (NATIVE && sharing()) svcHealth();
     if (!d.fam) { const mine = d.sos.find(x => x.me); if (mine) setMySos({ id: mine.id, at: Date.parse(mine.at) || Date.now() }); else setMySos(null); }
     const sosB = app.querySelector('[data-act=trk-sos]'); if (sosB) sosB.textContent = mySos() ? '🆘 SOS sent · Cancel' : '🆘 SOS';
-    $('#trk-status').innerHTML = d.fam ? `<span class="small muted">${rider ? `<b>${rName}</b> is sharing live${riders.length > 1 ? ` · ${riders.length - 1} more on the same ride` : ''}` : `${rName} isn't sharing a live location right now. You'll see them here when they share on Track.`}${d.sos.length ? ' · <b class="sos-txt">SOS</b>' : ''}</span>` : `${sharing() ? `<span class="trk-live-pill"><span class="dot"></span>You're live · ${esc(leftTxt(trk.until))}</span>` : ''}
-        <span class="small muted">${riders.length ? `${riders.length} rider${riders.length === 1 ? '' : 's'} live${ev ? ` on ${esc(ev.title)}` : ''}` : 'No one is sharing right now'}${d.sos.length ? ` · <b class="sos-txt">${d.sos.length} SOS</b>` : ''}</span>
-        ${trk.filter ? '<button class="linkish small" data-act="trk-all">Show everyone</button>' : ''}`;
+    const moving = d.riders.filter(r => rState(r).k === 'move');
+    $('#trk-status').innerHTML = d.fam ? `<span class="small muted">${rider ? `<b>${rName}</b> is sharing live${d.riders.length > 1 ? ` · ${d.riders.length - 1} more on the same ride` : ''}` : `${rName} isn't sharing a live location right now. You'll see them here when they share on Track.`}${d.sos.length ? ' · <b class="sos-txt">SOS</b>' : ''}</span>`
+        : `${sharing() ? `<span class="trk-live-pill"><span class="dot"></span>You're live · ${esc(leftTxt(trk.until))}</span>` : ''}${d.sos.length ? `<b class="sos-txt small">${d.sos.length} SOS</b>` : ''}${d.riders.length ? '' : '<span class="small muted">No one is sharing right now</span>'}`;
     const sb = $('#trk-share'); if (sb) sb.textContent = sharing() ? '🟢 Sharing · Stop / change' : '📍 Share my location';
-    $('#trk-list').innerHTML = [...d.sos.map(s => ({ ...s, k: 's' + s.id, sos: true })), ...riders.map(r => ({ ...r, k: 'r' + r.id }))].map(r => `<button class="trk-row${r.sos ? ' sos' : ''}" data-act="trk-rider" data-k="${r.k}">${face({ full_name: r.name, avatar_url: r.avatar }, 'avatar sm')}
-        <span class="grow"><b>${r.sos ? '🆘 ' : ''}${esc(r.name)}${r.me ? ' <span class="muted">(you)</span>' : r.mine ? ' <span class="muted">(your rider)</span>' : ''}</b>${r.note && !r.sos ? `<span class="trk-note-txt">“${esc(r.note)}”</span>` : ''}<span class="small muted">${r.sos ? 'SOS ' + timeAgo(r.at) : `${r.spd > 1 ? Math.round(r.spd * 3.6) + ' km/h · ' : ''}updated ${timeAgo(r.at)}`}${trk.last && !r.me ? ' · ' + kmAway(r) : ''}</span></span><span class="chev">›</span></button>`).join('');
-    drawMarkers(riders, d.sos);
+    /* the event chips on the map: everyone, then every event someone is riding */
+    const evs = new Map(); d.riders.forEach(r => { if (r.event_id) { const x = evs.get(r.event_id) || { id: r.event_id, title: evName(r), n: 0 }; x.n++; evs.set(r.event_id, x); } });
+    if (f && !evs.has(f)) evs.set(f, { id: f, title: ev?.title || 'Ride', n: 0 });
+    const chips = $('#trk-chips');
+    if (chips) chips.innerHTML = d.fam || (!evs.size && !d.riders.length) ? '' : `<button type="button" class="tc${f ? '' : ' on'}" data-act="trk-all">Everyone <b>${d.riders.length}</b></button>${[...evs.values()].map(x => `<button type="button" class="tc ev${x.id === f ? ' on' : ''}" data-act="trk-ev" data-e="${x.id}">🏍️ ${esc(x.title || 'Event ride')} <b>${x.n}</b></button>`).join('')}`;
+    /* numbers at a glance */
+    const group = f ? d.riders.filter(onEv) : d.riders;
+    let spread = 0; if (f && group.length > 1) group.forEach((a, i) => group.slice(i + 1).forEach(b => { spread = Math.max(spread, distM(a, b)); }));
+    const gm = group.filter(r => rState(r).k === 'move'), avg = gm.length ? Math.round(gm.reduce((s, r) => s + kmhOf(r), 0) / gm.length) : 0;
+    const tile = (v, l) => `<span class="ts"><b>${v}</b><small>${l}</small></span>`;
+    const stats = $('#trk-stats');
+    if (stats) stats.innerHTML = !d.riders.length ? '' : f
+        ? tile(group.length, 'on this ride') + tile(group.length > 1 ? distTxt(spread) : '–', 'group spread') + tile(avg ? avg : '–', 'avg km/h moving')
+        : tile(d.riders.length, d.riders.length === 1 ? 'rider live' : 'riders live') + tile(moving.length, 'on the move') + tile(d.riders.filter(r => r.event_id).length, 'on RWB events');
+    /* the list: SOS, you, this ride's riders, then the closest */
+    const here = trk.vfix || trk.last, near = r => (here ? distM(here, r) : 0);
+    const sorted = [...d.riders].sort((a, b) => (b.me - a.me) || (!!b.mine - !!a.mine) || ((onEv(b) ? 1 : 0) - (onEv(a) ? 1 : 0)) || (here ? near(a) - near(b) : a.name.localeCompare(b.name)));
+    const row = r => { const st = r.sos ? { k: 'sos' } : rState(r), en = !r.sos && evName(r), km = !r.sos && rideKm(r);
+        return `<button class="trk-row ${st.k}${f && !r.sos && !onEv(r) ? ' dim' : ''}" data-act="trk-rider" data-k="${r.k}"><span class="tr-face">${face({ full_name: r.name, avatar_url: r.avatar }, 'avatar sm')}</span>
+        <span class="grow"><b class="tr-name">${r.sos ? '🆘 ' : ''}${esc(r.name)}${r.me ? ' <span class="muted">(you)</span>' : r.mine ? ' <span class="muted">(your rider)</span>' : ''}</b>
+            ${en ? `<span class="tr-ev">🏍️ ${esc(en)}</span>` : ''}${r.note && !r.sos ? `<span class="trk-note-txt">“${esc(r.note)}”</span>` : ''}
+            <span class="tr-meta">${r.sos ? 'SOS ' + timeAgo(r.at) : [st.k === 'move' ? '' : st.txt, here && !r.me ? distTxt(near(r)) + ' away' : '', km ? km + ' ridden' : ''].filter(Boolean).join(' · ') || 'Live'}</span></span>
+        ${st.k === 'move' ? `<span class="tr-spd"><b>${st.kmh}</b><small>km/h</small></span>` : '<span class="chev">›</span>'}</button>`; };
+    const sosRows = d.sos.map(s => row({ ...s, k: 's' + s.id, sos: true })).join('');
+    const mainRows = sorted.filter(r => !f || r.me || onEv(r)).map(r => row({ ...r, k: 'r' + r.id })).join('');
+    const otherRows = f ? sorted.filter(r => !r.me && !onEv(r)).map(r => row({ ...r, k: 'r' + r.id })).join('') : '';
+    $('#trk-list').innerHTML = sosRows + (mainRows || (f ? '<p class="small muted trk-empty">No one is sharing for this ride yet.</p>' : '')) + (otherRows ? `<h3 class="trk-sub">Also riding now</h3>${otherRows}` : '');
+    drawMarkers(d.riders, d.sos);
+    drawMe(); hud();
+    if (trk.follow && trk.follow !== 'me' && trk.map) { const r = d.riders.find(x => x.id === trk.follow); if (r) trk.map.panTo([r.lat, r.lng]); else trkFollow(null); }
     if (!trk.fitted && trk.map) { trk.fitted = true; fitAll(false); }
     if (state.param === 'sos' && d.sos[0] && trk.map && !trk.sosFocused) { trk.sosFocused = true; trk.map.setView([d.sos[0].lat, d.sos[0].lng], 15); }
     if (d.staff) alertNewSos(d.sos);
     trackSignal();
 }
-const kmAway = r => { const m = distM(trk.last, r); return m < 1000 ? `${Math.round(m)} m away` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km away`; };
+const kmAway = r => distTxt(distM(trk.vfix || trk.last, r)) + ' away';
 function drawMarkers(riders, sos) {
     const L = trk.L, map = trk.map; if (!L || !map) return;
-    const sync = (store, list, key, isSos) => {
+    const sync = (store, list, isSos) => {
         const keep = new Set();
-        list.forEach(r => { const k = key(r); keep.add(k); let m = store.get(k);
-            if (!m) { m = L.marker([r.lat, r.lng], { icon: riderIcon(L, r, isSos), zIndexOffset: isSos ? 1000 : r.me ? 500 : 0 }).addTo(map); m.on('click', () => openRider((isSos ? 's' : 'r') + (isSos ? r.id : r.id))); store.set(k, m); }
-            else { m.setLatLng([r.lat, r.lng]); m.setIcon(riderIcon(L, r, isSos)); } });
+        list.forEach(r => { const k = r.id; keep.add(k); let m = store.get(k);
+            const ic = riderIcon(L, r, isSos, !isSos && trk.filter && r.event_id !== trk.filter && !r.me);
+            const z = isSos ? 1000 : r.me ? 500 : trk.filter && r.event_id === trk.filter ? 300 : 0;
+            if (!m) { m = L.marker([r.lat, r.lng], { icon: ic.icon(), zIndexOffset: z }).addTo(map); m.on('click', () => openRider((isSos ? 's' : 'r') + r.id)); m._h = ic.html; store.set(k, m); }
+            else { if (!(r.me && trk.vfix)) m.setLatLng([r.lat, r.lng]); if (m._h !== ic.html) { m.setIcon(ic.icon()); m._h = ic.html; } m.setZIndexOffset(z); } });
         [...store.keys()].forEach(k => { if (!keep.has(k)) { map.removeLayer(store.get(k)); store.delete(k); } });
     };
-    sync(trk.markers, riders, r => r.id, false); sync(trk.sosMarkers, sos, s => s.id, true);
+    sync(trk.markers, riders, false); sync(trk.sosMarkers, sos, true);
 }
 function fitAll(animate) {
     const map = trk.map, d = trk.data; if (!map || !d) return;
-    const pts = [...(trk.filter ? d.riders.filter(r => r.event_id === trk.filter) : d.riders), ...d.sos].map(r => [r.lat, r.lng]);
-    if (trk.last) pts.push([trk.last.lat, trk.last.lng]);
+    const group = trk.filter ? d.riders.filter(r => r.event_id === trk.filter) : d.riders;
+    const pts = [...(group.length ? group : d.riders), ...d.sos].map(r => [r.lat, r.lng]);
+    const here = trk.vfix || trk.last; if (here && (!trk.filter || !group.length)) pts.push([here.lat, here.lng]);
     if (!pts.length) { gpsFix(60000).then(p => { trk.last = p; map.setView([p.lat, p.lng], 13); }).catch(() => {}); return; }
-    if (pts.length === 1) map.setView(pts[0], 14, { animate }); else map.fitBounds(pts, { padding: [40, 40], maxZoom: 15, animate });
+    if (pts.length === 1) map.setView(pts[0], 14, { animate }); else map.fitBounds(pts, { paddingTopLeft: [30, 70], paddingBottomRight: [70, 40], maxZoom: 15, animate });
 }
 function openRider(k) {
     const d = trk.data; if (!d) return;
     const r = k[0] === 's' ? d.sos.find(s => 's' + s.id === k) : d.riders.find(x => 'r' + x.id === k); if (!r) return;
-    const sos = k[0] === 's', mine = r.me;
+    const sos = k[0] === 's', mine = r.me, st = sos ? null : rState(r), en = !sos && evName(r), here = trk.vfix || trk.last;
     if (!sos && !mine) { trk.focus = r.id; trackSignal(); }
-    trk.map?.setView([r.lat, r.lng], Math.max(trk.map.getZoom(), 14));
+    trk.map?.setView([r.lat, r.lng], Math.max(trk.map.getZoom(), 15));
+    const stat = (v, l) => `<span class="rs"><b>${v}</b><small>${l}</small></span>`;
+    const top = r.top_spd ? Math.round(r.top_spd * 3.6) : 0;
     openSheet(sos ? '🆘 SOS' : r.name, `<div class="vc-who" style="margin-bottom:12px">${face({ full_name: r.name, avatar_url: r.avatar }, 'avatar')}<span class="grow"><b>${esc(r.name)}</b>${r.nick ? ` <span class="muted">“${esc(r.nick)}”</span>` : ''}
-        <span class="small muted">${sos ? 'Sent SOS ' + timeAgo(r.at) : `Updated ${timeAgo(r.at)}${r.spd > 1 ? ' · ' + Math.round(r.spd * 3.6) + ' km/h' : ''}${r.acc ? ' · ±' + Math.round(r.acc) + ' m' : ''}`}${trk.last && !mine ? ' · ' + kmAway(r) : ''}</span></span></div>
+        <span class="small muted">${sos ? 'Sent SOS ' + timeAgo(r.at) : `<span class="rs-state ${st.k}">${st.k === 'move' ? 'Moving' : st.k === 'stop' ? st.txt : 'Signal lost'}</span> · updated ${timeAgo(r.at)}${r.acc ? ' · ±' + Math.round(r.acc) + ' m' : ''}`}</span></span></div>
+        ${en ? `<a class="rs-ev" href="#events/${r.event_id}">🏍️ <span class="grow"><small>Riding</small><b>${esc(en)}</b></span>›</a>` : ''}
         ${r.note && !sos ? `<p class="trk-note-txt big">“${esc(r.note)}”</p>` : ''}
-        <div class="btns">${r.phone ? `<a class="btn" href="tel:+91${esc(r.phone)}">📞 Call</a>` : ''}<a class="btn ghost" href="${mapsLink(r)}" target="_blank" rel="noopener">🗺️ Open in Google Maps</a></div>
+        ${sos ? '' : `<div class="rs-grid">${stat(st.k === 'move' ? st.kmh : 0, 'km/h now')}${stat(top || '–', 'top km/h')}${stat(rideKm(r) || '0 km', 'this ride')}
+            ${stat(r.since ? durTxt(Date.now() - Date.parse(r.since)).replace(' h', 'h').replace(' min', 'm') : '–', 'sharing for')}${stat(here && !mine ? distTxt(distM(here, r)) : '–', mine ? 'that’s you' : 'from you')}${stat(r.until ? (Date.parse(r.until) - Date.now() > 11 * 36e5 ? 'Open' : new Date(r.until).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })) : '–', 'sharing till')}</div>`}
+        <div class="btns rs-btns">${r.phone ? `<a class="btn" href="tel:+91${esc(r.phone)}">📞 Call</a>` : ''}<a class="btn ghost" href="https://www.google.com/maps/dir/?api=1&destination=${r.lat},${r.lng}" target="_blank" rel="noopener">🧭 Directions</a>${!sos && !mine ? `<button class="btn ghost" data-x="follow">${trk.follow === r.id ? '✓ Following' : '🎯 Follow'}</button>` : ''}</div>
         ${sos && (mine || d.staff) ? `<button class="btn ${mine ? '' : 'ghost'} block" data-x="safe" style="margin-top:12px">${mine ? "✅ I'm safe now" : '✅ Mark as resolved'}</button>` : ''}`, body => {
         body.querySelector('[data-x=safe]')?.addEventListener('click', e => busy(e.currentTarget, async () => { await api.trackSosResolve(r.id); closeSheet(); toast('SOS closed. The RWB team is told.'); refreshTrack(); }));
+        body.querySelector('[data-x=follow]')?.addEventListener('click', () => { closeSheet(); trkFollow(trk.follow === r.id ? null : r.id); if (trk.follow) trk.map?.setView([r.lat, r.lng], Math.max(trk.map.getZoom(), 15)); });
     });
 }
 
@@ -6466,6 +6656,7 @@ if (NATIVE) try {
         if (document.body.classList.contains('blocked')) return App.minimizeApp();
         if (gdLayer) return gdClose();   /* a photo, video or PDF open full screen: back closes it (on Home it used to close the app) */
         if (document.querySelector('dialog#sheet[open]')) return closeSheet();
+        if (document.body.classList.contains('trk-full-on')) return trkFull(false);   /* full-screen Track map: back shrinks it */
         if (document.querySelector('.mm-search')) return closeMmSearch();   /* MotoMart search open: back closes it */
         if (document.querySelector('.sos-alarm')) return document.querySelector('.sos-alarm').remove();
         const h = location.hash.slice(1).split('/')[0];
