@@ -757,3 +757,48 @@ html.lite .dark .tabs button:not(.active){background:rgba(255,255,255,.06)}
 /* gallery photos roll but don't open (Nov 2026): the full gallery is in the RWB App */
 .mq-gal .g-item.g-still{display:block;cursor:default}
 .mq-gal .g-item.g-still img{pointer-events:none;-webkit-touch-callout:none;user-select:none}
+
+/* "Try it here": the app demo (js/app-demo.js), replaces the feature grid */
+.ax-demo{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:3rem;align-items:center;margin:3.2rem 0;padding:2.6rem 0;border-top:1px solid rgba(255,255,255,.12);border-bottom:1px solid rgba(255,255,255,.12)}
+.axd-kick{font:500 .74rem/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:#ec6a2c;margin-bottom:.8rem}
+.axd-h{font:800 clamp(1.9rem,3.4vw,2.6rem)/1 var(--display);text-transform:uppercase;letter-spacing:.01em;margin-bottom:1.6rem;max-width:22ch}
+.axd-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border-top:1px solid rgba(255,255,255,.12);border-left:1px solid rgba(255,255,255,.12)}
+.axd-tab{all:unset;box-sizing:border-box;cursor:pointer;padding:1.05rem 1.1rem 1.15rem;border-right:1px solid rgba(255,255,255,.12);border-bottom:1px solid rgba(255,255,255,.12);color:#f6f1ea;transition:background .15s}
+.axd-tab:hover{background:rgba(255,255,255,.04)}
+.axd-tab:focus-visible{outline:2px solid #ec6a2c;outline-offset:-2px}
+.axd-tab[aria-selected=true]{background:rgba(236,106,44,.12);box-shadow:inset 3px 0 0 #ec6a2c}
+.axd-tab .ic{display:block;margin-bottom:.55rem;color:#ec6a2c}
+.axd-tab b{display:block;font:800 1.3rem/1 var(--display);text-transform:uppercase;letter-spacing:.02em}
+.axd-tab p{font-size:.86rem;line-height:1.4;color:#a9a197;margin-top:.3rem}
+.axd-side,.axd-stage{min-width:0}
+.axd-stage{display:flex;flex-direction:column;align-items:center}
+.axd-phone{width:min(300px,78vw);padding:9px;border-radius:44px;background:linear-gradient(145deg,#2c2c30,#0b0b0d 45%,#1d1d21);box-shadow:0 0 0 1px rgba(255,255,255,.08) inset,0 40px 80px -30px rgba(236,106,44,.45)}
+.axd-scr{position:relative;aspect-ratio:390/844;border-radius:36px;overflow:hidden;background:#141210;user-select:none;-webkit-user-select:none}
+.axd-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .18s;pointer-events:none;-webkit-touch-callout:none}
+.axd-img.on{opacity:1}
+.axd-hot{all:unset;position:absolute;box-sizing:border-box;border-radius:14px;border:2px solid #ff8a3d;cursor:pointer;z-index:2;box-shadow:0 0 0 4px rgba(255,138,61,.25),0 0 22px rgba(255,138,61,.6);animation:axd-glow 1.6s ease-in-out infinite}
+.axd-hot[hidden]{display:none}
+.axd-hot:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.axd-hot.nudge{animation:axd-nudge .35s}
+@keyframes axd-glow{50%{box-shadow:0 0 0 8px rgba(255,138,61,.12),0 0 30px rgba(255,138,61,.8)}}
+@keyframes axd-nudge{30%{transform:scale(1.08)}60%{transform:scale(.97)}}
+.axd-rip{position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;background:rgba(255,255,255,.45);opacity:0;pointer-events:none;z-index:3}
+.axd-rip.go{animation:axd-rip .35s ease-out}
+@keyframes axd-rip{0%{opacity:.9;transform:scale(.3)}100%{opacity:0;transform:scale(1.4)}}
+.axd-cap{min-height:2.8em;margin-top:1.2rem;text-align:center;font-size:1.05rem;line-height:1.4;color:#f6f1ea;max-width:30ch}
+.axd-ctl{display:flex;align-items:center;gap:1.2rem;margin-top:.6rem}
+.axd-dots{display:flex;gap:6px}.axd-dots i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.25)}.axd-dots i.on{background:#ec6a2c}
+.axd-next{all:unset;cursor:pointer;font:600 .92rem var(--body);color:#ffb27a;padding:.45rem .9rem;border-radius:99px;border:1px solid rgba(255,255,255,.18)}
+.axd-next:hover{border-color:rgba(255,255,255,.4)}
+.axd-next:focus-visible{outline:2px solid #ec6a2c}
+@media (max-width:899px){
+  .ax-demo{grid-template-columns:minmax(0,1fr);gap:1.6rem;padding:2rem 0}
+  .axd-h{margin-bottom:1rem}
+  .axd-tabs{display:flex;overflow-x:auto;gap:.5rem;border:0;scrollbar-width:none;margin:0 -1rem;padding:0 1rem .2rem}
+  .axd-tabs::-webkit-scrollbar{display:none}
+  .axd-tab{flex:none;display:flex;align-items:center;gap:.5rem;padding:.6rem .95rem;border:1px solid rgba(255,255,255,.16);border-radius:99px}
+  .axd-tab .ic{margin:0;width:18px;height:18px}.axd-tab b{font-size:1.1rem}.axd-tab p{display:none}
+  .axd-tab[aria-selected=true]{box-shadow:none;border-color:#ec6a2c}
+  .axd-phone{width:min(250px,64vw);border-radius:38px}.axd-scr{border-radius:30px}
+}
+@media (prefers-reduced-motion:reduce){.axd-hot{animation:none}.axd-img{transition:none}}
