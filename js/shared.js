@@ -4,6 +4,7 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 
 /* Header + footer + popup are built here once, so editing the menu changes every page */
 (function buildPage() {
+    const FB_URL = 'https://www.facebook.com/profile.php?id=61556220173720', WA_CHANNEL_URL = 'https://whatsapp.com/channel/0029VaiK6QHEgGfTItym9t2H';
     const here = document.body.dataset.page, home = here === 'home', base = home ? '' : 'index.html';
     const link = (href, label, key) => `<a href="${href}"${key === here ? ' aria-current="page"' : ''}>${label}</a>`;
     /* slow drifting glow behind every page */
@@ -18,7 +19,26 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
   <button class="icon-btn nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false"><span></span><span></span></button>
 </header>`);
     document.body.insertAdjacentHTML('beforeend', `
-<footer class="footer"><p>Copyright of this website is reserved by Ronin Warriors of Bengal. roninwb.in</p><p class="footer-link"><a href="team-guide.html">Team guide</a> for admins and coordinators · <a href="privacy.html">Privacy policy</a> · <a href="terms.html">Terms &amp; Conditions</a></p></footer>
+<footer class="ft">
+  <div class="ft-in">
+    <div class="ft-top">
+      <a href="${home ? '#home' : 'index.html'}" class="ft-brand"><img src="assets/logo-96.webp" alt="" width="44" height="44" loading="lazy"><span><b>Ronin Warriors of Bengal</b><small>Explore. Evolve. Inspire.</small></span></a>
+      <div class="ft-social">
+        <a href="${CONFIG.INSTAGRAM_URL}" target="_blank" rel="noopener" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r=".9" fill="currentColor" stroke="none"/></svg></a>
+        <a href="${FB_URL}" target="_blank" rel="noopener" aria-label="Facebook"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 8.5V7c0-.8.5-1 1-1h2V2.5h-3C11.2 2.5 10 4.4 10 6.8v1.7H7.5V12H10v9.5h4V12h2.7l.4-3.5z"/></svg></a>
+        <a href="${WA_CHANNEL_URL}" target="_blank" rel="noopener" aria-label="WhatsApp channel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 20l1.2-3.6A8.5 8.5 0 1 1 8 19.1z"/><path d="M9.2 8.6c0 3.3 2.9 6.2 6.2 6.2l1-1.6-2-1-1 .8c-1-.5-1.9-1.4-2.4-2.4l.8-1-1-2z" fill="currentColor" stroke="none"/></svg></a>
+        <a href="mailto:ronin.warriors.bengal@gmail.com" aria-label="Email"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/></svg></a>
+      </div>
+    </div>
+    <nav class="ft-cols" aria-label="Footer">
+      <div><h3>Explore</h3>${link(base + '#about', 'About RWB')}${link(base + '#events', 'Events')}${link(base + '#gallery', 'Gallery')}${link(base + '#warriors', 'Warriors')}</div>
+      <div><h3>Ride</h3>${link(base + '#app', 'The RWB App')}${link('maintenance.html', 'Maintenance', 'maintenance')}${link('accessories.html', 'Accessories', 'accessories')}${link(base + '#market', 'Marketplace')}</div>
+      <div><h3>Community</h3><a href="${CONFIG.JOIN_FORM_URL}">Join RWB</a><a href="${CONFIG.INSTAGRAM_URL}" target="_blank" rel="noopener">Instagram</a><a href="${FB_URL}" target="_blank" rel="noopener">Facebook</a><a href="${WA_CHANNEL_URL}" target="_blank" rel="noopener">WhatsApp channel</a></div>
+      <div><h3>Legal</h3>${link('privacy.html', 'Privacy policy', 'privacy')}${link('terms.html', 'Terms &amp; Conditions', 'terms')}<a href="delete-account.html">Delete your account</a></div>
+    </nav>
+    <div class="ft-bottom"><span>&copy; ${new Date().getFullYear()} Ronin Warriors of Bengal. All rights reserved.</span><span>A riders&rsquo; community. Not affiliated with TVS Motor Company.</span></div>
+  </div>
+</footer>
 <dialog id="dialog" aria-label="Details"><button class="dialog-close" aria-label="Close">✕</button><div id="dialog-body"></div></dialog>`);
 })();
 
@@ -104,7 +124,7 @@ const inr = n => '₹' + Number(n).toLocaleString('en-IN');
         walk(el); };
     const hero = document.querySelector('.hero h1'); if (hero && !reduce) { split(hero); hero.querySelectorAll('.w > span').forEach((x, i) => x.style.setProperty('--d', (.15 + i * .1) + 's')); }
     document.querySelectorAll('[data-split]').forEach(el => { split(el); el.classList.add('split'); });
-    const auto = '.section h2, .section .lead, .section > .wrap > p, .section .rail, .section .tabs, .stats, .page-head > *, .teaser, .join .btn, .social, .footer';
+    const auto = '.section h2, .section .lead, .section > .wrap > p, .section .rail, .section .tabs, .stats, .page-head > *, .teaser, .join .btn, .social';
     document.querySelectorAll(auto).forEach(el => { if (!el.closest('[data-reveal]') && !el.hasAttribute('data-split')) el.setAttribute('data-reveal', el.getAttribute('data-reveal') || ''); });
     /* siblings come in one after another */
     document.querySelectorAll('[data-reveal]').forEach(el => { const sib = [...el.parentElement.children].filter(x => x.hasAttribute('data-reveal')); const i = sib.indexOf(el); if (i > 0 && !el.style.getPropertyValue('--d')) el.style.setProperty('--d', Math.min(i * .08, .6) + 's'); });

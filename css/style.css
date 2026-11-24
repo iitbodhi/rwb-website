@@ -234,10 +234,6 @@ dialog:has(.ev-dialog){max-width:min(640px,94vw)}
 .social a{width:48px;height:48px;border:1.5px solid var(--ink);border-radius:50%;display:grid;place-items:center}
 .social a:hover{background:var(--orange);border-color:var(--orange);color:#fff}
 .social svg{width:20px;height:20px}
-.footer-link{margin-top:.4rem;font-size:.85rem}
-.footer-link a{color:inherit;text-underline-offset:3px}
-.footer-link a:hover{color:var(--orange)}
-.footer{padding:1.75rem 1.25rem;border-top:3px dashed var(--orange);color:var(--muted);font-size:.9rem;text-align:center}
 
 /* dialog (lightbox + warrior profile) */
 dialog{border:0;border-radius:14px;padding:0;max-width:min(860px,94vw);max-height:92vh;width:100%;background:var(--paper);overflow:auto}
@@ -502,7 +498,6 @@ h2{font-size:clamp(2.6rem,7.2vw,5rem);margin-bottom:1.6rem;max-width:13ch;text-w
 .join p{font-size:1.1rem}
 .social a{border:1px solid var(--hair);transition:background .25s,color .25s,border-color .25s}
 .social a:hover{background:var(--ink);border-color:var(--ink);color:var(--paper)}
-.footer{border-top:1px solid var(--hair);padding:2rem 1.25rem 2.4rem;font:400 .8rem/1.6 var(--mono);letter-spacing:.02em}
 
 /* page headers on the inner pages */
 .page-head h1{font-size:clamp(3rem,10vw,5.6rem);font-weight:900}
@@ -565,7 +560,6 @@ body{background:transparent}
 .dark .tabs button{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.18)}
 .ax-grid{background:rgba(255,255,255,.02)}
 .ax-btn:not(.ax-pri){background:rgba(255,255,255,.05);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
-.footer{background:rgba(255,255,255,.25);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
 .hero-badge img{box-shadow:0 30px 70px -28px rgba(140,50,10,.55)}
 @media (prefers-reduced-motion:reduce){.bg i{animation:none}}
 /* one menu button at every width; the menu opens as a glass panel */
@@ -744,7 +738,6 @@ img{-webkit-touch-callout:none;-webkit-user-drag:none;-webkit-user-select:none;u
 /* big full-width areas: see-through colour instead of live blur */
 .alt{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(255,255,255,.4)}
 .dark,.app-x{backdrop-filter:none;-webkit-backdrop-filter:none;background:#100f0e}
-.footer{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(255,255,255,.4)}
 /* the glow holds still while the page scrolls */
 html.scrolling .bg i{animation-play-state:paused}
 /* low-power phones (4 GB / 4 cores or less): glow still, cards without live blur */
@@ -802,3 +795,32 @@ html.lite .dark .tabs button:not(.active){background:rgba(255,255,255,.06)}
   .axd-phone{width:min(250px,64vw);border-radius:38px}.axd-scr{border-radius:30px}
 }
 @media (prefers-reduced-motion:reduce){.axd-hot{animation:none}.axd-img{transition:none}}
+
+/* footer (Nov 2026): calm, Apple-style. Brand + socials, four link columns, one fine-print line */
+.ft{position:relative;background:var(--paper-2);border-top:1px solid var(--hair);color:var(--stone);font-size:.86rem;line-height:1.5}
+.ft-in{width:min(1180px,100% - 2.5rem);margin-inline:auto;padding:3rem 0 2rem}
+.ft-top{display:flex;align-items:center;justify-content:space-between;gap:1.5rem;padding-bottom:2rem;border-bottom:1px solid var(--hair)}
+.ft-brand{display:flex;align-items:center;gap:.85rem;text-decoration:none;color:var(--ink)}
+.ft-brand img{width:44px;height:44px;border-radius:50%}
+.ft-brand b{display:block;font:800 1.35rem/1.05 var(--display);text-transform:uppercase;letter-spacing:.02em}
+.ft-brand small{display:block;font-size:.82rem;color:var(--muted);margin-top:.15rem}
+.ft-social{display:flex;gap:.5rem}
+.ft-social a{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;color:var(--stone);border:1px solid var(--hair);transition:color .15s,border-color .15s,background .15s}
+.ft-social a:hover{color:var(--ink);border-color:var(--ink);background:rgba(18,17,16,.04)}
+.ft-social svg{width:18px;height:18px}
+.ft-cols{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2rem;padding:2rem 0 2.2rem}
+.ft-cols h3{font:600 .72rem/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:1rem}
+.ft-cols a{display:block;width:fit-content;color:var(--stone);text-decoration:none;padding:.22rem 0}
+.ft-cols a:hover,.ft-cols a[aria-current]{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+.ft-bottom{display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem 2rem;padding-top:1.4rem;border-top:1px solid var(--hair);font-size:.78rem;color:var(--muted)}
+.ft a:focus-visible{outline:2px solid var(--orange);outline-offset:2px;border-radius:4px}
+@media (max-width:760px){
+  .ft-in{padding:2.4rem 0 1.6rem}
+  .ft-top{flex-direction:column;align-items:flex-start}
+  .ft-brand b{font-size:1.12rem}
+  .ft-cols{grid-template-columns:repeat(2,minmax(0,1fr));gap:1.8rem 1rem}
+  .ft-bottom{flex-direction:column}
+}
+
+/* the promo video: not wall-to-wall on laptops */
+@media (min-width:900px){.ax-video{max-width:880px;margin-inline:auto}}
