@@ -2117,7 +2117,7 @@ async function eventCard1080(e, heads) {
 /* the RWB bar at the bottom of every share card: club logo, name, roninwb.in and a button */
 async function cardBrand(x, W, H, cta) {
     const L = 72, D = "'Barlow Condensed','Arial Narrow',sans-serif", B = "'Barlow',system-ui,sans-serif", by = H - 150;
-    x.fillStyle = 'rgba(255,255,255,.08)'; x.fillRect(0, by - 2, W, 2);
+    x.textAlign = 'left'; x.fillStyle = 'rgba(255,255,255,.08)'; x.fillRect(0, by - 2, W, 2);
     const logo = await cardImg('icons/logo-384.png').catch(() => null);
     if (logo) { x.save(); x.beginPath(); x.arc(L + 48, by + 74, 48, 0, Math.PI * 2); x.clip(); x.drawImage(logo, L, by + 26, 96, 96); x.restore(); }
     x.font = `700 32px ${B}`; const jw = x.measureText(cta).width + 64;
@@ -4916,15 +4916,44 @@ function sellPostText(l) {
     if (k === 'merch') return `🔥 *RWB MERCH*\n\n${l.product_name}\nPrice: ${lprice(l)}${l.details ? `\n${l.details}` : ''}\n\n👉 Order in the RWB App: ${url}`;
     return `📌 *RWB MOTOMART · Pre-owned*\n\nProduct Name: ${l.product_name}\nSize: ${l.size || '–'}\nCategory: ${l.category}\nAge: ${l.age || '–'}\nCondition: ${l.condition || '–'}\nReason for Selling: ${l.reason || '–'}\nSelling Price: ${lprice(l)}\nSeller: ${maskName(l.seller_name)} · ${maskPhone(l.seller_phone)}${l.details ? `\n\n${l.details}` : ''}\n\n🔒 The seller's contact is in the RWB App only.\n👉 Photos & contact: ${url}`;
 }
+/* MotoMart share card: 1080×1350 with the product photo, kind, name, price and details (never the seller's name or number) */
+async function listingCard1080(l) {
+    const W = 1080, H = 1350, PH = 760, L = 64, k = kindOf(l), cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const x = cv.getContext('2d'), D = "'Barlow Condensed','Arial Narrow',sans-serif", F = "'Barlow',system-ui,sans-serif";
+    await Promise.all(['800 100px "Barlow Condensed"', '600 40px "Barlow"', '700 40px "Barlow"'].map(f => document.fonts?.load(f).catch(() => {})));
+    x.fillStyle = '#0f0b09'; x.fillRect(0, 0, W, H);
+    const src = allPhotos(l)[0], im = src ? await cardImg(src).catch(() => null) : null;
+    if (im) {   /* blurred fill behind, the whole product in front */
+        const c = Math.max(W / im.naturalWidth, PH / im.naturalHeight), f = Math.min(W / im.naturalWidth, PH / im.naturalHeight);
+        x.save(); x.beginPath(); x.rect(0, 0, W, PH); x.clip(); x.filter = 'blur(40px) brightness(.55)';
+        x.drawImage(im, (W - im.naturalWidth * c) / 2 - 40, (PH - im.naturalHeight * c) / 2 - 40, im.naturalWidth * c + 80, im.naturalHeight * c + 80);
+        x.filter = 'none'; x.drawImage(im, (W - im.naturalWidth * f) / 2, (PH - im.naturalHeight * f) / 2, im.naturalWidth * f, im.naturalHeight * f); x.restore();
+    } else { const g = x.createLinearGradient(0, 0, W, PH); g.addColorStop(0, '#3a1d0e'); g.addColorStop(.55, '#a8431a'); g.addColorStop(1, '#f0712f'); x.fillStyle = g; x.fillRect(0, 0, W, PH);
+        x.fillStyle = 'rgba(255,255,255,.9)'; x.textAlign = 'center'; x.font = `800 96px ${D}`; x.fillText('RWB MOTOMART', W / 2, PH / 2 + 30); x.textAlign = 'left'; }
+    const fade = x.createLinearGradient(0, PH - 200, 0, PH + 2); fade.addColorStop(0, 'rgba(15,11,9,0)'); fade.addColorStop(1, '#0f0b09'); x.fillStyle = fade; x.fillRect(0, PH - 200, W, 202);
+    /* kind badge on the photo */
+    const kt = { used: 'PRE-OWNED', new: 'NEW', merch: 'RWB MERCH' }[k]; x.font = `700 28px ${F}`; const kw = x.measureText(kt).width + 48;
+    x.fillStyle = k === 'merch' ? '#f0712f' : 'rgba(15,11,9,.72)'; x.beginPath(); x.roundRect(L, 48, kw, 56, 28); x.fill(); x.fillStyle = '#fff'; x.textBaseline = 'middle'; x.fillText(kt, L + 24, 78);
+    /* name, price, details */
+    x.textBaseline = 'alphabetic'; let y = PH + 14;
+    x.fillStyle = '#f5a06d'; x.font = `700 28px ${F}`; x.fillText([...catGroup(l).toUpperCase()].join(String.fromCharCode(8202)).slice(0, 60), L, y += 30);
+    x.fillStyle = '#fff'; x.font = `800 84px ${D}`;
+    const words = String(l.product_name || '').toUpperCase().split(/\s+/), lines = []; let ln = '';
+    for (const w of words) { const t = ln ? ln + ' ' + w : w; if (x.measureText(t).width > W - 2 * L && ln) { lines.push(ln); ln = w; } else ln = t; }
+    if (ln) lines.push(ln); if (lines.length > 2) { lines.length = 2; lines[1] = lines[1].replace(/\s*\S*$/, '') + '…'; }
+    for (const t of lines) x.fillText(t, L, y += 82);
+    y += 26; x.font = `800 72px ${D}`; const pr = lprice(l), pw = x.measureText(pr).width + 56;
+    const pg = x.createLinearGradient(L, 0, L + pw, 0); pg.addColorStop(0, '#ffa766'); pg.addColorStop(1, '#cf5119');
+    x.fillStyle = pg; x.beginPath(); x.roundRect(L, y, pw, 92, 22); x.fill(); x.fillStyle = '#fff'; x.textBaseline = 'middle'; x.fillText(pr, L + 28, y + 50);
+    const chips = (k === 'used' ? [l.condition, l.size && `Size ${l.size}`, l.age] : k === 'new' ? [l.link && hostOf(l.link)] : ['Official RWB']).filter(Boolean);
+    let cx = L + pw + 20; x.font = `600 28px ${F}`;
+    for (const c of chips) { const cw = x.measureText(c).width + 40; if (cx + cw > W - L) break; x.fillStyle = 'rgba(255,255,255,.1)'; x.beginPath(); x.roundRect(cx, y + 18, cw, 56, 28); x.fill(); x.fillStyle = 'rgba(255,255,255,.88)'; x.fillText(c, cx + 20, y + 47); cx += cw + 12; }
+    await cardBrand(x, W, H, k === 'merch' ? 'ORDER NOW' : k === 'new' ? 'SEE IT' : 'SEE IN APP');
+    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', .9));
+    return new File([blob], `rwb-motomart-${l.id}.jpg`, { type: 'image/jpeg' });
+}
 async function shareListing(l) {
-    const text = sellPostText(l), pics = allPhotos(l).slice(0, 4);
-    try {   /* phones that can share photos straight into WhatsApp */
-        if (navigator.canShare && pics.length) {
-            const files = await Promise.all(pics.map(async (u, i) => new File([await (await fetch(u)).blob()], `rwb-motomart-${l.id}-${i + 1}.jpg`, { type: 'image/jpeg' })));
-            if (navigator.canShare({ files, text })) { await navigator.share({ files, text }); return; }
-        }
-    } catch (e) { if (e.name === 'AbortError') return; }
-    openWA(waShare(text));
+    return shareCard(await listingCard1080(l), sellPostText(l), l.product_name);
 }
 
 /* RWB Merch "Get now": the post's own link (Google Form, store…) if it has one, otherwise RWB's Instagram DM.
@@ -4942,7 +4971,7 @@ function listingDetail(l) {
     openSheet(l.product_name, `<div class="mm-detail${sold ? ' is-sold' : ''}">
         <div class="mm-gal">${pics.length ? `<div class="gallery">${pics.map((u, i) => `<img src="${esc(u)}" alt="Photo ${i + 1} of ${esc(l.product_name)}" referrerpolicy="no-referrer">`).join('')}</div>`
             : `<div class="mm-gal-ph"${l.link ? ` data-link="${esc(safeUrl(l.link))}"` : ''}><span class="mm-ph">${catIco(catGroup(l))}</span></div>`}
-            <span class="mm-kind k-${k}">${MM_KIND[k]}</span>${sold ? `<span class="mm-sold">${statusTxt}</span>` : ''}</div>
+            <span class="mm-kind k-${k}">${MM_KIND[k]}</span>${sold ? `<span class="mm-sold">${statusTxt}</span>` : ''}${l.status === 'live' && (adm || own) && !(soon(l) && !adm) ? `<button class="evt-sharebtn mm-share" data-x="share" aria-label="Share">${EVT_ICON.share}</button>` : ''}</div>
         ${pics.length > 1 ? `<p class="small muted" style="text-align:center;margin-top:4px">Swipe for ${pics.length} photos</p>` : ''}
         <div class="mm-d-head"><b class="mm-price">${lprice(l)}</b>${soon(l) && l.status === 'live' ? '' : `<span class="badge ${l.status === 'live' ? 'ok' : sold ? '' : 'orange'}">${statusTxt}</span>`}</div>
         <p class="mm-d-cat">${esc(catGroup(l))}${k === 'new' && l.link ? ` · from <b>${esc(hostOf(l.link))}</b>` : ''}</p>
@@ -4957,7 +4986,6 @@ function listingDetail(l) {
             ${k === 'merch' && !sold && !soon(l) ? `<a class="btn block mm-cta" href="${esc(merchHref(l))}" target="_blank" rel="noopener noreferrer">Get now</a>` : ''}
             ${k === 'used' && !own && l.status === 'live' ? `<a class="btn wa block" href="${waTo(l.seller_phone, contact)}" target="_blank" rel="noopener">Message seller on WhatsApp</a>` : ''}
             ${judge && l.status === 'pending' ? `<div class="btns"><button class="btn ghost" data-x="reject">Reject</button><button class="btn" data-x="approve">Approve</button></div>` : ''}
-            ${l.status === 'live' && (!soon(l) || adm) ? '<button class="btn ghost block" data-x="share">Share to WhatsApp</button>' : ''}
             ${(own && k === 'used' || adm && k === 'merch') && ['live', 'sold'].includes(l.status) ? `<button class="btn ${l.status === 'live' ? '' : 'ghost'} block" data-x="toggle">${l.status === 'live' ? (team ? 'Mark as sold out' : 'Mark as sold') : (team ? 'Back in stock' : 'Put back on sale')}</button>` : ''}
             ${own && k === 'used' || adm && team ? '<button class="btn ghost block" data-x="edit">Edit</button>' : ''}
             ${!own && k === 'used' && l.status === 'live' ? `<button class="linkish" data-report="listing" data-ref="${l.id}" data-label="${esc(l.product_name + ' · ' + (l.seller_name || ''))}" style="margin:6px auto 0;display:block;color:var(--muted)">🚩 Report this post</button>` : ''}
@@ -4969,7 +4997,7 @@ function listingDetail(l) {
         on('approve', b => busy(b, async () => { await api.setListingStatus(l.id, 'live'); await after('Approved. It’s live and members are notified.'); }));
         on('reject', b => { const r = window.prompt('Reason (the seller will see this):', 'Please add clearer photos'); if (r === null) return; busy(b, async () => { await api.setListingStatus(l.id, 'rejected', r.trim() || null); await after('Rejected'); }); });
         on('toggle', b => busy(b, async () => { await api.setListingStatus(l.id, l.status === 'live' ? 'sold' : 'live'); await after(l.status === 'live' ? (team ? 'Marked as sold out' : `Marked as sold 🎉 It’s removed after ${SOLD_DAYS} days.`) : 'Back on sale'); }));
-        on('share', b => busy(b, () => shareListing(l)));
+        on('share', b => { if (b.disabled) return; b.disabled = true; shareListing(l).catch(er => toast(er.message || 'Could not share', true)).finally(() => { b.disabled = false; }); });
         on('edit', () => team ? teamForm(l, k) : listingForm(l));
         on('del', b => { if (confirmBox('Delete this post and its photos?')) busy(b, async () => { await api.deleteListing(l); await after('Deleted'); }); });
     });
@@ -5468,50 +5496,85 @@ const lbSrc = (key, raw) => {
     if (pr) return key === 'gps' ? pr.map(r => ({ ...r, km: Number(r.gps_km) })) : pr;
     return key === 'gps' ? (state.gps || []) : key === 'pookie' ? (state.pookieBoard || []) : raw;
 };
-/* the board's share card (admins and coordinators): 1080×1350, top 3 on a podium and #4–#8 below */
+/* the board's share card (admins and coordinators): 1080×1350, glowing stage, podium with the top 3, #4–#8 with bars */
 async function boardCard1080(key, raw) {
     const B = BOARDS[key], rows = lbRows(key, raw).slice(0, 8), per = state.boardPer || 'all';
-    const W = 1080, H = 1350, L = 72, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const W = 1080, H = 1350, L = 64, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     const x = cv.getContext('2d'), D = "'Barlow Condensed','Arial Narrow',sans-serif", F = "'Barlow',system-ui,sans-serif";
     await Promise.all(['800 100px "Barlow Condensed"', '600 40px "Barlow"', '700 40px "Barlow"'].map(f => document.fonts?.load(f).catch(() => {})));
-    const bg = x.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#2a1308'); bg.addColorStop(.45, '#120b08'); bg.addColorStop(1, '#0f0b09'); x.fillStyle = bg; x.fillRect(0, 0, W, H);
-    const glow = x.createRadialGradient(W / 2, 330, 40, W / 2, 330, 560); glow.addColorStop(0, 'rgba(240,113,47,.35)'); glow.addColorStop(1, 'rgba(240,113,47,0)'); x.fillStyle = glow; x.fillRect(0, 0, W, 900);
     const name = r => (r.nickname || r.full_name.split(' ')[0] || '').trim();
     const fit = (t, mw) => { while (x.measureText(t).width > mw && t.length > 3) t = t.slice(0, -2).trimEnd() + '…'; return t; };
+    const lin = (x0, y0, x1, y1, stops) => { const g = x.createLinearGradient(x0, y0, x1, y1); stops.forEach(([o, c]) => g.addColorStop(o, c)); return g; };
+    const rad = (cx, cy, r, c0, c1) => { const g = x.createRadialGradient(cx, cy, 0, cx, cy, r); g.addColorStop(0, c0); g.addColorStop(1, c1); return g; };
+    /* stage: deep night, ember glows, light rays */
+    x.fillStyle = lin(0, 0, 0, H, [[0, '#1d0d06'], [.5, '#0e0806'], [1, '#090605']]); x.fillRect(0, 0, W, H);
+    x.fillStyle = rad(W / 2, 520, 620, 'rgba(240,113,47,.42)', 'rgba(240,113,47,0)'); x.fillRect(0, 0, W, H);
+    x.fillStyle = rad(120, 60, 420, 'rgba(255,167,102,.22)', 'rgba(255,167,102,0)'); x.fillRect(0, 0, W, H);
+    x.fillStyle = rad(W - 80, 980, 460, 'rgba(207,81,25,.20)', 'rgba(207,81,25,0)'); x.fillRect(0, 0, W, H);
+    x.save(); x.translate(W / 2, 560); x.globalAlpha = .07; x.fillStyle = '#ffd6b0';
+    for (let i = 0; i < 18; i++) { x.rotate(Math.PI / 9); x.beginPath(); x.moveTo(0, 0); x.lineTo(-38, -900); x.lineTo(38, -900); x.closePath(); x.fill(); }
+    x.restore();
+    for (const [sx, sy, s] of [[180, 380, 5], [905, 330, 4], [820, 520, 3], [250, 600, 3], [980, 640, 3], [95, 520, 2]]) { x.fillStyle = 'rgba(255,214,176,.75)'; x.beginPath(); x.arc(sx, sy, s, 0, Math.PI * 2); x.fill(); }
+    /* header: board icon, kicker, title, period */
+    const ico = await cardImg('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(LB_ICON[key].replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" ').replace(/class="ac"/g, 'fill="rgba(255,255,255,.25)" stroke="none"'))).catch(() => null);
+    x.fillStyle = lin(W / 2 - 46, 52, W / 2 + 46, 144, [[0, '#ffa766'], [1, '#cf5119']]); x.beginPath(); x.roundRect(W / 2 - 46, 50, 92, 92, 26); x.fill();
+    if (ico) x.drawImage(ico, W / 2 - 30, 66, 60, 60);
     x.textAlign = 'center'; x.textBaseline = 'alphabetic';
-    x.fillStyle = '#f5a06d'; x.font = `700 30px ${F}`; x.fillText([...'RWB WARRIORBOARDS'].join(String.fromCharCode(8202)), W / 2, 104);
-    x.fillStyle = '#fff'; let ts = 112; do { x.font = `800 ${ts}px ${D}`; ts -= 4; } while (x.measureText(B.title.toUpperCase()).width > W - 2 * L && ts > 60); x.fillText(B.title.toUpperCase(), W / 2, 214);
-    x.font = `700 30px ${F}`; const pt = lbPerLabel(per).toUpperCase(), pw = x.measureText(pt).width + 56;
-    x.fillStyle = '#f0712f'; x.beginPath(); x.roundRect((W - pw) / 2, 246, pw, 60, 30); x.fill(); x.fillStyle = '#fff'; x.textBaseline = 'middle'; x.fillText(pt, W / 2, 278);
-    /* podium: 2 · 1 · 3 */
+    x.fillStyle = '#f5a06d'; x.font = `700 26px ${F}`; x.fillText([...'RWB WARRIORBOARDS'].join(String.fromCharCode(8202)), W / 2, 182);
+    let ts = 104; do { x.font = `800 ${ts}px ${D}`; ts -= 4; } while (x.measureText(B.title.toUpperCase()).width > W - 2 * L && ts > 60);
+    x.fillStyle = lin(0, 190, 0, 272, [[0, '#ffffff'], [1, '#ffd9bd']]); x.fillText(B.title.toUpperCase(), W / 2, 272);
+    const ist = d => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }).toUpperCase();
+    const pt = per === 'all' ? 'ALL TIME' : `${lbPerLabel(per).toUpperCase()}  ·  ${ist(new Date(Date.now() - (Number(per) - 1) * 864e5))} – ${ist(new Date())}`;
+    x.font = `700 26px ${F}`; const pw = x.measureText(pt).width + 52;
+    x.fillStyle = 'rgba(255,255,255,.08)'; x.strokeStyle = 'rgba(255,167,102,.55)'; x.lineWidth = 2; x.beginPath(); x.roundRect((W - pw) / 2, 292, pw, 50, 25); x.fill(); x.stroke();
+    x.fillStyle = '#ffd2b3'; x.textBaseline = 'middle'; x.fillText(pt, W / 2, 318);
+    /* podium */
     const pics = await Promise.all(rows.slice(0, 3).map(r => r.avatar_url ? cardImg(r.avatar_url).catch(() => null) : null));
-    const ring = ['#ffd36a', '#d9dde3', '#e7a06a'];
-    const spot = (i, cx, top, rad) => {
-        const r = rows[i]; if (!r) return;
-        x.save(); x.beginPath(); x.arc(cx, top + rad, rad + 8, 0, Math.PI * 2); x.fillStyle = ring[i]; x.fill(); x.restore();
-        x.save(); x.beginPath(); x.arc(cx, top + rad, rad, 0, Math.PI * 2); x.clip();
-        if (pics[i]) { const im = pics[i], s = Math.max(2 * rad / im.naturalWidth, 2 * rad / im.naturalHeight); x.drawImage(im, cx - im.naturalWidth * s / 2, top + rad - im.naturalHeight * s / 2, im.naturalWidth * s, im.naturalHeight * s); }
-        else { x.fillStyle = '#3a2418'; x.fillRect(cx - rad, top, 2 * rad, 2 * rad); x.fillStyle = '#fff'; x.textBaseline = 'middle'; x.font = `800 ${Math.round(rad * .8)}px ${D}`; x.fillText(initials(r), cx, top + rad + 4); }
-        x.restore();
-        x.beginPath(); x.arc(cx + rad * .72, top + rad * 1.72, 30, 0, Math.PI * 2); x.fillStyle = ring[i]; x.fill();
-        x.fillStyle = '#1a0f0a'; x.textBaseline = 'middle'; x.font = `800 36px ${D}`; x.fillText(String(i + 1), cx + rad * .72, top + rad * 1.72 + 2);
-        x.textBaseline = 'alphabetic'; x.fillStyle = '#fff'; x.font = `800 ${i ? 46 : 54}px ${D}`; x.fillText(fit(name(r).toUpperCase(), 300), cx, top + 2 * rad + 70);
-        x.fillStyle = '#f5a06d'; x.font = `700 ${i ? 32 : 36}px ${F}`; x.fillText(fit(B.big(r), 300), cx, top + 2 * rad + 116);
+    const MET = [['#fff2b8', '#ffcf4d', '#c98a12'], ['#ffffff', '#d5dbe3', '#8d97a5'], ['#ffd9b8', '#e79a62', '#9c5426']];
+    const base = 890, colW = 300;
+    const step = (i, cx, h) => {
+        const top = base - h, m = MET[i];
+        x.fillStyle = lin(0, top, 0, base, [[0, m[1]], [1, 'rgba(0,0,0,0)']]); x.globalAlpha = .9;
+        x.beginPath(); x.roundRect(cx - colW / 2 + 12, top, colW - 24, h, [22, 22, 0, 0]); x.fill(); x.globalAlpha = 1;
+        x.fillStyle = 'rgba(255,255,255,.35)'; x.fillRect(cx - colW / 2 + 34, top + 10, colW - 68, 3);
+        x.fillStyle = 'rgba(40,20,8,.55)'; x.textBaseline = 'alphabetic'; x.font = `800 ${i ? 84 : 108}px ${D}`; x.fillText(String(i + 1), cx, top + (i ? 86 : 110));
     };
-    spot(1, W / 2 - 330, 420, 100); spot(2, W / 2 + 330, 420, 100); spot(0, W / 2, 360, 130);
-    /* #4–#8 */
-    x.textAlign = 'left'; let y = 830;
-    if (!rows.length) { x.textAlign = 'center'; x.fillStyle = 'rgba(255,255,255,.7)'; x.font = `600 40px ${F}`; x.fillText('Be the first on this board!', W / 2, 640); x.textAlign = 'left'; }
-    for (const r of rows.slice(3, 8)) {
-        x.fillStyle = 'rgba(255,255,255,.06)'; x.beginPath(); x.roundRect(L, y - 52, W - 2 * L, 70, 20); x.fill();
-        x.fillStyle = '#f5a06d'; x.font = `800 40px ${D}`; x.fillText(`#${r.rank}`, L + 28, y - 4);
-        x.fillStyle = '#fff'; x.font = `600 36px ${F}`; x.fillText(fit(name(r), 480), L + 130, y - 4);
-        x.textAlign = 'right'; x.fillStyle = 'rgba(255,255,255,.85)'; x.font = `700 34px ${F}`; x.fillText(B.big(r), W - L - 28, y - 4); x.textAlign = 'left';
-        y += 84;
-    }
+    const who = (i, cx, h, r0) => {
+        const r = rows[i]; if (!r) return;
+        const m = MET[i], vy = base - h - 22, ny = vy - (i ? 44 : 50), cy = ny - (i ? 46 : 56) - r0 - 10;
+        x.fillStyle = rad(cx, cy, r0 + 70, 'rgba(255,190,120,.35)', 'rgba(255,190,120,0)'); x.fillRect(cx - r0 - 80, cy - r0 - 80, 2 * r0 + 160, 2 * r0 + 160);
+        x.fillStyle = lin(cx - r0, cy - r0, cx + r0, cy + r0, [[0, m[0]], [.5, m[1]], [1, m[2]]]); x.beginPath(); x.arc(cx, cy, r0 + 9, 0, Math.PI * 2); x.fill();
+        x.save(); x.beginPath(); x.arc(cx, cy, r0, 0, Math.PI * 2); x.clip();
+        if (pics[i]) { const im = pics[i], s = Math.max(2 * r0 / im.naturalWidth, 2 * r0 / im.naturalHeight); x.drawImage(im, cx - im.naturalWidth * s / 2, cy - im.naturalHeight * s / 2, im.naturalWidth * s, im.naturalHeight * s); }
+        else { x.fillStyle = lin(0, cy - r0, 0, cy + r0, [[0, '#4a2a19'], [1, '#24140c']]); x.fillRect(cx - r0, cy - r0, 2 * r0, 2 * r0); x.fillStyle = '#ffe6d3'; x.textBaseline = 'middle'; x.font = `800 ${Math.round(r0 * .78)}px ${D}`; x.fillText(initials(r), cx, cy + 4); }
+        x.restore();
+        if (i === 0) {   /* crown */
+            const cy0 = cy - r0 - 26; x.fillStyle = lin(0, cy0 - 40, 0, cy0 + 18, [[0, '#fff2b8'], [1, '#e0a21a']]);
+            x.beginPath(); x.moveTo(cx - 52, cy0 + 16); x.lineTo(cx - 60, cy0 - 30); x.lineTo(cx - 24, cy0 - 6); x.lineTo(cx, cy0 - 44); x.lineTo(cx + 24, cy0 - 6); x.lineTo(cx + 60, cy0 - 30); x.lineTo(cx + 52, cy0 + 16); x.closePath(); x.fill();
+        }
+        x.textBaseline = 'alphabetic'; x.fillStyle = '#fff'; x.font = `800 ${i ? 46 : 56}px ${D}`; x.fillText(fit(name(r).toUpperCase(), colW - 10), cx, ny);
+        x.fillStyle = '#ffb27a'; x.font = `700 ${i ? 32 : 38}px ${F}`; x.fillText(fit(B.big(r), colW - 10), cx, vy);
+    };
+    const cols = [[1, W / 2 - colW, 130, 74], [0, W / 2, 180, 88], [2, W / 2 + colW, 100, 74]];
+    if (rows.length) { cols.forEach(([i, cx, h]) => rows[i] && step(i, cx, h)); cols.forEach(([i, cx, h, r0]) => who(i, cx, h, r0)); }
+    else { x.fillStyle = 'rgba(255,255,255,.75)'; x.textBaseline = 'alphabetic'; x.font = `700 44px ${F}`; x.fillText('Be the first on this board!', W / 2, 640); }
+    x.fillStyle = 'rgba(255,255,255,.1)'; x.fillRect(L, base, W - 2 * L, 2);
+    /* #4–#8 with a bar for the score */
+    const rest = rows.slice(3, 8), top1 = rows[0] ? B.val(rows[0]) : 1;
+    let y = base + 24; const rh = rest.length > 4 ? 54 : 62;
     x.textAlign = 'left';
+    for (const r of rest) {
+        x.fillStyle = 'rgba(255,255,255,.06)'; x.beginPath(); x.roundRect(L, y, W - 2 * L, rh - 10, 16); x.fill();
+        const pct = Math.max(.04, Math.min(1, B.val(r) / (top1 || 1)));
+        x.fillStyle = lin(L, 0, L + (W - 2 * L) * pct, 0, [[0, 'rgba(240,113,47,.38)'], [1, 'rgba(240,113,47,.08)']]); x.beginPath(); x.roundRect(L, y, (W - 2 * L) * pct, rh - 10, 16); x.fill();
+        x.textBaseline = 'middle'; const my = y + (rh - 10) / 2 + 2;
+        x.fillStyle = '#ffb27a'; x.font = `800 34px ${D}`; x.fillText(`#${r.rank}`, L + 24, my);
+        x.fillStyle = '#fff'; x.font = `600 32px ${F}`; x.fillText(fit(name(r), 520), L + 110, my);
+        x.textAlign = 'right'; x.fillStyle = 'rgba(255,255,255,.9)'; x.font = `700 30px ${F}`; x.fillText(B.big(r), W - L - 24, my); x.textAlign = 'left';
+        y += rh;
+    }
     await cardBrand(x, W, H, 'JOIN RWB');
-    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', .9));
+    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', .92));
     return new File([blob], `rwb-${key}-warriors-${per === 'all' ? 'all-time' : per + '-days'}.jpg`, { type: 'image/jpeg' });
 }
 async function shareBoard(key, raw) {

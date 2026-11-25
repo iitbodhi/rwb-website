@@ -2756,3 +2756,4 @@ html.lite .tab-track.live .brand-ring::after{animation-iteration-count:infinite!
 .lb-share:disabled{opacity:.5}
 .lb-per{overflow:visible}
 .lb-per button{flex:1 1 0;min-width:0;padding:9px 4px;text-align:center}
+.mm-gal .mm-share{top:10px;right:10px;z-index:3}
