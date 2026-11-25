@@ -56,7 +56,13 @@ m = m.replace(/(<application[^>]*>)/, `$1
         <service android:name=".RwbMessagingService" android:exported="false">
             <intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter>
         </service>`);
+// event share cards (TrackPlugin.shareImage): our own FileProvider for pictures in the app's cache
+if (!m.includes('.rwbshare"')) m = m.replace('</application>', `    <provider android:name=".ShareProvider" android:authorities="\${applicationId}.rwbshare" android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/rwb_share_paths" />
+        </provider>
+    </application>`);
 write(mf, m);
+write(path.join(app, 'src/main/res/xml/rwb_share_paths.xml'), '<?xml version="1.0" encoding="utf-8"?>\n<paths><cache-path name="share" path="share/" /></paths>\n');
 
 /* ---------- RWB Track: our own background service (keeps sharing with the screen off) ---------- */
 const javaRoot = path.join(app, 'src/main/java');

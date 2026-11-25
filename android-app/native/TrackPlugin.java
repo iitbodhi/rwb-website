@@ -191,6 +191,34 @@ public class TrackPlugin extends Plugin {
         });
     }
 
+    /** Events (Nov 2026): share the event card picture + text through Android's share menu (WhatsApp, Instagram, Facebook…).
+        { data: base64 JPEG, name, text, title } */
+    @PluginMethod
+    public void shareImage(PluginCall call) {
+        try {
+            String data = call.getString("data", "");
+            if (data == null || data.isEmpty()) { call.reject("No picture"); return; }
+            byte[] bytes = android.util.Base64.decode(data, android.util.Base64.DEFAULT);
+            java.io.File dir = new java.io.File(getContext().getCacheDir(), "share");
+            if (!dir.exists()) dir.mkdirs();
+            java.io.File[] old = dir.listFiles(); if (old != null) for (java.io.File f : old) f.delete();   /* only the latest card is kept */
+            String name = call.getString("name", "rwb-event.jpg").replaceAll("[^A-Za-z0-9._-]", "-");
+            java.io.File out = new java.io.File(dir, name);
+            try (java.io.FileOutputStream fo = new java.io.FileOutputStream(out)) { fo.write(bytes); }
+            Uri uri = ShareProvider.getUriForFile(getContext(), getContext().getPackageName() + ".rwbshare", out);
+            Intent send = new Intent(Intent.ACTION_SEND);
+            send.setType("image/jpeg");
+            send.putExtra(Intent.EXTRA_STREAM, uri);
+            String text = call.getString("text", "");
+            if (text != null && !text.isEmpty()) send.putExtra(Intent.EXTRA_TEXT, text);
+            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            Intent chooser = Intent.createChooser(send, call.getString("title", "Share"));
+            chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            getActivity().startActivity(chooser);
+            call.resolve();
+        } catch (Exception e) { call.reject("Could not share: " + e.getMessage()); }
+    }
+
     /** Ask Android to let RWB run in the background without battery restrictions. */
     @PluginMethod
     public void battery(PluginCall call) {

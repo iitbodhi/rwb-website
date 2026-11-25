@@ -1946,7 +1946,8 @@ function evtWhen(e, short = false) {
 const evtDay = iso => `<span class="evt-d"><i>${tfmt(iso, { month: 'short' }).toUpperCase()}</i><b>${tfmt(iso, { day: 'numeric' })}</b><em>${tfmt(iso, { weekday: 'short' }).toUpperCase()}</em></span>`;
 /* the small line above an event's name, like the website: TAG · 2 DAYS */
 const evtEyebrow = e => { const t = [e.tag, evtMulti(e) ? `${evtDays(e)} days` : ''].filter(Boolean); return t.length ? `<span class="evt-eyebrow">${esc(t.join(' · '))}</span>` : ''; };
-const EVT_ICON = { clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>', pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>', edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>' };
+const EVT_ICON = { clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>', pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>', edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>',
+    share: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="M8.3 10.8l7.4-4.4M8.3 13.2l7.4 4.4"/></svg>' };
 /* slots left (when the event has a limit) */
 const evtSlots = (e, n) => { if (!e.capacity) return ''; const left = Math.max(e.capacity - n, 0), p = Math.min(n / e.capacity, 1);
     return `<span class="evt-slots ${p >= 1 ? 'full' : p >= .6 ? 'mid' : ''}"><span><b>${left}</b> of ${e.capacity} slots left</span><i><i style="width:${Math.round(p * 100)}%"></i></i></span>`; };
@@ -2033,7 +2034,7 @@ async function eventPage(e) {
     app.innerHTML = top('Events') + `
         <a class="back-link" href="#events">‹ All events</a>
         <section class="card evt-hero v2${live ? '' : ' cancelled'}">
-            ${evtCover(e, 'big')}
+            <div class="evt-cwrap">${evtCover(e, 'big')}${mod && !fam ? `<button class="evt-sharebtn" data-act="evt-share" aria-label="Share event">${EVT_ICON.share}</button>` : ''}</div>
             <div class="evt-hbody">
                 ${evtEyebrow(e)}<h2 class="evt-title">${esc(e.title)}</h2>${!live ? '<span class="badge">Cancelled</span>' : past ? '<span class="badge">Ended</span>' : ''}
                 <div class="evt-when">${when}</div>
@@ -2044,21 +2045,20 @@ async function eventPage(e) {
                     ${e.reminder_minutes != null && live && !past ? `<p><span>⏰</span>Reminder ${esc(REMINDERS.find(r => r[0] === e.reminder_minutes)?.[1].toLowerCase() || '')} for people going</p>` : ''}
                 </div>
                 ${join}
-                <div class="btns evt-actions">${mod && !fam ? '<button class="btn sm" data-act="evt-share">Share to WhatsApp</button>' : ''}${live && !past ? `<a class="btn sm ghost" href="${esc(gcalUrl(e))}" target="_blank" rel="noopener">Add to calendar</a>` : ''}</div>
+                ${live && !past ? `<div class="btns evt-actions"><a class="btn sm ghost" href="${esc(gcalUrl(e))}" target="_blank" rel="noopener">Add to calendar</a></div>` : ''}
             </div>
         </section>
         ${e.description ? `<section class="section"><h2>About</h2><div class="card"><p class="evt-desc">${linkify(e.description)}</p></div></section>` : ''}
         ${rideLive(e)}
         ${fam ? '' : `<section class="section"><div class="evt-whohead"><h2>${past ? 'Who went' : "Who's going"}${cached && headcount ? ` <span class="muted">${headcount}</span>` : ''}</h2>${team ? `<span class="btns">${going.length ? '<button class="btn sm ghost" data-act="evt-copy">Share list</button>' : ''}<button class="btn sm" data-act="evt-add">＋ Add rider</button></span>` : ''}</div>
-            ${team ? `<p class="small muted evt-teamnote">${past ? 'Fix who actually went: add riders who came, or tap ✎ to take someone off.' : 'Add riders who forgot to join or aren\'t on the app yet. Tap ✎ to change or remove someone.'}</p>` : ''}
             <div class="card">${!cached ? SKEL(2) : going.length ? `<div class="evt-plist">${going.map(row).join('')}</div>${guests ? `<p class="small muted" style="margin-top:10px">${going.length} rider${going.length === 1 ? '' : 's'} + ${guests} guest${guests === 1 ? '' : 's'}</p>` : ''}` : `<p class="muted small">${past ? 'Nobody was on the list.' : 'Nobody yet. Be the first!'}</p>`}</div></section>
-        <section class="section" id="exp-sec"><h2>Expenses</h2><div id="exp-body">${me || mod ? SKEL(2) : `<div class="card empty"><b>Split costs with the group</b>Join the event to see and add shared expenses. Costs are split only between people going.</div>`}</div></section>`}
+        <section class="section" id="exp-sec"><h2>Expenses</h2><div id="exp-body">${me || mod ? SKEL(2) : `<div class="card empty"><b>Split costs with the group</b>Join the event to see and add shared expenses.</div>`}</div></section>`}
         ${mod ? `<section class="section"><h2>Organiser</h2><div class="btns">${live ? '<button class="btn ghost" data-act="evt-edit">Edit</button><button class="btn ghost" data-act="evt-cancel">Cancel event</button>' : ''}<button class="btn danger" data-act="evt-del">Delete</button></div></section>` : ''}`;
     actions = {
         rsvp: b => busy(b, async () => { const go = b.dataset.s === 'going';
             if (!go && !confirmBox(`Not going to “${e.title}” anymore?`)) return;
             await api.rsvp(e.id, go ? 'going' : 'no', 0); delete state.evPeople[e.id]; await loadEvents(true); toast(go ? "You're going 🏍️ Everyone can see you joined." : "You're off the list"); render(); }),
-        'evt-share': b => busy(b, () => shareEvent(e, headcount)),
+        'evt-share': b => { if (b.disabled) return; b.disabled = true; shareEvent(e, headcount).catch(er => toast(er.message || 'Could not share', true)).finally(() => { b.disabled = false; }); },
         'evt-edit': () => eventForm(e),
         'evt-add': () => evtTeamFind(e),
         'evt-pm': b => { const p = people.find(x => String(x.member_id) === b.dataset.m); if (p) evtTeamPick(e, { member_id: p.member_id, full_name: p.full_name, nickname: p.nickname, avatar_url: p.avatar_url, on_app: p.on_app, status: 'going', guests: p.guests }); },
@@ -2074,22 +2074,70 @@ async function eventPage(e) {
 function eventShareText(e, heads) {
     return `📅 *${e.title}*${e.tag ? ` · ${e.tag}` : ''}\n🗓 ${evtWhen(e)}${e.location ? `\n📍 ${e.location}${mapsUrl(e) ? '\n🗺 ' + mapsUrl(e) : ''}` : ''}${e.capacity ? `\n🎟 ${Math.max(e.capacity - heads, 0)} of ${e.capacity} slots left` : heads ? `\n🏍️ ${heads} going` : ''}${e.description ? `\n\n${e.description}` : ''}\n\n👉 Join in the RWB App: https://roninwb.in/app/#events/${e.id}`;
 }
-/* the cover as a JPEG (WhatsApp turns shared WebP pictures into stickers) */
-async function coverJpeg(e) {
-    const img = await new Promise((res, rej) => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = rej; i.src = e.cover_url; });
-    const cv = document.createElement('canvas'); cv.width = img.naturalWidth; cv.height = img.naturalHeight; cv.getContext('2d').drawImage(img, 0, 0);
-    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.86));
-    return new File([blob], `rwb-event-${e.id}.jpg`, { type: 'image/jpeg' });
+/* The event's share card: a 1080×1350 picture (fits WhatsApp, Instagram and Facebook) with the cover, title, date, place
+   and slots, shared with the event text through the phone's share menu (admins and coordinators only). */
+const cardImg = src => new Promise((res, rej) => { const i = new Image(); if (!src.startsWith('data:')) i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = rej; i.src = src; });
+async function eventCard1080(e, heads) {
+    const W = 1080, H = 1350, CH = 560, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const x = cv.getContext('2d'), D = "'Barlow Condensed','Arial Narrow',sans-serif", B = "'Barlow',system-ui,sans-serif";
+    await Promise.all(['800 100px "Barlow Condensed"', '600 40px "Barlow"', '700 40px "Barlow"'].map(f => document.fonts?.load(f).catch(() => {})));
+    x.fillStyle = '#0f0b09'; x.fillRect(0, 0, W, H);
+    /* cover, or the orange banner */
+    let cover = null; if (e.cover_url) cover = await cardImg(e.cover_url).catch(() => null);
+    if (cover) { const r = Math.max(W / cover.naturalWidth, CH / cover.naturalHeight), w = cover.naturalWidth * r, h = cover.naturalHeight * r; x.save(); x.beginPath(); x.rect(0, 0, W, CH); x.clip(); x.drawImage(cover, (W - w) / 2, (CH - h) / 2, w, h); x.restore(); }
+    else { const g = x.createLinearGradient(0, 0, W, CH); g.addColorStop(0, '#3a1d0e'); g.addColorStop(.55, '#a8431a'); g.addColorStop(1, '#f0712f'); x.fillStyle = g; x.fillRect(0, 0, W, CH);
+        x.fillStyle = 'rgba(255,255,255,.95)'; x.font = `800 260px ${D}`; x.textBaseline = 'alphabetic'; x.fillText(tfmt(e.starts_at, { day: 'numeric' }), 64, CH - 110);
+        x.font = `700 64px ${B}`; x.fillText(tfmt(e.starts_at, { month: 'long' }).toUpperCase(), 72, CH - 40); }
+    const fade = x.createLinearGradient(0, CH - 220, 0, CH + 2); fade.addColorStop(0, 'rgba(15,11,9,0)'); fade.addColorStop(1, '#0f0b09'); x.fillStyle = fade; x.fillRect(0, CH - 220, W, 222);
+    /* text */
+    let y = CH + 40; const L = 72, maxW = W - 2 * L;
+    const pill = (t, px, py, bg, fg, f) => { x.font = f; const w = x.measureText(t).width + 56; x.fillStyle = bg; x.beginPath(); x.roundRect(px, py, w, 72, 36); x.fill(); x.fillStyle = fg; x.textBaseline = 'middle'; x.fillText(t, px + 28, py + 38); return w; };
+    const when = `${tfmt(e.starts_at, { weekday: 'short', day: 'numeric', month: 'short' })} · ${evtTime(e.starts_at)}`.toUpperCase();
+    pill(when, L, y - 36, '#f0712f', '#fff', `700 34px ${B}`);
+    y += 90;
+    if (e.tag) { x.font = `700 30px ${B}`; x.fillStyle = '#f5a06d'; x.textBaseline = 'alphabetic'; x.fillText([...e.tag.toUpperCase()].join(String.fromCharCode(8202)), L, y); y += 22; }
+    x.font = `800 104px ${D}`; x.fillStyle = '#fff'; x.textBaseline = 'alphabetic';
+    const words = e.title.toUpperCase().split(/\s+/), lines = []; let ln = '';
+    for (const w of words) { const t = ln ? ln + ' ' + w : w; if (x.measureText(t).width > maxW && ln) { lines.push(ln); ln = w; } else ln = t; }
+    if (ln) lines.push(ln);
+    if (lines.length > 3) { lines.length = 3; lines[2] = lines[2].replace(/\s*\S*$/, '') + '…'; }
+    for (const t of lines) { y += 96; x.fillText(t, L, y); }
+    y += 24;
+    const fact = (icon, t) => { if (y > H - 230) return; y += 60; x.font = `600 40px ${B}`; x.fillStyle = '#f0712f'; x.fillText(icon, L, y); x.fillStyle = 'rgba(255,255,255,.88)';
+        let s2 = t; while (x.measureText(s2).width > maxW - 64 && s2.length > 4) s2 = s2.slice(0, -2); x.fillText(s2 === t ? t : s2 + '…', L + 64, y); };
+    if (evtMulti(e)) fact('⏱', `Till ${tfmt(e.ends_at, { weekday: 'short', day: 'numeric', month: 'short' })}, ${evtTime(e.ends_at)}`);
+    else if (e.ends_at) fact('⏱', `${evtTime(e.starts_at)} – ${evtTime(e.ends_at)}`);
+    if (e.location) fact('📍', e.location);
+    if (e.capacity) fact('🎟', `${Math.max(e.capacity - heads, 0)} of ${e.capacity} slots left`);
+    else if (heads) fact('🏍', `${heads} rider${heads === 1 ? '' : 's'} going`);
+    /* brand bar */
+    const by = H - 150; x.fillStyle = 'rgba(255,255,255,.08)'; x.fillRect(0, by - 2, W, 2);
+    const logo = await cardImg('icons/logo-384.png').catch(() => null);
+    if (logo) { x.save(); x.beginPath(); x.arc(L + 48, by + 74, 48, 0, Math.PI * 2); x.clip(); x.drawImage(logo, L, by + 26, 96, 96); x.restore(); }
+    x.font = `700 32px ${B}`; const jt = 'JOIN THE RIDE', jw = x.measureText(jt).width + 64;
+    const jg = x.createLinearGradient(W - L - jw, 0, W - L, 0); jg.addColorStop(0, '#ffa766'); jg.addColorStop(1, '#cf5119');
+    x.fillStyle = jg; x.beginPath(); x.roundRect(W - L - jw, by + 40, jw, 72, 36); x.fill(); x.fillStyle = '#fff'; x.textBaseline = 'middle'; x.fillText(jt, W - L - jw + 32, by + 78);
+    const fit = (t, mw) => { while (x.measureText(t).width > mw && t.length > 3) t = t.slice(0, -2).trimEnd() + '…'; return t; }, tw = W - L - jw - 28 - (L + 124);
+    x.textBaseline = 'alphabetic'; x.fillStyle = '#fff'; x.font = `800 46px ${D}`; x.fillText('RWB', L + 124, by + 70);
+    x.fillStyle = 'rgba(255,255,255,.62)'; x.font = `600 26px ${B}`; x.fillText(fit('Ronin Warriors of Bengal · roninwb.in', tw), L + 124, by + 108);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', .9));
+    return new File([blob], `rwb-${(e.title || 'event').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'event'}.jpg`, { type: 'image/jpeg' });
 }
+const blobB64 = b => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(b); });
 async function shareEvent(e, heads) {
-    const text = eventShareText(e, heads);
-    try {   /* phones that can share a picture straight into WhatsApp */
-        if (e.cover_url && navigator.canShare) {
-            const files = [await coverJpeg(e)];
-            if (navigator.canShare({ files, text })) { await navigator.share({ files, text }); return; }
-        }
-    } catch (er) { if (er?.name === 'AbortError') return; }
-    openWA(waShare(text));
+    const text = eventShareText(e, heads), file = await eventCard1080(e, heads);
+    /* the Android app: its own share menu (build 26+) */
+    const T = RwbTrack();
+    if (T?.shareImage) { try { await T.shareImage({ data: await blobB64(file), name: file.name, text, title: e.title }); return; } catch (er) { if (!/not implemented|unimplemented/i.test(er?.message || '')) throw er; } }
+    /* browsers that can share pictures (Chrome on Android, Safari) */
+    try { if (navigator.canShare?.({ files: [file], text })) { await navigator.share({ files: [file], text }); return; } }
+    catch (er) { if (er?.name === 'AbortError') return; }
+    /* anything else: show the card to save, plus the text for WhatsApp */
+    const url = URL.createObjectURL(file);
+    openSheet('Share event', `<img class="evt-cardprev" src="${url}" alt="">
+        <div class="btns" style="margin-top:12px"><a class="btn" href="${url}" download="${esc(file.name)}">Save picture</a><button class="btn ghost" data-x="wa">WhatsApp text</button></div>`, body => {
+        body.querySelector('[data-x=wa]').onclick = () => openWA(waShare(text));
+    });
 }
 function evtShareList(e, going) {
     const total = going.length + going.reduce((a, p) => a + p.guests, 0);
@@ -2108,7 +2156,6 @@ async function evtTeamSaved(e, msg) {
 /* search members (name, nickname, bike number or last 4+ digits of the phone) */
 function evtTeamFind(e) {
     openSheet('Add a rider', `<input type="search" id="evf-q" class="evt-find" placeholder="Name, nickname, bike number or phone" autocomplete="off" enterkeyhint="search" aria-label="Search members">
-        <p class="small muted" style="margin:8px 2px 0">Every RWB member shows here, also those not on the app yet.</p>
         <div id="evf-res" class="group evt-findres"></div>`, body => {
         const q = body.querySelector('#evf-q'), res = body.querySelector('#evf-res'); let t, seq = 0, rows = [];
         const draw = () => { res.innerHTML = rows.length ? rows.map((m, i) => `<button class="bike-row evt-fr" data-i="${i}">${face(m, 'avatar sm')}<span class="grow"><b>${esc(m.full_name)}</b><span class="small muted">${[m.nickname, m.vrn, m.on_app ? '' : 'Not on the app'].filter(Boolean).map(esc).join(' · ')}</span></span>${m.status === 'going' ? '<span class="evt-me going">Going</span>' : '<span class="evt-add-go">＋</span>'}</button>`).join('')
@@ -2130,7 +2177,6 @@ function evtTeamPick(e, m, fromFind = false) {
     openSheet(m.full_name || 'Rider', `<div class="row" style="margin-bottom:12px">${face(m, 'avatar')}<span class="grow"><b>${esc(m.full_name)}</b><span class="small muted" style="display:block">On the ${past ? 'Went' : 'Going'} list${m.on_app ? '' : ' · not on the app yet'}</span></span></div>
         ${e.allow_guests ? `<label class="switch">Bringing a guest (+1)<input type="checkbox" id="evt-tg"${m.guests ? ' checked' : ''}></label>` : ''}
         <button class="btn ghost block evt-offbtn" data-x="off" style="margin-top:14px">Take ${esc(name)} off the list</button>
-        <p class="small muted" style="margin-top:12px">${m.on_app ? (past ? 'This only fixes the list. No notification for a past event.' : `${esc(name)} gets a notification.`) : `${esc(name)} isn't on the app yet. The place moves to their account when they sign in.`}</p>
         ${fromFind ? '<button class="btn ghost block" data-x="back" style="margin-top:8px">‹ Back to search</button>' : ''}`, body => {
         const set = (b, st, guests = 0) => busy(b, async () => {
             try { await api.eventTeamSet(e.id, m.member_id, st, guests); } catch (er) { throw teamErr(er); }
@@ -2215,7 +2261,7 @@ function eventForm(e = null) {
             <input type="file" id="cv-file" accept="${PHOTO_ACCEPT}" hidden>
             <label id="cv-pos-wrap" hidden>Move the photo<input type="range" id="cv-pos" min="0" max="100" value="50"></label>
             <div class="btns" id="cv-btns"></div>
-            <p class="small muted">A wide (landscape) photo shows at the top of the event, like WhatsApp events. It is shrunk to about 100 KB.</p></div>
+</div>
         <input name="title" class="evt-name" required maxlength="100" placeholder="Event name" value="${esc(r.title || '')}" aria-label="Event name">
         <textarea name="description" maxlength="2000" placeholder="Description (optional)" aria-label="Description">${esc(r.description || '')}</textarea>
         <div class="grid2"><label>Date<input type="date" name="d1" required value="${start.slice(0, 10)}"></label><label>Time<input type="time" name="t1" required value="${start.slice(11, 16)}"></label></div>

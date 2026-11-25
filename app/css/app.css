@@ -2741,3 +2741,8 @@ html.lite .tab-track.live .brand-ring::after{animation-iteration-count:infinite!
 .evt-cpick input[type=range]{width:100%;accent-color:var(--orange)}
 .evt-whohead .btns .btn{white-space:nowrap}
 @media (max-width:420px){.evt-whohead{display:grid;gap:8px}.evt-whohead .btns{display:flex}.evt-whohead .btns .btn{flex:1}}
+.evt-cwrap{position:relative}
+.evt-sharebtn{position:absolute;top:12px;right:12px;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;border:1px solid rgba(255,255,255,.35);background:rgba(20,12,8,.42);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);color:#fff;cursor:pointer;box-shadow:0 4px 14px -6px rgba(0,0,0,.5)}
+.evt-sharebtn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.evt-sharebtn:disabled{opacity:.6}
+.evt-cardprev{display:block;width:100%;border-radius:14px}
