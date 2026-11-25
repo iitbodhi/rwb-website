@@ -214,7 +214,7 @@ const STALE = new Error('stale screen');
 (() => {
     const d = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
     Object.defineProperty(app, 'innerHTML', { configurable: true, get() { return d.get.call(this); },
-        set(v) { if (paintN >= 0 && paintN !== navN) throw STALE; d.set.call(this, v); navUI.painted();
+        set(v) { if (paintN >= 0 && paintN !== navN) throw STALE; d.set.call(this, v); navUI.painted(); vtPaint();
             /* a new screen starts at its scroll spot in the same frame it's drawn (scrolling a frame later made it jump) */
             if (topFor === navN) { topFor = -1; if (navScroll != null) window.scrollTo(0, navScroll); } } });
 })();
@@ -233,7 +233,29 @@ const stillHere = n => n === navN;
     const mem = navigator.deviceMemory, cores = navigator.hardwareConcurrency;
     if ((mem && mem <= 4) || (cores && cores <= 4)) root.classList.add('lite');
 })();
+/* No blank frame between screens (Nov 26 2026: on phones the whole screen went empty for one frame on every tab
+   change, while the phone was still drawing the new one). A view transition keeps the old screen on show until the
+   new one is fully drawn, then swaps with a very short fade. Phones without it just swap as before. */
+const canVT = !!document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+let vtEnd = null;
+function vtBegin() {   /* resolves when the screen may change */
+    if (!canVT || document.visibilityState !== 'visible') return Promise.resolve();
+    vtPaint();
+    return new Promise(go => {
+        let done = false; const run = () => { if (!done) { done = true; go(); } };
+        try {
+            const vt = document.startViewTransition(() => new Promise(res => { vtEnd = res; run(); setTimeout(res, 450); }));
+            vt.ready.catch(() => {}); vt.finished.catch(() => {}); vt.updateCallbackDone?.catch(() => {});
+        } catch { run(); }
+        setTimeout(run, 250);
+    });
+}
+function vtPaint() { const r = vtEnd; vtEnd = null; r?.(); }   /* the new screen is on the page: let the swap finish */
 async function doRender() {
+    await vtBegin();
+    try { return await drawRoute(); } finally { vtPaint(); }
+}
+async function drawRoute() {
     if (!state.me) return;          /* signed out / not loaded yet: boot() shows the right screen */
     const gate = isFam() ? null : await gateFor(state.me);
     if (gate) { tabbar.hidden = true; document.body.dataset.route = 'gate'; return gate === 'tnc' ? tncGate() : profileGate(); }
@@ -4833,7 +4855,7 @@ async function sweepSold(all) {
 }
 
 /* redraw MotoMart in place: keep the scroll position, no entrance animation, no new download */
-function mmRedraw() { const y = scrollY; mmState.local = true; viewMotoMart().then(() => scrollTo(0, y)).catch(() => {}); }
+function mmRedraw() { const y = scrollY; mmState.local = true; vtBegin().then(() => viewMotoMart()).then(() => scrollTo(0, y)).catch(() => {}).finally(vtPaint); }
 async function viewMotoMart() {
     state.myId ??= await api.myId();
     const p = state.param;
@@ -6023,6 +6045,17 @@ function stopSend(tries = 0) {
     api.trackStop().then(() => { try { localStorage.removeItem(STOP_KEY); } catch { /* ignore */ } if (location.hash.startsWith('#track')) refreshTrack(); })
         .catch(() => { if (tries < 5) setTimeout(() => stopSend(tries + 1), 3000 * (tries + 1)); });
 }
+/* the phone's sharing service already stopped (e.g. Stop on the notification): make sure the server knows too.
+   (The service's own stop message can be lost when Android closes the app straight after.) */
+function stopTell() { try { localStorage.setItem(STOP_KEY, '1'); } catch { /* ignore */ } stopSend(); }
+let selfCheckAt = 0;
+async function staleSelf(d) {
+    const me = !sharing() && NATIVE && (d.riders || []).find(r => r.me);
+    if (!me || Date.now() - selfCheckAt < 60e3) return; selfCheckAt = Date.now();
+    let st; try { st = await RwbTrack().status(); } catch { return; }
+    /* this phone stopped sharing after the share the map still shows (not a share started on another phone) */
+    if (!st.running && st.stopped && st.stopped >= (st.started || 0) && (!me.since || Date.parse(me.since) <= st.stopped)) stopTell();
+}
 async function stopShare(quiet = false) {
     const was = sharing() || trackSaved();
     trk.until = 0; trk.event = null; trackSave(null); stopWatch(); trackBadge();
@@ -6071,7 +6104,7 @@ async function svcCheck() {
         const st = await RwbTrack().status();
         if (st.lat && st.fix) trk.last = { lat: +st.lat, lng: +st.lng, acc: st.acc || null, t: st.fix };
         if (!st.running) {
-            if (st.stopped && st.stopped >= (st.started || 0)) { await stopShare(true); toast(/notification/.test(st.why || '') ? 'You stopped sharing from the notification' : 'Sharing stopped'); }
+            if (st.stopped && st.stopped >= (st.started || 0)) { await stopShare(true); stopTell(); toast(/notification/.test(st.why || '') ? 'You stopped sharing from the notification' : 'Sharing stopped'); }
             else await svcStart();   /* Android stopped it: start again */
         }
     } catch { /* ignore */ } finally { svcBusy = false; }
@@ -6589,6 +6622,7 @@ async function refreshTrack(redraw) {
     const ev = f ? (state.evd?.events || []).find(e => e.id === f) || { title: d.riders.find(onEv)?.event || 'this ride' } : null;
     const rider = d.fam ? d.riders.find(r => r.mine) : null, rName = esc(firstName(state.fam?.member));
     if (NATIVE && sharing()) svcHealth();
+    if (!d.fam) staleSelf(d);
     if (!d.fam) { const mine = d.sos.find(x => x.me); if (mine) setMySos({ id: mine.id, at: Date.parse(mine.at) || Date.now() }); else setMySos(null); }
     const sosB = app.querySelector('[data-act=trk-sos]'); if (sosB) sosB.textContent = mySos() ? '🆘 SOS sent · Cancel' : '🆘 SOS';
     const moving = d.riders.filter(r => rState(r).k === 'move');
