@@ -1188,7 +1188,7 @@ function newsSheet(n) {
     openSheet(n.title, `<p class="small muted" style="margin-bottom:12px"><span class="inl-ico">${KIND_ICON[n.kind] || ICON.mega}</span> ${timeAgo(n.created_at)}${n.audience === 'admins' ? ' · admins only' : n.audience === 'moderators' ? ' · team only' : ''}</p>
         <div class="news-full">${n.body ? linkifyNews(n.body) : '<span class="muted">No details.</span>'}</div>
         <button class="btn ghost block" data-x="share" style="margin-top:16px">Share on WhatsApp</button>`, body => {
-        body.querySelector('[data-x=share]').onclick = () => openWA(waShare(`📣 *${n.title}*${n.body ? '\n\n' + n.body : ''}\n\n– RWB App: https://${APP_LINK}`));
+        body.querySelector('[data-x=share]').onclick = () => openWA(waShare(`📣 *${n.title}*${n.body ? '\n\n' + n.body : ''}\n\n– RWB App: ${appLink()}`));
     });
 }
 function newsRow(n, del = false, compact = false) {
@@ -4098,24 +4098,28 @@ function checkSheet(r, k) {
     });
 }
 /* Ready-made WhatsApp messages; the admin can edit them before sending (free: sent from the admin's own WhatsApp) */
-const APP_LINK = 'roninwb.in/get';   /* Android → the app file; iPhone and computers → the web app */
+/* Where to get the app. Inside the Play Store app (and once RWB is public on Play) only the Play Store link is ever shown:
+   Google rejects apps that point people to an APK outside Play ("Device and Network Abuse", Nov 2026). */
+let PLAY_APP = false;
+const appLink = () => PLAY_APP || PLAY_LIVE ? PLAY_URL : 'https://roninwb.in/get';
+const playOnly = () => PLAY_APP || PLAY_LIVE;
 function waMsg(kind, x = {}) {
     const first = firstName(x) || 'Warrior', me = firstName(state.me) || 'RWB';
     /* one place for every rider, whether they joined in the app, on the website or on the old Google Form */
     const joinLink = `roninwb.in/join and continue with Google using ${x.email ? x.email : 'the email you joined with'}`;
     const T = {
-        welcome: `Hi ${first}! 🎉\n\nWelcome to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nMeanwhile, get the RWB App: https://${APP_LINK}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}. Your details are already there.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
-        existing: `Hi Warrior ${first}! 👋\n\nYou're already in our RWB WhatsApp group, so nothing to worry about. Your RWB App account is ready: just open the app and explore.\n\n📍 Track: live location on rides, SOS to the RWB team\n🔧 Service: records, bills and next-service reminders\n⛽ Mileage: your real km/l and fuel spends\n🛒 MotoMart: buy and sell used riding gear\n📘 Guides: maintenance help and tested gear\n📅 Events: rides, RSVPs and shared expenses\n🗓️ Calendar: events plus renewal, service and parts due dates, with reminders\n🏍️ RWB: members and leaderboards\n🤖 Pookie: our AI for any bike question\n\nPlease also update your details in the Me tab (you can set your bike model and add up to 3 bikes).\n\n${APP_LINK}\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
-        returning: `Hi ${first}! 🎉\n\nWelcome back to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nThe RWB App: https://${APP_LINK}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
+        welcome: `Hi ${first}! 🎉\n\nWelcome to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nMeanwhile, get the RWB App: ${appLink()}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}. Your details are already there.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
+        existing: `Hi Warrior ${first}! 👋\n\nYou're already in our RWB WhatsApp group, so nothing to worry about. Your RWB App account is ready: just open the app and explore.\n\n📍 Track: live location on rides, SOS to the RWB team\n🔧 Service: records, bills and next-service reminders\n⛽ Mileage: your real km/l and fuel spends\n🛒 MotoMart: buy and sell used riding gear\n📘 Guides: maintenance help and tested gear\n📅 Events: rides, RSVPs and shared expenses\n🗓️ Calendar: events plus renewal, service and parts due dates, with reminders\n🏍️ RWB: members and leaderboards\n🤖 Pookie: our AI for any bike question\n\nPlease also update your details in the Me tab (you can set your bike model and add up to 3 bikes).\n\n${appLink()}\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
+        returning: `Hi ${first}! 🎉\n\nWelcome back to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nThe RWB App: ${appLink()}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
         rejected: `Hi ${first},\n\nThank you for your interest in Ronin Warriors of Bengal. We're sorry, we couldn't approve your registration this time${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'}\n\nIf things change, you can apply again: open ${joinLink}. If you think this is a mistake, just reply here.\n\nRide safe! 🙏\n– ${me}, RWB`,
         hold: `Hi ${first}! 👋\n\nThanks for your interest in Ronin Warriors of Bengal. Your join request is on hold for now${x.note ? `: ${x.note.replace(/[.\s]+$/, '')}.` : '.'}\n\nTo see your request or update your answers, open ${joinLink}. Any questions? Just reply here.\n– ${me}, RWB`,
         change_ok: `Hi ${first}! ✅ Your ${x.what || 'profile'} update in the RWB App is approved. Thanks for keeping your details up to date.\n– ${me}, RWB`,
         change_no: `Hi ${first}, we couldn't approve your ${x.what || 'profile'} update in the RWB App${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'} Just reply here if you'd like help with it. 🙏\n– ${me}, RWB`,
         ask: `Hi ${first}! 👋\n\nThanks for registering with Ronin Warriors of Bengal. Before we approve you, could you please help us with:\n${(x.asks || []).map(a => '• ' + a).join('\n') || '• '}\n${(x.asks || []).some(a => /terms/i.test(a)) ? `\n📜 RWB Terms & Conditions: ${TNC_URL}\nIf you agree, just reply “I agree” here.\n` : ''}\nTo update your answers, open ${joinLink}. Or just reply here.\n\nThank you!\n– ${me}, RWB`,
-        invite: `Hi ${first}! 👋\n\nRWB now has its own free app for members: service records and reminders, a calendar that reminds you of renewals and service dates, mileage tracker, MotoMart for used gear, events, guides and more.\n\n📲 Get it here: https://${APP_LINK}\nSign in with Google using the email you gave on the RWB join form. Don't remember it? The app will help: on the “No Account Found” screen, enter your WhatsApp number and VRN.\n\n🎥 How to install:\nAndroid: ${INSTALL_ANDROID}\niPhone: ${INSTALL_IPHONE}\n\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
+        invite: `Hi ${first}! 👋\n\nRWB now has its own free app for members: service records and reminders, a calendar that reminds you of renewals and service dates, mileage tracker, MotoMart for used gear, events, guides and more.\n\n📲 Get it here: ${appLink()}\nSign in with Google using the email you gave on the RWB join form. Don't remember it? The app will help: on the “No Account Found” screen, enter your WhatsApp number and VRN.${playOnly() ? `\n\n🎥 iPhone: ${INSTALL_IPHONE}` : `\n\n🎥 How to install:\nAndroid: ${INSTALL_ANDROID}\niPhone: ${INSTALL_IPHONE}`}\n\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
         sticker: `Hi ${first}! 👋\n\nIf you haven't got your RWB sticker yet, you can collect it at our next meet-up or ride. 🏍️\n\nIf you already have one, kindly update it in the RWB App → Me → More from RWB: https://roninwb.in/app/#me\n\nThank you!\n– ${me}, RWB`,
         comeback: `Hi ${first}! 👋\n\nIt's ${me} from Ronin Warriors of Bengal. We miss you on the road! If you'd like to come back to RWB, just reply here or fill the join form again at roninwb.in.\n\nRide safe! 🏍️`,
-        remind: `Hi ${first}! 👋\n\nA quick one from the RWB team: please complete your RWB profile.${x.rules ? `\n\n📜 Please read and agree to the RWB Terms & Conditions: ${TNC_URL}\nAgree in the app (Me → Terms & Conditions → Read & agree), or just reply “I agree” here.` : ''}${x.missing?.length ? `\n\nMissing: ${x.missing.join(', ')}.` : ''}\n\nIt takes a minute in the RWB App: ${APP_LINK} → Me.${x.on_app ? '' : ' Sign in with Google using the email you gave on the join form.'}\n\nThank you! Explore. Evolve. Inspire.\n– ${me}, RWB`
+        remind: `Hi ${first}! 👋\n\nA quick one from the RWB team: please complete your RWB profile.${x.rules ? `\n\n📜 Please read and agree to the RWB Terms & Conditions: ${TNC_URL}\nAgree in the app (Me → Terms & Conditions → Read & agree), or just reply “I agree” here.` : ''}${x.missing?.length ? `\n\nMissing: ${x.missing.join(', ')}.` : ''}\n\nIt takes a minute in the RWB App: ${appLink()} → Me.${x.on_app ? '' : ' Sign in with Google using the email you gave on the join form.'}\n\nThank you! Explore. Evolve. Inspire.\n– ${me}, RWB`
     };
     return T[kind];
 }
@@ -4307,12 +4311,12 @@ function bindFollowUps(inc, all) {
     const shareAll = (pick = { tnc: true, other: true, app: true, gone: true, sticker: true }) => {
         const t = inTab(), tnc = pick.tnc ? t.tnc : [], other = pick.other ? t.other : [], notApp = pick.app ? t.app : [], left = pick.gone ? t.gone : [], sticker = pick.sticker ? t.sticker : [];
         const firstNames = l => azSort(l).map(m => `• ${m.full_name}`).join('\n');
-        if (state.fuView === 'gone') return `🏍️ *We miss these warriors!* 🧡\n\n${firstNames(left)}\n\nIf you're in touch with them, let them know they're always welcome back. They can rejoin with the join form at roninwb.in or the RWB App: https://${APP_LINK}\n\nExplore. Evolve. Inspire.`;
+        if (state.fuView === 'gone') return `🏍️ *We miss these warriors!* 🧡\n\n${firstNames(left)}\n\nIf you're in touch with them, let them know they're always welcome back. They can rejoin with the join form at roninwb.in or the RWB App: ${appLink()}\n\nExplore. Evolve. Inspire.`;
         return `🏍️ *RWB App: a quick to-do for some of our warriors* 🙏\n`
             + (tnc.length ? `\n📜 *Please respond to the RWB Terms & Conditions in the app*\nOpen it directly: https://roninwb.in/app/#terms\n(or RWB App → Me → Terms & Conditions → Read & agree)\n${firstNames(tnc)}\n` : '')
             + (other.length ? `\n✍️ *Please add your missing details* (RWB App → Me → Edit)\n${azSort(other).map(m => `• ${m.full_name}: ${m.missing.join(', ')}`).join('\n')}\n` : '')
             + (sticker.length ? `\n🏷️ *RWB sticker not received yet?*\nCollect it at our next meet-up or ride. Already got one? Update it in the RWB App → Me → More from RWB: https://roninwb.in/app/#me\n${firstNames(sticker)}\n` : '')
-            + (notApp.length ? `\n📲 *Not on the RWB App yet?* Get it: https://${APP_LINK}\nSign in with the email you gave on the join form.\nAndroid guide: ${INSTALL_ANDROID}\niPhone guide: ${INSTALL_IPHONE}\n${firstNames(notApp)}\n` : '')
+            + (notApp.length ? `\n📲 *Not on the RWB App yet?* Get it: ${appLink()}\nSign in with the email you gave on the join form.${playOnly() ? '' : `\nAndroid guide: ${INSTALL_ANDROID}`}\niPhone guide: ${INSTALL_IPHONE}\n${firstNames(notApp)}\n` : '')
             + `\nThank you! Explore. Evolve. Inspire.`;
     };
     Object.assign(actions, {
@@ -4608,7 +4612,7 @@ async function drawPushState() {
             return;
         }
         btn.innerHTML = isIOS() ? `<ol class="steps"><li>Open iPhone <b>Settings → Notifications</b></li><li>Find <b>RWB</b> and turn on <b>Allow Notifications</b></li><li>Come back here and tap <b>Turn on</b></li></ol><button class="btn sm" data-act="push-on" style="margin-top:10px">Turn on</button>`
-            : `<p class="small" style="margin:4px 0 6px"><b>Using the RWB app (downloaded APK)</b></p><ol class="steps"><li>Open phone <b>Settings → Apps → RWB → Notifications</b></li><li>Turn on <b>Allow notifications</b></li></ol>
+            : `<p class="small" style="margin:4px 0 6px"><b>Using the RWB Android app</b></p><ol class="steps"><li>Open phone <b>Settings → Apps → RWB → Notifications</b></li><li>Turn on <b>Allow notifications</b></li></ol>
                <p class="small" style="margin:12px 0 6px"><b>Using Chrome</b></p><ol class="steps"><li>Tap the icon left of <b>roninwb.in</b> in the address bar</li><li><b>Permissions → Notifications → Allow</b></li></ol>
                <p class="small muted" style="margin-top:10px">Then close and reopen the app, and come back to this page.</p>`;
         return;
@@ -6236,7 +6240,7 @@ function keepBlocker(html, go) {
 }
 /* an older RWB Android app (without the Track service): ask to update once per visit */
 async function nativeUpdateAsk() {
-    if (!NATIVE || await hasSvc()) return;
+    if (!NATIVE || (await nativeInfo()).channel === 'play' || await hasSvc()) return;   /* the Play Store app only ever updates through Play */
     try { if (sessionStorage.getItem('rwb-native-update')) return; sessionStorage.setItem('rwb-native-update', '1'); } catch { /* ignore */ }
     const el = document.createElement('div'); el.className = 'promo'; el.setAttribute('role', 'dialog');
     el.innerHTML = `<div class="promo-card"><span class="promo-ico">🚀</span><h2>Update the RWB app</h2>
@@ -6705,7 +6709,7 @@ const FAM_CODE_KEY = 'rwb-fam-code';
 const FAM_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M12 21.2s-2.6-1.6-2.6-3.3a1.4 1.4 0 0 1 2.6-.7 1.4 1.4 0 0 1 2.6.7c0 1.7-2.6 3.3-2.6 3.3z"/><circle cx="8" cy="7.5" r="2.6"/><circle cx="16.5" cy="8.5" r="2.1"/><path d="M3.5 19c.4-3.4 2.2-5.6 4.5-5.6s4.1 2.2 4.5 5.6M13.4 14.6c.8-.9 1.8-1.4 3.1-1.4 2 0 3.5 1.7 3.9 4.6"/><path d="M12 21.2s-2.6-1.6-2.6-3.3a1.4 1.4 0 0 1 2.6-.7 1.4 1.4 0 0 1 2.6.7c0 1.7-2.6 3.3-2.6 3.3z"/></svg>';
 const famCodeNorm = c => { const t = String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return t ? 'RWB-' + t.replace(/^RWB/, '').slice(0, 8) : ''; };
 const famCodeSaved = () => { try { return localStorage.getItem(FAM_CODE_KEY) || ''; } catch { return ''; } };
-const famLink = code => `https://roninwb.in/fam/?c=${encodeURIComponent(code)}`;
+const famLink = code => `https://roninwb.in/fam/?c=${encodeURIComponent(code)}${playOnly() ? '&p=1' : ''}`;
 /* roninwb.in/app/?fam=RWB-XXXX (from the invite page): remember the code until the person signs in */
 (() => { try { const u = new URL(location.href), c = u.searchParams.get('fam'); if (!c) return;
     localStorage.setItem(FAM_CODE_KEY, famCodeNorm(c)); u.searchParams.delete('fam'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch { /* ignore */ } })();
@@ -6958,6 +6962,7 @@ function appLink(url) {
    the Back button, links to WhatsApp / phone / Maps, and background location for Track. */
 const NATIVE = !!window.Capacitor?.isNativePlatform?.();
 const nativePlugins = {};
+if (NATIVE) nativeInfo().then(i => { PLAY_APP = i?.channel === 'play'; }).catch(() => {});
 function Native(name) { if (!NATIVE) return null; try { return nativePlugins[name] ??= capRegister(name); } catch (e) { console.error(e); return null; } }
 const FCM_KEY = 'rwb-fcm';
 /* RWB Android app: right after the first sign-in, Android asks "Allow RWB to send you notifications?" once */

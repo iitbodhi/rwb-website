@@ -1,5 +1,7 @@
 // Turns the built RWB Android project into the Google Play Store version (run after the APK for roninwb.in is built):
 // - marks it as the Play Store app (it then updates through the Play Store, never by downloading an APK)
+//   Nov 26 2026: Play rejected build 130 under "Device and Network Abuse" because the web screens could still offer the APK.
+//   The web app now checks the channel (PLAY_APP / playOnly in app.js): the Play copy never shows or links the APK.
 // - removes the permission Google Play restricts (asking to ignore battery optimisation directly); the app opens the
 //   app's settings page instead, where riders choose Battery → Unrestricted.
 import fs from 'node:fs';
