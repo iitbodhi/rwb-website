@@ -1946,7 +1946,7 @@ function evtWhen(e, short = false) {
 const evtDay = iso => `<span class="evt-d"><i>${tfmt(iso, { month: 'short' }).toUpperCase()}</i><b>${tfmt(iso, { day: 'numeric' })}</b><em>${tfmt(iso, { weekday: 'short' }).toUpperCase()}</em></span>`;
 /* the small line above an event's name, like the website: TAG · 2 DAYS */
 const evtEyebrow = e => { const t = [e.tag, evtMulti(e) ? `${evtDays(e)} days` : ''].filter(Boolean); return t.length ? `<span class="evt-eyebrow">${esc(t.join(' · '))}</span>` : ''; };
-const EVT_ICON = { clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>', pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>' };
+const EVT_ICON = { clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>', pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>', edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>' };
 /* slots left (when the event has a limit) */
 const evtSlots = (e, n) => { if (!e.capacity) return ''; const left = Math.max(e.capacity - n, 0), p = Math.min(n / e.capacity, 1);
     return `<span class="evt-slots ${p >= 1 ? 'full' : p >= .6 ? 'mid' : ''}"><span><b>${left}</b> of ${e.capacity} slots left</span><i><i style="width:${Math.round(p * 100)}%"></i></i></span>`; };
@@ -2015,8 +2015,10 @@ async function eventPage(e) {
     const headcount = cached ? going.length + guests : cnt ? cnt.going + cnt.guests : 0;
     const inGroup = me && me.status !== 'no';
     const live = e.status === 'live', past = evtPast(e);
+    /* the RWB team (admins + coordinators) can add, move or take anyone off the list (file 86), also after the event */
+    const team = mod && !fam && live && !!cached && people.every(p => 'member_id' in p);
     const ppl = (list, label) => list.length ? `<details class="evt-people"${label === 'Going' ? ' open' : ''}><summary><b>${label}</b> <span class="muted">${list.length}${label === 'Going' && guests ? ` + ${guests} guest${guests > 1 ? 's' : ''}` : ''}</span></summary>
-        <div class="evt-plist">${list.map(p => `<div class="row">${face(p, 'avatar sm')}<span class="grow">${esc(p.full_name)}${p.user_id === myUid ? ' <span class="muted">(you)</span>' : ''}</span>${p.guests ? '<span class="badge">+1 guest</span>' : ''}</div>`).join('')}</div></details>` : '';
+        <div class="evt-plist">${list.map(p => `<div class="row">${face(p, 'avatar sm')}<span class="grow">${esc(p.full_name)}${p.user_id && p.user_id === myUid ? ' <span class="muted">(you)</span>' : ''}${p.set_by_name || p.on_app === false ? `<span class="evt-by">${[p.on_app === false && mod ? 'Not on the app' : '', p.set_by_name ? 'Added by ' + esc(p.set_by_name) : ''].filter(Boolean).join(' · ')}</span>` : ''}</span>${p.guests ? '<span class="badge">+1 guest</span>' : ''}${team && p.member_id != null ? `<button class="evt-pm" data-act="evt-pm" data-m="${p.member_id}" aria-label="Change ${esc(p.full_name)}">${EVT_ICON.edit}</button>` : ''}</div>`).join('')}</div></details>` : '';
     app.innerHTML = top('Events') + `
         <a class="back-link" href="#events">‹ All events</a>
         <section class="card evt-hero${live ? '' : ' cancelled'}">
@@ -2037,19 +2039,75 @@ async function eventPage(e) {
             <div class="btns evt-actions">${fam ? '' : '<button class="btn sm ghost" data-act="evt-share">Share</button>'}${live && !past ? `<a class="btn sm ghost" href="${esc(gcalUrl(e))}" target="_blank" rel="noopener">Add to calendar</a>` : ''}</div>
         </section>
         ${rideLive(e)}
-        ${fam ? '' : `<section class="section"><h2>Who's coming</h2><div class="card">${!cached ? SKEL(2) : people.length ? ppl(going, 'Going') + ppl(maybe, 'Maybe') + ppl(no, "Can't go") : '<p class="muted small">No responses yet.</p>'}</div></section>
+        ${fam ? '' : `<section class="section"><div class="evt-whohead"><h2>Who's coming</h2>${team ? `<span class="btns">${going.length ? '<button class="btn sm ghost" data-act="evt-copy">Copy list</button>' : ''}<button class="btn sm" data-act="evt-add">＋ Add rider</button></span>` : ''}</div>${team ? `<p class="small muted evt-teamnote">${past ? 'Fix who actually went: tap ✎ next to a name, or add riders who came.' : 'Add riders who forgot to respond or aren\'t on the app, or fix a wrong answer with ✎.'}</p>` : ''}<div class="card">${!cached ? SKEL(2) : people.length ? ppl(going, 'Going') + ppl(maybe, 'Maybe') + ppl(no, "Can't go") : '<p class="muted small">No responses yet.</p>'}</div></section>
         <section class="section" id="exp-sec"><h2>Expenses</h2><div id="exp-body">${inGroup || mod ? SKEL(2) : `<div class="card empty"><b>Split costs with the group</b>Respond Going or Maybe to see and add shared expenses for this event.</div>`}</div></section>`}
         ${mod ? `<section class="section"><h2>Organiser</h2><div class="btns">${live ? '<button class="btn ghost" data-act="evt-edit">Edit</button><button class="btn ghost" data-act="evt-cancel">Cancel event</button>' : ''}<button class="btn danger" data-act="evt-del">Delete</button></div></section>` : ''}`;
     actions = {
         rsvp: b => busy(b, async () => { await api.rsvp(e.id, b.dataset.s, b.dataset.s === 'going' ? (me?.guests || 0) : 0); await loadEvents(true); toast(b.dataset.s === 'going' ? "You're going 🏍️" : b.dataset.s === 'maybe' ? 'Marked as maybe' : 'Marked as can\'t go'); render(); }),
         'evt-share': () => openWA(waShare(`📅 *${e.title}*\n🗓 ${evtWhen(e)}${e.location ? `\n📍 ${e.location}${mapsUrl(e) ? ' ' + mapsUrl(e) : ''}` : ''}${e.description ? `\n\n${e.description}` : ''}\n\n👉 RSVP in the RWB App: https://roninwb.in/app/#events/${e.id}`)),
         'evt-edit': () => eventForm(e),
+        'evt-add': () => evtTeamFind(e),
+        'evt-pm': b => { const p = people.find(x => String(x.member_id) === b.dataset.m); if (p) evtTeamPick(e, { member_id: p.member_id, full_name: p.full_name, nickname: p.nickname, avatar_url: p.avatar_url, on_app: p.on_app, status: p.status, guests: p.guests }); },
+        'evt-copy': () => evtCopyList(e, going, maybe),
         'evt-track-share': () => shareSheet(e.id, e.title),
         'evt-cancel': b => { if (confirmBox(`Cancel “${e.title}”? Everyone gets a notification.`)) busy(b, async () => { await api.saveEvent({ id: e.id, status: 'cancelled' }); await loadEvents(true); toast('Event cancelled'); render(); }); },
         'evt-del': b => { if (confirmBox(`Delete “${e.title}” with its RSVPs and expenses? This can't be undone.`)) busy(b, async () => { await api.deleteEvent(e.id); await loadEvents(true); location.hash = '#events'; toast('Deleted'); }); }
     };
     const g = $('#evt-guest'); if (g) g.onchange = () => busy(null, async () => { await api.rsvp(e.id, 'going', g.checked ? 1 : 0); await loadEvents(true); toast(g.checked ? 'Guest added' : 'Guest removed'); render(); });
     if (!fam && cached && (inGroup || mod)) drawExpenses(e, people, myUid);
+}
+/* ---- RWB team: manage who's going (file 86) ---- */
+const teamErr = er => /event_(team_set|find_members)|schema cache|function/i.test(er?.message || '') ? new Error('This needs a quick update on the RWB server first. Please try again later.') : er;
+async function evtTeamSaved(e, msg) {
+    delete state.evPeople[e.id];
+    const [p] = await Promise.all([api.eventPeople(e.id).catch(() => null), loadEvents(true)]);
+    if (p) state.evPeople[e.id] = p;
+    toast(msg);
+    if (location.hash === '#events/' + e.id) render();
+}
+/* search members (name, nickname, bike number or last 4+ digits of the phone) */
+function evtTeamFind(e) {
+    openSheet('Add a rider', `<input type="search" id="evf-q" class="evt-find" placeholder="Name, nickname, bike number or phone" autocomplete="off" enterkeyhint="search" aria-label="Search members">
+        <p class="small muted" style="margin:8px 2px 0">Every RWB member shows here, also those not on the app yet.</p>
+        <div id="evf-res" class="group evt-findres"></div>`, body => {
+        const q = body.querySelector('#evf-q'), res = body.querySelector('#evf-res'); let t, seq = 0, rows = [];
+        const draw = () => { res.innerHTML = rows.length ? rows.map((m, i) => `<button class="bike-row evt-fr" data-i="${i}">${face(m, 'avatar sm')}<span class="grow"><b>${esc(m.full_name)}</b><span class="small muted">${[m.nickname, m.vrn, m.on_app ? '' : 'Not on the app'].filter(Boolean).map(esc).join(' · ')}</span></span>${m.status ? `<span class="evt-me ${m.status}">${RSVP_TXT[m.status]}</span>` : '<span class="evt-add-go">＋</span>'}</button>`).join('')
+            : q.value.trim().length >= 2 ? '<p class="small muted" style="padding:12px">No member found. Try another spelling, the bike number or the phone number.</p>' : ''; };
+        const run = async () => { const v = q.value.trim(), my = ++seq; if (v.length < 2) { rows = []; draw(); return; }
+            try { const r = await api.eventFind(e.id, v); if (my === seq) { rows = r; draw(); } } catch (er) { if (my === seq) toast(teamErr(er).message, true); } };
+        q.oninput = () => { clearTimeout(t); t = setTimeout(run, 300); };
+        res.onclick = ev => { const b = ev.target.closest('.evt-fr'); if (b) evtTeamPick(e, rows[+b.dataset.i], true); };
+        setTimeout(() => q.focus(), 60);
+    });
+}
+/* pick Going / Maybe / Can't go / take off the list for one member */
+function evtTeamPick(e, m, fromFind = false) {
+    const name = m.nickname || (m.full_name || '').split(' ')[0] || 'this rider', past = evtPast(e);
+    const opts = [['going', '✓ Going'], ['maybe', '? Maybe'], ...(m.on_app ? [['no', "✕ Can't go"]] : [])];
+    openSheet(m.full_name || 'Rider', `<div class="row" style="margin-bottom:12px">${face(m, 'avatar')}<span class="grow"><b>${esc(m.full_name)}</b><span class="small muted" style="display:block">${m.status ? 'Now: ' + RSVP_TXT[m.status] : 'Not on the list yet'}${m.on_app ? '' : ' · not on the app'}</span></span></div>
+        <div class="evt-rsvp" role="group" aria-label="Answer for ${esc(name)}">${opts.map(([k, l]) => `<button class="${m.status === k ? 'on ' + k : ''}" data-x="${k}" aria-pressed="${m.status === k}">${l}</button>`).join('')}</div>
+        ${e.allow_guests ? `<label class="switch" style="margin-top:12px">Bringing a guest (+1)<input type="checkbox" id="evt-tg"${m.guests ? ' checked' : ''}></label>` : ''}
+        ${m.status ? `<button class="btn ghost block evt-offbtn" data-x="off" style="margin-top:14px">Take ${esc(name)} off the list</button>` : ''}
+        <p class="small muted" style="margin-top:12px">${m.on_app ? (past ? 'This only fixes the list. No notification for a past event.' : `${esc(name)} gets a notification and can still change it.`) : `${esc(name)} isn't on the app yet. The place is kept and moves to their account when they sign in.`}</p>
+        ${fromFind ? '<button class="btn ghost block" data-x="back" style="margin-top:8px">‹ Back to search</button>' : ''}`, body => {
+        const set = (b, st) => busy(b, async () => {
+            const g = body.querySelector('#evt-tg'), guests = st === 'going' && g?.checked ? 1 : 0;
+            try { await api.eventTeamSet(e.id, m.member_id, st, guests); } catch (er) { throw teamErr(er); }
+            closeSheet();
+            await evtTeamSaved(e, st === null ? `${name} taken off the list` : st === 'going' ? `${name} is on the Going list` : st === 'maybe' ? `${name} marked as maybe` : `${name} marked as can't go`);
+        });
+        body.querySelectorAll('.evt-rsvp [data-x]').forEach(b => b.onclick = () => set(b, b.dataset.x));
+        const off = body.querySelector('[data-x=off]'); if (off) off.onclick = () => set(off, null);
+        const g = body.querySelector('#evt-tg'); if (g && m.status === 'going') g.onchange = () => set(null, 'going');
+        const bk = body.querySelector('[data-x=back]'); if (bk) bk.onclick = () => evtTeamFind(e);
+    });
+}
+/* the Going list as text for WhatsApp roll call */
+async function evtCopyList(e, going, maybe) {
+    const line = (p, i) => `${i + 1}. ${p.full_name}${p.nickname ? ` (${p.nickname})` : ''}${p.guests ? ' +1' : ''}`;
+    const total = going.length + going.reduce((a, p) => a + p.guests, 0);
+    const text = `📅 *${e.title}*\n🗓 ${evtWhen(e)}\n\n*Going (${total})*\n${going.map(line).join('\n')}${maybe.length ? `\n\n*Maybe (${maybe.length})*\n${maybe.map(line).join('\n')}` : ''}`;
+    try { await navigator.clipboard.writeText(text); toast('List copied: paste it in WhatsApp'); } catch { openWA(waShare(text)); }
 }
 function gcalUrl(e) {
     const z = iso => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -3590,7 +3648,7 @@ function viewMe() {
         <h2 class="st-title">Notifications</h2>
         <div class="card st-card" id="notif-card"><p id="push-state">Checking…</p><div id="push-btn" style="margin-top:10px"></div></div>
         <div class="group st-group">
-            ${[...(isMod() ? [['birthday', 'Birthdays']] : []), ['reminder', 'Renewal, service and my reminders'], ['track', 'Riders who start sharing on Track'], ['motomart', 'New MotoMart posts'], ['member', 'New members on the app']].map(([k, l]) => `<label class="toggle-row"><span class="grow">${l}</span><span class="switch-only"><input type="checkbox" data-pref="${k}"${(m.notify || {})[k] !== false ? ' checked' : ''}></span></label>`).join('')}
+            ${[...(isMod() ? [['birthday', 'Birthdays']] : []), ['reminder', 'Renewal, service and my reminders'], ['track', 'Riders who start sharing on Track'], ['rsvp', 'Riders joining events'], ['motomart', 'New MotoMart posts'], ['member', 'New members on the app']].map(([k, l]) => `<label class="toggle-row"><span class="grow">${l}</span><span class="switch-only"><input type="checkbox" data-pref="${k}"${(m.notify || {})[k] !== false ? ' checked' : ''}></span></label>`).join('')}
         </div>
         <p class="st-foot">RWB announcements always come through.</p>
 
@@ -3647,7 +3705,7 @@ function viewMe() {
         })
     };
     app.querySelectorAll('[data-pref]').forEach(cb => cb.onchange = async () => {
-        const notify = { birthday: true, reminder: true, track: true, motomart: true, member: true, ...(state.me.notify || {}), [cb.dataset.pref]: cb.checked };
+        const notify = { birthday: true, reminder: true, track: true, rsvp: true, motomart: true, member: true, ...(state.me.notify || {}), [cb.dataset.pref]: cb.checked };
         try { state.me = await api.updateMe({ notify }); toast('Saved'); } catch (e) { cb.checked = !cb.checked; toast(e.message, true); }
     });
     const wa = $('#wa-app'); if (wa) wa.onchange = () => { try { localStorage.setItem('rwb-wa-app', wa.value); } catch { /* ignore */ } toast(`WhatsApp links open in ${WA_APPS[wa.value][0] === 'Let my phone decide' ? 'whichever app your phone picks' : WA_APPS[wa.value][0]}`); };
@@ -4441,7 +4499,7 @@ async function drawPushState() {
 
 /* =================== Announcements =================== */
 const STICKY = n => n.kind === 'announcement' || n.kind === 'event';   /* only admins can remove these */
-const KIND_ICON = { event: ICON.cal, announcement: ICON.mega, birthday: ICON.cake, motomart: ICON.cart, member: ICON.bike, admin: ICON.approve, personal: ICON.profile, sos: ICON.alert, reminder: ICON.cal, track: ICON.pin };
+const KIND_ICON = { event: ICON.cal, announcement: ICON.mega, birthday: ICON.cake, motomart: ICON.cart, member: ICON.bike, admin: ICON.approve, personal: ICON.profile, sos: ICON.alert, reminder: ICON.cal, track: ICON.pin, rsvp: ICON.cal };
 function shortAgo(iso) {
     const s = (Date.now() - new Date(iso)) / 1000;
     if (s < 60) return 'now'; if (s < 3600) return Math.floor(s / 60) + 'm'; if (s < 86400) return Math.floor(s / 3600) + 'h';

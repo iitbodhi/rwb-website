@@ -2682,3 +2682,18 @@ html.lite .card,html.lite .group,html.lite .evt-card,html.lite .mm-card{backgrou
 /* the Track ring keeps spinning while you scroll (only the background lights pause) */
 html.scrolling .brand-ring::after,html.scrolling .tab-track.live .brand-ring::after{animation-play-state:running!important}
 html.lite .tab-track.live .brand-ring::after{animation-iteration-count:infinite!important}
+/* Events: the RWB team manages who's going (file 86) */
+.evt-whohead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.evt-whohead h2{margin:0}
+.evt-whohead .btns{margin:0;gap:6px}
+.evt-teamnote{margin:6px 2px 10px}
+.evt-by{display:block;font-size:.76rem;color:var(--muted);margin-top:1px}
+.evt-pm{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line);background:transparent;color:var(--orange);cursor:pointer}
+.evt-pm svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.evt-find{width:100%}
+.evt-findres{margin-top:12px}
+.evt-findres:empty{display:none}
+.evt-fr{width:100%;text-align:left;background:none;border:0;color:inherit;cursor:pointer;font:inherit}
+.evt-fr .small{display:block}
+.evt-add-go{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--grad-o);color:#fff;font-weight:700}
+.evt-offbtn{color:#d93a2b!important}

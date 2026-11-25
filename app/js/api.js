@@ -208,6 +208,9 @@ async function supabaseApi(url, key) {
         eventCounts: async () => must(await sb.rpc('event_counts')) || [],
         myRsvps: async () => must(await sb.from('event_rsvps').select('event_id,status,guests').eq('user_id', await uid())),
         eventPeople: async id => must(await sb.rpc('event_people', { p_event: id })) || [],
+        /* RWB team (admins + coordinators, file 86): find members and set anyone's answer, also for members not on the app */
+        eventFind: async (id, q) => must(await sb.rpc('event_find_members', { p_event: id, p_q: q })) || [],
+        eventTeamSet: async (id, memberId, status, guests = 0) => must(await sb.rpc('event_team_set', { p_event: id, p_member: memberId, p_status: status, p_guests: guests })),
         async rsvp(eventId, status, guests = 0) { return must(await sb.from('event_rsvps').upsert({ event_id: eventId, user_id: await uid(), status, guests }, { onConflict: 'event_id,user_id' }).select().single()); },
         async saveEvent(rec) {
             const { id, created_by, created_at, updated_at, reminded_at, source_key, ...row } = rec;
@@ -582,6 +585,8 @@ function demoApi() {
     const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { /* ignore */ } };
     const clone = x => JSON.parse(JSON.stringify(x));
     const nid = () => ++db.nextId;
+    /* demo: members not on the app are kept by member_id (file 86) */
+    const rsvpMember = r => r.member_id ? db.members.find(x => x.id === r.member_id) : db.members.find(x => x.user_id === r.user_id);
     const personOf = uidv => { const m = db.members.find(x => x.user_id === uidv) || {}; return { full_name: m.full_name || 'Rider', nickname: m.nickname || '', avatar_url: m.avatar_url || null }; };
     const me = () => db.members.find(m => m.user_id === 'me');
     const firstOf = m => (m.nickname || m.full_name).split(' ')[0];
@@ -779,12 +784,28 @@ function demoApi() {
             return wait([...db.events].sort((a, b) => a.starts_at.localeCompare(b.starts_at)));
         },
         eventCounts() {
-            const out = {}; for (const r of db.rsvps || []) { const o = out[r.event_id] ||= { event_id: r.event_id, going: 0, maybe: 0, guests: 0, faces: [] }; if (r.status === 'going') { o.going++; o.guests += r.guests; if (o.faces.length < 4) o.faces.push({ full_name: personOf(r.user_id).full_name, avatar_url: personOf(r.user_id).avatar_url }); } if (r.status === 'maybe') o.maybe++; }
+            const out = {}; for (const r of db.rsvps || []) { const o = out[r.event_id] ||= { event_id: r.event_id, going: 0, maybe: 0, guests: 0, faces: [] }; if (r.status === 'going') { o.going++; o.guests += r.guests; if (o.faces.length < 4) { const m = rsvpMember(r) || {}; o.faces.push({ full_name: m.full_name || 'Rider', avatar_url: m.avatar_url || null }); } } if (r.status === 'maybe') o.maybe++; }
             return wait(Object.values(out));
         },
         myRsvps: () => wait((db.rsvps || []).filter(r => r.user_id === 'me')),
-        eventPeople: id => wait((db.rsvps || []).filter(r => r.event_id === id).map(r => ({ ...personOf(r.user_id), user_id: r.user_id, status: r.status, guests: r.guests }))),
-        async rsvp(eventId, status, guests = 0) { db.rsvps ||= []; const e = db.events.find(x => x.id === eventId); if (!e.allow_guests || status !== 'going') guests = 0; const r = db.rsvps.find(x => x.event_id === eventId && x.user_id === 'me'); if (r) Object.assign(r, { status, guests }); else db.rsvps.push({ event_id: eventId, user_id: 'me', status, guests }); save(); return wait({ status, guests }); },
+        eventPeople: id => wait((db.rsvps || []).filter(r => r.event_id === id).map(r => { const m = rsvpMember(r) || {};
+            return { full_name: m.full_name || 'Rider', nickname: m.nickname || '', avatar_url: m.avatar_url || null, user_id: r.user_id || null, member_id: m.id ?? null, status: r.status, guests: r.guests,
+                set_by_name: r.set_by ? (r.set_by === 'me' ? 'You' : 'RWB team') : null, on_app: !!r.user_id }; })),
+        eventFind: (id, q) => { q = String(q || '').trim().toLowerCase(); if (q.length < 2) return wait([]); const v = q.replace(/[^a-z0-9]/g, '');
+            return wait(db.members.filter(m => (m.status || 'active') === 'active' && ((m.full_name || '').toLowerCase().includes(q) || (m.nickname || '').toLowerCase().includes(q) || (v.length >= 3 && (m.vrn || '').toLowerCase().replace(/[^a-z0-9]/g, '').includes(v)))).slice(0, 20)
+                .map(m => { const r = (db.rsvps || []).find(x => x.event_id === id && (m.user_id ? x.user_id === m.user_id : x.member_id === m.id));
+                    return { member_id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url || null, vrn: m.vrn, on_app: !!m.user_id, status: r?.status || null }; })); },
+        async eventTeamSet(id, memberId, status, guests = 0) {
+            db.rsvps ||= []; const e = db.events.find(x => x.id === id), m = db.members.find(x => x.id === memberId);
+            if (!e || e.status !== 'live') throw new Error('This event was cancelled'); if (!m) throw new Error('That member was not found');
+            if (!e.allow_guests || status !== 'going') guests = 0;
+            const uidv = m.user_id ? m.user_id : null;
+            const match = x => x.event_id === id && (uidv ? x.user_id === uidv : x.member_id === m.id);
+            db.rsvps = db.rsvps.filter(x => !match(x));
+            if (status && !(status === 'no' && !uidv)) db.rsvps.push({ event_id: id, ...(uidv ? { user_id: uidv } : { member_id: m.id }), status, guests, set_by: uidv === 'me' ? null : 'me' });
+            save(); return wait(status || 'removed');
+        },
+        async rsvp(eventId, status, guests = 0) { db.rsvps ||= []; const e = db.events.find(x => x.id === eventId); if (!e.allow_guests || status !== 'going') guests = 0; const r = db.rsvps.find(x => x.event_id === eventId && x.user_id === 'me'); if (r) Object.assign(r, { status, guests, set_by: null }); else db.rsvps.push({ event_id: eventId, user_id: 'me', status, guests }); save(); return wait({ status, guests }); },
         async saveEvent(rec) { let row; if (rec.id) { row = db.events.find(e => e.id === rec.id); Object.assign(row, rec); } else { row = { status: 'live', ...rec, id: nid(), created_by: 'me' }; db.events.push(row); } save(); return wait(row); },
         async deleteEvent(id) { db.events = db.events.filter(e => e.id !== id); save(); },
         importEvents: rows => { let n = 0; rows.forEach(r => { const key = (r.title + r.starts_at.slice(0, 10)).toLowerCase(); if (db.events.some(e => (e.title + String(e.starts_at).slice(0, 10)).toLowerCase() === key)) return; db.events.push({ ...r, id: nid(), status: 'live', capacity: r.capacity ? +r.capacity : null, on_website: true, created_by: 'me' }); n++; }); save(); return wait(n); },
