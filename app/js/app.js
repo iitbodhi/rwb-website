@@ -2023,13 +2023,13 @@ async function eventPage(e) {
     const team = mod && !fam && live && !!cached && people.every(p => 'member_id' in p);
     const row = p => `<div class="row">${face(p, 'avatar sm')}<span class="grow">${esc(p.full_name)}${p.user_id && p.user_id === myUid ? ' <span class="muted">(you)</span>' : ''}${p.set_by_name || (mod && p.on_app === false) ? `<span class="evt-by">${[mod && p.on_app === false ? 'Not on the app' : '', p.set_by_name ? 'Added by ' + esc(p.set_by_name) : ''].filter(Boolean).join(' · ')}</span>` : ''}</span>${p.guests ? '<span class="badge">+1 guest</span>' : ''}${team && p.member_id != null ? `<button class="evt-pm" data-act="evt-pm" data-m="${p.member_id}" aria-label="Change ${esc(p.full_name)}">${EVT_ICON.edit}</button>` : ''}</div>`;
     const when = evtMulti(e)
-        ? `<div><span>Starts</span><b>${esc(tfmt(e.starts_at, { weekday: 'short', day: 'numeric', month: 'short' }))}</b><em>${esc(evtTime(e.starts_at))}</em></div><div><span>Ends</span><b>${esc(tfmt(e.ends_at, { weekday: 'short', day: 'numeric', month: 'short' }))}</b><em>${esc(evtTime(e.ends_at))}</em></div>`
-        : `<div><span>When</span><b>${esc(tfmt(e.starts_at, { weekday: 'long', day: 'numeric', month: 'short' }))}</b><em>${esc(evtTime(e.starts_at))}${e.ends_at ? ' – ' + esc(evtTime(e.ends_at)) : ''}</em></div>`;
-    const join = !live || past || fam ? ''
-        : me ? `<div class="evt-join on"><span class="evt-yes">✓ You're going</span><button class="link-btn" data-act="rsvp" data-s="no">Not going anymore</button></div>
-                ${e.allow_guests ? `<label class="switch" style="margin-top:10px">Bringing a guest (+1)<input type="checkbox" id="evt-guest"${me.guests ? ' checked' : ''}></label>` : ''}`
-        : full ? '<div class="evt-join"><button class="btn block" disabled>Event full</button></div>'
-        : '<div class="evt-join"><button class="btn block evt-go" data-act="rsvp" data-s="going">I\'m going 🏍️</button></div>';
+        ? `<div><span>Starts</span><b>${esc(tfmt(e.starts_at, { weekday: 'short', day: 'numeric', month: 'short' }))}</b><em>${esc(evtTime(e.starts_at))}</em></div><i class="evt-wto" aria-hidden="true">→</i><div><span>Ends</span><b>${esc(tfmt(e.ends_at, { weekday: 'short', day: 'numeric', month: 'short' }))}</b><em>${esc(evtTime(e.ends_at))}</em></div>`
+        : `<div><span>When</span><b>${esc(tfmt(e.starts_at, { weekday: 'short', day: 'numeric', month: 'short' }))}</b><em>${esc(evtTime(e.starts_at))}${e.ends_at ? ' – ' + esc(evtTime(e.ends_at)) : ''}</em></div>`;
+    const calBtn = live && !past ? `<a class="evt-calbtn" href="${esc(gcalUrl(e))}" target="_blank" rel="noopener" aria-label="Add to calendar">${ICON.cal}</a>` : '';
+    const join = !live || past || fam ? (calBtn ? `<div class="evt-jrow">${calBtn}</div>` : '')
+        : `<div class="evt-jrow">${me ? `<div class="evt-join on"><span class="evt-yes">✓ You're going</span><button class="link-btn" data-act="rsvp" data-s="no">Not going</button></div>`
+            : full ? '<button class="btn evt-go" disabled>Event full</button>' : '<button class="btn evt-go" data-act="rsvp" data-s="going">I\'m going 🏍️</button>'}${calBtn}</div>
+            ${me && e.allow_guests ? `<label class="switch evt-guestsw">Bringing a guest (+1)<input type="checkbox" id="evt-guest"${me.guests ? ' checked' : ''}></label>` : ''}`;
     app.innerHTML = top('Events') + `
         <a class="back-link" href="#events">‹ All events</a>
         <section class="card evt-hero v2${live ? '' : ' cancelled'}">
@@ -2037,17 +2037,13 @@ async function eventPage(e) {
             <div class="evt-hbody">
                 ${evtEyebrow(e)}<h2 class="evt-title">${esc(e.title)}</h2>${!live ? '<span class="badge">Cancelled</span>' : past ? '<span class="badge">Ended</span>' : ''}
                 <div class="evt-when">${when}</div>
-                ${e.location ? `<div class="evt-place">${EVT_ICON.pin}<span><b>${esc(e.location)}</b>${mapsUrl(e) ? `<a href="${esc(mapsUrl(e))}" target="_blank" rel="noopener">Open in Maps ↗</a>` : ''}</span></div>` : ''}
-                <div class="evt-facts">
-                    ${live && !past && e.capacity ? `<p><span>🎟</span>${evtSlots(e, headcount)}</p>` : ''}
-                    ${e.call_link ? `<p><span>📞</span><a href="${esc(safeUrl(e.call_link))}" target="_blank" rel="noopener">Join the call</a></p>` : ''}
-                    ${e.reminder_minutes != null && live && !past ? `<p><span>⏰</span>Reminder ${esc(REMINDERS.find(r => r[0] === e.reminder_minutes)?.[1].toLowerCase() || '')} for people going</p>` : ''}
-                </div>
+                ${e.location ? `<div class="evt-place v2">${EVT_ICON.pin}<b>${esc(e.location)}</b>${mapsUrl(e) ? `<a href="${esc(mapsUrl(e))}" target="_blank" rel="noopener">Maps ↗</a>` : ''}</div>` : ''}
+                ${live && !past && e.capacity ? evtSlots(e, headcount) : ''}
+                ${e.call_link || (e.reminder_minutes != null && live && !past) ? `<div class="evt-chips">${e.call_link ? `<a href="${esc(safeUrl(e.call_link))}" target="_blank" rel="noopener">📞 Join the call</a>` : ''}${e.reminder_minutes != null && live && !past ? `<span>⏰ Reminder ${esc(REMINDERS.find(r => r[0] === e.reminder_minutes)?.[1].toLowerCase() || '')}</span>` : ''}</div>` : ''}
                 ${join}
-                ${live && !past ? `<div class="btns evt-actions"><a class="btn sm ghost" href="${esc(gcalUrl(e))}" target="_blank" rel="noopener">Add to calendar</a></div>` : ''}
             </div>
         </section>
-        ${e.description ? `<section class="section"><h2>About</h2><div class="card"><p class="evt-desc">${linkify(e.description)}</p></div></section>` : ''}
+        ${e.description ? `<section class="section"><h2>About</h2><div class="card evt-about"><p class="evt-desc clamp" id="evt-desc">${linkify(e.description)}</p><button class="link-btn evt-more" id="evt-more" hidden>Show more</button></div></section>` : ''}
         ${rideLive(e)}
         ${fam ? '' : `<section class="section"><div class="evt-whohead"><h2>${past ? 'Who went' : "Who's going"}${cached && headcount ? ` <span class="muted">${headcount}</span>` : ''}</h2>${team ? `<span class="btns">${going.length ? '<button class="btn sm ghost" data-act="evt-copy">Share list</button>' : ''}<button class="btn sm" data-act="evt-add">＋ Add rider</button></span>` : ''}</div>
             <div class="card">${!cached ? SKEL(2) : going.length ? `<div class="evt-plist">${going.map(row).join('')}</div>${guests ? `<p class="small muted" style="margin-top:10px">${going.length} rider${going.length === 1 ? '' : 's'} + ${guests} guest${guests === 1 ? '' : 's'}</p>` : ''}` : `<p class="muted small">${past ? 'Nobody was on the list.' : 'Nobody yet. Be the first!'}</p>`}</div></section>
@@ -2068,6 +2064,8 @@ async function eventPage(e) {
     };
     const g = $('#evt-guest'); if (g) g.onchange = () => busy(null, async () => { try { await api.rsvp(e.id, 'going', g.checked ? 1 : 0); } catch (er) { g.checked = false; throw er; } delete state.evPeople[e.id]; await loadEvents(true); toast(g.checked ? 'Guest added' : 'Guest removed'); render(); });
     if (!fam && cached && (me || mod)) drawExpenses(e, going, myUid);
+    const dsc = $('#evt-desc'), more = $('#evt-more');   /* About: 3 lines, Show more / Show less */
+    if (dsc && more) { if (dsc.scrollHeight > dsc.clientHeight + 4) { more.hidden = false; more.onclick = () => { const open = dsc.classList.toggle('clamp'); more.textContent = open ? 'Show more' : 'Show less'; }; } else dsc.classList.remove('clamp'); }
 }
 /* ---- WhatsApp sharing: only admins and coordinators (members open the event in the app) ---- */
 function eventShareText(e, heads) {

@@ -2758,3 +2758,31 @@ html.lite .tab-track.live .brand-ring::after{animation-iteration-count:infinite!
 .lb-per button{flex:1 1 0;min-width:0;padding:9px 4px;text-align:center}
 .mm-gal .mm-share{top:10px;right:10px;z-index:3}
 .evt-card.v2 .evt-crow .evt-slots{margin-top:8px}
+/* Events: compact event page (Nov 2026) */
+.evt-hero.v2 .evt-hbody{padding:14px 16px 16px;gap:8px}
+.evt-hero.v2 .evt-title{margin:0;font-size:1.2rem}
+.evt-hero.v2 .evt-when{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.evt-hero.v2 .evt-when > div{display:grid;grid-template-columns:none;gap:1px}
+.evt-hero.v2 .evt-when span{grid-row:auto;padding:0;font-size:.62rem}
+.evt-hero.v2 .evt-when b{font-size:.95rem}
+.evt-hero.v2 .evt-when em{grid-column:auto;font-size:.82rem}
+.evt-wto{font-style:normal;color:var(--orange);font-weight:700;align-self:center;margin-top:10px}
+.evt-place.v2{display:flex;align-items:center;gap:8px;margin:0;padding:8px 0 0;font-size:.92rem}
+.evt-place.v2 b{flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.evt-place.v2 svg{margin:0}
+.evt-place.v2 a{flex:none}
+.evt-hero.v2 .evt-slots{margin-top:2px}
+.evt-chips{display:flex;flex-wrap:wrap;gap:6px}
+.evt-chips > *{font-size:.78rem;padding:5px 10px;border-radius:99px;background:color-mix(in srgb,var(--ink) 7%,transparent);color:var(--muted);text-decoration:none}
+.evt-chips a{color:var(--orange);font-weight:600}
+.evt-jrow{display:flex;gap:10px;align-items:stretch;margin-top:4px}
+.evt-jrow .evt-go{flex:1;min-height:48px}
+.evt-jrow .evt-join{flex:1;margin:0;padding:10px 14px}
+.evt-calbtn{flex:none;width:48px;min-height:48px;border-radius:14px;display:grid;place-items:center;border:1px solid var(--hair);background:var(--surface);color:var(--orange);margin-left:auto}
+.evt-calbtn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.evt-calbtn svg .ac{fill:color-mix(in srgb,var(--orange) 22%,transparent);stroke:none}
+.evt-guestsw{margin-top:2px}
+.evt-desc.clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.evt-about .evt-more{margin-top:6px}
+.evt-guestsw{padding:8px 12px;font-size:.88rem;min-height:0}
+.evt-about{padding:14px 16px}.evt-about .evt-desc{margin:0}
