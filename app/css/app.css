@@ -2650,3 +2650,35 @@ body:has(#app .mm-fabs:not([hidden])) .pookie-fab{bottom:calc(var(--tab-h) + 92p
 .trk-actions .btn.sos-btn,.btn.sos-btn,:root .btn.sos-btn{background:linear-gradient(180deg,#ef5350 0%,#d32f2f 60%,#b71c1c 100%)!important;border-color:transparent!important;color:#fff!important;
   box-shadow:0 1px 0 rgba(255,255,255,.3) inset,0 10px 22px -10px rgba(183,28,28,.75)!important}
 .trk-opt.sos .trk-ico,.trk-opt.sos b{color:#d32f2f}
+
+/* ===== Rich glass (Nov 25 2026, Bodhi: the calmer grade went too muted and flat) =====
+   Between the bright first Aurora and the muted grade: a vivid but not harsh orange, glowing aurora,
+   and 3D glass: a light top edge, a sheen from above, a soft inner shade below and a deep warm shadow. */
+:root{--orange:#e15d24;--orange-dk:#c04a16;--orange-soft:#ffe6d4;
+  --grad-o:linear-gradient(180deg,#ffa766 0%,#f0712f 52%,#cf5119 100%);
+  --au-1:rgba(255,132,60,.38);--au-2:rgba(255,196,150,.58);--au-3:rgba(250,100,60,.20);--au-4:rgba(255,216,176,.55);--au-5:rgba(240,112,45,.18);
+  --glass3d:linear-gradient(180deg,rgba(255,255,255,.80) 0%,rgba(255,255,255,.58) 100%);--glass-edge:rgba(255,255,255,.95);
+  --lift:inset 0 1px 0 rgba(255,255,255,1),inset 0 -1px 0 rgba(160,80,30,.07),0 1px 2px rgba(120,50,10,.06),0 16px 34px -18px rgba(160,65,15,.42)}
+:root[data-theme=dark]{--orange:#f57d43;--orange-dk:#ff955f;--orange-soft:#3a1d0f;
+  --au-1:rgba(240,95,35,.32);--au-2:rgba(125,42,14,.42);--au-3:rgba(255,125,60,.15);--au-4:rgba(90,28,10,.45);--au-5:rgba(255,150,85,.10);
+  --glass3d:linear-gradient(180deg,rgba(58,44,36,.66) 0%,rgba(30,23,19,.58) 100%);--glass-edge:rgba(255,255,255,.10);
+  --lift:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -1px 0 rgba(0,0,0,.35),0 1px 2px rgba(0,0,0,.4),0 18px 38px -20px rgba(0,0,0,.95)}
+@media (prefers-color-scheme:dark){:root[data-theme=system]{--orange:#f57d43;--orange-dk:#ff955f;--orange-soft:#3a1d0f;
+  --au-1:rgba(240,95,35,.32);--au-2:rgba(125,42,14,.42);--au-3:rgba(255,125,60,.15);--au-4:rgba(90,28,10,.45);--au-5:rgba(255,150,85,.10);
+  --glass3d:linear-gradient(180deg,rgba(58,44,36,.66) 0%,rgba(30,23,19,.58) 100%);--glass-edge:rgba(255,255,255,.10);
+  --lift:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -1px 0 rgba(0,0,0,.35),0 1px 2px rgba(0,0,0,.4),0 18px 38px -20px rgba(0,0,0,.95)}}
+/* buttons: raised, with a light top lip and a darker bottom lip */
+.btn:not(.ghost):not(.wa):not(.danger):not(.sos-btn){background:var(--grad-o);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.45),inset 0 -2px 0 rgba(140,45,5,.22),0 2px 4px -1px rgba(180,65,15,.35),0 12px 24px -12px rgba(205,75,15,.8)}
+.quick .fam-q span{box-shadow:inset 0 1px 0 rgba(255,255,255,.45),inset 0 -2px 0 rgba(140,45,5,.22),0 12px 24px -12px rgba(205,75,15,.85)!important}
+.tab-track .brand-ring,.pookie-fab,:root .pookie-fab,:root[data-theme] .pookie-fab,:root:not([data-theme=dark]) .pookie-fab{background:radial-gradient(120% 100% at 30% 0%,#ffb27a 0%,#f0712f 52%,#c04a16 100%)!important}
+@media (prefers-color-scheme:dark){:root[data-theme=system] .pookie-fab{background:radial-gradient(120% 100% at 30% 0%,#ffb27a 0%,#f0712f 52%,#c04a16 100%)!important}}
+.tab-track .brand-ring{box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -3px 0 rgba(130,40,5,.25),0 12px 24px -10px rgba(200,70,15,.8),0 0 0 4px var(--bar)}
+.pookie-fab,:root .pookie-fab,:root[data-theme] .pookie-fab{box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -3px 0 rgba(130,40,5,.25),0 14px 26px -12px rgba(200,70,15,.8)!important}
+.card,.group,.group-row-card,.banner,.stat,.mm-card,details.howto,.msg.model,.evt-card,.cal-it,.doc-card,.gd-type,.gd-kind,.promo-card,.word-card,.trk-row,.lb-list li,.ts,.me-hero{background:var(--glass3d)}
+.st-ico,.st-ico[class*=c-],.quick span:not(.fam-q span){background:var(--glass3d)!important}
+.quick .fam-q span{background:var(--grad-o)!important}
+html.lite .card,html.lite .group,html.lite .evt-card,html.lite .mm-card{background:color-mix(in srgb,var(--card-solid) 92%,transparent)}
+/* the Track ring keeps spinning while you scroll (only the background lights pause) */
+html.scrolling .brand-ring::after,html.scrolling .tab-track.live .brand-ring::after{animation-play-state:running!important}
+html.lite .tab-track.live .brand-ring::after{animation-iteration-count:infinite!important}
