@@ -49,6 +49,7 @@
 - **Commits:** use `git -c user.name=Claude -c user.email=noreply@anthropic.com commit`, end the message with the attribution lines from the system reminder, then `git pull --rebase origin main && git push origin HEAD:main`.
 
 ## Testing
+- **Before every push, load the app in a browser (demo mode) and check for page errors.** `node --check` misses a `const` that clashes with a `function` of the same name in the module; on Nov 26 2026 that blank-screened the live app for ~45 min (`appLink`, now `getLink`).
 - **Serve the site:** `python3 -m http.server 8766 --directory <repo>`.
 - **Demo mode:** with Playwright, serve an empty `APP_CONFIG` for `**/app/config.js`. Wait for `#boot` to be detached before clicking, then click `[data-act=google]`. You sign in as the demo admin.
 - **Demo role switch:**
@@ -60,6 +61,6 @@
 ## Status (Nov 2026)
 - **Play closed test:** live. Build 25 (gallery screenshot block, `RwbTrack.secure`) is the current upload (Nov 21 2026). Bodhi's account needs 12+ testers for 14 days, then he can apply for production.
 - **Play policy (Nov 26 2026):** build 130 was rejected for "Device and Network Abuse" (the app pointed to the APK). Inside the Play copy (`PLAY_APP`, set from `nativeInfo().channel`) and once `PLAY_LIVE` is true, `appLink()` gives the Play Store link in every WhatsApp message, the install-video line is dropped, `nativeUpdateAsk` never runs, FAM invites add `&p=1` so fam/index.html shows Google Play instead of the APK. Never add an APK link or download that the Play copy can show.
-- **After production approval:** switch the website download buttons, /get and the FAM links to Play, and set `PLAY_TRACK` to production.
+- **Live on Google Play since Nov 26 2026** (production, India, build 31 / 2.0.31). `PLAY_LIVE = true`: website button, roninwb.in/get (Android → Play), FAM page and every app link go to Play; Android browsers get `playGetBlocker`; the old APK copy (channel `web`) gets `moveToPlayBlocker` (open Play → uninstall old → install; different signing keys, so the Play copy can't install over the APK); Admin → App copies "Move old-APK riders to Google Play". The build robot still makes download/RWB-App.apk but nothing links to it.
 - **Admin → App copies** shows who uses the Play, APK or browser copy.
 - **Gallery (Nov 21 2026):** Bodhi deployed the updated `tools/gallery.gs` (checked: no pass → 30 photos) and deleted the old list-only gallery script project (checked: its link now answers 404). The folder sharing should be "Anyone with the link: Viewer" (it was Editor; Bodhi was asked to change it). **Storage warning:** the gallery folder is in Bodhi's personal Drive, whose 5 TB comes from Jio's free Google AI Pro offer (18 months from activation, ends around mid-2027). Afterwards that account drops to 15 GB while already holding ~58 GB, so Drive would refuse new gallery uploads. Plan agreed in principle: a few months before it ends, move the RWB Gallery folder to RWB's own Google account (ronin.warriors.bengal@gmail.com) and redeploy `tools/gallery.gs` from there (new `GALLERY_FOLDER_ID` and script URL in js/data.js).
