@@ -286,7 +286,7 @@ const docsAlert = () => (state.docs || []).some(d => docStatus(d).level !== 'ok'
 const getAppBtn = () => !NATIVE && /android/i.test(navigator.userAgent) ? `<a class="get-app" href="${apkUrl()}" download="RWB-App.apk" aria-label="Download the RWB Android app"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span>App</span></a>` : '';
 /* quiet shimmer bars instead of a "Loading…" line */
 const SKEL = (n = 3) => `<div class="skel" aria-hidden="true">${'<i></i>'.repeat(n)}</div><span class="sr-only">Loading</span>`;
-const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1>${right}${getAppBtn()}
+const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/app-icon-256.webp" alt=""><h1>${esc(title)}</h1>${right}${getAppBtn()}
     ${isFam() ? '' : `<a class="icon-btn bell cal-btn" href="#calendar" aria-label="Calendar${calAlert() ? ' (something due soon)' : ''}">${CAL_ICON}${calAlert() ? '<i class="dot"></i>' : ''}</a>`}
     <a class="icon-btn bell guide-btn" href="#guides" aria-label="Guides and how-to videos">${HELP_ICON}</a>
     <a class="icon-btn bell" href="#news" aria-label="Announcements${unread() ? ' (new)' : ''}">${BELL}${unread() ? '<i class="dot"></i>' : ''}</a>
@@ -405,7 +405,7 @@ const G_ICON = '<svg viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V2
 function viewSignIn() {
     tabbar.hidden = true;
     app.innerHTML = `${demoBar()}<section class="signin">
-        <img src="icons/logo-384.png" alt="Ronin Warriors of Bengal">
+        <img class="si-icon" src="icons/app-icon-256.webp" alt="RWB App">
         ${JOIN_MODE ? `<div><h1>Join RWB</h1><p class="lead">Ronin owner or not, every rider is welcome. Continue with Google to fill the RWB join form: your Google email becomes your RWB email.</p></div>
         <button class="btn gbtn block" data-act="google">${G_ICON} Continue with Google</button>
         <p class="small muted">Already a member? Continue with the Google account you use for RWB.</p>`
@@ -616,7 +616,7 @@ function liveJoinForm(def, known, sess, filled = false, back = null) {
     const pages = formPages(def);
     let at = 0;
     const stepName = n => pages[n].title || (n ? '' : 'Welcome');
-    app.innerHTML = `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${filled ? 'Update my answers' : 'Join RWB'}</h1></header>
+    app.innerHTML = `${demoBar()}<header class="top"><img class="logo" src="icons/app-icon-256.webp" alt=""><h1>${filled ? 'Update my answers' : 'Join RWB'}</h1></header>
         <div class="jf-prog" aria-live="polite"><div class="jf-bar"><i id="jf-fill"></i></div><span class="jf-step" id="jf-step"></span></div>
         <p class="jx-acct"><span class="jx-dot" aria-hidden="true"></span>${esc(sess.email)}</p>
         <form id="req" class="gform jf" novalidate>${pages.map((pg, n) => `<section class="gpage" data-p="${n}"${n ? ' hidden' : ''}>
@@ -723,7 +723,7 @@ async function viewAccess(status, sess, noJump = false) {
     /* came from roninwb.in/join: straight to the form */
     if (JOIN_MODE && !noJump) return startJoin(sess);
     actions.join = b => busy(b, () => startJoin(sess));
-    app.innerHTML = `${demoBar()}<section class="signin no-acct"><img src="icons/logo-128.png" alt="">
+    app.innerHTML = `${demoBar()}<section class="signin no-acct"><img src="icons/app-icon-256.webp" alt="">
         <div><h1>No Account Found!</h1><p class="lead">There's no RWB membership for <b>${esc(sess.email)}</b>.</p></div>
         <div class="card na-card na-join"><b class="na-h">New to RWB?</b><p class="small muted">Every rider is welcome, with or without a Ronin. It takes about 3 minutes.</p>
             <button type="button" class="btn block" data-act="join">Join RWB</button></div>
@@ -3490,7 +3490,7 @@ async function gateFor(m) {
     await loadJoinForm();
     return miss.length || moreMissing(m).length ? 'profile' : null;
 }
-const gateTop = title => `${demoBar()}<header class="top gate-top"><img class="logo" src="icons/logo-128.png" alt=""><h1>${esc(title)}</h1></header>`;
+const gateTop = title => `${demoBar()}<header class="top gate-top"><img class="logo" src="icons/app-icon-256.webp" alt=""><h1>${esc(title)}</h1></header>`;
 function tncGate() {
     const m = state.me, withdrew = m.tnc_agreed === false, updated = m.tnc_agreed === true;
     app.innerHTML = gateTop('RWB') + `<section class="gate card">
@@ -3563,62 +3563,66 @@ function bikeSheet(slot, b, done) {
 
 function viewMe() {
     const m = state.me, role = (ROLE[m.role] || 'Member') + (m.role === 'coordinator' ? ' (MotoMart)' : '');
-    const row = (k, v) => `<div><span class="muted">${k}</span><span class="rt">${esc(v || '–')}</span></div>`;
+    const ST = { phone: 'M7 3h10v18H7zM11 18h2', bike: 'M5 17a3 3 0 1 0 0-.01M19 17a3 3 0 1 0 0-.01M5 17l4-7h5l3 7M9 10l-1-3H6m8 3 2-3h2', plate: 'M3 7h18v10H3zM7 12h.01M10 12h7', cake: 'M5 11h14v9H5zM12 11V8m0-3v.01M5 15c2 1.5 4.5 1.5 7 0s5-1.5 7 0', drop: 'M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z', pin: 'M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11zM12 10h.01', sos: 'M12 3l9 16H3zM12 10v4M12 17h.01' };
+    const stI = (k, c) => `<span class="st-ico ${c}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ST[k]}"/></svg></span>`;
+    const row = (k, v, ic, c) => `<div>${stI(ic, c)}<span class="grow">${k}</span><span class="rt">${esc(v || '–')}</span></div>`;
     const theme = getTheme();
     app.innerHTML = top('Me') + `
-        <section class="profile">
+        <section class="profile me-hero">
             <label class="photo-pick" aria-label="Change profile photo">${face(m, 'avatar xl')}<span class="cam">📷</span><input type="file" accept="image/*,.heic,.heif" id="pic" hidden></label>
-            <div class="grow"><h2>${esc(m.full_name)}</h2><p class="muted">${esc(role)}${m.nickname ? `, “${esc(m.nickname)}”` : ''}</p></div>
-            <button class="btn sm ghost" data-act="edit">Edit</button>
+            <div class="grow"><h2>${esc(m.full_name)}</h2><p class="muted">${m.nickname ? `“${esc(m.nickname)}” · ` : ''}${esc(role)}</p></div>
+            <button class="btn sm" data-act="edit">Edit profile</button>
         </section>
-        <div class="group kv">
-            ${row('WhatsApp', m.phone)}${row('Bike', m.bike)}${row('Registration', m.vrn)}${row('Birthday', m.dob ? fmtDayMonth(m.dob) : '')}${row('Blood group', m.blood_group)}${row('Locality', m.locality)}${row('Emergency contact', m.emergency_phone)}
-        </div>
         <div id="my-changes"></div>
-        <div id="more-rwb"></div>
-        <h2 class="group-title">Follow RWB</h2>${followRwb()}
-        <h2 class="group-title">My bikes <span class="small muted" style="text-transform:none;letter-spacing:0;font-weight:500">up to 3</span></h2>
-        <div class="group bikes" id="my-bikes">${bikeRows(m, null)}</div>
-        ${'tnc_agreed' in m ? `<h2 class="group-title">Terms & Conditions</h2>
-        <div class="group"><div class="bike-row"><span class="g-ico">📜</span><span class="grow"><b>${tncOk(m) ? 'You agree to the RWB T&C' : m.tnc_agreed === false ? 'You don\'t agree to the RWB T&C' : 'Please read and agree'}</b><span class="small muted">${tncOk(m) ? (m.tnc_version ? 'Version ' + esc(m.tnc_version) + (m.tnc_agreed_at ? ', agreed ' + fmtDate(String(m.tnc_agreed_at).slice(0, 10)) : '') : 'From the RWB join form') : 'Needed for every RWB member'}</span></span>
-            <button class="btn sm ${tncOk(m) ? 'ghost' : ''}" data-act="rules">${tncOk(m) ? 'Read' : 'Read & agree'}</button></div></div>` : ''}
+        <h2 class="st-title">Personal details</h2>
+        <div class="group kv st-group">
+            ${row('WhatsApp', m.phone, 'phone', 'c-green')}${row('Bike', m.bike, 'bike', 'c-orange')}${row('Registration', m.vrn, 'plate', 'c-blue')}${row('Birthday', m.dob ? fmtDayMonth(m.dob) : '', 'cake', 'c-pink')}${row('Blood group', m.blood_group, 'drop', 'c-red')}${row('Locality', m.locality, 'pin', 'c-teal')}${row('Emergency contact', m.emergency_phone, 'sos', 'c-red')}
+        </div>
+        <h2 class="st-title">My bikes <span>up to 3</span></h2>
+        <div class="group bikes st-group" id="my-bikes">${bikeRows(m, null)}</div>
 
+        <h2 class="st-title">Notifications</h2>
+        <div class="card st-card" id="notif-card"><p id="push-state">Checking…</p><div id="push-btn" style="margin-top:10px"></div></div>
+        <div class="group st-group">
+            ${[...(isMod() ? [['birthday', 'Birthdays']] : []), ['reminder', 'Renewal, service and my reminders'], ['track', 'Riders who start sharing on Track'], ['motomart', 'New MotoMart posts'], ['member', 'New members on the app']].map(([k, l]) => `<label class="toggle-row"><span class="grow">${l}</span><span class="switch-only"><input type="checkbox" data-pref="${k}"${(m.notify || {})[k] !== false ? ' checked' : ''}></span></label>`).join('')}
+        </div>
+        <p class="st-foot">RWB announcements always come through.</p>
 
-        <h2 class="group-title">Appearance</h2>
-        <div class="seg" role="radiogroup" aria-label="Theme">${[['light', 'Light'], ['dark', 'Dark'], ['system', 'Auto']].map(([k, l]) => `<button role="radio" aria-selected="${theme === k}" aria-checked="${theme === k}" data-act="theme" data-t="${k}">${l}</button>`).join('')}</div>
+        <h2 class="st-title">Privacy</h2>
+        <div class="group st-group"><label class="toggle-row"><span class="grow">Show me on the Warriorboards<span class="small muted">Other members see your name, photo, km, average mileage and how many services you've logged</span></span><span class="switch-only"><input type="checkbox" id="lb"${m.show_on_leaderboard !== false ? ' checked' : ''}></span></label></div>
+        <p class="st-foot">Other members always see your name, nickname and photo. Choose what else they see below. RWB admins and coordinators can always see your details.</p>
+        <div class="group st-group" id="share-box">${SHARE_OPTS.map(([k, t, d]) => `<label class="toggle-row"><span class="grow">${t}<span class="small muted">${d}</span></span><span class="switch-only"><input type="checkbox" data-share="${k}"${m.share?.[k] ? ' checked' : ''}></span></label>`).join('')}
+            <button class="bike-add" data-act="share-all">${SHARE_OPTS.every(([k]) => m.share?.[k]) ? '🔒 Hide all from members' : '👁 Share all with members'}</button></div>
 
-        ${isAndroid ? `<h2 class="group-title">WhatsApp</h2>
+        <h2 class="st-title">Appearance</h2>
+        <div class="seg st-seg" role="radiogroup" aria-label="Theme">${[['light', 'Light'], ['dark', 'Dark'], ['system', 'Auto']].map(([k, l]) => `<button role="radio" aria-selected="${theme === k}" aria-checked="${theme === k}" data-act="theme" data-t="${k}">${l}</button>`).join('')}</div>
+        ${isAndroid ? `<h2 class="st-title">WhatsApp</h2>
         <div class="group"><label class="toggle-row"><span class="grow">Open WhatsApp links in<span class="small muted">For phones with both WhatsApp and WhatsApp Business</span></span>
             <select id="wa-app" style="width:auto;min-height:38px">${Object.entries(WA_APPS).map(([k, [l]]) => `<option value="${k}"${waPref() === k ? ' selected' : ''}>${l}</option>`).join('')}</select></label></div>` : ''}
 
-        <h2 class="group-title">Notifications</h2>
-        <div class="card" id="notif-card"><p id="push-state">Checking…</p><div id="push-btn" style="margin-top:10px"></div></div>
-        <div class="group" style="margin-top:10px">
-            ${[...(isMod() ? [['birthday', 'Birthdays']] : []), ['reminder', 'Renewal, service and my reminders'], ['track', 'Riders who start sharing on Track'], ['motomart', 'New MotoMart posts'], ['member', 'New members on the app']].map(([k, l]) => `<label class="toggle-row"><span class="grow">${l}</span><span class="switch-only"><input type="checkbox" data-pref="${k}"${(m.notify || {})[k] !== false ? ' checked' : ''}></span></label>`).join('')}
-        </div>
-        <p class="small muted" style="margin:8px 4px 0">RWB announcements always come through.</p>
+        <div id="more-rwb"></div>
+        <h2 class="st-title">Follow RWB</h2>${followRwb()}
+        ${'tnc_agreed' in m ? `<h2 class="st-title">Terms & Conditions</h2>
+        <div class="group"><div class="bike-row"><span class="g-ico">📜</span><span class="grow"><b>${tncOk(m) ? 'You agree to the RWB T&C' : m.tnc_agreed === false ? 'You don\'t agree to the RWB T&C' : 'Please read and agree'}</b><span class="small muted">${tncOk(m) ? (m.tnc_version ? 'Version ' + esc(m.tnc_version) + (m.tnc_agreed_at ? ', agreed ' + fmtDate(String(m.tnc_agreed_at).slice(0, 10)) : '') : 'From the RWB join form') : 'Needed for every RWB member'}</span></span>
+            <button class="btn sm ${tncOk(m) ? 'ghost' : ''}" data-act="rules">${tncOk(m) ? 'Read' : 'Read & agree'}</button></div></div>` : ''}
 
-        <h2 class="group-title">Privacy</h2>
-        <p class="small muted" style="margin:-4px 0 8px">Other members always see your name, nickname and photo. Choose what else they see. RWB admins and coordinators can always see your details.</p>
-        <div class="group" id="share-box">${SHARE_OPTS.map(([k, t, d]) => `<label class="toggle-row"><span class="grow">${t}<span class="small muted">${d}</span></span><span class="switch-only"><input type="checkbox" data-share="${k}"${m.share?.[k] ? ' checked' : ''}></span></label>`).join('')}
-            <button class="bike-add" data-act="share-all">${SHARE_OPTS.every(([k]) => m.share?.[k]) ? '🔒 Hide all from members' : '👁 Share all with members'}</button></div>
-        <div class="group" style="margin-top:12px"><label class="toggle-row"><span class="grow">Show me on the Warriorboards<span class="small muted">Other members see your name, photo, km, average mileage and how many services you've logged</span></span><span class="switch-only"><input type="checkbox" id="lb"${m.show_on_leaderboard !== false ? ' checked' : ''}></span></label></div>
-
-        <h2 class="group-title">App</h2>
-        <div class="group">
+        <h2 class="st-title">App</h2>
+        <div class="group st-group">
             <a href="../privacy.html" target="_blank" rel="noopener"><span class="g-ico">${ICON.shield}</span><span class="grow"><b>Privacy</b></span>${ICON.out}</a>
             <button data-report="other"><span class="g-ico">🚩</span><span class="grow"><b>Report a problem</b><span class="small muted">Something wrong, unsafe or abusive in the app? Tell the RWB team</span></span></button>
+</div>
+        <div class="group st-group">
             <button data-act="out" class="danger-row"><span class="grow"><b>Sign out</b></span></button>
             <button data-del-acct class="danger-row"><span class="grow"><b>Delete my account</b><span class="small muted">Deletes your RWB App account and what you added in the app</span></span></button>
         </div>
-        <p class="small muted" style="text-align:center;margin-top:24px">RWB App, free for every warrior</p>`;
+        <div class="me-foot"><img src="icons/app-icon-256.webp" alt=""><p><b>RWB App</b><br>Free for every warrior · Explore. Evolve. Inspire.</p></div>`;
     let myBikes = [], myChanges = [];
     const drawBikes = async () => {
         [myBikes, myChanges] = await Promise.all([api.myBikes().catch(() => []), api.myChanges().catch(() => [])]);
         const g = $('#my-bikes'); if (g) g.innerHTML = bikeRows(state.me, myBikes, false, myChanges.filter(c => c.kind === 'bike' && c.status === 'pending'));
         const ch = $('#my-changes'); if (ch) ch.innerHTML = changesBox(myChanges);
     };
-    const drawMore = () => { const el = $('#more-rwb'); if (el) el.innerHTML = moreQs(m).length ? `<h2 class="group-title">More from RWB</h2><div class="group">${answerRows(m, true)}<button class="bike-add" data-act="more-edit">✎ Edit my answers</button></div>` : ''; };
+    const drawMore = () => { const el = $('#more-rwb'); if (el) el.innerHTML = moreQs(m).length ? `<h2 class="st-title">More from RWB</h2><div class="group st-group">${answerRows(m, true)}<button class="bike-add" data-act="more-edit">✎ Edit my answers</button></div>` : ''; };
     drawBikes(); drawMore(); loadJoinForm().then(drawMore);
     actions = {
         'more-edit': () => moreSheet(m, drawMore),
@@ -3648,7 +3652,7 @@ function viewMe() {
     $('#share-box').querySelectorAll('[data-share]').forEach(x => x.onchange = async () => { const next = Object.fromEntries(SHARE_OPTS.map(([k]) => [k, !!m.share?.[k]])); next[x.dataset.share] = x.checked; if (await saveShare(next)) toast(x.checked ? 'Shared with members' : 'Hidden from members'); });
     actions['share-all'] = async () => { const all = !SHARE_OPTS.every(([k]) => m.share?.[k]); if (await saveShare(Object.fromEntries(SHARE_OPTS.map(([k]) => [k, all])))) toast(all ? 'Your details are shared with members' : 'Your details are hidden from members'); };
     $('#lb').onchange = async e => {
-        try { state.me = await api.updateMe({ show_on_leaderboard: e.target.checked }); state.board = null; state.dir = null; toast(e.target.checked ? 'You\'re on the Warriorboards' : 'Hidden from the Warriorboards'); }
+        try { state.me = await api.updateMe({ show_on_leaderboard: e.target.checked }); state.board = null; state.dir = null; state.gps = null; state.gpsAt = 0; state.pookieBoard = null; toast(e.target.checked ? 'You\'re on the Warriorboards' : 'Hidden from the Warriorboards'); }
         catch (err) { e.target.checked = !e.target.checked; toast(err.message, true); }
     };
     $('#pic').onchange = async e => {
@@ -4354,7 +4358,7 @@ function setTheme(t) {
     try { localStorage.setItem('rwb-theme', t); } catch { /* ignore */ }
     document.documentElement.dataset.theme = t;
     const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-    const m = document.getElementById('theme-color'); if (m) m.content = dark ? '#121110' : '#e9e6e1';
+    const m = document.getElementById('theme-color'); if (m) m.content = dark ? '#0b0908' : '#fbf3ec';
 }
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => getTheme() === 'system' && setTheme('system'));
 
@@ -5242,7 +5246,7 @@ const LB_ICON = { gps: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class=
     pookie: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M3 9l9-4.5L21 9l-9 4.5z"/><path d="M3 9l9-4.5L21 9l-9 4.5zM7 11v4.5c1.4 1.3 3 2 5 2s3.6-.7 5-2V11M21 9v5"/></svg>' };
 const TROPHY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4.5v1.5A3 3 0 0 0 7.4 10.5M17 6h2.5v1.5a3 3 0 0 1-2.9 3M12 14v3.5M8.5 20.5h7M9.5 17.5h5v3h-5z"/></svg>';
 const CROWN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8l4.2 3.6L12 5l4.3 6.6L20.5 8l-1.8 10H5.3z"/></svg>';
-const lbRows = (key, raw) => rankBoard(key === 'gps' ? (state.gps || []) : key === 'pookie' ? (state.pookieBoard || []) : raw, key);
+const lbRows = (key, raw) => rankBoard((key === 'gps' ? (state.gps || []) : key === 'pookie' ? (state.pookieBoard || []) : raw).filter(r => !(r.is_me && state.me?.show_on_leaderboard === false)), key);   /* hidden riders never see themselves, even on a saved copy */
 const lbName = r => esc(r.nickname || r.full_name.split(' ')[0]);
 function boardHtml(key, raw) {
     const B = BOARDS[key], board = lbRows(key, raw);
@@ -5483,7 +5487,7 @@ async function boot() {
     } catch (e) {
         tabbar.hidden = true;
         const off = !navigator.onLine || /offline|internet/i.test(e.message || '');
-        app.innerHTML = `<section class="signin"><img src="icons/logo-128.png" alt=""><div><h1>${off ? 'You\'re offline' : 'Can\'t connect'}</h1><p class="lead">${off ? 'Connect to the internet once, and the RWB App keeps your data on this phone so it opens without internet next time.' : esc(e.message || 'Please check your internet connection.')}</p></div><button class="btn block" onclick="location.reload()">Try again</button></section>`;
+        app.innerHTML = `<section class="signin"><img src="icons/app-icon-256.webp" alt=""><div><h1>${off ? 'You\'re offline' : 'Can\'t connect'}</h1><p class="lead">${off ? 'Connect to the internet once, and the RWB App keeps your data on this phone so it opens without internet next time.' : esc(e.message || 'Please check your internet connection.')}</p></div><button class="btn block" onclick="location.reload()">Try again</button></section>`;
     } finally { hideBoot(); }
 }
 
@@ -5844,7 +5848,7 @@ async function nativeBlocker(web = false) {
     if (web && PLAY_LIVE) return playGetBlocker();
     tabbar.hidden = true; document.body.dataset.route = 'gate'; document.body.classList.add('blocked');
     const html = `<div class="blocker" role="alertdialog" aria-modal="true" aria-labelledby="blk-h"><div class="blk-card">
-        <img src="icons/logo-128.png" alt="" class="blk-logo">
+        <img src="icons/app-icon-256.webp" alt="" class="blk-logo">
         <p class="blk-kicker">${web ? 'RWB Android app' : 'RWB App'}</p>
         <h1 id="blk-h">${web ? 'Get the RWB app' : 'New Update Available'}</h1>
         ${web ? `<p>On Android, RWB works through the <b>RWB Android app</b>. <b>Track</b> (live location with the screen off) and <b>RWB FAM</b> only work there.</p>
@@ -5876,7 +5880,7 @@ async function nativeBlocker(web = false) {
 /* Play Store app: Google's own update screen; the Play Store page if that can't open */
 function playBlocker() {
     keepBlocker(`<div class="blocker" role="alertdialog" aria-modal="true" aria-labelledby="blk-h"><div class="blk-card">
-        <img src="icons/logo-128.png" alt="" class="blk-logo"><p class="blk-kicker">RWB App</p>
+        <img src="icons/app-icon-256.webp" alt="" class="blk-logo"><p class="blk-kicker">RWB App</p>
         <h1 id="blk-h">New Update Available</h1>
         <p>A new version of RWB is on the Google Play Store. Tap <b>Update now</b>: it takes a moment and you stay signed in.</p>
         <button class="btn block" data-x="get">⬆ Update now</button>
@@ -5888,7 +5892,7 @@ function playBlocker() {
 /* Android browser, once RWB is on the Play Store: install it from there */
 function playGetBlocker() {
     keepBlocker(`<div class="blocker" role="alertdialog" aria-modal="true" aria-labelledby="blk-h"><div class="blk-card">
-        <img src="icons/logo-128.png" alt="" class="blk-logo"><p class="blk-kicker">RWB Android app</p>
+        <img src="icons/app-icon-256.webp" alt="" class="blk-logo"><p class="blk-kicker">RWB Android app</p>
         <h1 id="blk-h">Get RWB on Google Play</h1>
         <p>On Android, RWB works through the <b>RWB app from the Google Play Store</b>. <b>Track</b> and <b>RWB FAM</b> only work there.</p>
         <ol class="blk-steps"><li>Remove the RWB web app if it's on your home screen (press and hold its icon → <b>Remove</b>).</li>
@@ -6389,7 +6393,7 @@ function famView(name) {
 /* ---------- joining with an invite code ---------- */
 function famJoinScreen(sess, code = famCodeSaved()) {
     tabbar.hidden = true; document.body.dataset.route = 'gate';
-    app.innerHTML = `${demoBar()}<section class="signin fam-join"><img src="icons/logo-128.png" alt="">
+    app.innerHTML = `${demoBar()}<section class="signin fam-join"><img src="icons/app-icon-256.webp" alt="">
         <div><h1>Join RWB FAM</h1><p class="lead">An RWB member invited you to their family circle in the RWB App.</p></div>
         <form class="card na-card" id="fj" novalidate>
             <label>Invite code<input name="code" autocapitalize="characters" autocomplete="off" placeholder="RWB-XXXX" value="${esc(code)}" required></label>

@@ -2429,3 +2429,155 @@ html.lite .trk-me-dot{animation:none}
 .trk-evpick{margin-bottom:12px}.trk-evpick p{margin-bottom:6px}
 .trk-evs{display:flex;flex-wrap:wrap;gap:6px}
 .trk-evs .chip{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+
+/* =====================================================================
+   "Aurora" redesign (Nov 25 2026): matches the orange RWB app icon.
+   Light = warm ivory with orange/peach light drifting across, frosted-glass cards.
+   Dark  = near-black with ember glows, smoky glass cards.
+   Cards are translucent WITHOUT live blur (fast on every phone); only the header,
+   tab bar and sheets use real blur. The background pauses while scrolling (html.scrolling)
+   and stands still on low-end phones (html.lite).
+   ===================================================================== */
+:root{
+  --paper:#fbf3ec; --paper-2:rgba(120,60,20,.07); --ink:#1a120c; --stone:#4b3d33; --muted:#76665a;
+  --orange:#e8571c; --orange-dk:#c4440f; --orange-soft:#ffe7d6; --line:rgba(90,45,15,.11); --hair:rgba(90,45,15,.09);
+  --card:rgba(255,255,255,.66); --surface:rgba(255,255,255,.66); --card-solid:#fffaf6;
+  --glass-edge:rgba(255,255,255,.9); --bar:rgba(255,248,242,.66);
+  --lift:0 1px 0 rgba(255,255,255,.95) inset,0 12px 30px -18px rgba(150,60,10,.34);
+  --au-base:linear-gradient(165deg,#fffaf5 0%,#fdeee2 45%,#fbe2cf 100%);
+  --au-1:rgba(255,128,48,.42); --au-2:rgba(255,190,140,.60); --au-3:rgba(255,92,52,.24); --au-4:rgba(255,214,170,.55); --au-5:rgba(242,106,34,.20);
+  --grad-o:linear-gradient(180deg,#ff9a4a 0%,#f26a22 55%,#d4490f 100%);
+  --r:20px; --tab-h:66px; color-scheme:light}
+:root[data-theme=dark]{
+  --paper:#0b0908; --paper-2:rgba(255,255,255,.06); --ink:#f7f1eb; --stone:#d6cbc1; --muted:#a49487;
+  --orange:#ff7a35; --orange-dk:#ff9358; --orange-soft:#3a1d0f; --line:rgba(255,255,255,.08); --hair:rgba(255,255,255,.07);
+  --card:rgba(40,31,26,.56); --surface:rgba(40,31,26,.56); --card-solid:#1a1411;
+  --glass-edge:rgba(255,255,255,.09); --bar:rgba(18,13,11,.62);
+  --lift:0 1px 0 rgba(255,255,255,.06) inset,0 16px 36px -20px rgba(0,0,0,.95);
+  --au-base:linear-gradient(165deg,#0d0a09 0%,#120c0a 50%,#170d08 100%);
+  --au-1:rgba(232,85,30,.34); --au-2:rgba(130,40,12,.42); --au-3:rgba(255,122,53,.16); --au-4:rgba(90,25,10,.45); --au-5:rgba(255,150,80,.10);
+  color-scheme:dark}
+@media (prefers-color-scheme:dark){:root[data-theme=system]{
+  --paper:#0b0908; --paper-2:rgba(255,255,255,.06); --ink:#f7f1eb; --stone:#d6cbc1; --muted:#a49487;
+  --orange:#ff7a35; --orange-dk:#ff9358; --orange-soft:#3a1d0f; --line:rgba(255,255,255,.08); --hair:rgba(255,255,255,.07);
+  --card:rgba(40,31,26,.56); --surface:rgba(40,31,26,.56); --card-solid:#1a1411;
+  --glass-edge:rgba(255,255,255,.09); --bar:rgba(18,13,11,.62);
+  --lift:0 1px 0 rgba(255,255,255,.06) inset,0 16px 36px -20px rgba(0,0,0,.95);
+  --au-base:linear-gradient(165deg,#0d0a09 0%,#120c0a 50%,#170d08 100%);
+  --au-1:rgba(232,85,30,.34); --au-2:rgba(130,40,12,.42); --au-3:rgba(255,122,53,.16); --au-4:rgba(90,25,10,.45); --au-5:rgba(255,150,80,.10);
+  color-scheme:dark}}
+html{background:var(--paper)}
+body{background:transparent;color:var(--ink)}
+
+/* ---- the aurora: five soft lights drifting across the screen (transform only) ---- */
+.bg{background:var(--au-base)}
+.bg i,.bg::before,.bg::after{content:"";position:absolute;border-radius:50%;will-change:transform}
+.bg i:nth-child(1){width:95vmax;height:95vmax;left:-45vmax;top:-40vmax;background:radial-gradient(closest-side,var(--au-1),transparent)!important;animation:au-a 18s ease-in-out infinite alternate!important}
+.bg i:nth-child(2){width:85vmax;height:85vmax;right:-45vmax;top:10vh;background:radial-gradient(closest-side,var(--au-2),transparent)!important;animation:au-b 22s ease-in-out infinite alternate!important}
+.bg i:nth-child(3){width:90vmax;height:90vmax;left:-20vmax;bottom:-55vmax;background:radial-gradient(closest-side,var(--au-3),transparent)!important;animation:au-c 26s ease-in-out infinite alternate!important}
+.bg::before{width:70vmax;height:70vmax;left:30vw;top:-35vmax;background:radial-gradient(closest-side,var(--au-4),transparent);animation:au-d 30s ease-in-out infinite alternate}
+.bg::after{width:75vmax;height:75vmax;right:10vw;bottom:-30vmax;background:radial-gradient(closest-side,var(--au-5),transparent);animation:au-e 24s ease-in-out infinite alternate}
+@keyframes au-a{to{transform:translate3d(55vw,35vh,0) scale(1.2)}}
+@keyframes au-b{to{transform:translate3d(-60vw,30vh,0) scale(.85)}}
+@keyframes au-c{to{transform:translate3d(45vw,-40vh,0) scale(1.15)}}
+@keyframes au-d{to{transform:translate3d(-50vw,45vh,0) scale(1.1)}}
+@keyframes au-e{to{transform:translate3d(-35vw,-50vh,0) scale(1.25)}}
+html.scrolling .bg::before,html.scrolling .bg::after{animation-play-state:paused}
+html.lite .bg::before,html.lite .bg::after{animation:none}
+@media (prefers-reduced-motion:reduce){.bg::before,.bg::after{animation:none}}
+
+/* ---- glass surfaces ---- */
+.card,.group,.group-row-card,.banner,.stat,.mm-card,details.howto,.msg.model,.evt-card,.cal-it,.doc-card,.gd-type,.gd-kind,.promo-card,.word-card,.trk-row,.lb-list li,.ts{
+  background:var(--card);border:1px solid var(--glass-edge);box-shadow:var(--lift);border-radius:var(--r)}
+.group{overflow:hidden}
+.group > a,.group > button,.group > label,.group > div{border-top-color:var(--hair)}
+dialog#sheet{background:color-mix(in srgb,var(--card-solid) 88%,transparent);backdrop-filter:blur(26px) saturate(1.6);-webkit-backdrop-filter:blur(26px) saturate(1.6);border:1px solid var(--glass-edge)}
+dialog#sheet::backdrop{background:rgba(20,8,2,.38);backdrop-filter:blur(3px)}
+.cp-panel,.mm-search-bar input,.trk-opt,.trk-style{background:var(--card-solid)}
+input,select,textarea{background:color-mix(in srgb,var(--card-solid) 82%,transparent);border-color:var(--line)}
+html.lite .card,html.lite .group,html.lite .evt-card,html.lite .mm-card{background:color-mix(in srgb,var(--card-solid) 92%,transparent)}
+
+/* ---- header: frosted bar across the full width ---- */
+.top{background:transparent!important;isolation:isolate}
+.top::before{content:"";position:absolute;inset:0 -50vw;z-index:-1;background:var(--bar);backdrop-filter:blur(22px) saturate(1.7);-webkit-backdrop-filter:blur(22px) saturate(1.7);
+  border-bottom:1px solid var(--hair);opacity:.98}
+.top .logo{width:32px;height:32px;border-radius:9px;box-shadow:0 4px 12px -5px rgba(201,68,14,.7)}
+.top h1{font:800 1.7rem/1 var(--display);letter-spacing:.01em}
+.top .icon-btn{width:36px;height:36px;background:var(--card);border:1px solid var(--glass-edge);box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 4px 12px -8px rgba(0,0,0,.3)}
+.top .bell .dot{border-color:var(--card-solid)}
+
+/* ---- buttons, segments, chips ---- */
+.btn:not(.ghost):not(.wa):not(.danger){background:var(--grad-o);color:#fff;border:0;box-shadow:0 1px 0 rgba(255,255,255,.35) inset,0 10px 22px -10px rgba(212,73,15,.75)}
+.btn.ghost,.btn.ghost:hover{background:var(--card);border:1px solid var(--glass-edge);box-shadow:var(--lift)}
+.seg{background:var(--paper-2);border:1px solid var(--hair);padding:3px;gap:2px}
+.seg button[aria-selected=true]{background:var(--card-solid);color:var(--ink);box-shadow:0 1px 0 rgba(255,255,255,.4) inset,0 3px 10px -4px rgba(0,0,0,.25)}
+.chip{background:var(--card);border:1px solid var(--glass-edge)}
+
+/* ---- section headings: small, calm, Apple-like ---- */
+.section > h2,.group-title,.st-title{font:600 .78rem/1.2 var(--body)!important;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.section > h2 a,.section > h2 .h-acts a,.section > h2 button{text-transform:none;letter-spacing:0;font-size:.85rem;color:var(--orange)}
+
+/* ---- quick actions: glass tiles, FAM in the icon's orange ---- */
+.quick span{background:var(--card)!important;border:1px solid var(--glass-edge);box-shadow:var(--lift)!important;color:var(--orange)}
+.quick .fam-q span{background:var(--grad-o)!important;color:#fff;border:0;box-shadow:0 1px 0 rgba(255,255,255,.35) inset,0 10px 22px -10px rgba(212,73,15,.8)!important}
+
+/* ---- tab bar: a floating glass capsule; Track is the orange app-icon tile ---- */
+.tabbar{left:10px;right:10px;bottom:calc(8px + max(env(safe-area-inset-bottom),var(--safe-area-inset-bottom,0px)));max-width:620px;margin:0 auto;border-radius:26px;
+  background:var(--bar);backdrop-filter:blur(24px) saturate(1.8);-webkit-backdrop-filter:blur(24px) saturate(1.8);border:1px solid var(--glass-edge);
+  box-shadow:0 1px 0 rgba(255,255,255,.55) inset,0 18px 40px -16px rgba(80,30,5,.45);padding:0 4px}
+:root[data-theme=dark] .tabbar{box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 18px 40px -14px rgba(0,0,0,.9)}
+.tabbar a{height:60px;position:relative}
+.tabbar a[aria-current=page]{color:var(--orange)}
+.tabbar a[aria-current=page]:not(.tab-brand)::after{content:"";position:absolute;bottom:5px;left:50%;width:5px;height:5px;margin-left:-2.5px;border-radius:50%;background:var(--orange)}
+.tab-track .brand-ring{width:58px;height:58px;margin-top:-26px;border-radius:19px;background:radial-gradient(120% 100% at 30% 0%,#ffa45a 0%,#f26a22 55%,#c9440e 100%);
+  box-shadow:0 1px 0 rgba(255,255,255,.4) inset,0 12px 24px -8px rgba(201,68,14,.85),0 0 0 4px var(--bar)}
+.tab-track .brand-ring::after{border-radius:23px}
+.tab-track .trk-dot{border-color:#f26a22}
+#app{padding-bottom:calc(var(--tab-h) + 110px + max(env(safe-area-inset-bottom),var(--safe-area-inset-bottom,0px)))}
+
+/* ---- Pookie: a small frosted bubble that never shouts over content ---- */
+.pookie-fab{width:48px;height:48px;bottom:calc(var(--tab-h) + 24px + max(env(safe-area-inset-bottom),var(--safe-area-inset-bottom,0px)));
+  background:radial-gradient(circle at 32% 26%,#3a2a22,#140f0c 72%)!important;box-shadow:0 12px 26px -10px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.08) inset}
+.fab{bottom:calc(var(--tab-h) + 24px + max(env(safe-area-inset-bottom),var(--safe-area-inset-bottom,0px)))}
+body:has(#app .btn.fab) .pookie-fab{bottom:calc(var(--tab-h) + 86px + max(env(safe-area-inset-bottom),var(--safe-area-inset-bottom,0px)))}
+
+/* ---- Home hero ---- */
+.home-hero{margin:6px 2px 18px}
+.hh-date{font:600 .78rem/1 var(--body);letter-spacing:.08em;text-transform:uppercase;color:var(--orange)}
+.hh-hi{font:800 2.5rem/.98 var(--display);text-transform:uppercase;letter-spacing:.005em;margin-top:8px;color:var(--ink)}
+.hh-hi span{background:var(--grad-o);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hh-sub{margin-top:10px;color:var(--stone);font-size:.98rem}
+.hh-sub b{color:var(--ink)}
+
+/* ---- Me: Apple Settings style ---- */
+.me-hero{flex-direction:column;text-align:center;gap:10px;margin:8px 0 6px;padding:22px 16px 18px;border-radius:26px;background:var(--card);border:1px solid var(--glass-edge);box-shadow:var(--lift)}
+.me-hero .photo-pick{margin:0 auto}
+.me-hero .avatar.xl{width:96px;height:96px;font-size:2rem;box-shadow:0 0 0 4px var(--card-solid),0 0 0 6px color-mix(in srgb,var(--orange) 55%,transparent),0 16px 30px -14px rgba(201,68,14,.7)}
+.me-hero h2{font:700 1.45rem/1.15 var(--body);letter-spacing:-.01em}
+.me-hero .grow{display:flex;flex-direction:column;align-items:center;gap:2px}
+.me-hero .btn{margin-top:4px}
+.st-title{margin:26px 16px 8px!important}
+.st-title span{text-transform:none;letter-spacing:0;font-weight:500;opacity:.8;margin-left:4px}
+.st-foot{font-size:.8rem;line-height:1.4;color:var(--muted);margin:8px 16px 0}
+.st-foot + .group{margin-top:10px}
+.st-group > div,.st-group > a,.st-group > button,.st-group > label{min-height:50px;padding:10px 14px}
+.st-group.kv > div{gap:12px}
+.st-group.kv .grow{color:var(--ink);font-weight:500}
+.st-group.kv .rt{color:var(--muted);font-weight:500}
+.st-ico{flex:none;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:#fff;box-shadow:0 1px 0 rgba(255,255,255,.3) inset}
+.st-ico svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.st-ico.c-green{background:linear-gradient(180deg,#3ad07a,#1fa85a)}.st-ico.c-orange{background:var(--grad-o)}.st-ico.c-blue{background:linear-gradient(180deg,#4f9bff,#2f74e0)}
+.st-ico.c-pink{background:linear-gradient(180deg,#ff7aa8,#e8467e)}.st-ico.c-red{background:linear-gradient(180deg,#ff6a5c,#e0392b)}.st-ico.c-teal{background:linear-gradient(180deg,#38c9c0,#16a39b)}
+.st-card{border-radius:var(--r)}
+.st-seg{margin:0}
+.me-foot{display:flex;flex-direction:column;align-items:center;gap:10px;margin:34px 0 6px;text-align:center;color:var(--muted);font-size:.8rem}
+.me-foot img{width:52px;height:52px;border-radius:14px;box-shadow:0 10px 22px -10px rgba(201,68,14,.8)}
+.me-foot b{color:var(--ink);font-size:.9rem}
+.danger-row b{color:#e0392b}
+
+/* ---- sign-in, splash and app-icon pictures ---- */
+.signin img.si-icon,.signin > img{width:112px;height:112px;border-radius:26px;box-shadow:0 22px 44px -18px rgba(201,68,14,.85)}
+.splash img{border-radius:20px}
+.blk-logo{border-radius:18px}
+:root:not([data-theme=dark]) .pookie-fab{background:radial-gradient(circle at 30% 22%,#fff,#fff3ea 70%)!important;color:var(--orange)!important;box-shadow:0 1px 0 #fff inset,0 12px 26px -12px rgba(150,60,10,.55),0 0 0 1px rgba(232,87,28,.18)}
+@media (prefers-color-scheme:dark){:root[data-theme=system] .pookie-fab{background:radial-gradient(circle at 32% 26%,#3a2a22,#140f0c 72%)!important;color:#ffb07a!important;box-shadow:0 12px 26px -10px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.08) inset}}

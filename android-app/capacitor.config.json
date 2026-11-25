@@ -8,7 +8,7 @@
     "allowNavigation": ["roninwb.in"]
   },
   "android": {
-    "backgroundColor": "#121110",
+    "backgroundColor": "#fbf3ec",
     "appendUserAgent": "RWB-Android-App"
   },
   "plugins": {

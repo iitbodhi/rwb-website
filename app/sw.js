@@ -1,8 +1,8 @@
 /* RWB App service worker: keeps the app shell available offline and loads it fast.
    Bump VERSION whenever app files change so phones pick up the new version. */
-const VERSION = 'rwb-app-v206';
+const VERSION = 'rwb-app-v207';
 const SHELL = ['./', 'index.html', 'config.js', 'css/app.css', 'js/app.js', 'js/api.js', 'js/offline.js', '../js/data.js', '../js/terms.js', '../js/pdfview.js',
-    'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
+    'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/app-icon-256.webp', 'icons/rwb-mark.webp'];
 
 self.addEventListener('install', e => {
     e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));

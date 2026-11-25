@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>RWB App · Ronin Warriors of Bengal</title>
 <meta name="description" content="The Ronin Warriors of Bengal members app: service records, mileage tracker, guides and more.">
-<meta name="theme-color" content="#e9e6e1" id="theme-color">
+<meta name="theme-color" content="#fbf3ec" id="theme-color">
 <script>/* apply the saved theme before anything draws (light unless the rider chose otherwise) */
 (function () { var t = 'light'; try { t = localStorage.getItem('rwb-theme') || 'light'; } catch (e) {}
   document.documentElement.dataset.theme = t;
   var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-  document.getElementById('theme-color').content = dark ? '#121110' : '#e9e6e1'; })();</script>
+  document.getElementById('theme-color').content = dark ? '#0b0908' : '#fbf3ec'; })();</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="../assets/favicon.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -22,70 +22,56 @@
 <link rel="preconnect" href="https://lh3.googleusercontent.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,800;1,800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/app.css">
-<style>/* intro / loading screen "Nightfall": the screen starts in light-mode ivory, the logo opens like a shutter,
-   then night falls (a dark circle grows from the logo), a warm headlight glow comes on, a thin ring draws round the logo,
-   the name and motto arrive, and a small line shows it's loading. Quick reopens get a short version; tap skips it. */
-#boot{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;padding:24px;overflow:hidden;
-  background:#ece8e2;color:#f3efe9;transition:opacity .5s ease,visibility .5s;-webkit-tap-highlight-color:transparent}
+<style>/* intro / loading screen "Ignition" (Nov 2026): the orange app-icon tile pops in, the white 3D RWB letters ride in
+   from the left with speed lines, a light glint sweeps the tile and an engine-rev ring pulses out; when the app is ready
+   the tile zooms open into it. About 1 s; tap skips it. Light/dark follow the rider's theme. */
+#boot{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;overflow:hidden;
+  background:radial-gradient(60% 45% at 50% 46%,rgba(255,138,61,.30),transparent 70%),radial-gradient(70% 60% at 85% 100%,rgba(255,170,110,.35),transparent 70%),#fbf3ec;
+  -webkit-tap-highlight-color:transparent;transition:opacity .34s ease .1s,visibility .34s .1s}
+:root[data-theme=dark] #boot{background:radial-gradient(60% 45% at 50% 46%,rgba(232,85,30,.34),transparent 70%),radial-gradient(70% 60% at 85% 100%,rgba(120,40,12,.45),transparent 70%),#0b0908}
+@media (prefers-color-scheme:dark){:root[data-theme=system] #boot{background:radial-gradient(60% 45% at 50% 46%,rgba(232,85,30,.34),transparent 70%),radial-gradient(70% 60% at 85% 100%,rgba(120,40,12,.45),transparent 70%),#0b0908}}
 #boot.out{opacity:0;visibility:hidden}
-#boot .night{position:absolute;inset:0;background:#0f0c0a;clip-path:circle(0% at 50% 50%)}
-#boot .glow{position:absolute;inset:-25%;pointer-events:none;opacity:0;
-  background:radial-gradient(42% 30% at 50% 48%,rgba(232,102,46,.62),transparent 70%),radial-gradient(60% 50% at 18% 8%,rgba(120,40,20,.45),transparent 70%),radial-gradient(60% 50% at 85% 95%,rgba(70,30,60,.5),transparent 70%)}
-#boot > :not(.night):not(.glow):not(.bar){position:relative}
-#boot .b-name{margin:0;font:600 13px/1 'Barlow',system-ui,sans-serif;letter-spacing:.42em;padding-left:.42em;text-transform:uppercase;white-space:nowrap;color:rgba(243,239,233,.9);text-align:center}
-#boot .b-logo{position:relative;width:136px;height:136px}
-#boot .b-logo img{width:100%;height:100%;border-radius:50%;display:block;box-shadow:0 18px 50px -16px rgba(0,0,0,.45)}
-#boot .b-logo svg{position:absolute;inset:-9px;width:calc(100% + 18px);height:calc(100% + 18px);transform:rotate(-90deg);overflow:visible}
-#boot .b-logo circle{fill:none;stroke:#ee7a42;stroke-width:1.6;stroke-linecap:round;stroke-dasharray:480;stroke-dashoffset:480}
-#boot .b-motto{margin:0;display:flex;gap:.6em;font:500 13px/1 'Barlow',system-ui,sans-serif;letter-spacing:.3em;padding-left:.3em;text-transform:uppercase;color:rgba(243,239,233,.62)}
-#boot .b-motto b{font-weight:600;color:#ee7a42}
-#boot .b-motto > *{display:inline-block}
-#boot .bar{position:absolute;bottom:calc(64px + max(env(safe-area-inset-bottom),var(--safe-area-inset-bottom,0px)));left:50%;width:64px;height:2px;margin-left:-32px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden;opacity:0}
-#boot .bar i{position:absolute;inset:0;background:#ee7a42;transform:scaleX(0)}
-/* full: the whole story (first open, or after 6 hours away) */
-#boot.i-full .night{animation:bNight .75s cubic-bezier(.65,0,.35,1) .6s both}
-#boot.i-full .glow{animation:bGlow 1s ease 1s both,bDrift 6s ease-in-out 2s infinite alternate}
-#boot.i-full .b-logo img{animation:bIris .7s cubic-bezier(.16,1,.3,1) .1s both}
-#boot.i-full .b-logo circle{animation:bRing 1s cubic-bezier(.65,0,.35,1) 1s both}
-#boot.i-full .b-name{animation:bTrack 1s cubic-bezier(.16,1,.3,1) 1.15s both}
-#boot.i-full .b-motto > *{animation:bRise .7s cubic-bezier(.16,1,.3,1) both}
-#boot.i-full .b-motto > :nth-child(1){animation-delay:1.4s}#boot.i-full .b-motto > :nth-child(2){animation-delay:1.52s}#boot.i-full .b-motto > :nth-child(3){animation-delay:1.64s}
-#boot.i-full .bar{animation:bFade .4s ease 1.8s both}#boot.i-full .bar i{animation:bLoad 1.4s cubic-bezier(.65,0,.35,1) 1.9s infinite}
-/* quick: already night, everything just fades in */
-#boot.i-quick .night{clip-path:none}
-#boot.i-quick .glow{opacity:1;animation:bDrift 6s ease-in-out infinite alternate}
-#boot.i-quick .b-logo circle{stroke-dashoffset:0;opacity:.35}
-#boot.i-quick .b-logo,#boot.i-quick .b-name,#boot.i-quick .b-motto{animation:bFade .45s ease both}
-#boot.i-quick .bar{animation:bFade .3s ease .6s both}#boot.i-quick .bar i{animation:bLoad 1.4s cubic-bezier(.65,0,.35,1) .6s infinite}
-@keyframes bIris{from{clip-path:circle(0% at 50% 50%);transform:scale(1.12)}to{clip-path:circle(50% at 50% 50%);transform:none}}
-@keyframes bNight{from{clip-path:circle(0% at 50% 50%)}to{clip-path:circle(75% at 50% 50%)}}
-@keyframes bGlow{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:none}}
-@keyframes bDrift{from{transform:translate3d(0,0,0) scale(1);filter:hue-rotate(0)}to{transform:translate3d(-3%,2%,0) scale(1.05);filter:hue-rotate(-25deg)}}
-@keyframes bRing{0%{stroke-dashoffset:480;opacity:1}75%{stroke-dashoffset:0;opacity:1}100%{stroke-dashoffset:0;opacity:.35}}
-@keyframes bTrack{from{opacity:0;letter-spacing:.85em}to{opacity:1}}
-@keyframes bRise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
-@keyframes bFade{from{opacity:0}to{opacity:1}}
-@keyframes bLoad{0%{transform:scaleX(0);transform-origin:left}50%{transform:scaleX(1);transform-origin:left}50.01%{transform-origin:right}100%{transform:scaleX(0);transform-origin:right}}
-/* less motion: straight to the finished night screen */
-@media (prefers-reduced-motion:reduce){#boot *{animation:none!important}#boot .night{clip-path:none}#boot .glow{opacity:1}#boot .b-logo circle{stroke-dashoffset:0;opacity:.35}}
+#boot .b-stage{position:relative;width:132px;height:132px}
+#boot .b-ring{position:absolute;inset:-2px;border-radius:34px;border:2px solid rgba(255,122,47,.75);opacity:0}
+#boot .b-tile{position:absolute;inset:0;border-radius:32px;overflow:hidden;
+  background:radial-gradient(120% 100% at 30% 0%,#ffa45a 0%,#f26a22 55%,#c9440e 100%);
+  box-shadow:0 1px 0 rgba(255,255,255,.35) inset,0 22px 50px -18px rgba(201,68,14,.85),0 8px 18px -10px rgba(0,0,0,.35)}
+#boot .b-tile img{position:absolute;left:8%;top:50%;width:84%;transform:translateY(-50%)}
+#boot .b-tile .sp{position:absolute;left:-30%;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.95));opacity:0}
+#boot .b-tile .sp:nth-of-type(1){top:36%;width:70%}#boot .b-tile .sp:nth-of-type(2){top:52%;width:90%}#boot .b-tile .sp:nth-of-type(3){top:66%;width:55%}
+#boot .b-tile .gl{position:absolute;top:-20%;bottom:-20%;width:38%;left:-60%;transform:skewX(-20deg);background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent)}
+#boot .b-name{margin:0;font:600 12px/1 'Barlow',system-ui,sans-serif;letter-spacing:.42em;padding-left:.42em;text-transform:uppercase;white-space:nowrap;color:#5a4636;opacity:0}
+:root[data-theme=dark] #boot .b-name{color:rgba(246,238,230,.82)}
+@media (prefers-color-scheme:dark){:root[data-theme=system] #boot .b-name{color:rgba(246,238,230,.82)}}
+#boot.go .b-tile{animation:bPop .5s cubic-bezier(.34,1.56,.64,1) both}
+#boot.go .b-tile img{animation:bRide .46s cubic-bezier(.16,1,.3,1) .16s both}
+#boot.go .b-tile .sp{animation:bStreak .42s cubic-bezier(.2,.7,.3,1) both}
+#boot.go .b-tile .sp:nth-of-type(1){animation-delay:.14s}#boot.go .b-tile .sp:nth-of-type(2){animation-delay:.2s}#boot.go .b-tile .sp:nth-of-type(3){animation-delay:.26s}
+#boot.go .b-tile .gl{animation:bGlint .55s ease-in-out .58s both}
+#boot.go .b-ring{animation:bRev .7s cubic-bezier(.2,.7,.3,1) .44s forwards}
+#boot.go .b-name{animation:bName .5s cubic-bezier(.16,1,.3,1) .38s both}
+#boot.out .b-stage{transition:transform .42s cubic-bezier(.55,0,.75,0),opacity .3s ease .08s;transform:scale(3.2);opacity:0}
+#boot.out .b-name{transition:opacity .2s;opacity:0}
+@keyframes bPop{0%{opacity:0;transform:scale(.25) rotate(-14deg)}60%{opacity:1}100%{opacity:1;transform:none}}
+@keyframes bRide{0%{opacity:0;transform:translate(-150%,-50%) skewX(-28deg);filter:blur(5px)}100%{opacity:1;transform:translate(0,-50%);filter:none}}
+@keyframes bStreak{0%{opacity:0;transform:translateX(0)}30%{opacity:1}100%{opacity:0;transform:translateX(190%)}}
+@keyframes bGlint{to{left:130%}}
+@keyframes bRev{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(1.7)}}
+@keyframes bName{0%{opacity:0;letter-spacing:.8em;transform:translateY(8px)}100%{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){#boot *{animation:none!important;transition:none!important}#boot .b-name{opacity:1}}
 </style>
 </head>
 <body>
 <div id="boot" aria-hidden="true">
-  <i class="night"></i><i class="glow"></i>
+  <div class="b-stage"><i class="b-ring"></i><div class="b-tile"><i class="sp"></i><i class="sp"></i><i class="sp"></i><img src="icons/rwb-mark.webp" alt="" decoding="sync"><i class="gl"></i></div></div>
   <p class="b-name">Ronin Warriors of Bengal</p>
-  <div class="b-logo"><img src="icons/logo-384.png" alt=""><svg viewBox="0 0 154 154"><circle cx="77" cy="77" r="76"/></svg></div>
-  <p class="b-motto"><span>Explore.</span><b>Evolve.</b><span>Inspire.</span></p>
-  <span class="bar"><i></i></span>
 </div>
-<script>/* which intro: the full one every time the app opens; the quick one only for people who ask their phone for less motion. */
+<script>/* start the intro once the RWB letters are ready (they're tiny); the app hides it when it has drawn, never before ~1 s */
 (function () {
-  var b = document.getElementById('boot'), now = Date.now(), last = 0, rm = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  try { last = Number(localStorage.getItem('rwb-intro-seen') || 0); } catch (e) {}
-  var full = !rm;   /* the full intro on every open (members asked for it); tap skips it */
-  b.className = full ? 'i-full' : 'i-quick';   /* not "full"/"quick": .quick is the app's quick-action row */
-  if (full) { try { localStorage.setItem('rwb-intro-seen', String(now)); } catch (e) {} }
-  window.INTRO_END = performance.now() + (full ? 2300 : 700);
+  var b = document.getElementById('boot'), rm = matchMedia('(prefers-reduced-motion: reduce)').matches, img = b.querySelector('img');
+  var go = function () { if (!b.classList.contains('go')) b.classList.add('go'); };
+  if (img.complete) go(); else { img.onload = img.onerror = go; setTimeout(go, 250); }
+  window.INTRO_END = performance.now() + (rm ? 300 : 1050);
   b.addEventListener('click', function () { window.INTRO_END = 0; if (window.hideBootNow) window.hideBootNow(); });
 })();</script>
 <script>window.BOOT_T = performance.now();
@@ -102,7 +88,7 @@ setTimeout(() => { const b = document.getElementById('boot'); if (!b || b.datase
 </script>
 <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
 <div id="app" aria-live="polite">
-  <div class="splash"><img src="icons/logo-128.png" alt="" width="96" height="96"><p>Loading…</p></div>
+  <div class="splash"><img src="icons/app-icon-256.webp" alt="" width="88" height="88"><p>Loading…</p></div>
 </div>
 <nav class="tabbar" id="tabbar" hidden aria-label="Main">
   <a href="#home" data-tab="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M9.5 14.5h5v6h-5z"/><path d="M3.5 10.5 12 4l8.5 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-4.5v-6h-5v6H5A1.5 1.5 0 0 1 3.5 19z"/></svg><span>Home</span></a>
