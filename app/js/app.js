@@ -250,6 +250,8 @@ async function doRender() {
     /* the entrance animation plays when the screen changes, not when the same screen refreshes */
     const route = name + '/' + (param || '');
     app.classList.toggle('same', route === lastRoute); lastRoute = route;
+    liveCheck();   /* Track button ring: throttled to once per ~2 min */
+    if (route !== app.dataset.shown) { app.classList.add('enter'); clearTimeout(app._enterT); app._enterT = setTimeout(() => app.classList.remove('enter'), 420); }
     paintN = navN;
     navUI.start(route !== app.dataset.shown); app.dataset.shown = route;
     pingCopy().catch(() => {});
@@ -286,7 +288,7 @@ const docsAlert = () => (state.docs || []).some(d => docStatus(d).level !== 'ok'
 const getAppBtn = () => !NATIVE && /android/i.test(navigator.userAgent) ? `<a class="get-app" href="${apkUrl()}" download="RWB-App.apk" aria-label="Download the RWB Android app"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span>App</span></a>` : '';
 /* quiet shimmer bars instead of a "Loading…" line */
 const SKEL = (n = 3) => `<div class="skel" aria-hidden="true">${'<i></i>'.repeat(n)}</div><span class="sr-only">Loading</span>`;
-const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/app-icon-256.webp" alt=""><h1>${esc(title)}</h1>${right}${getAppBtn()}
+const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.webp" alt="RWB"><h1>${esc(title)}</h1>${right}${getAppBtn()}
     ${isFam() ? '' : `<a class="icon-btn bell cal-btn" href="#calendar" aria-label="Calendar${calAlert() ? ' (something due soon)' : ''}">${CAL_ICON}${calAlert() ? '<i class="dot"></i>' : ''}</a>`}
     <a class="icon-btn bell guide-btn" href="#guides" aria-label="Guides and how-to videos">${HELP_ICON}</a>
     <a class="icon-btn bell" href="#news" aria-label="Announcements${unread() ? ' (new)' : ''}">${BELL}${unread() ? '<i class="dot"></i>' : ''}</a>
@@ -355,7 +357,8 @@ function joinFields(v = {}, mode = 'join') {
         L('phone', 'WhatsApp No.', tel('phone', '10-digit number'), mode === 'join' ? 'The number you\'re in the RWB WhatsApp group with' : APPROVE),
         L('alt_phone', 'Mobile No. (alternative)', tel('alt_phone', 'Optional')),
         mode === 'admin' ? L('email', 'Email', `<input type="email" name="email" inputmode="email" autocomplete="off" autocapitalize="none" spellcheck="false" value="${val('email')}">`,
-            v.user_id ? 'The Google account they sign in to the app with. If you change it, they\'re signed out of the app at once and must sign in with the new email. Their records and role come along.' : v.move_from ? 'Waiting for them to sign in with this email. Their records come along when they do.' : 'They sign in to the app with this Google account') : '',
+            v.user_id ? 'The Google account they sign in to the app with. If you change it, they\'re signed out of the app at once and must sign in with the new email. Their records and role come along.' : v.move_from ? 'Waiting for them to sign in with this email. Their records come along when they do.' : 'They sign in to the app with this Google account')  : mode === 'me' ? L('email', 'Email', `<input type="email" name="email" inputmode="email" autocomplete="email" autocapitalize="none" spellcheck="false" value="${val('email')}">`,
+            APPROVE + '<br>The Google account you sign in with. Once it\'s approved you\'re signed out; sign in again with the new email. Your records come along.'): '',
         L('bike', 'Do you own a Ronin bike?', sel('bike', RONIN, v.bike || (mode === 'join' ? 'TVS Ronin 225' : ''))),
         L('vrn', 'VRN please', `<input name="vrn" autocapitalize="characters" placeholder="WB 02 AB 1234"${rq('vrn')} value="${val('vrn')}">`, mode === 'me' ? 'Your main bike. ' + APPROVE : 'Your Ronin\'s registration number'),
         L('blood_group', 'Blood group', sel('blood_group', BLOOD.map(b => [b, b]), normBlood(v.blood_group))),
@@ -616,7 +619,7 @@ function liveJoinForm(def, known, sess, filled = false, back = null) {
     const pages = formPages(def);
     let at = 0;
     const stepName = n => pages[n].title || (n ? '' : 'Welcome');
-    app.innerHTML = `${demoBar()}<header class="top"><img class="logo" src="icons/app-icon-256.webp" alt=""><h1>${filled ? 'Update my answers' : 'Join RWB'}</h1></header>
+    app.innerHTML = `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.webp" alt="RWB"><h1>${filled ? 'Update my answers' : 'Join RWB'}</h1></header>
         <div class="jf-prog" aria-live="polite"><div class="jf-bar"><i id="jf-fill"></i></div><span class="jf-step" id="jf-step"></span></div>
         <p class="jx-acct"><span class="jx-dot" aria-hidden="true"></span>${esc(sess.email)}</p>
         <form id="req" class="gform jf" novalidate>${pages.map((pg, n) => `<section class="gpage" data-p="${n}"${n ? ' hidden' : ''}>
@@ -3472,6 +3475,9 @@ function saveMyDetails(form, m, submitter, done) {
     const ask = [];
     if (d.full_name && d.full_name !== m.full_name) ask.push(['name', d.full_name]);
     if (d.phone && d.phone.replace(/\D/g, '').slice(-10) !== m.phone) ask.push(['phone', d.phone]);
+    const em = String(all.email || '').trim().toLowerCase();
+    if (em && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) return toast('Please check the email', true);
+    if (em && em !== String(m.email || '').toLowerCase()) ask.push(['email', em]);
     if ((d.vrn && vrnKey(d.vrn) !== vrnKey(m.vrn)) || (d.bike && d.bike !== m.bike)) ask.push(['vrn', d.vrn || m.vrn, d.bike || m.bike]);
     ['full_name', 'phone', 'vrn', 'bike'].forEach(k => delete d[k]);
     busy(submitter, async () => {
@@ -3490,7 +3496,7 @@ async function gateFor(m) {
     await loadJoinForm();
     return miss.length || moreMissing(m).length ? 'profile' : null;
 }
-const gateTop = title => `${demoBar()}<header class="top gate-top"><img class="logo" src="icons/app-icon-256.webp" alt=""><h1>${esc(title)}</h1></header>`;
+const gateTop = title => `${demoBar()}<header class="top gate-top"><img class="logo" src="icons/logo-128.webp" alt="RWB"><h1>${esc(title)}</h1></header>`;
 function tncGate() {
     const m = state.me, withdrew = m.tnc_agreed === false, updated = m.tnc_agreed === true;
     app.innerHTML = gateTop('RWB') + `<section class="gate card">
@@ -3563,7 +3569,7 @@ function bikeSheet(slot, b, done) {
 
 function viewMe() {
     const m = state.me, role = (ROLE[m.role] || 'Member') + (m.role === 'coordinator' ? ' (MotoMart)' : '');
-    const ST = { phone: 'M7 3h10v18H7zM11 18h2', bike: 'M5 17a3 3 0 1 0 0-.01M19 17a3 3 0 1 0 0-.01M5 17l4-7h5l3 7M9 10l-1-3H6m8 3 2-3h2', plate: 'M3 7h18v10H3zM7 12h.01M10 12h7', cake: 'M5 11h14v9H5zM12 11V8m0-3v.01M5 15c2 1.5 4.5 1.5 7 0s5-1.5 7 0', drop: 'M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z', pin: 'M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11zM12 10h.01', sos: 'M12 3l9 16H3zM12 10v4M12 17h.01' };
+    const ST = { mail: 'M3 6h18v12H3zM3 7l9 6 9-6', phone: 'M7 3h10v18H7zM11 18h2', bike: 'M5 17a3 3 0 1 0 0-.01M19 17a3 3 0 1 0 0-.01M5 17l4-7h5l3 7M9 10l-1-3H6m8 3 2-3h2', plate: 'M3 7h18v10H3zM7 12h.01M10 12h7', cake: 'M5 11h14v9H5zM12 11V8m0-3v.01M5 15c2 1.5 4.5 1.5 7 0s5-1.5 7 0', drop: 'M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z', pin: 'M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11zM12 10h.01', sos: 'M12 3l9 16H3zM12 10v4M12 17h.01' };
     const stI = (k, c) => `<span class="st-ico ${c}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ST[k]}"/></svg></span>`;
     const row = (k, v, ic, c) => `<div>${stI(ic, c)}<span class="grow">${k}</span><span class="rt">${esc(v || '–')}</span></div>`;
     const theme = getTheme();
@@ -3576,7 +3582,7 @@ function viewMe() {
         <div id="my-changes"></div>
         <h2 class="st-title">Personal details</h2>
         <div class="group kv st-group">
-            ${row('WhatsApp', m.phone, 'phone', 'c-green')}${row('Bike', m.bike, 'bike', 'c-orange')}${row('Registration', m.vrn, 'plate', 'c-blue')}${row('Birthday', m.dob ? fmtDayMonth(m.dob) : '', 'cake', 'c-pink')}${row('Blood group', m.blood_group, 'drop', 'c-red')}${row('Locality', m.locality, 'pin', 'c-teal')}${row('Emergency contact', m.emergency_phone, 'sos', 'c-red')}
+            ${row('WhatsApp', m.phone, 'phone', 'c-green')}${row('Email', m.email, 'mail', 'c-blue')}${row('Bike', m.bike, 'bike', 'c-orange')}${row('Registration', m.vrn, 'plate', 'c-blue')}${row('Birthday', m.dob ? fmtDayMonth(m.dob) : '', 'cake', 'c-pink')}${row('Blood group', m.blood_group, 'drop', 'c-red')}${row('Locality', m.locality, 'pin', 'c-teal')}${row('Emergency contact', m.emergency_phone, 'sos', 'c-red')}
         </div>
         <h2 class="st-title">My bikes <span>up to 3</span></h2>
         <div class="group bikes st-group" id="my-bikes">${bikeRows(m, null)}</div>
@@ -3634,7 +3640,7 @@ function viewMe() {
         'push-off': b => busy(b, async () => { await disablePush(); toast('Notifications are off on this phone'); drawPushState(); }),
         'push-test': b => busy(b, async () => { await api.testPush(); toast('Test sent. It should arrive in a few seconds.'); }),
         edit: () => openSheet('My details', `<form id="mf">
-            <p class="small muted" style="margin-bottom:10px">Changes to your Full Name, WhatsApp No. and main bike (VRN) are checked by an admin first. Everything else saves straight away. <span class="req">*</span> marks answers every member needs.</p>
+            <p class="small muted" style="margin-bottom:10px">Changes to your Full Name, WhatsApp No., Email and main bike (VRN) are checked by an admin first. Everything else saves straight away. <span class="req">*</span> marks answers every member needs.</p>
             ${joinFields(m, 'me')}
             <button class="btn block">Save details</button></form>`, body => {
             body.querySelector('#mf').onsubmit = e => { e.preventDefault(); saveMyDetails(e.target, m, e.submitter, () => { closeSheet(); render(); }); };
@@ -3959,7 +3965,7 @@ function tellOnWhatsApp(title, phone, text, done) {
     });
 }
 const azSort = l => [...l].sort((a, b) => String(a.full_name || '').trim().localeCompare(String(b.full_name || '').trim(), 'en', { sensitivity: 'base' }));
-const CHANGE_TXT = { name: 'Name', phone: 'WhatsApp No.', vrn: 'Main bike (VRN)', bike: 'New bike', tnc: 'Terms & Conditions' };
+const CHANGE_TXT = { name: 'Name', phone: 'WhatsApp No.', email: 'Email', vrn: 'Main bike (VRN)', bike: 'New bike', tnc: 'Terms & Conditions' };
 function changeCard(c) {
     const isVrn = c.kind === 'vrn' || c.kind === 'bike';
     return `<div class="card req-card change-card" data-cid="${c.id}">
@@ -4637,13 +4643,15 @@ async function sweepSold(all) {
     if (old.length) state.listings = null;
 }
 
+/* redraw MotoMart in place: keep the scroll position, no entrance animation, no new download */
+function mmRedraw() { const y = scrollY; mmState.local = true; viewMotoMart().then(() => scrollTo(0, y)).catch(() => {}); }
 async function viewMotoMart() {
     state.myId ??= await api.myId();
     const p = state.param;
     if (p === 'review') { if (isMod()) Object.assign(mmState, { review: true, mine: false }); }
     else if (['new', 'used', 'merch'].includes(p)) Object.assign(mmState, { branch: p, cat: 'all', review: false, mine: false });
     if (['review', 'new', 'used', 'merch'].includes(p)) { state.param = null; history.replaceState(null, '', '#motomart'); }
-    const all = await load.listings(true);
+    const all = await load.listings(!mmState.local); mmState.local = false;   /* tabs, filters and sorting reuse what's loaded */
     sweepSold(all);
     const mod = isMod(), waiting = mod ? all.filter(l => l.status === 'pending' && (isAdmin() || !mine(l))) : [];
     if (!mod || !waiting.length) mmState.review = false;
@@ -4671,17 +4679,17 @@ async function viewMotoMart() {
         <div class="mm-fabs">${mod ? `<button class="btn fab-2" data-act="list">＋ ${fabLabel}</button>` : ''}<button class="btn fab-1" data-act="sell">＋ Sell something</button></div>`;
     watchPreviews(app);
     actions = {
-        branch: el => { mmState.branch = el.dataset.b; mmState.cat = 'all'; mmState.review = false; viewMotoMart(); },
-        cat: el => { mmState.cat = el.dataset.cat; viewMotoMart(); },
-        mine: () => { mmState.mine = !mmState.mine; mmState.review = false; viewMotoMart(); },
-        review: () => { mmState.review = !mmState.review; mmState.mine = false; viewMotoMart(); },
+        branch: el => { mmState.branch = el.dataset.b; mmState.cat = 'all'; mmState.review = false; mmRedraw(); },
+        cat: el => { mmState.cat = el.dataset.cat; mmRedraw(); },
+        mine: () => { mmState.mine = !mmState.mine; mmState.review = false; mmRedraw(); },
+        review: () => { mmState.review = !mmState.review; mmState.mine = false; mmRedraw(); },
         search: () => mmSearch(mmVisible(all)),
-        'q-clear': () => { mmState.q = ''; viewMotoMart(); },
+        'q-clear': () => { mmState.q = ''; mmRedraw(); },
         sell: () => listingForm(),
         list: () => teamForm(null, mmState.branch === 'merch' ? 'merch' : 'new'),
         listing: el => listingDetail(all.find(l => String(l.id) === el.dataset.id))
     };
-    const s = $('#mms'); if (s) s.onchange = e => { mmState.sort = e.target.value; viewMotoMart(); };
+    const s = $('#mms'); if (s) s.onchange = e => { mmState.sort = e.target.value; mmRedraw(); };
     /* a post opened by link (e.g. from Home or a WhatsApp share): open it once, then forget it so filters don't reopen it */
     if (state.param) { const id = state.param; state.param = null; history.replaceState(null, '', '#motomart'); const l = all.find(x => String(x.id) === id); if (l && !expired(l)) listingDetail(l); else toast('That post is no longer available', true); }
 }
@@ -4697,7 +4705,7 @@ function mmSearch(items) {
     document.body.append(box);
     const input = box.querySelector('input'), list = box.querySelector('.mm-sugg');
     const close = closeMmSearch;
-    const go = q => { mmState.q = q; mmState.review = false; close(); viewMotoMart(); };
+    const go = q => { mmState.q = q; mmState.review = false; close(); mmRedraw(); };
     const draw = () => {
         const q = input.value.trim();
         if (!q) { list.innerHTML = popular.length ? `<p class="mm-s-h">Popular</p><div class="chips">${popular.map(c => `<button class="chip" data-q="${esc(c)}">${esc(c)}</button>`).join('')}</div>` : ''; return; }
@@ -5922,8 +5930,19 @@ async function nativeUpdateAsk() {
         if (x === 'get') { el.remove(); (Native('Browser')?.open({ url: apkUrl() }) || Promise.reject()).catch(() => { location.href = apkUrl(); }); } });
     document.body.append(el);
 }
-/* the middle Track button shows a live dot while sharing */
-function trackBadge() { document.getElementById('track-tab')?.classList.toggle('live', sharing()); }
+/* the middle Track button lights up (spinning green ring + dot) while ANYONE is sharing on Track, so everyone opening the app sees
+   a ride is live. The count comes from track_live_count (file 85, a few bytes): on open, on coming back to the app, every 2 min while visible,
+   and whenever the Track map loads its riders. Your own sharing lights it at once. */
+var liveRide = { n: 0, at: 0 };   /* var: doRender may run before this line */
+function trackBadge() { document.getElementById('track-tab')?.classList.toggle('live', sharing() || (liveRide?.n || 0) > 0); }
+async function liveCheck(force) {
+    if (!liveRide || !state.me || document.hidden || (!force && Date.now() - liveRide.at < 110e3)) return;
+    liveRide.at = Date.now();
+    try { liveRide.n = Number(await api.trackLiveCount()) || 0; } catch { /* offline: keep the last answer */ }
+    trackBadge();
+}
+setInterval(() => liveCheck(), 120e3);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) liveCheck(); });
 
 /* ---------- the middle button: Share / View / SOS ---------- */
 document.getElementById('track-tab')?.addEventListener('click', e => { e.preventDefault(); if (!state.me) return; if (isFam()) { if (location.hash.startsWith('#track')) refreshTrack(); else location.hash = '#track'; } else trackMenu(); });
@@ -6218,7 +6237,7 @@ function trkFollow(who) {
 async function refreshTrack(redraw) {
     if (!$('#trk-status')) return;
     let d = trk.data;
-    if (!redraw || !d) { try { d = trk.data = await api.trackView(); } catch (e) { $('#trk-status').innerHTML = `<span class="warn small">${esc(e.message)}</span>`; if ($('#trk-list .skel')) $('#trk-list').innerHTML = ''; return; } }
+    if (!redraw || !d) { try { d = trk.data = await api.trackView(); liveRide.n = (d.riders || []).length; liveRide.at = Date.now(); trackBadge(); } catch (e) { $('#trk-status').innerHTML = `<span class="warn small">${esc(e.message)}</span>`; if ($('#trk-list .skel')) $('#trk-list').innerHTML = ''; return; } }
     if (!$('#trk-status')) return;
     const f = trk.filter, onEv = r => f && r.event_id === f;
     const ev = f ? (state.evd?.events || []).find(e => e.id === f) || { title: d.riders.find(onEv)?.event || 'this ride' } : null;

@@ -2581,3 +2581,72 @@ body:has(#app .btn.fab) .pookie-fab{bottom:calc(var(--tab-h) + 86px + max(env(sa
 .blk-logo{border-radius:18px}
 :root:not([data-theme=dark]) .pookie-fab{background:radial-gradient(circle at 30% 22%,#fff,#fff3ea 70%)!important;color:var(--orange)!important;box-shadow:0 1px 0 #fff inset,0 12px 26px -12px rgba(150,60,10,.55),0 0 0 1px rgba(232,87,28,.18)}
 @media (prefers-color-scheme:dark){:root[data-theme=system] .pookie-fab{background:radial-gradient(circle at 32% 26%,#3a2a22,#140f0c 72%)!important;color:#ffb07a!important;box-shadow:0 12px 26px -10px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.08) inset}}
+
+/* Smooth screens (Nov 25 2026, Bodhi: tabs and screen changes flickered): a new screen slides up 6 px with NO fade
+   (a fade from invisible blinks over the glass background), only when the screen changes (#app.enter); redraws inside a
+   screen (MotoMart tabs, filters, sorting) don't animate at all. The old screen dims only if the next one is truly slow. */
+#app > *:not(.top):not(.demo-bar){animation:none}
+#app.enter:not(.same) > *:not(.top):not(.demo-bar){animation:rise-slide .22s cubic-bezier(.22,.8,.24,1) both}
+@keyframes rise-slide{from{transform:translate3d(0,6px,0)}to{transform:none}}
+html.nav-wait #app > *:not(.top):not(.demo-bar){opacity:.78;transition:opacity .25s ease .15s}
+
+/* ===== Final touches (Nov 25 2026, Bodhi) =====
+   1. Tab bar docked at the bottom again, full width (as before the floating capsule), keeping the frosted glass.
+   2. Me icons = the Home quick-action look (glass tile, orange line icon), not coloured cartoon tiles.
+   3. Pookie: an orange app-icon tile with a white helmet buddy, gently hovering. */
+.tabbar{left:0;right:0;bottom:0;max-width:none;margin:0;border-radius:0;border:0;border-top:1px solid var(--glass-edge);padding:0 4px max(env(safe-area-inset-bottom),var(--safe-area-inset-bottom,0px));
+  box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 -10px 30px -18px rgba(80,30,5,.35)}
+:root[data-theme=dark] .tabbar{box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 -10px 30px -16px rgba(0,0,0,.8)}
+@media (prefers-color-scheme:dark){:root[data-theme=system] .tabbar{box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 -10px 30px -16px rgba(0,0,0,.8)}}
+.tab-track .brand-ring{margin-top:-24px}
+#app{padding-bottom:calc(var(--tab-h) + 96px + max(env(safe-area-inset-bottom),var(--safe-area-inset-bottom,0px)))}
+.pookie-fab,.fab{bottom:calc(var(--tab-h) + 18px + max(env(safe-area-inset-bottom),var(--safe-area-inset-bottom,0px)))}
+body:has(#app .btn.fab) .pookie-fab{bottom:calc(var(--tab-h) + 80px + max(env(safe-area-inset-bottom),var(--safe-area-inset-bottom,0px)))}
+
+.st-ico,.st-ico[class*=c-]{width:32px;height:32px;border-radius:10px;background:var(--card)!important;border:1px solid var(--glass-edge);color:var(--orange);box-shadow:var(--lift)}
+.st-ico svg{width:17px;height:17px;stroke-width:1.8}
+.st-ico.c-red{color:#e0392b}
+
+.pookie-fab,:root .pookie-fab,:root[data-theme] .pookie-fab,:root:not([data-theme=dark]) .pookie-fab{width:52px;height:52px;border-radius:16px;color:#fff!important;
+  background:radial-gradient(120% 100% at 30% 0%,#ffa45a 0%,#f26a22 55%,#c9440e 100%)!important;
+  box-shadow:0 1px 0 rgba(255,255,255,.45) inset,0 -2px 0 rgba(120,35,5,.25) inset,0 14px 26px -10px rgba(201,68,14,.8)!important;
+  animation:pkHover 3s ease-in-out infinite!important}
+@media (prefers-color-scheme:dark){:root[data-theme=system] .pookie-fab{background:radial-gradient(120% 100% at 30% 0%,#ffa45a 0%,#f26a22 55%,#c9440e 100%)!important;color:#fff!important}}
+.pookie-fab::after{display:none}
+.pookie-fab .pk-ico{width:34px;height:34px;filter:drop-shadow(0 2px 0 rgba(110,35,5,.55)) drop-shadow(0 3px 4px rgba(80,25,0,.35))}
+.pookie-fab .pk-ico .pk-shell{fill:#fff}
+.pookie-fab .pk-ico .pk-visor{fill:#3a1d0c}
+.pookie-fab .pk-ico .pk-eye{fill:#ffb07a;animation:pkBlink 4.6s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.pookie-fab .pk-ico .pk-spark{fill:#fff;animation:pkTwinkle 2.4s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.pookie-fab.dragging{animation:none!important}
+@keyframes pkHover{0%,100%{translate:0 0}50%{translate:0 -5px}}
+@keyframes pkBlink{0%,92%,100%{transform:none}95%{transform:scaleY(.15)}}
+@keyframes pkTwinkle{0%,100%{opacity:.35;transform:scale(.6) rotate(0)}50%{opacity:1;transform:scale(1) rotate(45deg)}}
+html.scrolling .pookie-fab,html.scrolling .pookie-fab *{animation-play-state:paused!important}
+html.lite .pookie-fab,html.lite .pookie-fab *{animation:none!important}
+@media (prefers-reduced-motion:reduce){.pookie-fab,.pookie-fab *{animation:none!important}}
+.tabbar{background:rgba(251,243,236,.93)}
+:root[data-theme=dark] .tabbar{background:rgba(16,12,10,.93)}
+@media (prefers-color-scheme:dark){:root[data-theme=system] .tabbar{background:rgba(16,12,10,.93)}}
+.pookie-fab .pk-ico{width:38px;height:38px}
+body:has(#app .mm-fabs:not([hidden])) .pookie-fab{bottom:calc(var(--tab-h) + 92px + max(env(safe-area-inset-bottom),var(--safe-area-inset-bottom,0px)))}
+
+/* ===== Calmer colour grade (Nov 25 2026, Bodhi: the deep orange was too bright and hurt the eyes) =====
+   A warmer, slightly muted copper-orange; softer aurora lights; the club emblem in the header; a red SOS button. */
+:root{--orange:#d2612e;--orange-dk:#b44f22;--orange-soft:#f8e6d9;
+  --grad-o:linear-gradient(180deg,#f2a06c 0%,#e07440 55%,#c45a2a 100%);
+  --au-1:rgba(238,140,80,.30);--au-2:rgba(250,200,160,.50);--au-3:rgba(230,110,70,.15);--au-4:rgba(250,220,185,.50);--au-5:rgba(225,120,60,.13)}
+:root[data-theme=dark]{--orange:#ec8a56;--orange-dk:#f29d6e;--orange-soft:#33200f;
+  --au-1:rgba(210,95,45,.24);--au-2:rgba(110,40,15,.36);--au-3:rgba(236,138,86,.11);--au-4:rgba(80,28,12,.40);--au-5:rgba(236,150,95,.08)}
+@media (prefers-color-scheme:dark){:root[data-theme=system]{--orange:#ec8a56;--orange-dk:#f29d6e;--orange-soft:#33200f;
+  --au-1:rgba(210,95,45,.24);--au-2:rgba(110,40,15,.36);--au-3:rgba(236,138,86,.11);--au-4:rgba(80,28,12,.40);--au-5:rgba(236,150,95,.08)}}
+.tab-track .brand-ring,.pookie-fab,:root .pookie-fab,:root[data-theme] .pookie-fab,:root:not([data-theme=dark]) .pookie-fab{background:radial-gradient(120% 100% at 30% 0%,#f4aa74 0%,#e07440 55%,#b9542a 100%)!important}
+@media (prefers-color-scheme:dark){:root[data-theme=system] .pookie-fab{background:radial-gradient(120% 100% at 30% 0%,#f4aa74 0%,#e07440 55%,#b9542a 100%)!important}}
+.tab-track .brand-ring{box-shadow:0 1px 0 rgba(255,255,255,.35) inset,0 10px 22px -10px rgba(170,70,25,.7),0 0 0 4px var(--bar)}
+.pookie-fab,:root .pookie-fab,:root[data-theme] .pookie-fab{box-shadow:0 1px 0 rgba(255,255,255,.4) inset,0 -2px 0 rgba(110,40,10,.2) inset,0 12px 24px -12px rgba(170,70,25,.7)!important}
+.pookie-fab .pk-ico .pk-visor{fill:#3b2112}
+.top .logo{border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.06),0 4px 12px -6px rgba(0,0,0,.45)}
+/* SOS is always red, never the Share orange */
+.trk-actions .btn.sos-btn,.btn.sos-btn,:root .btn.sos-btn{background:linear-gradient(180deg,#ef5350 0%,#d32f2f 60%,#b71c1c 100%)!important;border-color:transparent!important;color:#fff!important;
+  box-shadow:0 1px 0 rgba(255,255,255,.3) inset,0 10px 22px -10px rgba(183,28,28,.75)!important}
+.trk-opt.sos .trk-ico,.trk-opt.sos b{color:#d32f2f}

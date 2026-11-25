@@ -74,7 +74,7 @@ const copyDir = (from, to) => { for (const e of fs.readdirSync(from, { withFileT
   const a = path.join(from, e.name), b = path.join(to, e.name);
   if (e.isDirectory()) copyDir(a, b); else { fs.mkdirSync(to, { recursive: true }); fs.copyFileSync(a, b); } } };
 copyDir(path.join(root, 'res'), res);
-// the start-up picture: the orange RWB app-icon tile on warm ivory (matches the web intro) instead of Capacitor's
+// the start-up picture: the RWB club logo on dark (the intro then plays Daybreak / Nightfall) instead of Capacitor's
 (function splash(dir) { for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
   const f = path.join(dir, e.name);
   if (e.isDirectory()) splash(f); else if (e.name === 'splash.png') fs.copyFileSync(path.join(root, dir.includes('land') ? 'splash-land.png' : 'splash.png'), f); } })(res);

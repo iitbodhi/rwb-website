@@ -22,56 +22,85 @@
 <link rel="preconnect" href="https://lh3.googleusercontent.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,800;1,800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/app.css">
-<style>/* intro / loading screen "Ignition" (Nov 2026): the orange app-icon tile pops in, the white 3D RWB letters ride in
-   from the left with speed lines, a light glint sweeps the tile and an engine-rev ring pulses out; when the app is ready
-   the tile zooms open into it. About 1 s; tap skips it. Light/dark follow the rider's theme. */
-#boot{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;overflow:hidden;
-  background:radial-gradient(60% 45% at 50% 46%,rgba(255,138,61,.30),transparent 70%),radial-gradient(70% 60% at 85% 100%,rgba(255,170,110,.35),transparent 70%),#fbf3ec;
-  -webkit-tap-highlight-color:transparent;transition:opacity .34s ease .1s,visibility .34s .1s}
-:root[data-theme=dark] #boot{background:radial-gradient(60% 45% at 50% 46%,rgba(232,85,30,.34),transparent 70%),radial-gradient(70% 60% at 85% 100%,rgba(120,40,12,.45),transparent 70%),#0b0908}
-@media (prefers-color-scheme:dark){:root[data-theme=system] #boot{background:radial-gradient(60% 45% at 50% 46%,rgba(232,85,30,.34),transparent 70%),radial-gradient(70% 60% at 85% 100%,rgba(120,40,12,.45),transparent 70%),#0b0908}}
+<style>/* intro / loading screen "Nightfall" (back by Bodhi's choice, Nov 25 2026, ~35% faster). Dark theme: the screen starts in light-mode ivory, the logo opens like a shutter,
+   then night falls (a dark circle grows from the logo), a warm headlight glow comes on, a thin ring draws round the logo,
+   the name and motto arrive, and a small line shows it's loading. Quick reopens get a short version; tap skips it. */
+#boot{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;padding:24px;overflow:hidden;
+  background:#fbf3ec;color:#f3efe9;transition:opacity .4s ease,visibility .4s;-webkit-tap-highlight-color:transparent}
 #boot.out{opacity:0;visibility:hidden}
-#boot .b-stage{position:relative;width:132px;height:132px}
-#boot .b-ring{position:absolute;inset:-2px;border-radius:34px;border:2px solid rgba(255,122,47,.75);opacity:0}
-#boot .b-tile{position:absolute;inset:0;border-radius:32px;overflow:hidden;
-  background:radial-gradient(120% 100% at 30% 0%,#ffa45a 0%,#f26a22 55%,#c9440e 100%);
-  box-shadow:0 1px 0 rgba(255,255,255,.35) inset,0 22px 50px -18px rgba(201,68,14,.85),0 8px 18px -10px rgba(0,0,0,.35)}
-#boot .b-tile img{position:absolute;left:8%;top:50%;width:84%;transform:translateY(-50%)}
-#boot .b-tile .sp{position:absolute;left:-30%;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.95));opacity:0}
-#boot .b-tile .sp:nth-of-type(1){top:36%;width:70%}#boot .b-tile .sp:nth-of-type(2){top:52%;width:90%}#boot .b-tile .sp:nth-of-type(3){top:66%;width:55%}
-#boot .b-tile .gl{position:absolute;top:-20%;bottom:-20%;width:38%;left:-60%;transform:skewX(-20deg);background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent)}
-#boot .b-name{margin:0;font:600 12px/1 'Barlow',system-ui,sans-serif;letter-spacing:.42em;padding-left:.42em;text-transform:uppercase;white-space:nowrap;color:#5a4636;opacity:0}
-:root[data-theme=dark] #boot .b-name{color:rgba(246,238,230,.82)}
-@media (prefers-color-scheme:dark){:root[data-theme=system] #boot .b-name{color:rgba(246,238,230,.82)}}
-#boot.go .b-tile{animation:bPop .5s cubic-bezier(.34,1.56,.64,1) both}
-#boot.go .b-tile img{animation:bRide .46s cubic-bezier(.16,1,.3,1) .16s both}
-#boot.go .b-tile .sp{animation:bStreak .42s cubic-bezier(.2,.7,.3,1) both}
-#boot.go .b-tile .sp:nth-of-type(1){animation-delay:.14s}#boot.go .b-tile .sp:nth-of-type(2){animation-delay:.2s}#boot.go .b-tile .sp:nth-of-type(3){animation-delay:.26s}
-#boot.go .b-tile .gl{animation:bGlint .55s ease-in-out .58s both}
-#boot.go .b-ring{animation:bRev .7s cubic-bezier(.2,.7,.3,1) .44s forwards}
-#boot.go .b-name{animation:bName .5s cubic-bezier(.16,1,.3,1) .38s both}
-#boot.out .b-stage{transition:transform .42s cubic-bezier(.55,0,.75,0),opacity .3s ease .08s;transform:scale(3.2);opacity:0}
-#boot.out .b-name{transition:opacity .2s;opacity:0}
-@keyframes bPop{0%{opacity:0;transform:scale(.25) rotate(-14deg)}60%{opacity:1}100%{opacity:1;transform:none}}
-@keyframes bRide{0%{opacity:0;transform:translate(-150%,-50%) skewX(-28deg);filter:blur(5px)}100%{opacity:1;transform:translate(0,-50%);filter:none}}
-@keyframes bStreak{0%{opacity:0;transform:translateX(0)}30%{opacity:1}100%{opacity:0;transform:translateX(190%)}}
-@keyframes bGlint{to{left:130%}}
-@keyframes bRev{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(1.7)}}
-@keyframes bName{0%{opacity:0;letter-spacing:.8em;transform:translateY(8px)}100%{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){#boot *{animation:none!important;transition:none!important}#boot .b-name{opacity:1}}
+#boot .night{position:absolute;inset:0;background:#0b0908;clip-path:circle(0% at 50% 50%)}
+#boot .glow{position:absolute;inset:-25%;pointer-events:none;opacity:0;
+  background:radial-gradient(42% 30% at 50% 48%,rgba(232,102,46,.62),transparent 70%),radial-gradient(60% 50% at 18% 8%,rgba(120,40,20,.45),transparent 70%),radial-gradient(60% 50% at 85% 95%,rgba(70,30,60,.5),transparent 70%)}
+#boot > :not(.night):not(.glow):not(.bar){position:relative}
+#boot .b-name{margin:0;font:600 13px/1 'Barlow',system-ui,sans-serif;letter-spacing:.42em;padding-left:.42em;text-transform:uppercase;white-space:nowrap;color:rgba(243,239,233,.9);text-align:center}
+#boot .b-logo{position:relative;width:136px;height:136px}
+#boot .b-logo img{width:100%;height:100%;border-radius:50%;display:block;box-shadow:0 18px 50px -16px rgba(0,0,0,.45)}
+#boot .b-logo svg{position:absolute;inset:-9px;width:calc(100% + 18px);height:calc(100% + 18px);transform:rotate(-90deg);overflow:visible}
+#boot .b-logo circle{fill:none;stroke:#ee7a42;stroke-width:1.6;stroke-linecap:round;stroke-dasharray:480;stroke-dashoffset:480}
+#boot .b-motto{margin:0;display:flex;gap:.6em;font:500 13px/1 'Barlow',system-ui,sans-serif;letter-spacing:.3em;padding-left:.3em;text-transform:uppercase;color:rgba(243,239,233,.62)}
+#boot .b-motto b{font-weight:600;color:#ee7a42}
+#boot .b-motto > *{display:inline-block}
+#boot .bar{position:absolute;bottom:calc(64px + max(env(safe-area-inset-bottom),var(--safe-area-inset-bottom,0px)));left:50%;width:64px;height:2px;margin-left:-32px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden;opacity:0}
+#boot .bar i{position:absolute;inset:0;background:#ee7a42;transform:scaleX(0)}
+/* full: the whole story (first open, or after 6 hours away) */
+#boot.i-full .night{animation:bNight .55s cubic-bezier(.65,0,.35,1) .38s both}
+#boot.i-full .glow{animation:bGlow .7s ease .62s both,bDrift 6s ease-in-out 1.4s infinite alternate}
+#boot.i-full .b-logo img{animation:bIris .5s cubic-bezier(.16,1,.3,1) .04s both}
+#boot.i-full .b-logo circle{animation:bRing .7s cubic-bezier(.65,0,.35,1) .62s both}
+#boot.i-full .b-name{animation:bTrack .7s cubic-bezier(.16,1,.3,1) .72s both}
+#boot.i-full .b-motto > *{animation:bRise .5s cubic-bezier(.16,1,.3,1) both}
+#boot.i-full .b-motto > :nth-child(1){animation-delay:.88s}#boot.i-full .b-motto > :nth-child(2){animation-delay:.96s}#boot.i-full .b-motto > :nth-child(3){animation-delay:1.04s}
+#boot.i-full .bar{animation:bFade .3s ease 1.15s both}#boot.i-full .bar i{animation:bLoad 1.2s cubic-bezier(.65,0,.35,1) 1.2s infinite}
+/* quick: already night, everything just fades in */
+#boot.i-quick .night{clip-path:none}
+#boot.i-quick .glow{opacity:1;animation:bDrift 6s ease-in-out infinite alternate}
+#boot.i-quick .b-logo circle{stroke-dashoffset:0;opacity:.35}
+#boot.i-quick .b-logo,#boot.i-quick .b-name,#boot.i-quick .b-motto{animation:bFade .45s ease both}
+#boot.i-quick .bar{animation:bFade .3s ease .6s both}#boot.i-quick .bar i{animation:bLoad 1.4s cubic-bezier(.65,0,.35,1) .6s infinite}
+@keyframes bIris{from{clip-path:circle(0% at 50% 50%);transform:scale(1.12)}to{clip-path:circle(50% at 50% 50%);transform:none}}
+@keyframes bNight{from{clip-path:circle(0% at 50% 50%)}to{clip-path:circle(75% at 50% 50%)}}
+@keyframes bGlow{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:none}}
+@keyframes bDrift{from{transform:translate3d(0,0,0) scale(1);filter:hue-rotate(0)}to{transform:translate3d(-3%,2%,0) scale(1.05);filter:hue-rotate(-25deg)}}
+@keyframes bRing{0%{stroke-dashoffset:480;opacity:1}75%{stroke-dashoffset:0;opacity:1}100%{stroke-dashoffset:0;opacity:.35}}
+@keyframes bTrack{from{opacity:0;letter-spacing:.85em}to{opacity:1}}
+@keyframes bRise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes bFade{from{opacity:0}to{opacity:1}}
+@keyframes bLoad{0%{transform:scaleX(0);transform-origin:left}50%{transform:scaleX(1);transform-origin:left}50.01%{transform-origin:right}100%{transform:scaleX(0);transform-origin:right}}
+/* less motion: straight to the finished night screen */
+@media (prefers-reduced-motion:reduce){#boot *{animation:none!important}#boot .night{clip-path:none}#boot .glow{opacity:1}#boot .b-logo circle{stroke-dashoffset:0;opacity:.35}}
+/* Light theme = "Daybreak": the same story the other way round, so the intro always ends in the rider's own theme:
+   it starts at night and the warm ivory day opens out from the logo, with a sunrise glow. */
+#boot.day{background:#0b0908}
+#boot.day .night{background:#fbf3ec}
+#boot.day .glow{background:radial-gradient(42% 30% at 50% 48%,rgba(255,138,61,.42),transparent 70%),radial-gradient(60% 50% at 18% 8%,rgba(255,190,140,.55),transparent 70%),radial-gradient(60% 50% at 85% 95%,rgba(255,150,90,.35),transparent 70%)}
+#boot.day .b-name{color:#2a1c12}
+#boot.day .b-motto{color:rgba(42,28,18,.6)}
+#boot.day .b-motto b,#boot.day .b-logo circle{color:#e8571c;stroke:#e8571c}
+#boot.day .b-motto b{color:#e8571c}
+#boot.day .bar{background:rgba(42,28,18,.12)}#boot.day .bar i{background:#e8571c}
+#boot.day.i-quick{background:#fbf3ec}
 </style>
 </head>
 <body>
 <div id="boot" aria-hidden="true">
-  <div class="b-stage"><i class="b-ring"></i><div class="b-tile"><i class="sp"></i><i class="sp"></i><i class="sp"></i><img src="icons/rwb-mark.webp" alt="" decoding="sync"><i class="gl"></i></div></div>
+  <i class="night"></i><i class="glow"></i>
   <p class="b-name">Ronin Warriors of Bengal</p>
+  <div class="b-logo"><img src="icons/logo-384.webp" alt=""><svg viewBox="0 0 154 154"><circle cx="77" cy="77" r="76"/></svg></div>
+  <p class="b-motto"><span>Explore.</span><b>Evolve.</b><span>Inspire.</span></p>
+  <span class="bar"><i></i></span>
 </div>
-<script>/* start the intro once the RWB letters are ready (they're tiny); the app hides it when it has drawn, never before ~1 s */
+<script>/* which intro: the full one every time the app opens; the quick one only for people who ask their phone for less motion. */
 (function () {
-  var b = document.getElementById('boot'), rm = matchMedia('(prefers-reduced-motion: reduce)').matches, img = b.querySelector('img');
-  var go = function () { if (!b.classList.contains('go')) b.classList.add('go'); };
-  if (img.complete) go(); else { img.onload = img.onerror = go; setTimeout(go, 250); }
-  window.INTRO_END = performance.now() + (rm ? 300 : 1050);
+  var b = document.getElementById('boot'), now = Date.now(), last = 0, rm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  try { last = Number(localStorage.getItem('rwb-intro-seen') || 0); } catch (e) {}
+  var full = !rm;   /* the full intro on every open (members asked for it); tap skips it */
+  b.className = full ? 'i-full' : 'i-quick';   /* not "full"/"quick": .quick is the app's quick-action row */
+  if (full) { try { localStorage.setItem('rwb-intro-seen', String(now)); } catch (e) {} }
+  /* light theme (or Auto on a light phone): daybreak; dark: nightfall. Either way it ends in the app's own colours */
+  var t = 'light'; try { t = localStorage.getItem('rwb-theme') || 'light'; } catch (e) {}
+  var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  if (!dark) b.className += ' day';
+  window.INTRO_END = performance.now() + (full ? 1450 : 600);
   b.addEventListener('click', function () { window.INTRO_END = 0; if (window.hideBootNow) window.hideBootNow(); });
 })();</script>
 <script>window.BOOT_T = performance.now();
@@ -100,7 +129,7 @@ setTimeout(() => { const b = document.getElementById('boot'); if (!b || b.datase
   <a href="#crew" data-tab="crew"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4.5v1.5A3 3 0 0 0 7.4 10.5M17 6h2.5v1.5a3 3 0 0 1-2.9 3M12 14v3.5M8.5 20.5h7M9.5 17.5h5v3h-5z"/></svg><span>Warriors</span></a>
   <a href="#events" data-tab="events"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M5.5 5h13a2 2 0 0 1 2 2v3h-17V7a2 2 0 0 1 2-2z"/><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><rect x="7.5" y="13.5" width="3" height="3" rx=".7"/></svg><span>Events</span></a>
 </nav>
-<a href="#chat" class="pookie-fab" id="pookie-fab" aria-label="Ask Pookie, the RWB AI"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/><path d="M9 10h.01M12 10h.01M15 10h.01"/></svg><span class="pookie-tag">Pookie</span></a>
+<a href="#chat" class="pookie-fab" id="pookie-fab" aria-label="Ask Pookie, the RWB AI"><svg class="pk-ico" viewBox="0 0 24 24" aria-hidden="true"><path class="pk-shell" d="M3.6 15.2A8.4 8.4 0 0 1 20.4 14v3.2a2.3 2.3 0 0 1-2.3 2.3H5.9a2.3 2.3 0 0 1-2.3-2.3z"/><rect class="pk-visor" x="6" y="11.2" width="12" height="5" rx="2.5"/><circle class="pk-eye" cx="9.7" cy="13.7" r="1.05"/><circle class="pk-eye" cx="14.3" cy="13.7" r="1.05"/><path class="pk-spark" d="M19.6 2.4l.75 1.85 1.85.75-1.85.75-.75 1.85-.75-1.85L17 5l1.85-.75z"/></svg><span class="pookie-tag">Pookie</span></a>
 <dialog id="sheet" aria-label="Details"><div class="sheet-head"><h2 id="sheet-title"></h2><button class="icon-btn" id="sheet-close" aria-label="Close">✕</button></div><div id="sheet-body"></div></dialog>
 <div class="toast" id="toast" role="status" hidden></div>
 <script src="../js/data.js"></script>

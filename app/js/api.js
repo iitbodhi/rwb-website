@@ -161,6 +161,7 @@ async function supabaseApi(url, key) {
         trackPing: async (lat, lng, acc, spd, hdg) => must(await sb.rpc('track_ping', { p_lat: lat, p_lng: lng, p_acc: acc, p_spd: spd, p_hdg: hdg })),
         trackStop: async () => must(await sb.rpc('track_stop')),
         trackView: async () => must(await sb.rpc('track_view')),
+        trackLiveCount: async () => must(await sb.rpc('track_live_count')),
         trackToken: async () => must(await sb.rpc('track_token')),
         trackSos: async (lat, lng, acc) => must(await sb.rpc('track_sos', { p_lat: lat, p_lng: lng, p_acc: acc })),
         trackSosResolve: async id => must(await sb.rpc('track_sos_resolve', { p_id: id })),
@@ -656,7 +657,7 @@ function demoApi() {
             if (kind === 'tnc' && value === 'agree') { m.tnc_agreed = true; save(); return 'saved'; }
             const nv = x => String(x || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
             if (kind === 'vrn' && nv(value) === nv(m.vrn)) { if ((model || m.bike) === m.bike) return 'unchanged'; m.bike = model || null; save(); return 'saved'; }
-            db.changes.push({ id: nid(), member_id: m.id, full_name: m.full_name, phone: m.phone, kind, slot, new_value: kind === 'phone' ? value.replace(/\D/g, '').slice(-10) : kind === 'vrn' || kind === 'bike' ? value.toUpperCase() : value, new_model: model, old_value: kind === 'name' ? m.full_name : kind === 'phone' ? m.phone : kind === 'vrn' ? [m.vrn, m.bike].filter(Boolean).join(' · ') : kind === 'tnc' ? 'agree' : null, vrn_verified: false, status: 'pending', created_at: new Date().toISOString(), on_app: true });
+            db.changes.push({ id: nid(), member_id: m.id, full_name: m.full_name, phone: m.phone, kind, slot, new_value: kind === 'phone' ? value.replace(/\D/g, '').slice(-10) : kind === 'email' ? value.trim().toLowerCase() : kind === 'vrn' || kind === 'bike' ? value.toUpperCase() : value, new_model: model, old_value: kind === 'name' ? m.full_name : kind === 'phone' ? m.phone : kind === 'vrn' ? [m.vrn, m.bike].filter(Boolean).join(' · ') : kind === 'tnc' ? 'agree' : null, vrn_verified: false, status: 'pending', created_at: new Date().toISOString(), on_app: true });
             save(); return 'pending';
         },
         updateMyAnswers: answers => { me().form_answers = { ...(me().form_answers || {}), ...answers }; save(); return wait(answers); },
@@ -707,6 +708,7 @@ function demoApi() {
         trackPing: (lat, lng, acc, spd) => { if (!db.track) return wait('stopped'); Object.assign(db.track, { lat, lng, acc, spd, at: new Date().toISOString() }); save(); return wait('ok'); },
         trackStop: () => { db.track = null; save(); return wait('stopped'); },
         trackToken: () => wait('demo-key'),
+        trackLiveCount: () => wait(demoFam() ? 1 : 3 + (db.track && new Date(db.track.until) > new Date() ? 1 : 0)),   /* the sample riders + you */
         trackView: () => { const t = Date.now(), ago = s => new Date(t - s * 1000).toISOString(), m = me();
             if (demoFam()) { if (!db.famMe?.approved && db.famMe) return Promise.reject(new Error('Members only'));
                 return wait({ riders: [{ id: m.id, name: m.full_name, nick: m.nickname, avatar: m.avatar_url, lat: 22.6120, lng: 88.4020, spd: 0, at: ago(260), moved_at: ago(900), since: ago(4000), ride_km: 31.5, top_spd: 19, event_id: 501, event: 'Sunday breakfast ride', note: 'towards Simlipal!', mine: true, me: false, phone: null },
