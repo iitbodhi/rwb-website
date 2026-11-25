@@ -2787,5 +2787,6 @@ html.lite .tab-track.live .brand-ring::after{animation-iteration-count:infinite!
 .evt-guestsw{padding:8px 12px;font-size:.88rem;min-height:0}
 .evt-about{padding:14px 16px}.evt-about .evt-desc{margin:0}
 
-/* screen swaps (view transitions, Nov 26 2026): the old screen stays until the new one is drawn, then a quick fade */
-::view-transition-old(root),::view-transition-new(root){animation-duration:.14s;animation-timing-function:ease-out}
+/* Screen changes are instant, like iOS tab switches (Nov 26 2026). The 6 px slide-in made the phone build a new
+   layer for every block of the new screen, and Android WebView showed those layers blank for one frame. */
+#app.enter:not(.same) > *:not(.top):not(.demo-bar){animation:none}

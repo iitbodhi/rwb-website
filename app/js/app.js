@@ -195,7 +195,7 @@ let navN = 0, paintN = -1, lastRoute = '', topFor = -1;
 /* pictures already shown once this session are drawn at once on the next screen (no lazy wait), so faces don't blink */
 const seenImg = new Set();
 document.addEventListener('load', e => { const t = e.target; if (t.tagName === 'IMG') { t.classList.add('in'); seenImg.add(t.getAttribute('src')); } }, true);   /* on document: a picture's load never reaches window */
-new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.querySelectorAll) n.querySelectorAll('img').forEach(i => { if (i.complete && i.naturalWidth) i.classList.add('in'); }); })
+new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.querySelectorAll) n.querySelectorAll('img').forEach(i => { if ((i.complete && i.naturalWidth) || seenImg.has(i.getAttribute('src'))) i.classList.add('in'); }); })
     .observe(document.getElementById('app'), { childList: true, subtree: true });
 const navUI = (() => {
     const root = document.documentElement, bar = document.createElement('div'); bar.id = 'nav-bar'; bar.setAttribute('aria-hidden', 'true');
@@ -214,7 +214,7 @@ const STALE = new Error('stale screen');
 (() => {
     const d = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
     Object.defineProperty(app, 'innerHTML', { configurable: true, get() { return d.get.call(this); },
-        set(v) { if (paintN >= 0 && paintN !== navN) throw STALE; d.set.call(this, v); navUI.painted(); vtPaint();
+        set(v) { if (paintN >= 0 && paintN !== navN) throw STALE; d.set.call(this, v); navUI.painted();
             /* a new screen starts at its scroll spot in the same frame it's drawn (scrolling a frame later made it jump) */
             if (topFor === navN) { topFor = -1; if (navScroll != null) window.scrollTo(0, navScroll); } } });
 })();
@@ -233,29 +233,7 @@ const stillHere = n => n === navN;
     const mem = navigator.deviceMemory, cores = navigator.hardwareConcurrency;
     if ((mem && mem <= 4) || (cores && cores <= 4)) root.classList.add('lite');
 })();
-/* No blank frame between screens (Nov 26 2026: on phones the whole screen went empty for one frame on every tab
-   change, while the phone was still drawing the new one). A view transition keeps the old screen on show until the
-   new one is fully drawn, then swaps with a very short fade. Phones without it just swap as before. */
-const canVT = !!document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches;
-let vtEnd = null;
-function vtBegin() {   /* resolves when the screen may change */
-    if (!canVT || document.visibilityState !== 'visible') return Promise.resolve();
-    vtPaint();
-    return new Promise(go => {
-        let done = false; const run = () => { if (!done) { done = true; go(); } };
-        try {
-            const vt = document.startViewTransition(() => new Promise(res => { vtEnd = res; run(); setTimeout(res, 450); }));
-            vt.ready.catch(() => {}); vt.finished.catch(() => {}); vt.updateCallbackDone?.catch(() => {});
-        } catch { run(); }
-        setTimeout(run, 250);
-    });
-}
-function vtPaint() { const r = vtEnd; vtEnd = null; r?.(); }   /* the new screen is on the page: let the swap finish */
 async function doRender() {
-    await vtBegin();
-    try { return await drawRoute(); } finally { vtPaint(); }
-}
-async function drawRoute() {
     if (!state.me) return;          /* signed out / not loaded yet: boot() shows the right screen */
     const gate = isFam() ? null : await gateFor(state.me);
     if (gate) { tabbar.hidden = true; document.body.dataset.route = 'gate'; return gate === 'tnc' ? tncGate() : profileGate(); }
@@ -4855,7 +4833,7 @@ async function sweepSold(all) {
 }
 
 /* redraw MotoMart in place: keep the scroll position, no entrance animation, no new download */
-function mmRedraw() { const y = scrollY; mmState.local = true; vtBegin().then(() => viewMotoMart()).then(() => scrollTo(0, y)).catch(() => {}).finally(vtPaint); }
+function mmRedraw() { const y = scrollY; mmState.local = true; viewMotoMart().then(() => scrollTo(0, y)).catch(() => {}); }
 async function viewMotoMart() {
     state.myId ??= await api.myId();
     const p = state.param;
