@@ -188,11 +188,13 @@ function render() {
 }
 /* A screen that is still loading when the rider moves on never paints over the new one:
    its next write to the page stops it (navN changes on every navigation). */
-let navN = 0, paintN = -1, lastRoute = '';
+let navN = 0, paintN = -1, lastRoute = '', topFor = -1;
 /* Screen changes: if the next screen takes a moment, the old one gently dims (and can't be tapped) and a thin
    line at the top shows progress. Fast screens (most, they're cache-first) show neither: they just glide in. */
 /* pictures fade in once loaded (CSS hides the listed thumbnails until then; already-cached ones show at once) */
-document.addEventListener('load', e => { const t = e.target; if (t.tagName === 'IMG') t.classList.add('in'); }, true);   /* on document: a picture's load never reaches window */
+/* pictures already shown once this session are drawn at once on the next screen (no lazy wait), so faces don't blink */
+const seenImg = new Set();
+document.addEventListener('load', e => { const t = e.target; if (t.tagName === 'IMG') { t.classList.add('in'); seenImg.add(t.getAttribute('src')); } }, true);   /* on document: a picture's load never reaches window */
 new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.querySelectorAll) n.querySelectorAll('img').forEach(i => { if (i.complete && i.naturalWidth) i.classList.add('in'); }); })
     .observe(document.getElementById('app'), { childList: true, subtree: true });
 const navUI = (() => {
@@ -212,7 +214,9 @@ const STALE = new Error('stale screen');
 (() => {
     const d = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
     Object.defineProperty(app, 'innerHTML', { configurable: true, get() { return d.get.call(this); },
-        set(v) { if (paintN >= 0 && paintN !== navN) throw STALE; d.set.call(this, v); navUI.painted(); } });
+        set(v) { if (paintN >= 0 && paintN !== navN) throw STALE; d.set.call(this, v); navUI.painted();
+            /* a new screen starts at its scroll spot in the same frame it's drawn (scrolling a frame later made it jump) */
+            if (topFor === navN) { topFor = -1; if (navScroll != null) window.scrollTo(0, navScroll); } } });
 })();
 /* still on the screen that started loading? (for parts filled in after the first paint) */
 const stillHere = n => n === navN;
@@ -252,7 +256,7 @@ async function doRender() {
     app.classList.toggle('same', route === lastRoute); lastRoute = route;
     liveCheck();   /* Track button ring: throttled to once per ~2 min */
     if (route !== app.dataset.shown) { app.classList.add('enter'); clearTimeout(app._enterT); app._enterT = setTimeout(() => app.classList.remove('enter'), 420); }
-    paintN = navN;
+    paintN = navN; topFor = navN;
     navUI.start(route !== app.dataset.shown); app.dataset.shown = route;
     pingCopy().catch(() => {});
     try { await view(); } catch (e) { if (e === STALE) return; paintN = -1; app.innerHTML = top('Oops') + `<div class="card empty"><b>Could not load</b>${esc(e.message)}<p style="margin-top:12px"><button class="btn sm" onclick="location.reload()">Try again</button></p></div>`; }
@@ -279,7 +283,7 @@ const seenNews = () => { try { return Number(localStorage.getItem('rwb-news-seen
 const unread = () => (state.news || []).some(n => n.id > seenNews());
 const initials = m => (m?.full_name || '?').split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 /* profile photo if the member added one, otherwise their initials */
-const face = (m, cls = 'avatar') => `<span class="${cls}">${m?.avatar_url ? `<img src="${esc(m.avatar_url)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<i>${esc(initials(m))}</i></span>`;
+const face = (m, cls = 'avatar') => `<span class="${cls}">${m?.avatar_url ? `<img src="${esc(m.avatar_url)}" alt=""${seenImg.has(m.avatar_url) ? ' decoding="sync"' : ' loading="lazy"'} onerror="this.remove()">` : ''}<i>${esc(initials(m))}</i></span>`;
 const CREW_F = all => { const n = all.filter(m => m.on_app).length; return { all: 'Everyone', app: `On app (${n})`, noapp: `Not on app (${all.length - n})` }; };
 const CREW_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19.5c.6-3.3 3-5 6-5s5.4 1.7 6 5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.4.2 4 1.7 4.5 4.4"/></svg>';
 const CAL_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M7.8 14h.01M12 14h.01M16.2 14h.01M7.8 17.2h.01M12 17.2h.01" stroke-width="2.4"/></svg>';
@@ -288,7 +292,7 @@ const docsAlert = () => (state.docs || []).some(d => docStatus(d).level !== 'ok'
 const getAppBtn = () => !NATIVE && /android/i.test(navigator.userAgent) ? `<a class="get-app" href="${PLAY_URL}" aria-label="Get the RWB app on Google Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span>App</span></a>` : '';
 /* quiet shimmer bars instead of a "Loading…" line */
 const SKEL = (n = 3) => `<div class="skel" aria-hidden="true">${'<i></i>'.repeat(n)}</div><span class="sr-only">Loading</span>`;
-const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.webp" alt="RWB"><h1>${esc(title)}</h1>${right}${getAppBtn()}
+const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.webp" alt="RWB" decoding="sync"><h1>${esc(title)}</h1>${right}${getAppBtn()}
     ${isFam() ? '' : `<a class="icon-btn bell cal-btn" href="#calendar" aria-label="Calendar${calAlert() ? ' (something due soon)' : ''}">${CAL_ICON}${calAlert() ? '<i class="dot"></i>' : ''}</a>`}
     <a class="icon-btn bell guide-btn" href="#guides" aria-label="Guides and how-to videos">${HELP_ICON}</a>
     <a class="icon-btn bell" href="#news" aria-label="Announcements${unread() ? ' (new)' : ''}">${BELL}${unread() ? '<i class="dot"></i>' : ''}</a>
@@ -619,7 +623,7 @@ function liveJoinForm(def, known, sess, filled = false, back = null) {
     const pages = formPages(def);
     let at = 0;
     const stepName = n => pages[n].title || (n ? '' : 'Welcome');
-    app.innerHTML = `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.webp" alt="RWB"><h1>${filled ? 'Update my answers' : 'Join RWB'}</h1></header>
+    app.innerHTML = `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.webp" alt="RWB" decoding="sync"><h1>${filled ? 'Update my answers' : 'Join RWB'}</h1></header>
         <div class="jf-prog" aria-live="polite"><div class="jf-bar"><i id="jf-fill"></i></div><span class="jf-step" id="jf-step"></span></div>
         <p class="jx-acct"><span class="jx-dot" aria-hidden="true"></span>${esc(sess.email)}</p>
         <form id="req" class="gform jf" novalidate>${pages.map((pg, n) => `<section class="gpage" data-p="${n}"${n ? ' hidden' : ''}>
@@ -3674,7 +3678,7 @@ async function gateFor(m) {
     await loadJoinForm();
     return miss.length || moreMissing(m).length ? 'profile' : null;
 }
-const gateTop = title => `${demoBar()}<header class="top gate-top"><img class="logo" src="icons/logo-128.webp" alt="RWB"><h1>${esc(title)}</h1></header>`;
+const gateTop = title => `${demoBar()}<header class="top gate-top"><img class="logo" src="icons/logo-128.webp" alt="RWB" decoding="sync"><h1>${esc(title)}</h1></header>`;
 function tncGate() {
     const m = state.me, withdrew = m.tnc_agreed === false, updated = m.tnc_agreed === true;
     app.innerHTML = gateTop('RWB') + `<section class="gate card">
@@ -5346,7 +5350,7 @@ async function viewTeach() {
                 <div class="th-num"><b>${st.approved || 0}</b><span>taught</span></div></div>
             <div class="th-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(lv.p * 100)}"><i style="width:${Math.round(lv.p * 100)}%"></i></div>
             <p class="small muted" style="margin-top:8px">Answer from your own experience with the Ronin. Pookie answers riders <b>only</b> from what warriors teach it, so every answer counts. Admins check each one first. <b>+10 XP</b> for each answer they approve.</p>
-            ${st.urgent ? `<p class="small th-urgent"><span class="tq-urgent">URGENT</span> ${st.urgent} question${st.urgent > 1 ? 's' : ''} from riders that Pookie couldn't answer</p>` : ''}
+            ${st.urgent ? `<p class="small th-urgent"${q?.urgent ? '' : ' data-x="unskip" role="button" tabindex="0" style="cursor:pointer"'}><span class="tq-urgent">URGENT</span> ${st.urgent} question${st.urgent > 1 ? 's' : ''} from riders that Pookie couldn't answer${q?.urgent || !skip.length ? '' : ' · <b>Show</b>'}</p>` : ''}
         </section>
         ${q ? `<section class="teach-q card" id="tq">
             <div class="tq-head"><span class="tq-ava" aria-hidden="true">${ICON.chat}</span><div><b>Pookie asks</b>${q.urgent ? '<span class="tq-urgent">URGENT</span>' : ''}<span class="tq-cat">${esc(q.category)}</span></div></div>
@@ -5356,9 +5360,12 @@ async function viewTeach() {
                 <textarea id="tqa" name="a" rows="4" maxlength="1500" placeholder="Share what you know: brands, km, prices, steps, what worked and what didn't…"></textarea>
                 <div class="tq-btns"><button type="button" class="btn ghost sm" data-x="skip">Skip</button><button class="btn sm grow">Teach Pookie</button></div></form>
             <p class="small muted" style="margin-top:8px">${q.answers ? `${q.answers} rider${q.answers > 1 ? 's have' : ' has'} answered this already. Yours adds more.` : 'Nobody has answered this yet. Be the first!'}</p>
-        </section>` : `<div class="card empty"><b>You've answered every question 🙌</b>Thank you! Admins add new questions regularly, so check back soon.</div>`}
+        </section>` : skip.length ? `<div class="card empty"><b>That's all for now</b>You skipped ${skip.length} question${skip.length > 1 ? 's' : ''}.<p style="margin-top:12px"><button type="button" class="btn sm" data-x="unskip">Show skipped questions</button></p></div>`
+            : `<div class="card empty"><b>You've answered every question 🙌</b>Thank you! Admins add new questions regularly, so check back soon.</div>`}
         ${(st.top || []).length ? `<section class="section"><h2>Top teachers</h2><ol class="group teach-top">${st.top.map((t, i) => `<li class="${t.me ? 'me' : ''}"><span class="rk">${i + 1}</span><span class="grow"><b>${esc(t.name)}${t.me ? ' (you)' : ''}</b><span class="small muted">${t.approved} taught</span></span><b class="xp">${t.xp} XP</b></li>`).join('')}</ol></section>` : ''}
         <p class="small muted" style="text-align:center;margin:18px 8px 0">Pookie also reads the maintenance PDFs in Guides. Please don't share anyone's private details in answers.</p>`;
+    /* skipped questions come back (a mistaken Skip used to hide an URGENT one until the app restarted) */
+    app.querySelectorAll('[data-x=unskip]').forEach(el => el.onclick = () => { skip.length = 0; render(); });
     if (!q) return;
     /* Pookie "types" the question */
     const qt = $('#tq-text'), full = q.question;
