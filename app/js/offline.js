@@ -49,7 +49,7 @@ export const savedSet = (k, v) => kvSet('keep|' + k, v).catch(() => {});
 
 /* ---- what can be read offline (the saved copy) ---- */
 const READS = ['linkAccount', 'settings', 'myPrefill', 'myChanges', 'me', 'birthdays', 'directory', 'rwbAdmins', 'joinHelpAdmins', 'famMe', 'myFam',
-    'gpsBoard', 'pookieBoard', 'myBikes', 'leaderboard', 'boards', 'centres', 'services', 'events', 'eventCounts', 'myRsvps', 'eventPeople', 'expenses',
+    'gpsBoard', 'pookieBoard', 'warriorPeriod', 'myBikes', 'leaderboard', 'boards', 'centres', 'services', 'events', 'eventCounts', 'myRsvps', 'eventPeople', 'expenses',
     'docs', 'myReminders', 'rideParts', 'rideName', 'fuel', 'myId', 'listings', 'news', 'guideItems', 'guideCats', 'chatNotes', 'adminFamList', 'joinForm'];
 const ADMIN_READS = ['stats', 'members', 'appCopies', 'sheetSyncStatus', 'joinList', 'requests', 'changes', 'incomplete', 'dupes', 'reports', 'teachQueue', 'pookiePending', 'pookieKnowledge'];
 

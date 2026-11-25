@@ -2110,34 +2110,38 @@ async function eventCard1080(e, heads) {
     if (e.location) fact('📍', e.location);
     if (e.capacity) fact('🎟', `${Math.max(e.capacity - heads, 0)} of ${e.capacity} slots left`);
     else if (heads) fact('🏍', `${heads} rider${heads === 1 ? '' : 's'} going`);
-    /* brand bar */
-    const by = H - 150; x.fillStyle = 'rgba(255,255,255,.08)'; x.fillRect(0, by - 2, W, 2);
-    const logo = await cardImg('icons/logo-384.png').catch(() => null);
-    if (logo) { x.save(); x.beginPath(); x.arc(L + 48, by + 74, 48, 0, Math.PI * 2); x.clip(); x.drawImage(logo, L, by + 26, 96, 96); x.restore(); }
-    x.font = `700 32px ${B}`; const jt = 'JOIN THE RIDE', jw = x.measureText(jt).width + 64;
-    const jg = x.createLinearGradient(W - L - jw, 0, W - L, 0); jg.addColorStop(0, '#ffa766'); jg.addColorStop(1, '#cf5119');
-    x.fillStyle = jg; x.beginPath(); x.roundRect(W - L - jw, by + 40, jw, 72, 36); x.fill(); x.fillStyle = '#fff'; x.textBaseline = 'middle'; x.fillText(jt, W - L - jw + 32, by + 78);
-    const fit = (t, mw) => { while (x.measureText(t).width > mw && t.length > 3) t = t.slice(0, -2).trimEnd() + '…'; return t; }, tw = W - L - jw - 28 - (L + 124);
-    x.textBaseline = 'alphabetic'; x.fillStyle = '#fff'; x.font = `800 46px ${D}`; x.fillText('RWB', L + 124, by + 70);
-    x.fillStyle = 'rgba(255,255,255,.62)'; x.font = `600 26px ${B}`; x.fillText(fit('Ronin Warriors of Bengal · roninwb.in', tw), L + 124, by + 108);
+    await cardBrand(x, W, H, 'JOIN THE RIDE');
     const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', .9));
     return new File([blob], `rwb-${(e.title || 'event').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'event'}.jpg`, { type: 'image/jpeg' });
 }
-const blobB64 = b => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(b); });
-async function shareEvent(e, heads) {
-    const text = eventShareText(e, heads), file = await eventCard1080(e, heads);
-    /* the Android app: its own share menu (build 26+) */
+/* the RWB bar at the bottom of every share card: club logo, name, roninwb.in and a button */
+async function cardBrand(x, W, H, cta) {
+    const L = 72, D = "'Barlow Condensed','Arial Narrow',sans-serif", B = "'Barlow',system-ui,sans-serif", by = H - 150;
+    x.fillStyle = 'rgba(255,255,255,.08)'; x.fillRect(0, by - 2, W, 2);
+    const logo = await cardImg('icons/logo-384.png').catch(() => null);
+    if (logo) { x.save(); x.beginPath(); x.arc(L + 48, by + 74, 48, 0, Math.PI * 2); x.clip(); x.drawImage(logo, L, by + 26, 96, 96); x.restore(); }
+    x.font = `700 32px ${B}`; const jw = x.measureText(cta).width + 64;
+    const jg = x.createLinearGradient(W - L - jw, 0, W - L, 0); jg.addColorStop(0, '#ffa766'); jg.addColorStop(1, '#cf5119');
+    x.fillStyle = jg; x.beginPath(); x.roundRect(W - L - jw, by + 40, jw, 72, 36); x.fill(); x.fillStyle = '#fff'; x.textBaseline = 'middle'; x.fillText(cta, W - L - jw + 32, by + 78);
+    const fit = (t, mw) => { while (x.measureText(t).width > mw && t.length > 3) t = t.slice(0, -2).trimEnd() + '…'; return t; }, tw = W - L - jw - 28 - (L + 124);
+    x.textBaseline = 'alphabetic'; x.fillStyle = '#fff'; x.font = `800 46px ${D}`; x.fillText('RWB', L + 124, by + 70);
+    x.fillStyle = 'rgba(255,255,255,.62)'; x.font = `600 26px ${B}`; x.fillText(fit('Ronin Warriors of Bengal · roninwb.in', tw), L + 124, by + 108);
+}
+/* hand a share card to the phone: the Android app's share menu, the browser's, or a sheet to save it */
+async function shareCard(file, text, title) {
     const T = RwbTrack();
-    if (T?.shareImage) { try { await T.shareImage({ data: await blobB64(file), name: file.name, text, title: e.title }); return; } catch (er) { if (!/not implemented|unimplemented/i.test(er?.message || '')) throw er; } }
-    /* browsers that can share pictures (Chrome on Android, Safari) */
+    if (T?.shareImage) { try { await T.shareImage({ data: await blobB64(file), name: file.name, text, title }); return; } catch (er) { if (!/not implemented|unimplemented/i.test(er?.message || '')) throw er; } }
     try { if (navigator.canShare?.({ files: [file], text })) { await navigator.share({ files: [file], text }); return; } }
     catch (er) { if (er?.name === 'AbortError') return; }
-    /* anything else: show the card to save, plus the text for WhatsApp */
     const url = URL.createObjectURL(file);
-    openSheet('Share event', `<img class="evt-cardprev" src="${url}" alt="">
-        <div class="btns" style="margin-top:12px"><a class="btn" href="${url}" download="${esc(file.name)}">Save picture</a><button class="btn ghost" data-x="wa">WhatsApp text</button></div>`, body => {
-        body.querySelector('[data-x=wa]').onclick = () => openWA(waShare(text));
+    openSheet('Share', `<img class="evt-cardprev" src="${url}" alt="">
+        <div class="btns" style="margin-top:12px"><a class="btn" href="${url}" download="${esc(file.name)}">Save picture</a>${text ? '<button class="btn ghost" data-x="wa">WhatsApp text</button>' : ''}</div>`, body => {
+        const wa = body.querySelector('[data-x=wa]'); if (wa) wa.onclick = () => openWA(waShare(text));
     });
+}
+const blobB64 = b => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(b); });
+async function shareEvent(e, heads) {
+    await shareCard(await eventCard1080(e, heads), eventShareText(e, heads), e.title);
 }
 function evtShareList(e, going) {
     const total = going.length + going.reduce((a, p) => a + p.guests, 0);
@@ -5418,10 +5422,10 @@ const kmTxt = n => Number(n).toLocaleString('en-IN') + ' km';
 const kmplTxt = v => Number(v).toFixed(1) + ' km/l';
 const BOARDS = {
     gps: { title: 'Track Warriors', sub: 'Kilometres ridden while sharing live location with Track', how: 'How to get on it: tap <b>Track</b> (the middle button) → <b>Share</b> before you ride. Every km you ride while sharing counts, checked by GPS.', has: r => r.km > 0, val: r => Number(r.km), big: r => `${Number(r.km).toLocaleString('en-IN', { maximumFractionDigits: r.km < 100 ? 1 : 0 })} km`, small: r => r.rides ? `${r.rides} ride${r.rides === 1 ? '' : 's'}` : '', empty: 'No one yet! Tap Track → Share on your next ride to be the first Track Warrior.' },
-    mileage: { title: 'Mileage Warriors', sub: 'Best average km/l, from full-tank fill-ups', has: r => r.kmpl > 0, val: r => Number(r.kmpl), big: r => kmplTxt(r.kmpl), small: r => r.km ? kmTxt(r.km) : '', empty: 'Add a full-tank fill-up with your Trip A reading to get on this board.' },
-    service: { title: 'Service Warriors', sub: 'Most services logged in the app', has: r => r.services > 0, val: r => r.services * 1e5 + (r.last_service ? Date.parse(r.last_service) / 864e5 : 0), big: r => `${r.services} service${r.services === 1 ? '' : 's'}`, small: r => [r.kmpl ? kmplTxt(r.kmpl) : '', r.last_service ? 'last ' + fmtDayMonth(r.last_service) : ''].filter(Boolean).join(' · '), empty: 'Log your services to get on this board.' },
-    road: { title: 'Road Warriors', sub: 'Most km on the odometer', has: r => r.km > 0, val: r => r.km, big: r => kmTxt(r.km), small: r => r.kmpl ? kmplTxt(r.kmpl) : '', empty: 'Update your odometer on Home, or add a fill-up or service, to get on this board.' },
-    pookie: { title: 'Pookie Warriors', sub: 'Most XP from teaching Pookie about the Ronin', how: 'How to get on it: open <a href="#teach"><b>Teach Pookie</b></a> and answer its questions. <b>10 XP</b> for every answer the admins approve, 2 XP while it waits.', has: r => r.xp > 0, val: r => r.xp * 1000 + r.approved, big: r => `${r.xp} XP`, small: r => `${r.approved} taught`, empty: 'Answer a question in Teach Pookie to get on this board.' }
+    mileage: { title: 'Mileage Warriors', sub: 'Best average km/l, from full-tank fill-ups', subP: 'Best average km/l of the tanks in this period', has: r => r.kmpl > 0, val: r => Number(r.kmpl), big: r => kmplTxt(r.kmpl), small: r => r.km ? kmTxt(r.km) : '', empty: 'Add a full-tank fill-up with your Trip A reading to get on this board.' },
+    service: { title: 'Service Warriors', sub: 'Most services logged in the app', subP: 'Most services done in this period', has: r => r.services > 0, val: r => r.services * 1e5 + (r.last_service ? Date.parse(r.last_service) / 864e5 : 0), big: r => `${r.services} service${r.services === 1 ? '' : 's'}`, small: r => [r.kmpl ? kmplTxt(r.kmpl) : '', r.last_service ? 'last ' + fmtDayMonth(r.last_service) : ''].filter(Boolean).join(' · '), empty: 'Log your services to get on this board.' },
+    road: { title: 'Road Warriors', sub: 'Most km on the odometer', subP: 'Most km ridden, from odometer readings', has: r => r.km > 0, val: r => r.km, big: r => kmTxt(r.km), small: r => r.kmpl ? kmplTxt(r.kmpl) : '', empty: 'Update your odometer on Home, or add a fill-up or service, to get on this board.' },
+    pookie: { title: 'Pookie Warriors', sub: 'Most XP from teaching Pookie about the Ronin', subP: 'Most XP earned teaching Pookie in this period', how: 'How to get on it: open <a href="#teach"><b>Teach Pookie</b></a> and answer its questions. <b>10 XP</b> for every answer the admins approve, 2 XP while it waits.', has: r => r.xp > 0, val: r => r.xp * 1000 + r.approved, big: r => `${r.xp} XP`, small: r => `${r.approved} taught`, empty: 'Answer a question in Teach Pookie to get on this board.' }
 };
 const rankBoard = (rows, key) => rows.filter(BOARDS[key].has).sort((a, b) => BOARDS[key].val(b) - BOARDS[key].val(a) || a.full_name.localeCompare(b.full_name)).map((r, i) => ({ ...r, rank: i + 1 }));
 const LB_ICON = { gps: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M12 21.5s-6.5-5.8-6.5-11a6.5 6.5 0 0 1 13 0c0 5.2-6.5 11-6.5 11z"/><path d="M12 21.5s-6.5-5.8-6.5-11a6.5 6.5 0 0 1 13 0c0 5.2-6.5 11-6.5 11z"/><circle cx="12" cy="10.5" r="2.4"/></svg>',
@@ -5431,7 +5435,7 @@ const LB_ICON = { gps: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class=
     pookie: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M3 9l9-4.5L21 9l-9 4.5z"/><path d="M3 9l9-4.5L21 9l-9 4.5zM7 11v4.5c1.4 1.3 3 2 5 2s3.6-.7 5-2V11M21 9v5"/></svg>' };
 const TROPHY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ac" d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4.5v1.5A3 3 0 0 0 7.4 10.5M17 6h2.5v1.5a3 3 0 0 1-2.9 3M12 14v3.5M8.5 20.5h7M9.5 17.5h5v3h-5z"/></svg>';
 const CROWN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8l4.2 3.6L12 5l4.3 6.6L20.5 8l-1.8 10H5.3z"/></svg>';
-const lbRows = (key, raw) => rankBoard((key === 'gps' ? (state.gps || []) : key === 'pookie' ? (state.pookieBoard || []) : raw).filter(r => !(r.is_me && state.me?.show_on_leaderboard === false)), key);   /* hidden riders never see themselves, even on a saved copy */
+const lbRows = (key, raw) => rankBoard(lbSrc(key, raw).filter(r => !(r.is_me && state.me?.show_on_leaderboard === false)), key);   /* hidden riders never see themselves, even on a saved copy */
 const lbName = r => esc(r.nickname || r.full_name.split(' ')[0]);
 function boardHtml(key, raw) {
     const B = BOARDS[key], board = lbRows(key, raw);
@@ -5440,13 +5444,80 @@ function boardHtml(key, raw) {
             <div class="lp-who"><span class="lp-ring">${p === 1 ? `<span class="lp-crown">${CROWN}</span>` : ''}${face(r, 'avatar lp-face')}</span>
             <b>${lbName(r)}</b><span class="lp-val lb-count">${B.big(r)}</span><span class="lp-sub">${esc(B.small(r))}</span></div>
             <div class="lp-step"><span>${p}</span></div></div>` : `<div class="lp lp${p} empty" style="--d:${[0, .5, .25, .7][p]}s"><div class="lp-who"><span class="lp-ring"><span class="avatar lp-face"><i>?</i></span></span><b>Open spot</b></div><div class="lp-step"><span>${p}</span></div></div>`;
-    return `<div class="lb-head"><span class="lb-ico">${LB_ICON[key]}</span><div class="grow"><h2 class="board-title">${B.title}</h2><p class="small muted">${B.sub}</p></div><span class="lb-n"><b class="lb-count">${board.length}</b><small>rider${board.length === 1 ? '' : 's'}</small></span></div>
+    const sub = (state.boardPer || 'all') !== 'all' && B.subP ? B.subP : B.sub;
+    return `<div class="lb-head"><span class="lb-ico">${LB_ICON[key]}</span><div class="grow"><h2 class="board-title">${B.title}</h2><p class="small muted">${sub}</p></div><span class="lb-n"><b class="lb-count">${board.length}</b><small>rider${board.length === 1 ? '' : 's'}</small></span>${isMod() && !isFam() ? `<button class="lb-share" data-act="lb-share" aria-label="Share ${B.title}">${EVT_ICON.share}</button>` : ''}</div>
         ${board.length ? `<div class="lb-stage"><i class="lb-rays"></i>${[1, 2, 3].map(i => `<i class="lb-spark s${i}"></i>`).join('')}<div class="lb-podium">${pod(top3[1], 2)}${pod(top3[0], 1)}${pod(top3[2], 3)}</div></div>`
             + (rest.length ? `<ol class="lb-list" start="4">${rest.map((r, i) => `<li class="${r.is_me ? 'me' : ''}" style="--i:${i}"><span class="rk">${r.rank}</span>${face(r, 'avatar sm')}<span class="grow"><b>${esc(r.full_name)}</b><span class="small muted">${esc(r.bike || '')}</span></span><span class="num km"><span class="lb-count">${B.big(r)}</span><small>${esc(B.small(r))}</small></span></li>`).join('')}</ol>` : '')
             + (me && me.rank > 10 ? `<p class="lb-me">You're <b>#${me.rank}</b> of ${board.length} with ${B.big(me)}. ${board[me.rank - 2] ? `Just <b>${esc(lbGap(key, board[me.rank - 2], me))}</b> behind #${me.rank - 1}.` : ''}</p>` : '')
             + (!me && !isFam() ? `<p class="small muted lb-note">${state.me.show_on_leaderboard === false ? 'You\'re hidden from the Warriorboards (Me → Privacy).' : B.empty}</p>` : '')
           : `<div class="lb-empty"><span class="lb-trophy">${TROPHY}</span><b>Be the first!</b><span class="muted">${B.empty}</span></div>`}
         ${B.how && !isFam() ? `<p class="small board-how">${B.how}</p>` : ''}`;
+}
+/* Warriorboards by period (file 87): everyone (members + RWB FAM) can switch; the numbers for a period come in one small call,
+   kept for 10 minutes (and offline). "All time" uses the boards as before. */
+const LB_PERIODS = [['7', 'Week'], ['30', 'Month'], ['90', '3M'], ['180', '6M'], ['365', 'Year'], ['all', 'All']];
+const lbPerLabel = p => p === 'all' ? 'All time' : ({ 7: 'Last 7 days', 30: 'Last 30 days', 90: 'Last 3 months', 180: 'Last 6 months', 365: 'Last 12 months' })[p];
+async function lbPeriodLoad(p) {
+    if (p === 'all') return;
+    const c = state.wp?.[p]; if (c && Date.now() - c.at < 10 * 60e3) return;
+    const rows = await api.warriorPeriod(Number(p));
+    (state.wp ??= {})[p] = { at: Date.now(), rows: rows || [] };
+}
+const lbSrc = (key, raw) => {
+    const p = state.boardPer || 'all', pr = p !== 'all' && state.wp?.[p]?.rows;
+    if (pr) return key === 'gps' ? pr.map(r => ({ ...r, km: Number(r.gps_km) })) : pr;
+    return key === 'gps' ? (state.gps || []) : key === 'pookie' ? (state.pookieBoard || []) : raw;
+};
+/* the board's share card (admins and coordinators): 1080×1350, top 3 on a podium and #4–#8 below */
+async function boardCard1080(key, raw) {
+    const B = BOARDS[key], rows = lbRows(key, raw).slice(0, 8), per = state.boardPer || 'all';
+    const W = 1080, H = 1350, L = 72, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const x = cv.getContext('2d'), D = "'Barlow Condensed','Arial Narrow',sans-serif", F = "'Barlow',system-ui,sans-serif";
+    await Promise.all(['800 100px "Barlow Condensed"', '600 40px "Barlow"', '700 40px "Barlow"'].map(f => document.fonts?.load(f).catch(() => {})));
+    const bg = x.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#2a1308'); bg.addColorStop(.45, '#120b08'); bg.addColorStop(1, '#0f0b09'); x.fillStyle = bg; x.fillRect(0, 0, W, H);
+    const glow = x.createRadialGradient(W / 2, 330, 40, W / 2, 330, 560); glow.addColorStop(0, 'rgba(240,113,47,.35)'); glow.addColorStop(1, 'rgba(240,113,47,0)'); x.fillStyle = glow; x.fillRect(0, 0, W, 900);
+    const name = r => (r.nickname || r.full_name.split(' ')[0] || '').trim();
+    const fit = (t, mw) => { while (x.measureText(t).width > mw && t.length > 3) t = t.slice(0, -2).trimEnd() + '…'; return t; };
+    x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+    x.fillStyle = '#f5a06d'; x.font = `700 30px ${F}`; x.fillText([...'RWB WARRIORBOARDS'].join(String.fromCharCode(8202)), W / 2, 104);
+    x.fillStyle = '#fff'; let ts = 112; do { x.font = `800 ${ts}px ${D}`; ts -= 4; } while (x.measureText(B.title.toUpperCase()).width > W - 2 * L && ts > 60); x.fillText(B.title.toUpperCase(), W / 2, 214);
+    x.font = `700 30px ${F}`; const pt = lbPerLabel(per).toUpperCase(), pw = x.measureText(pt).width + 56;
+    x.fillStyle = '#f0712f'; x.beginPath(); x.roundRect((W - pw) / 2, 246, pw, 60, 30); x.fill(); x.fillStyle = '#fff'; x.textBaseline = 'middle'; x.fillText(pt, W / 2, 278);
+    /* podium: 2 · 1 · 3 */
+    const pics = await Promise.all(rows.slice(0, 3).map(r => r.avatar_url ? cardImg(r.avatar_url).catch(() => null) : null));
+    const ring = ['#ffd36a', '#d9dde3', '#e7a06a'];
+    const spot = (i, cx, top, rad) => {
+        const r = rows[i]; if (!r) return;
+        x.save(); x.beginPath(); x.arc(cx, top + rad, rad + 8, 0, Math.PI * 2); x.fillStyle = ring[i]; x.fill(); x.restore();
+        x.save(); x.beginPath(); x.arc(cx, top + rad, rad, 0, Math.PI * 2); x.clip();
+        if (pics[i]) { const im = pics[i], s = Math.max(2 * rad / im.naturalWidth, 2 * rad / im.naturalHeight); x.drawImage(im, cx - im.naturalWidth * s / 2, top + rad - im.naturalHeight * s / 2, im.naturalWidth * s, im.naturalHeight * s); }
+        else { x.fillStyle = '#3a2418'; x.fillRect(cx - rad, top, 2 * rad, 2 * rad); x.fillStyle = '#fff'; x.textBaseline = 'middle'; x.font = `800 ${Math.round(rad * .8)}px ${D}`; x.fillText(initials(r), cx, top + rad + 4); }
+        x.restore();
+        x.beginPath(); x.arc(cx + rad * .72, top + rad * 1.72, 30, 0, Math.PI * 2); x.fillStyle = ring[i]; x.fill();
+        x.fillStyle = '#1a0f0a'; x.textBaseline = 'middle'; x.font = `800 36px ${D}`; x.fillText(String(i + 1), cx + rad * .72, top + rad * 1.72 + 2);
+        x.textBaseline = 'alphabetic'; x.fillStyle = '#fff'; x.font = `800 ${i ? 46 : 54}px ${D}`; x.fillText(fit(name(r).toUpperCase(), 300), cx, top + 2 * rad + 70);
+        x.fillStyle = '#f5a06d'; x.font = `700 ${i ? 32 : 36}px ${F}`; x.fillText(fit(B.big(r), 300), cx, top + 2 * rad + 116);
+    };
+    spot(1, W / 2 - 330, 420, 100); spot(2, W / 2 + 330, 420, 100); spot(0, W / 2, 360, 130);
+    /* #4–#8 */
+    x.textAlign = 'left'; let y = 830;
+    if (!rows.length) { x.textAlign = 'center'; x.fillStyle = 'rgba(255,255,255,.7)'; x.font = `600 40px ${F}`; x.fillText('Be the first on this board!', W / 2, 640); x.textAlign = 'left'; }
+    for (const r of rows.slice(3, 8)) {
+        x.fillStyle = 'rgba(255,255,255,.06)'; x.beginPath(); x.roundRect(L, y - 52, W - 2 * L, 70, 20); x.fill();
+        x.fillStyle = '#f5a06d'; x.font = `800 40px ${D}`; x.fillText(`#${r.rank}`, L + 28, y - 4);
+        x.fillStyle = '#fff'; x.font = `600 36px ${F}`; x.fillText(fit(name(r), 480), L + 130, y - 4);
+        x.textAlign = 'right'; x.fillStyle = 'rgba(255,255,255,.85)'; x.font = `700 34px ${F}`; x.fillText(B.big(r), W - L - 28, y - 4); x.textAlign = 'left';
+        y += 84;
+    }
+    x.textAlign = 'left';
+    await cardBrand(x, W, H, 'JOIN RWB');
+    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', .9));
+    return new File([blob], `rwb-${key}-warriors-${per === 'all' ? 'all-time' : per + '-days'}.jpg`, { type: 'image/jpeg' });
+}
+async function shareBoard(key, raw) {
+    const B = BOARDS[key], top3 = lbRows(key, raw).slice(0, 3);
+    const text = `🏆 *RWB ${B.title}* · ${lbPerLabel(state.boardPer || 'all')}\n${top3.map((r, i) => `${MEDAL[i]} ${r.nickname || r.full_name.split(' ')[0]} · ${B.big(r)}`).join('\n')}\n\n👉 https://roninwb.in`;
+    await shareCard(await boardCard1080(key, raw), text, B.title);
 }
 /* how far behind the next rider you are, in the board's own units */
 function lbGap(key, ahead, me) {
@@ -5468,7 +5539,8 @@ function lbCount(root) {
 async function viewCrew() {
     const raw = state.board ??= await api.boards().catch(() => api.leaderboard().then(rs => rs.map(r => ({ ...r, services: 0, kmpl: null }))).catch(() => []));
     if (!state.gps || Date.now() - (state.gpsAt || 0) > 120e3) { [state.gps, state.pookieBoard] = await Promise.all([api.gpsBoard().catch(() => []), api.pookieBoard?.().catch(() => []) ?? []]); state.gpsAt = Date.now(); }
-    state.boardKey ??= 'gps';
+    state.boardKey ??= 'gps'; state.boardPer ??= 'all';
+    if (state.boardPer !== 'all') await lbPeriodLoad(state.boardPer).catch(() => { state.boardPer = 'all'; });
     const keys = Object.keys(BOARDS);
     const mine = Object.fromEntries(keys.map(k => [k, lbRows(k, raw).find(r => r.is_me)?.rank || 0]));
     const best = keys.filter(k => mine[k]).sort((a, b) => mine[a] - mine[b])[0];
@@ -5479,6 +5551,7 @@ async function viewCrew() {
             <span class="lb-cup"><img src="icons/logo-384.png" alt="RWB"></span></section>
         <div class="lb-tabs" role="tablist" aria-label="Warriorboard">${keys.map(k => `<button role="tab" aria-selected="${k === state.boardKey}" data-act="board" data-b="${k}">
             <span class="lt-ico">${LB_ICON[k]}</span><b>${BOARDS[k].title.replace(' Warriors', '')}</b><small>${mine[k] ? `You #${mine[k]}` : '—'}</small></button>`).join('')}</div>
+        <div class="lb-per" role="tablist" aria-label="Period">${LB_PERIODS.map(([v, t]) => `<button role="tab" aria-selected="${v === state.boardPer}" data-act="lb-per" data-p="${v}" aria-label="${lbPerLabel(v)}">${t}</button>`).join('')}</div>
         <section class="board card lb-card" id="board">${boardHtml(state.boardKey, raw)}</section>
         <p class="board-dots" aria-hidden="true">${keys.map(k => `<i${k === state.boardKey ? ' class="on"' : ''}></i>`).join('')}</p>
         <a class="mem-entry" href="#members"><span class="mem-faces">${[...new Map([...(state.gps || []), ...raw].filter(r => r.full_name).map(r => [r.full_name, r])).values()].slice(0, 4).map(r => face(r, 'avatar sm')).join('')}</span>
@@ -5490,7 +5563,12 @@ async function viewCrew() {
         app.querySelectorAll('.board-dots i').forEach((d, i) => d.classList.toggle('on', keys[i] === k));
         el.classList.remove('slide-l', 'slide-r'); void el.offsetWidth; if (dir) el.classList.add(dir > 0 ? 'slide-l' : 'slide-r');
         lbCount(el); };
-    actions = { board: el => { if (el.dataset.b !== state.boardKey) showBoard(el.dataset.b, Math.sign(keys.indexOf(el.dataset.b) - keys.indexOf(state.boardKey))); } };
+    actions = { board: el => { if (el.dataset.b !== state.boardKey) showBoard(el.dataset.b, Math.sign(keys.indexOf(el.dataset.b) - keys.indexOf(state.boardKey))); },
+        'lb-per': el => { const p = el.dataset.p; if (p === state.boardPer) return;
+            app.querySelectorAll('.lb-per button').forEach(b => b.setAttribute('aria-selected', b === el));
+            lbPeriodLoad(p).then(() => { state.boardPer = p; if (location.hash === '#crew') render(); })
+                .catch(() => { toast('Couldn\'t load that period. Check your internet and try again.', true); app.querySelectorAll('.lb-per button').forEach(b => b.setAttribute('aria-selected', b.dataset.p === state.boardPer)); }); },
+        'lb-share': el => { if (el.disabled) return; el.disabled = true; shareBoard(state.boardKey, raw).catch(er => toast(er.message || 'Could not share', true)).finally(() => { el.disabled = false; }); } };
     /* swipe left / right to change leaderboard */
     let sx = null, sy = 0;
     $('#board').addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });

@@ -175,6 +175,7 @@ async function supabaseApi(url, key) {
         saveBike: async (slot, vrn, model, memberId = null) => must(await sb.rpc('save_bike', { p_slot: slot, p_vrn: vrn || '', p_model: model || null, p_member_id: memberId })),
         leaderboard: async () => must(await sb.rpc('odometer_leaderboard')),
         boards: async () => must(await sb.rpc('warrior_boards')),
+        warriorPeriod: async days => must(await sb.rpc('warrior_period', { p_days: days })),   /* setup file 87: every board for the last N days */
         centres: async () => must(await sb.from('service_centres').select('id,name,area,pincode').order('name')),
         addCentre: async (name, area, pincode) => must(await sb.rpc('add_service_centre', { p_name: name, p_area: area || null, p_pincode: pincode || null })),
         deleteCentre: async id => must(await sb.from('service_centres').delete().eq('id', id)),
@@ -747,6 +748,16 @@ function demoApi() {
         gpsBoard: () => wait([{ member_id: 2, full_name: 'Arjun Sen', nickname: 'Sultan', km: 412.6, rides: 9 }, { member_id: 3, full_name: 'Priya Dutta', km: 233.1, rides: 5 }, { member_id: 4, full_name: 'Rahul Ghosh', nickname: 'Rocket', km: 188.4, rides: 4 }, { member_id: 1, full_name: me().full_name, km: 96.2, rides: 2, is_me: true }, { member_id: 5, full_name: 'Sourav Paul', km: 41.0, rides: 1 }]),
         joinHelpAdmins: () => wait(db.members.filter(m => ['superadmin', 'admin'].includes(m.role) && (!m.status || m.status === 'active')).map(m => ({ first_name: (m.nickname || m.full_name).split(' ')[0], phone: m.phone }))),
         rwbAdmins: () => wait(db.members.filter(m => ['superadmin', 'admin'].includes(m.role) && (!m.status || m.status === 'active')).map(m => ({ full_name: m.full_name, nickname: m.nickname, phone: m.phone, role: m.role }))),
+        /* demo: the all-time boards scaled down for the period */
+        async warriorPeriod(days) {
+            const f = days / 365, j = i => 0.55 + ((i * 37 + days) % 9) / 10, by = new Map();
+            const row = r => { const k = r.full_name; if (!by.has(k)) by.set(k, { member_id: r.member_id, full_name: r.full_name, nickname: r.nickname || '', avatar_url: r.avatar_url || null, bike: r.bike || null, gps_km: 0, rides: 0, km: null, kmpl: null, tanks: 0, services: 0, last_service: null, xp: 0, approved: 0, is_me: !!r.is_me }); return by.get(k); };
+            const [b, g, p] = await Promise.all([this.boards(), this.gpsBoard(), this.pookieBoard()]);
+            b.forEach((r, i) => { const x = row(r); x.bike = r.bike || x.bike; x.km = r.km ? Math.round(Math.min(r.km, 12000) * f * j(i) * .6) || null : null; x.kmpl = r.kmpl && days >= 30 ? +(r.kmpl * (0.93 + j(i) / 10)).toFixed(2) : null; x.services = Math.round((r.services || 0) * f * j(i)); x.last_service = x.services ? r.last_service : null; });
+            g.forEach((r, i) => { const x = row(r); x.gps_km = +(r.km * Math.min(1, f * 3) * j(i + 2)).toFixed(1); x.rides = Math.max(x.gps_km ? 1 : 0, Math.round(r.rides * Math.min(1, f * 3))); });
+            p.forEach((r, i) => { const x = row(r); x.approved = Math.round(r.approved * Math.min(1, f * 2)); x.xp = x.approved * 10 + (r.xp % 10 ? 2 : 0); });
+            return wait([...by.values()].filter(x => x.gps_km >= .1 || x.km > 0 || x.kmpl || x.services || x.xp));
+        },
         async boards() {
             const myKm = Math.max(0, me().odo_km || 0, ...db.fuel.map(f => f.odometer_km), ...db.services.map(x => x.odometer_km));
             const rows = [['Rahul Ghosh', 'Rocket', 18420, 36.8, 5, 'TVS Ronin 225'], ['Arjun Sen', 'Sultan', 11250, 41.9, 3, 'TVS Ronin 225'], ['Sourav Paul', '', 5310, 38.2, 1, 'TVS Apache RTR 200 4V'], ['Priya Dutta', '', 2400, 44.6, 2, 'TVS Ronin 225'], ['Kaustabh Roy', 'Pookie', 26100, 34.1, 7, 'TVS Ronin 225']]
