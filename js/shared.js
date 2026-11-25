@@ -99,7 +99,9 @@ function loadMotomart() {
     return mmJob ||= fetch(CONFIG.APP_SUPABASE_URL + '/rest/v1/rpc/public_motomart', { method: 'POST', headers: { apikey: CONFIG.APP_SUPABASE_KEY, Authorization: 'Bearer ' + CONFIG.APP_SUPABASE_KEY, 'Content-Type': 'application/json' }, body: '{}' })
         .then(r => { if (!r.ok) throw new Error('app'); return r.json(); })
         .then(d => ({ used: d.used_count || 0, items: (d.items || []).map(i => ({ ...i,
-            image: i.photo ? `${CONFIG.APP_SUPABASE_URL}/storage/v1/object/public/motomart/${i.photo}` : i.image_url || '' })) }));
+            /* the small preview copy (~25 KB, Nov 2026); full: the original, used if a post has no preview yet */
+            image: i.photo ? `${CONFIG.APP_SUPABASE_URL}/storage/v1/object/public/motomart/${String(i.photo).replace(/\.jpe?g$/i, '')}-t.jpg` : i.image_url || '',
+            full: i.photo ? `${CONFIG.APP_SUPABASE_URL}/storage/v1/object/public/motomart/${i.photo}` : '' })) }));
 }
 const inr = n => '₹' + Number(n).toLocaleString('en-IN');
 

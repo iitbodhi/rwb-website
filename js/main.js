@@ -284,7 +284,7 @@ function renderMarket(rows) {
     if (!rows.length) { track.innerHTML = '<p class="muted">New products are on the way. Check back soon.</p>'; return; }
     track.innerHTML = rows.map(r => {
         const sold = /sold/i.test(r.status || ''), price = r.soon ? 'Coming soon' : r.price === 0 ? 'Free' : typeof r.price === 'number' ? inr(r.price) : rupees(r.price);
-        const img = r.image ? `<img src="${esc(driveImg(r.image))}" alt="${esc(r.name)}" loading="lazy" referrerpolicy="no-referrer">`
+        const img = r.image ? `<img src="${esc(driveImg(r.image))}" alt="${esc(r.name)}" loading="lazy" referrerpolicy="no-referrer"${r.full ? ` onerror="if(!this.dataset.f){this.dataset.f=1;this.src='${esc(r.full)}'}"` : ''}>`
                             : `<img class="ph" src="assets/logo-96.webp" alt="">`;
         return `<article class="prod${sold ? ' sold' : ''}"><div class="prod-img">${img}${r.category ? `<em>${esc(r.category)}</em>` : ''}</div>
             <div class="prod-body"><h3>${esc(r.name)}</h3><p>${esc(r.description || '')}</p>

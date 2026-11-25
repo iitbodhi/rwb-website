@@ -8,6 +8,18 @@ const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+
 const BILL_BUCKET = 'bills', PHOTO_BUCKET = 'motomart';
 const extOf = f => ({ 'application/pdf': 'pdf', 'application/msword': 'doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx', 'image/png': 'png' })[f.type] || 'jpg';
 
+/* MotoMart preview copies (400 px, ~20 KB): "<photo>-t.jpg" next to each photo */
+const thumbPath = p => String(p).replace(/\.jpe?g$/i, '') + '-t.jpg';
+const withThumbs = ps => ps.flatMap(p => [p, thumbPath(p)]);
+async function thumbJpeg(file, w = 400) {
+    const bmp = await createImageBitmap(file);
+    const s = Math.min(1, w / bmp.width), cv = document.createElement('canvas');
+    cv.width = Math.round(bmp.width * s); cv.height = Math.round(bmp.height * s);
+    const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(bmp, 0, 0, cv.width, cv.height); bmp.close?.();
+    const b = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.72));
+    return new File([b], 'thumb.jpg', { type: 'image/jpeg' });
+}
+
 export async function createApi() {
     const c = typeof APP_CONFIG !== 'undefined' ? APP_CONFIG : {};
     if (c.SUPABASE_URL && c.SUPABASE_ANON_KEY) return withOffline(await supabaseApi(c.SUPABASE_URL, c.SUPABASE_ANON_KEY));   /* works without internet: offline.js */
@@ -18,7 +30,7 @@ export async function createApi() {
 }
 function netSim(api) {
     const wrap = o => { for (const k of Object.keys(o)) { const f = o[k];
-        if (typeof f === 'function' && !['session', 'signIn', 'signOut', 'onAuthChange', 'resetDemo', 'photoUrl'].includes(k)) o[k] = async (...a) => { if (!navigator.onLine) throw new Error('No internet connection. You\'re offline: try again once you\'re connected.'); return f.apply(o, a); };
+        if (typeof f === 'function' && !['session', 'signIn', 'signOut', 'onAuthChange', 'resetDemo', 'photoUrl', 'thumbUrl'].includes(k)) o[k] = async (...a) => { if (!navigator.onLine) throw new Error('No internet connection. You\'re offline: try again once you\'re connected.'); return f.apply(o, a); };
         else if (f && typeof f === 'object' && k === 'admin') wrap(f); } };
     wrap(api); return api;
 }
@@ -291,6 +303,8 @@ async function supabaseApi(url, key) {
         myId: uid,
         listings: async () => must(await sb.from('listings').select('*').order('published_at', { ascending: false, nullsFirst: true }).order('created_at', { ascending: false })),
         photoUrl: path => sb.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl,
+        /* small preview copy (400 px) for grids and strips; the full photo only loads when a post is opened (Nov 2026) */
+        thumbUrl: path => sb.storage.from(PHOTO_BUCKET).getPublicUrl(thumbPath(path)).data.publicUrl,
         async saveListing(rec, newFiles = [], removed = []) {
             const me = await uid(), added = [];
             try {
@@ -298,19 +312,21 @@ async function supabaseApi(url, key) {
                     const path = `${me}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
                     must(await sb.storage.from(PHOTO_BUCKET).upload(path, f, { contentType: 'image/jpeg', upsert: false, cacheControl: '31536000' }));
                     added.push(path);
+                    const t = await thumbJpeg(f).catch(() => null);
+                    if (t) await sb.storage.from(PHOTO_BUCKET).upload(thumbPath(path), t, { contentType: 'image/jpeg', upsert: true, cacheControl: '31536000' }).catch(() => {});
                 }
                 const { id, user_id, created_at, updated_at, published_at, status, reject_reason, ...row } = rec;
                 row.photos = [...(rec.photos || []).filter(p => !removed.includes(p)), ...added];
                 const saved = id ? must(await sb.from('listings').update(row).eq('id', id).select().single())
                                  : must(await sb.from('listings').insert(row).select().single());
-                if (removed.length) await sb.storage.from(PHOTO_BUCKET).remove(removed);
+                if (removed.length) await sb.storage.from(PHOTO_BUCKET).remove(withThumbs(removed));
                 return saved;
-            } catch (e) { if (added.length) await sb.storage.from(PHOTO_BUCKET).remove(added); throw e; }
+            } catch (e) { if (added.length) await sb.storage.from(PHOTO_BUCKET).remove(withThumbs(added)); throw e; }
         },
         setListingStatus: async (id, status, reason = null) => must(await sb.from('listings').update({ status, reject_reason: reason }).eq('id', id).select().single()),
         async deleteListing(rec) {
             must(await sb.from('listings').delete().eq('id', rec.id));
-            if (rec.photos?.length) await sb.storage.from(PHOTO_BUCKET).remove(rec.photos);
+            if (rec.photos?.length) await sb.storage.from(PHOTO_BUCKET).remove(withThumbs(rec.photos));
         },
 
         /* ---- Announcements + push ---- */
@@ -526,7 +542,7 @@ async function supabaseApi(url, key) {
             async remove(id, userId, reason = 'removed', note = '') {
                 if (userId) await sb.storage.from('avatars').remove([`${userId}/avatar.jpg`]).catch(() => {});
                 const photos = must(await sb.rpc('admin_listing_photos', { p_member_id: id })) || [];
-                if (photos.length) await sb.storage.from(PHOTO_BUCKET).remove(photos);
+                if (photos.length) await sb.storage.from(PHOTO_BUCKET).remove(withThumbs(photos));
                 const files = must(await sb.rpc('admin_begin_removal', { p_member_id: id })) || [];
                 if (files.length) must(await sb.storage.from(BILL_BUCKET).remove(files));
                 const docs = await sb.rpc('admin_removal_docs', { p_member_id: id }).then(r => r.data || []).catch(() => []);
@@ -863,6 +879,7 @@ function demoApi() {
         myId: async () => 'me',
         listings: () => wait([...db.listings].filter(l => ['live', 'sold'].includes(l.status) || l.user_id === 'me' || ['coordinator', 'admin', 'superadmin'].includes(me().role)).sort((a, b) => String(b.published_at || '9').localeCompare(String(a.published_at || '9')))),
         photoUrl: path => path.startsWith('demo:') ? path.slice(5) : path,
+        thumbUrl: path => path.startsWith('demo:') ? path.slice(5) : path,
         async saveListing(rec, newFiles = [], removed = []) {
             const added = await Promise.all(newFiles.map(f => new Promise(r => { const fr = new FileReader(); fr.onload = () => r('demo:' + fr.result); fr.readAsDataURL(f); })));
             const photos = [...(rec.photos || []).filter(p => !removed.includes(p)), ...added];

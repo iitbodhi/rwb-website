@@ -51,7 +51,7 @@ function setThumb(box, src) {
     const im = new Image();
     im.alt = ''; im.referrerPolicy = 'no-referrer'; im.decoding = 'async';
     im.onload = () => { box.replaceChildren(im); box.classList.add('has-img'); };
-    im.onerror = () => box.classList.add('no-img');
+    im.onerror = () => { if (box.dataset.full && !im.dataset.f) { im.dataset.f = 1; im.src = box.dataset.full; } else box.classList.add('no-img'); };
     im.src = src;
 }
 const thumbObs = new IntersectionObserver(entries => entries.forEach(async e => {
@@ -68,7 +68,7 @@ function draw() {
     countEl.textContent = items.length ? `Showing ${shown.length} of ${items.length} products` : '';
     list.innerHTML = shown.length ? shown.map(i => {
         const link = safeLink(i.link), price = typeof i.price === 'number' ? inr(i.price) : rupees(i.price), own = i.image ? driveImg(i.image) : '';
-        const thumb = own ? `<div class="acc-img" data-src="${esc(own)}"></div>` : link ? `<div class="acc-img" data-link="${esc(link)}"></div>` : '<div class="acc-img no-img"></div>';
+        const thumb = own ? `<div class="acc-img" data-src="${esc(own)}"${i.full ? ` data-full="${esc(i.full)}"` : ''}></div>` : link ? `<div class="acc-img" data-link="${esc(link)}"></div>` : '<div class="acc-img no-img"></div>';
         return `<article class="acc">${thumb}
             <div class="acc-body">
                 ${i.category ? `<span class="acc-cat">${esc(i.category)}</span>` : ''}

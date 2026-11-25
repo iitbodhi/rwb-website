@@ -4755,6 +4755,9 @@ const price = n => Number(n) === 0 ? 'Free' : '₹' + Number(n).toLocaleString('
 const soon = l => kindOf(l) === 'merch' && !!l.coming_soon;
 const lprice = l => soon(l) ? 'Coming soon' : price(l.price);
 const photo = (l, i = 0) => l.photos?.[i] ? api.photoUrl(l.photos[i]) : i === 0 && l.image_url ? l.image_url : '';
+/* grids, strips and search show the small preview copy; if a post has none yet, the full photo (Nov 2026) */
+const thumb = l => l.photos?.[0] ? (api.thumbUrl ? api.thumbUrl(l.photos[0]) : api.photoUrl(l.photos[0])) : l.image_url || '';
+const thumbImg = (l, cls = '') => { const t = thumb(l), f = photo(l); return t ? `<img${cls ? ` class="${cls}"` : ''} src="${esc(t)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="if(this.dataset.f||'${esc(f)}'===this.getAttribute('src'))this.remove();else{this.dataset.f=1;this.src='${esc(f)}'}">` : ''; };
 const allPhotos = l => l.photos?.length ? l.photos.map(p => api.photoUrl(p)) : l.image_url ? [l.image_url] : [];
 const mine = l => l.user_id === state.myId;
 const kindOf = l => l.kind || 'used';
@@ -4796,7 +4799,7 @@ function listingCard(l) {
     const sub = k === 'new' ? [cs, hostOf(l.link)].filter(Boolean).join(' · ') : k === 'merch' ? cs : [l.condition, l.size && 'Size ' + l.size].filter(Boolean).join(' · ') || cs;
     const flag = { pending: 'Waiting for approval', rejected: 'Not approved' }[l.status];
     return `<button class="mm-card tap${sold ? ' is-sold' : ''}" data-act="listing" data-id="${l.id}">
-        <div class="mm-img"${!img && l.link ? ` data-link="${esc(safeUrl(l.link))}"` : ''}>${img ? `<img src="${esc(img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span class="mm-ph">${catIco(catGroup(l))}</span>
+        <div class="mm-img"${!img && l.link ? ` data-link="${esc(safeUrl(l.link))}"` : ''}>${thumbImg(l)}<span class="mm-ph">${catIco(catGroup(l))}</span>
             <span class="mm-kind k-${k}">${MM_KIND[k]}</span>${soon(l) && !sold ? '<span class="mm-sold mm-soon-tag">Coming soon</span>' : ''}${flag ? `<span class="mm-flag ${l.status}">${flag}</span>` : ''}${sold ? `<span class="mm-sold">${k === 'used' ? 'Sold' : 'Sold out'}</span>` : ''}</div>
         <div class="mm-body"><b class="mm-price">${lprice(l)}</b><span class="mm-name">${esc(l.product_name)}</span><span class="mm-sub">${esc(sub)}</span></div></button>`;
 }
@@ -4888,7 +4891,7 @@ function mmSearch(items) {
         const q = input.value.trim();
         if (!q) { list.innerHTML = popular.length ? `<p class="mm-s-h">Popular</p><div class="chips">${popular.map(c => `<button class="chip" data-q="${esc(c)}">${esc(c)}</button>`).join('')}</div>` : ''; return; }
         const hits = mmSort(items.filter(l => searchMatch(q, mmText(l))));
-        list.innerHTML = hits.length ? hits.slice(0, 6).map(l => { const img = photo(l); return `<button class="mm-s-row" data-id="${l.id}"><span class="mm-s-img">${img ? `<img src="${esc(img)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : catIco(catGroup(l))}</span>
+        list.innerHTML = hits.length ? hits.slice(0, 6).map(l => { const img = photo(l); return `<button class="mm-s-row" data-id="${l.id}"><span class="mm-s-img">${img ? thumbImg(l) : catIco(catGroup(l))}</span>
                 <span class="grow"><b>${markWords(esc(l.product_name), q)}</b><small>${MM_KIND[kindOf(l)]} · ${esc(catGroup(l))}${l.status === 'sold' ? ' · sold' : ''}</small></span><b class="mm-s-price">${lprice(l)}</b></button>`; }).join('')
             + `<button class="mm-s-all" data-all="1">See all ${hits.length} result${hits.length === 1 ? '' : 's'} for “${esc(q)}” ›</button>`
             : `<p class="mm-s-none">Nothing matches “${esc(q)}” yet.</p>`;
