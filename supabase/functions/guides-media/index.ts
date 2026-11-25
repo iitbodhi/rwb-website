@@ -125,6 +125,39 @@ Deno.serve(async (req) => {
 
   if (!GH_TOKEN) return fail("Uploads are being set up. Please try again later.", 503);
 
+  /* ---------- event cover photo (file 86): admins and coordinators, one landscape picture per event ----------
+     form: op=event_cover, event_id, file (JPEG/WebP ≤ 400 KB, already shrunk on the phone) — or remove=1 to take it off.
+     The old picture is deleted from GitHub. The app can't set events.cover_* itself (events_cover_guard). */
+  if (op === "event_cover") {
+    if (!["coordinator", "admin", "superadmin"].includes(role)) return fail("Only admins and coordinators can change the event photo.", 403);
+    const eid = Number(form?.get("event_id") ?? body.event_id);
+    const ev = await server.from("events").select("id,title,status,cover_path,cover_sha").eq("id", eid).maybeSingle();
+    if (!ev.data) return fail("That event is no longer available.", 404);
+    const old = { path: ev.data.cover_path as string | null, sha: ev.data.cover_sha as string | null };
+    if (String(form?.get("remove") ?? body.remove ?? "") === "1") {
+      await server.from("events").update({ cover_url: null, cover_path: null, cover_sha: null }).eq("id", eid);
+      await deleteFile(old.path, old.sha).catch((e) => console.error("cover delete", e));
+      return json({ cover_url: null });
+    }
+    const file = form?.get("file");
+    if (!(file instanceof File)) return fail("No photo arrived. Please choose it again.");
+    if (file.size > 400_000) return fail("That photo is too big. Please choose it again.");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const real = sniff(bytes);
+    if (!real || real.kind !== "image") return fail("That isn't a JPEG or WebP picture.");
+    const path = `events/${new Date().toISOString().slice(0, 7)}/e${eid}-${slug(String(ev.data.title || "event"))}-${crypto.randomUUID().slice(0, 8)}.${real.ext}`;
+    try {
+      const f = await putFile(path, bytes, `Events: cover for "${clean(ev.data.title, 60)}" (${clean(me.data.nickname || me.data.full_name, 60)})`);
+      const url = CDN(f.commit, path);
+      const up = await server.from("events").update({ cover_url: url, cover_path: path, cover_sha: f.sha }).eq("id", eid);
+      if (up.error) { await deleteFile(path, f.sha).catch(() => {}); return fail("Couldn't save the photo. Please try again.", 502); }
+      await deleteFile(old.path, old.sha).catch((e) => console.error("cover delete", e));
+      return json({ cover_url: url });
+    } catch (e) {
+      return fail(String((e as Error).message || e).slice(0, 300), 502);
+    }
+  }
+
   /* ---------- delete ---------- */
   if (op === "delete") {
     const id = Number(body.id);

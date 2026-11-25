@@ -211,9 +211,23 @@ async function supabaseApi(url, key) {
         /* RWB team (admins + coordinators, file 86): find members and set anyone's answer, also for members not on the app */
         eventFind: async (id, q) => must(await sb.rpc('event_find_members', { p_event: id, p_q: q })) || [],
         eventTeamSet: async (id, memberId, status, guests = 0) => must(await sb.rpc('event_team_set', { p_event: id, p_member: memberId, p_status: status, p_guests: guests })),
-        async rsvp(eventId, status, guests = 0) { return must(await sb.from('event_rsvps').upsert({ event_id: eventId, user_id: await uid(), status, guests }, { onConflict: 'event_id,user_id' }).select().single()); },
+        /* Going only (file 86): any other answer means "not going" and removes the RSVP */
+        async rsvp(eventId, status, guests = 0) {
+            if (status !== 'going') { must(await sb.from('event_rsvps').delete().eq('event_id', eventId).eq('user_id', await uid())); return { status: null, guests: 0 }; }
+            return must(await sb.from('event_rsvps').upsert({ event_id: eventId, user_id: await uid(), status, guests }, { onConflict: 'event_id,user_id' }).select().single());
+        },
+        /* the event's cover photo (file 86): saved on GitHub by the guides-media function; file = null takes it off */
+        async eventCover(eventId, file) {
+            const token = (await sb.auth.getSession()).data.session?.access_token;
+            const fd = new FormData(); fd.append('op', 'event_cover'); fd.append('event_id', String(eventId));
+            if (file) fd.append('file', file, file.name || 'cover.webp'); else fd.append('remove', '1');
+            const r = await fetch(url + '/functions/v1/guides-media', { method: 'POST', headers: { apikey: key, Authorization: 'Bearer ' + token }, body: fd })
+                .catch(() => { throw new Error('No internet connection. Please try again.'); });
+            const b = await r.json().catch(() => ({ error: 'Couldn\'t save the photo. Please try again in a minute.' }));
+            if (b.error) throw new Error(b.error); return b.cover_url || null;
+        },
         async saveEvent(rec) {
-            const { id, created_by, created_at, updated_at, reminded_at, source_key, ...row } = rec;
+            const { id, created_by, created_at, updated_at, reminded_at, source_key, cover_url, cover_path, cover_sha, ...row } = rec;
             const go = r => id ? sb.from('events').update(r).eq('id', id).select().single() : sb.from('events').insert(r).select().single();
             let res = await go(row);
             if (res.error && /tag|capacity|on_website/.test(res.error.message || '')) { const { tag, capacity, on_website, ...old } = row; res = await go(old); }   /* before setup file 38 */
@@ -771,10 +785,10 @@ function demoApi() {
             if (!db.events) {
                 const at = (d, h, m = 0) => { const x = new Date(); x.setDate(x.getDate() + d); x.setHours(h, m, 0, 0); return x.toISOString(); };
                 db.events = [
-                    { id: 501, title: 'Sunday breakfast ride', description: 'Meet at Nicco Park gate. Full tank please! Route: Kolkata to Kolaghat and back.', starts_at: at(1, 6), ends_at: at(1, 11), location: 'Nicco Park, Salt Lake', map_url: null, call_link: null, reminder_minutes: 60, allow_guests: true, status: 'live', created_by: 'u4' },
+                    { id: 501, title: 'Sunday breakfast ride', description: 'Meet at Nicco Park gate. Full tank please! Route: Kolkata to Kolaghat and back.', starts_at: at(1, 6), ends_at: at(1, 11), location: 'Nicco Park, Salt Lake', map_url: null, call_link: null, reminder_minutes: 60, allow_guests: true, capacity: 20, tag: 'Sunday Highs Ride', status: 'live', created_by: 'u4' },
                     { id: 502, title: 'Night ride to Princep Ghat', description: 'Easy city ride, chai at the end.', starts_at: at(9, 21, 30), ends_at: null, location: 'Princep Ghat', reminder_minutes: 60, allow_guests: false, status: 'live', created_by: 'u4' },
                     { id: 503, title: 'Mandarmani overnighter', description: 'Two days, one night by the sea.', starts_at: at(-12, 5), ends_at: at(-11, 18), location: 'Mandarmani', reminder_minutes: 1440, allow_guests: true, status: 'live', created_by: 'u4' }];
-                db.rsvps = [{ event_id: 501, user_id: 'u2', status: 'going', guests: 0 }, { event_id: 501, user_id: 'u4', status: 'going', guests: 1 }, { event_id: 501, user_id: 'u5', status: 'maybe', guests: 0 },
+                db.rsvps = [{ event_id: 501, user_id: 'u2', status: 'going', guests: 0 }, { event_id: 501, user_id: 'u4', status: 'going', guests: 1 }, { event_id: 501, member_id: 5, status: 'going', guests: 0, set_by: 'u4' },
                     { event_id: 503, user_id: 'me', status: 'going', guests: 0 }, { event_id: 503, user_id: 'u2', status: 'going', guests: 0 }, { event_id: 503, user_id: 'u4', status: 'going', guests: 1 }];
                 db.expenses = [{ id: 601, event_id: 503, kind: 'expense', title: 'Hotel (2 rooms)', amount: 3200, paid_by: 'u4', split: [{ u: 'me', w: 1 }, { u: 'u2', w: 1 }, { u: 'u4', w: 2 }], created_by: 'u4', created_at: at(-12, 20) },
                     { id: 602, event_id: 503, kind: 'expense', title: 'Dinner', amount: 1440, paid_by: 'me', split: [{ u: 'me', w: 1 }, { u: 'u2', w: 1 }, { u: 'u4', w: 2 }], created_by: 'me', created_at: at(-12, 22) },
@@ -788,7 +802,7 @@ function demoApi() {
             return wait(Object.values(out));
         },
         myRsvps: () => wait((db.rsvps || []).filter(r => r.user_id === 'me')),
-        eventPeople: id => wait((db.rsvps || []).filter(r => r.event_id === id).map(r => { const m = rsvpMember(r) || {};
+        eventPeople: id => wait((db.rsvps || []).filter(r => r.event_id === id && r.status === 'going').map(r => { const m = rsvpMember(r) || {};
             return { full_name: m.full_name || 'Rider', nickname: m.nickname || '', avatar_url: m.avatar_url || null, user_id: r.user_id || null, member_id: m.id ?? null, status: r.status, guests: r.guests,
                 set_by_name: r.set_by ? (r.set_by === 'me' ? 'You' : 'RWB team') : null, on_app: !!r.user_id }; })),
         eventFind: (id, q) => { q = String(q || '').trim().toLowerCase(); if (q.length < 2) return wait([]); const v = q.replace(/[^a-z0-9]/g, '');
@@ -798,14 +812,15 @@ function demoApi() {
         async eventTeamSet(id, memberId, status, guests = 0) {
             db.rsvps ||= []; const e = db.events.find(x => x.id === id), m = db.members.find(x => x.id === memberId);
             if (!e || e.status !== 'live') throw new Error('This event was cancelled'); if (!m) throw new Error('That member was not found');
-            if (!e.allow_guests || status !== 'going') guests = 0;
+            if (!e.allow_guests) guests = 0;
             const uidv = m.user_id ? m.user_id : null;
             const match = x => x.event_id === id && (uidv ? x.user_id === uidv : x.member_id === m.id);
             db.rsvps = db.rsvps.filter(x => !match(x));
-            if (status && !(status === 'no' && !uidv)) db.rsvps.push({ event_id: id, ...(uidv ? { user_id: uidv } : { member_id: m.id }), status, guests, set_by: uidv === 'me' ? null : 'me' });
+            if (status === 'going') db.rsvps.push({ event_id: id, ...(uidv ? { user_id: uidv } : { member_id: m.id }), status, guests, set_by: uidv === 'me' ? null : 'me' });
             save(); return wait(status || 'removed');
         },
-        async rsvp(eventId, status, guests = 0) { db.rsvps ||= []; const e = db.events.find(x => x.id === eventId); if (!e.allow_guests || status !== 'going') guests = 0; const r = db.rsvps.find(x => x.event_id === eventId && x.user_id === 'me'); if (r) Object.assign(r, { status, guests, set_by: null }); else db.rsvps.push({ event_id: eventId, user_id: 'me', status, guests }); save(); return wait({ status, guests }); },
+        async eventCover(eventId, file) { const e = db.events.find(x => x.id === eventId); e.cover_url = file ? await new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(file); }) : null; save(); return wait(e.cover_url); },
+        async rsvp(eventId, status, guests = 0) { db.rsvps ||= []; const e = db.events.find(x => x.id === eventId); if (status !== 'going') { db.rsvps = db.rsvps.filter(x => !(x.event_id === eventId && x.user_id === 'me')); save(); return wait({ status: null, guests: 0 }); } if (!e.allow_guests) guests = 0; if (e.capacity && (db.rsvps.filter(x => x.event_id === eventId && x.status === 'going' && x.user_id !== 'me').reduce((a, x) => a + 1 + (x.guests || 0), 0) + 1 + guests) > e.capacity) throw new Error('Sorry, this event is full.'); const r = db.rsvps.find(x => x.event_id === eventId && x.user_id === 'me'); if (r) Object.assign(r, { status, guests, set_by: null }); else db.rsvps.push({ event_id: eventId, user_id: 'me', status, guests }); save(); return wait({ status, guests }); },
         async saveEvent(rec) { let row; if (rec.id) { row = db.events.find(e => e.id === rec.id); Object.assign(row, rec); } else { row = { status: 'live', ...rec, id: nid(), created_by: 'me' }; db.events.push(row); } save(); return wait(row); },
         async deleteEvent(id) { db.events = db.events.filter(e => e.id !== id); save(); },
         importEvents: rows => { let n = 0; rows.forEach(r => { const key = (r.title + r.starts_at.slice(0, 10)).toLowerCase(); if (db.events.some(e => (e.title + String(e.starts_at).slice(0, 10)).toLowerCase() === key)) return; db.events.push({ ...r, id: nid(), status: 'live', capacity: r.capacity ? +r.capacity : null, on_website: true, created_by: 'me' }); n++; }); save(); return wait(n); },

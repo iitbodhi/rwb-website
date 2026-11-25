@@ -212,13 +212,15 @@ function evActions(r) {
     const full = r.totalslots && +r.filledslots >= +r.totalslots;
     return `<div class="ev-cta">${r.id ? `<a class="btn btn-sm" href="app/#events/${r.id}">RSVP in the app</a>` : ''}${full ? '' : `<a class="${r.id ? 'ev-ask' : 'btn btn-sm'}" href="${CONFIG.INSTAGRAM_DM_URL}" target="_blank" rel="noopener">${r.id ? 'Not a member? Ask us' : 'Enquire now'}</a>`}</div>`;
 }
+/* the event's cover photo from the app (file 86), 16:9 like WhatsApp events; only a jsDelivr link is accepted */
+const evCover = (r, big) => /^https:\/\/cdn\.jsdelivr\.net\//.test(r.cover || '') ? `<div class="ev-cover${big ? ' big' : ''}"><img src="${esc(r.cover)}" alt="" loading="lazy" draggable="false"></div>` : '';
 function renderEvents(rows) {
     const events = rows.filter(r => r.title).map(r => ({ ...r, state: eventState(r) }));
     const list = $('#events-list');
     const draw = f => {
         const shown = events.filter(e => f === 'all' || e.state === f);
-        list.innerHTML = shown.length ? shown.map(r => `<article class="ev ${r.state}" data-i="${events.indexOf(r)}">
-                <div class="ev-head">${evCal(r)}<div class="ev-main">${evEyebrow(r) ? `<p class="ev-eyebrow">${evEyebrow(r)}</p>` : ''}<h3>${esc(r.title)}</h3>${evFacts(r)}<button class="ev-more">See details ›</button></div></div>
+        list.innerHTML = shown.length ? shown.map(r => `<article class="ev ${r.state}${r.cover ? ' has-cover' : ''}" data-i="${events.indexOf(r)}">
+                ${evCover(r)}<div class="ev-head">${evCal(r)}<div class="ev-main">${evEyebrow(r) ? `<p class="ev-eyebrow">${evEyebrow(r)}</p>` : ''}<h3>${esc(r.title)}</h3>${evFacts(r)}<button class="ev-more">See details ›</button></div></div>
                 ${r.state === 'past' ? '' : `<div class="ev-foot">${slotsHTML(r)}${evActions(r)}</div>`}</article>`).join('')
             : '<p class="muted">Nothing here yet. Check back soon.</p>';
         list.scrollLeft = 0;
@@ -226,7 +228,7 @@ function renderEvents(rows) {
     list.onclick = e => {
         const b = e.target.closest('.ev-more'); if (!b) return;
         const r = events[b.closest('.ev').dataset.i];
-        openDialog(`<div class="ev-head">${evCal(r)}<div class="ev-main">${evEyebrow(r) ? `<p class="ev-eyebrow">${evEyebrow(r)}</p>` : ''}<h3>${esc(r.title)}</h3>${evFacts(r)}</div></div>
+        openDialog(`${evCover(r, true)}<div class="ev-head">${evCal(r)}<div class="ev-main">${evEyebrow(r) ? `<p class="ev-eyebrow">${evEyebrow(r)}</p>` : ''}<h3>${esc(r.title)}</h3>${evFacts(r)}</div></div>
             ${r.description ? `<div class="ev-desc full">${evText(r.description)}</div>` : ''}${r.state === 'past' ? '' : `<div class="ev-foot">${slotsHTML(r)}${evActions(r)}</div>`}`, 'ev-dialog');
     };
     const first = events.some(e => e.state === 'upcoming') ? 'upcoming' : events.some(e => e.state === 'live') ? 'live' : 'all';
@@ -242,7 +244,7 @@ function appEventRows(list) {
     const rows = list.map(e => {
         const s = new Date(e.starts_at), en = e.ends_at ? new Date(e.ends_at) : null, multi = !!en && ymd(en) !== ymd(s);
         const days = multi ? Math.round((new Date(ymd(en)) - new Date(ymd(s))) / 864e5) + 1 : 1;
-        return { id: e.id, title: e.title, description: e.description || '', location: e.location || '', tag: e.tag || '',
+        return { id: e.id, cover: e.cover_url || '', title: e.title, description: e.description || '', location: e.location || '', tag: e.tag || '',
             d1: chip(s), d2: multi ? chip(en) : null, days,
             when: multi ? `${ist(s, { weekday: 'short' })} ${hm(s)} → ${ist(en, { weekday: 'short' })} ${hm(en)}` : en ? `${hm(s)} – ${hm(en)}` : hm(s),
             eventdate: ymd(s), enddate: en ? ymd(en) : '', totalslots: e.capacity || '', filledslots: e.taken || 0 };

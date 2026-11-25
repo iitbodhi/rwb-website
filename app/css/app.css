@@ -2694,6 +2694,50 @@ html.lite .tab-track.live .brand-ring::after{animation-iteration-count:infinite!
 .evt-findres{margin-top:12px}
 .evt-findres:empty{display:none}
 .evt-fr{width:100%;text-align:left;background:none;border:0;color:inherit;cursor:pointer;font:inherit}
+.evt-fr:disabled{opacity:.6}
 .evt-fr .small{display:block}
 .evt-add-go{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--grad-o);color:#fff;font-weight:700}
 .evt-offbtn{color:#d93a2b!important}
+
+/* Events v2 (file 86): cover photo like WhatsApp events, one "I'm going" button */
+.evt-cover{position:relative;display:block;width:100%;aspect-ratio:16/9;overflow:hidden;background:var(--paper-2)}
+.evt-cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .2s;pointer-events:none;-webkit-touch-callout:none;user-select:none}
+.evt-cover img.in{opacity:1}
+.evt-cover.blank,.evt-cover.none{background:linear-gradient(135deg,#3a1d0e,#a8431a 55%,#f0712f);color:#fff;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;padding:14px 16px}
+.evt-cover.none img{display:none}
+.evt-cover.blank::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 85% 15%,rgba(255,200,150,.35),transparent 55%);pointer-events:none}
+.evt-cover.blank b{font:800 2.4rem/1 var(--display,var(--body))}
+.evt-cover.blank em{font-style:normal;font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:.8rem;opacity:.85}
+.evt-cover.blank i{position:absolute;top:12px;right:12px;font-style:normal;font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:rgba(0,0,0,.28);padding:5px 9px;border-radius:99px}
+.evt-cover.sm{aspect-ratio:16/7}
+.evt-cover.sm.blank{display:none}
+.evt-card.v2{display:block;padding:0;overflow:hidden}
+.evt-card.v2 .evt-cbody{display:grid;gap:6px;padding:14px}
+.evt-card.v2 .evt-crow{display:flex;gap:14px;align-items:flex-start}
+.evt-card.v2 .evt-meta{justify-content:flex-start}
+.evt-card.v2 .evt-meta .evt-me{margin-left:auto}
+.evt-card.v2.past .evt-cover img{filter:saturate(.6)}
+.evt-hero.v2{padding:0;overflow:hidden}
+.evt-hero.v2 .evt-cover.big{border-radius:0}
+.evt-hero.v2 .evt-hbody{padding:16px;display:grid;gap:6px}
+.evt-hero.v2 .evt-title{margin:0 0 6px}
+.evt-hero.v2.cancelled .evt-cover{filter:grayscale(1);opacity:.7}
+.evt-join{margin-top:12px}
+.evt-go{min-height:50px;font-size:1.02rem}
+.evt-join.on{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:14px;background:var(--ok-soft)}
+.evt-yes{font-weight:700;color:var(--ok)}
+.evt-join.on .link-btn{margin:0;color:var(--muted);font-size:.85rem}
+.evt-actions{margin-top:10px}
+.evt-desc{white-space:pre-line;overflow-wrap:anywhere;line-height:1.55}
+.evt-whohead h2 .muted{font-weight:600;font-size:.9em}
+.evt-cpick{display:grid;gap:8px}
+.evt-cprev{position:relative;width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;border:1.5px dashed var(--hair);background:var(--paper-2);cursor:pointer;padding:0;color:var(--muted)}
+.evt-cprev.has{border-style:solid}
+.evt-cprev img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.evt-cadd{display:grid;place-items:center;gap:4px;height:100%;font-weight:600;font-size:.9rem}
+.evt-cadd b{font-size:1.8rem;color:var(--orange);line-height:1}
+.evt-cpick .btns{margin:0}
+.evt-cpick .btns:empty{display:none}
+.evt-cpick input[type=range]{width:100%;accent-color:var(--orange)}
+.evt-whohead .btns .btn{white-space:nowrap}
+@media (max-width:420px){.evt-whohead{display:grid;gap:8px}.evt-whohead .btns{display:flex}.evt-whohead .btns .btn{flex:1}}

@@ -1928,7 +1928,7 @@ function drawTrend(el, logs, svcs, tnks) {
 }
 
 /* =================== Events (like WhatsApp events) + expense splitter =================== */
-const RSVP_TXT = { going: 'Going', maybe: 'Maybe', no: "Can't go" };
+const RSVP_TXT = { going: 'Going' };
 const REMINDERS = [[null, 'No reminder'], [0, 'At start time'], [15, '15 minutes before'], [30, '30 minutes before'], [60, '1 hour before'], [120, '2 hours before'], [1440, '1 day before']];
 const evtPast = e => new Date(e.ends_at || new Date(new Date(e.starts_at).getTime() + 6 * 36e5)) < new Date();
 const tfmt = (iso, o) => new Date(iso).toLocaleString('en-IN', o);
@@ -1958,7 +1958,7 @@ async function loadEvents(force) {
     if (!force && state.evd && Date.now() - state.evd.at < 60e3) return state.evd;
     if (evLoading) return evLoading;                     /* one request at a time, shared by every screen */
     evLoading = Promise.all([api.events(), api.eventCounts().catch(() => []), api.myRsvps().catch(() => [])]).then(([events, counts, mine]) =>
-        state.evd = { at: Date.now(), events, counts: Object.fromEntries(counts.map(c => [c.event_id, c])), mine: Object.fromEntries(mine.map(r => [r.event_id, r])) });
+        state.evd = { at: Date.now(), events, counts: Object.fromEntries(counts.map(c => [c.event_id, c])), mine: Object.fromEntries(mine.filter(r => r.status === 'going').map(r => [r.event_id, r])) });   /* Going only (file 86) */
     try { return await evLoading; } finally { evLoading = null; }
 }
 /* Events open straight away from what's already loaded; fresh data is fetched in the background and the
@@ -1990,71 +1990,111 @@ async function viewEvents() {
 function faceStack(faces = [], more = 0) {
     return `<span class="faces">${faces.map(f => face(f, 'avatar xs')).join('')}${more > 0 ? `<span class="avatar xs more">+${more}</span>` : ''}</span>`;
 }
+/* Events v2 (file 86): only "Going", a landscape cover photo (like WhatsApp events), team-only WhatsApp sharing */
+const evtCover = (e, cls = '') => e.cover_url
+    ? `<span class="evt-cover ${cls}"><img src="${esc(e.cover_url)}" alt="" loading="lazy" onload="this.classList.add('in')" onerror="this.parentNode.classList.add('none')"></span>`
+    : `<span class="evt-cover blank ${cls}"><b>${esc(tfmt(e.starts_at, { day: 'numeric' }))}</b><em>${esc(tfmt(e.starts_at, { month: 'short' }))}</em></span>`;
 function eventCard(e, d) {
-    const c = d.counts[e.id] || { going: 0, maybe: 0, guests: 0, faces: [] }, me = d.mine[e.id];
-    const n = c.going + c.guests;
-    return `<button class="card tap evt-card${e.status === 'cancelled' ? ' cancelled' : ''}" data-act="evt" data-id="${e.id}">
-        ${evtTile(e)}
-        <span class="grow">${evtEyebrow(e)}<b>${esc(e.title)}</b><span class="evt-fact">${EVT_ICON.clock}${esc(evtWhen(e, true))}</span>${e.location ? `<span class="evt-fact">${EVT_ICON.pin}${esc(e.location)}</span>` : ''}
-            ${e.status !== 'cancelled' && !evtPast(e) ? evtSlots(e, n) : ''}
-            <span class="evt-meta">${e.status === 'cancelled' ? '<span class="badge">Cancelled</span>' : isFam() ? '' : `${n ? faceStack(c.faces, c.going - c.faces.length) : ''}<span class="small muted">${n ? `${n} ${evtPast(e) ? 'went' : 'going'}` : evtPast(e) ? 'Past event' : isFam() ? 'RWB event' : 'Be the first to join'}${c.maybe ? ` · ${c.maybe} maybe` : ''}</span>`}</span></span>
-        ${me ? `<span class="evt-me ${me.status}">${RSVP_TXT[me.status]}</span>` : e.status === 'live' && !evtPast(e) && !isFam() ? '<span class="evt-me ask">RSVP</span>' : ''}</button>`;
+    const c = d.counts[e.id] || { going: 0, guests: 0, faces: [] }, me = d.mine[e.id], fam = isFam();
+    const n = c.going + c.guests, past = evtPast(e), off = e.status === 'cancelled';
+    return `<button class="card tap evt-card v2${off ? ' cancelled' : ''}${past ? ' past' : ''}" data-act="evt" data-id="${e.id}">
+        ${evtCover(e, 'sm')}
+        <span class="evt-cbody">
+            <span class="evt-crow">${evtTile(e)}<span class="grow">${evtEyebrow(e)}<b>${esc(e.title)}</b><span class="evt-fact">${EVT_ICON.clock}${esc(evtWhen(e, true))}</span>${e.location ? `<span class="evt-fact">${EVT_ICON.pin}${esc(e.location)}</span>` : ''}</span></span>
+            ${!off && !past ? evtSlots(e, n) : ''}
+            <span class="evt-meta">${off ? '<span class="badge">Cancelled</span>' : fam ? '<span class="small muted">RWB event</span>' : `${n ? faceStack(c.faces, c.going - c.faces.length) : ''}<span class="small muted">${n ? `${n} ${past ? 'went' : 'going'}` : past ? 'Past event' : 'Be the first to join'}</span>`}
+                ${me ? `<span class="evt-me going">${past ? 'You went' : "You're going"}</span>` : !off && !past && !fam ? '<span class="evt-me ask">Join</span>' : ''}</span>
+        </span></button>`;
 }
 state.evPeople = {};
 async function eventPage(e) {
     const n = navN, d = state.evd, me = d.mine[e.id], mod = isMod(), myUid = state.myId ??= await api.myId(), fam = isFam();
-    /* who's coming: shown from the last visit straight away, then refreshed */
-    const cached = state.evPeople[e.id], people = fam ? [] : cached || [];
+    /* who's going: shown from the last visit straight away, then refreshed */
+    const cached = state.evPeople[e.id], people = fam ? [] : (cached || []).filter(p => p.status === 'going');
     if (!fam) api.eventPeople(e.id).then(p => {
         state.evPeople[e.id] = p;
         if (!stillHere(n)) return;
-        if (!cached || JSON.stringify(p) !== JSON.stringify(cached)) render(); else if ((me && me.status !== 'no') || mod) drawExpenses(e, p, myUid);
+        if (!cached || JSON.stringify(p) !== JSON.stringify(cached)) render(); else if (me || mod) drawExpenses(e, p.filter(x => x.status === 'going'), myUid);
     }).catch(() => { if (!cached) { state.evPeople[e.id] = []; if (stillHere(n)) render(); } });
-    const going = people.filter(p => p.status === 'going'), maybe = people.filter(p => p.status === 'maybe'), no = people.filter(p => p.status === 'no');
-    const guests = going.reduce((a, p) => a + p.guests, 0), cnt = d.counts[e.id];
+    const going = people, guests = going.reduce((a, p) => a + p.guests, 0), cnt = d.counts[e.id];
     const headcount = cached ? going.length + guests : cnt ? cnt.going + cnt.guests : 0;
-    const inGroup = me && me.status !== 'no';
-    const live = e.status === 'live', past = evtPast(e);
-    /* the RWB team (admins + coordinators) can add, move or take anyone off the list (file 86), also after the event */
+    const live = e.status === 'live', past = evtPast(e), full = !!e.capacity && headcount >= e.capacity;
+    /* the RWB team (admins + coordinators) can add or take anyone off the list (file 86), also after the event */
     const team = mod && !fam && live && !!cached && people.every(p => 'member_id' in p);
-    const ppl = (list, label) => list.length ? `<details class="evt-people"${label === 'Going' ? ' open' : ''}><summary><b>${label}</b> <span class="muted">${list.length}${label === 'Going' && guests ? ` + ${guests} guest${guests > 1 ? 's' : ''}` : ''}</span></summary>
-        <div class="evt-plist">${list.map(p => `<div class="row">${face(p, 'avatar sm')}<span class="grow">${esc(p.full_name)}${p.user_id && p.user_id === myUid ? ' <span class="muted">(you)</span>' : ''}${p.set_by_name || p.on_app === false ? `<span class="evt-by">${[p.on_app === false && mod ? 'Not on the app' : '', p.set_by_name ? 'Added by ' + esc(p.set_by_name) : ''].filter(Boolean).join(' · ')}</span>` : ''}</span>${p.guests ? '<span class="badge">+1 guest</span>' : ''}${team && p.member_id != null ? `<button class="evt-pm" data-act="evt-pm" data-m="${p.member_id}" aria-label="Change ${esc(p.full_name)}">${EVT_ICON.edit}</button>` : ''}</div>`).join('')}</div></details>` : '';
+    const row = p => `<div class="row">${face(p, 'avatar sm')}<span class="grow">${esc(p.full_name)}${p.user_id && p.user_id === myUid ? ' <span class="muted">(you)</span>' : ''}${p.set_by_name || (mod && p.on_app === false) ? `<span class="evt-by">${[mod && p.on_app === false ? 'Not on the app' : '', p.set_by_name ? 'Added by ' + esc(p.set_by_name) : ''].filter(Boolean).join(' · ')}</span>` : ''}</span>${p.guests ? '<span class="badge">+1 guest</span>' : ''}${team && p.member_id != null ? `<button class="evt-pm" data-act="evt-pm" data-m="${p.member_id}" aria-label="Change ${esc(p.full_name)}">${EVT_ICON.edit}</button>` : ''}</div>`;
+    const when = evtMulti(e)
+        ? `<div><span>Starts</span><b>${esc(tfmt(e.starts_at, { weekday: 'short', day: 'numeric', month: 'short' }))}</b><em>${esc(evtTime(e.starts_at))}</em></div><div><span>Ends</span><b>${esc(tfmt(e.ends_at, { weekday: 'short', day: 'numeric', month: 'short' }))}</b><em>${esc(evtTime(e.ends_at))}</em></div>`
+        : `<div><span>When</span><b>${esc(tfmt(e.starts_at, { weekday: 'long', day: 'numeric', month: 'short' }))}</b><em>${esc(evtTime(e.starts_at))}${e.ends_at ? ' – ' + esc(evtTime(e.ends_at)) : ''}</em></div>`;
+    const join = !live || past || fam ? ''
+        : me ? `<div class="evt-join on"><span class="evt-yes">✓ You're going</span><button class="link-btn" data-act="rsvp" data-s="no">Not going anymore</button></div>
+                ${e.allow_guests ? `<label class="switch" style="margin-top:10px">Bringing a guest (+1)<input type="checkbox" id="evt-guest"${me.guests ? ' checked' : ''}></label>` : ''}`
+        : full ? '<div class="evt-join"><button class="btn block" disabled>Event full</button></div>'
+        : '<div class="evt-join"><button class="btn block evt-go" data-act="rsvp" data-s="going">I\'m going 🏍️</button></div>';
     app.innerHTML = top('Events') + `
         <a class="back-link" href="#events">‹ All events</a>
-        <section class="card evt-hero${live ? '' : ' cancelled'}">
-            <div class="evt-head">${evtTile(e)}<div class="evt-head-main">${evtEyebrow(e)}<h2 class="evt-title">${esc(e.title)}</h2>${!live ? '<span class="badge">Cancelled</span>' : past ? '<span class="badge">Ended</span>' : ''}
-                <div class="evt-when">${evtMulti(e)
-                    ? `<div><span>Starts</span><b>${esc(tfmt(e.starts_at, { weekday: 'short', day: 'numeric', month: 'short' }))}</b><em>${esc(evtTime(e.starts_at))}</em></div><div><span>Ends</span><b>${esc(tfmt(e.ends_at, { weekday: 'short', day: 'numeric', month: 'short' }))}</b><em>${esc(evtTime(e.ends_at))}</em></div>`
-                    : `<div><span>When</span><b>${esc(tfmt(e.starts_at, { weekday: 'short', day: 'numeric', month: 'short' }))}</b><em>${esc(evtTime(e.starts_at))}${e.ends_at ? ' – ' + esc(evtTime(e.ends_at)) : ''}</em></div>`}</div>
+        <section class="card evt-hero v2${live ? '' : ' cancelled'}">
+            ${evtCover(e, 'big')}
+            <div class="evt-hbody">
+                ${evtEyebrow(e)}<h2 class="evt-title">${esc(e.title)}</h2>${!live ? '<span class="badge">Cancelled</span>' : past ? '<span class="badge">Ended</span>' : ''}
+                <div class="evt-when">${when}</div>
                 ${e.location ? `<div class="evt-place">${EVT_ICON.pin}<span><b>${esc(e.location)}</b>${mapsUrl(e) ? `<a href="${esc(mapsUrl(e))}" target="_blank" rel="noopener">Open in Maps ↗</a>` : ''}</span></div>` : ''}
-            </div></div>
-            <div class="evt-facts">
-                ${live && !past && e.capacity ? `<p><span>🎟</span>${evtSlots(e, headcount)}</p>` : ''}
-                ${e.call_link ? `<p><span>📞</span><a href="${esc(safeUrl(e.call_link))}" target="_blank" rel="noopener">Join the call</a></p>` : ''}
-                ${e.reminder_minutes != null ? `<p><span>⏰</span>Reminder ${esc(REMINDERS.find(r => r[0] === e.reminder_minutes)?.[1].toLowerCase() || '')} for people going</p>` : ''}
+                <div class="evt-facts">
+                    ${live && !past && e.capacity ? `<p><span>🎟</span>${evtSlots(e, headcount)}</p>` : ''}
+                    ${e.call_link ? `<p><span>📞</span><a href="${esc(safeUrl(e.call_link))}" target="_blank" rel="noopener">Join the call</a></p>` : ''}
+                    ${e.reminder_minutes != null && live && !past ? `<p><span>⏰</span>Reminder ${esc(REMINDERS.find(r => r[0] === e.reminder_minutes)?.[1].toLowerCase() || '')} for people going</p>` : ''}
+                </div>
+                ${join}
+                <div class="btns evt-actions">${mod && !fam ? '<button class="btn sm" data-act="evt-share">Share to WhatsApp</button>' : ''}${live && !past ? `<a class="btn sm ghost" href="${esc(gcalUrl(e))}" target="_blank" rel="noopener">Add to calendar</a>` : ''}</div>
             </div>
-            ${e.description ? `<p class="evt-desc">${linkify(e.description)}</p>` : ''}
-            ${live && !past && !fam ? `<div class="evt-rsvp" role="group" aria-label="Your response">${['going', 'maybe', 'no'].map(k => `<button class="${me?.status === k ? 'on ' + k : ''}" data-act="rsvp" data-s="${k}" aria-pressed="${me?.status === k}">${{ going: '✓ Going', maybe: '? Maybe', no: "✕ Can't go" }[k]}</button>`).join('')}</div>
-                ${e.allow_guests && me?.status === 'going' ? `<label class="switch" style="margin-top:10px">Bringing a guest (+1)<input type="checkbox" id="evt-guest"${me.guests ? ' checked' : ''}></label>` : ''}` : ''}
-            <div class="btns evt-actions">${fam ? '' : '<button class="btn sm ghost" data-act="evt-share">Share</button>'}${live && !past ? `<a class="btn sm ghost" href="${esc(gcalUrl(e))}" target="_blank" rel="noopener">Add to calendar</a>` : ''}</div>
         </section>
+        ${e.description ? `<section class="section"><h2>About</h2><div class="card"><p class="evt-desc">${linkify(e.description)}</p></div></section>` : ''}
         ${rideLive(e)}
-        ${fam ? '' : `<section class="section"><div class="evt-whohead"><h2>Who's coming</h2>${team ? `<span class="btns">${going.length ? '<button class="btn sm ghost" data-act="evt-copy">Copy list</button>' : ''}<button class="btn sm" data-act="evt-add">＋ Add rider</button></span>` : ''}</div>${team ? `<p class="small muted evt-teamnote">${past ? 'Fix who actually went: tap ✎ next to a name, or add riders who came.' : 'Add riders who forgot to respond or aren\'t on the app, or fix a wrong answer with ✎.'}</p>` : ''}<div class="card">${!cached ? SKEL(2) : people.length ? ppl(going, 'Going') + ppl(maybe, 'Maybe') + ppl(no, "Can't go") : '<p class="muted small">No responses yet.</p>'}</div></section>
-        <section class="section" id="exp-sec"><h2>Expenses</h2><div id="exp-body">${inGroup || mod ? SKEL(2) : `<div class="card empty"><b>Split costs with the group</b>Respond Going or Maybe to see and add shared expenses for this event.</div>`}</div></section>`}
+        ${fam ? '' : `<section class="section"><div class="evt-whohead"><h2>${past ? 'Who went' : "Who's going"}${cached && headcount ? ` <span class="muted">${headcount}</span>` : ''}</h2>${team ? `<span class="btns">${going.length ? '<button class="btn sm ghost" data-act="evt-copy">Share list</button>' : ''}<button class="btn sm" data-act="evt-add">＋ Add rider</button></span>` : ''}</div>
+            ${team ? `<p class="small muted evt-teamnote">${past ? 'Fix who actually went: add riders who came, or tap ✎ to take someone off.' : 'Add riders who forgot to join or aren\'t on the app yet. Tap ✎ to change or remove someone.'}</p>` : ''}
+            <div class="card">${!cached ? SKEL(2) : going.length ? `<div class="evt-plist">${going.map(row).join('')}</div>${guests ? `<p class="small muted" style="margin-top:10px">${going.length} rider${going.length === 1 ? '' : 's'} + ${guests} guest${guests === 1 ? '' : 's'}</p>` : ''}` : `<p class="muted small">${past ? 'Nobody was on the list.' : 'Nobody yet. Be the first!'}</p>`}</div></section>
+        <section class="section" id="exp-sec"><h2>Expenses</h2><div id="exp-body">${me || mod ? SKEL(2) : `<div class="card empty"><b>Split costs with the group</b>Join the event to see and add shared expenses. Costs are split only between people going.</div>`}</div></section>`}
         ${mod ? `<section class="section"><h2>Organiser</h2><div class="btns">${live ? '<button class="btn ghost" data-act="evt-edit">Edit</button><button class="btn ghost" data-act="evt-cancel">Cancel event</button>' : ''}<button class="btn danger" data-act="evt-del">Delete</button></div></section>` : ''}`;
     actions = {
-        rsvp: b => busy(b, async () => { await api.rsvp(e.id, b.dataset.s, b.dataset.s === 'going' ? (me?.guests || 0) : 0); await loadEvents(true); toast(b.dataset.s === 'going' ? "You're going 🏍️" : b.dataset.s === 'maybe' ? 'Marked as maybe' : 'Marked as can\'t go'); render(); }),
-        'evt-share': () => openWA(waShare(`📅 *${e.title}*\n🗓 ${evtWhen(e)}${e.location ? `\n📍 ${e.location}${mapsUrl(e) ? ' ' + mapsUrl(e) : ''}` : ''}${e.description ? `\n\n${e.description}` : ''}\n\n👉 RSVP in the RWB App: https://roninwb.in/app/#events/${e.id}`)),
+        rsvp: b => busy(b, async () => { const go = b.dataset.s === 'going';
+            if (!go && !confirmBox(`Not going to “${e.title}” anymore?`)) return;
+            await api.rsvp(e.id, go ? 'going' : 'no', 0); delete state.evPeople[e.id]; await loadEvents(true); toast(go ? "You're going 🏍️ Everyone can see you joined." : "You're off the list"); render(); }),
+        'evt-share': b => busy(b, () => shareEvent(e, headcount)),
         'evt-edit': () => eventForm(e),
         'evt-add': () => evtTeamFind(e),
-        'evt-pm': b => { const p = people.find(x => String(x.member_id) === b.dataset.m); if (p) evtTeamPick(e, { member_id: p.member_id, full_name: p.full_name, nickname: p.nickname, avatar_url: p.avatar_url, on_app: p.on_app, status: p.status, guests: p.guests }); },
-        'evt-copy': () => evtCopyList(e, going, maybe),
+        'evt-pm': b => { const p = people.find(x => String(x.member_id) === b.dataset.m); if (p) evtTeamPick(e, { member_id: p.member_id, full_name: p.full_name, nickname: p.nickname, avatar_url: p.avatar_url, on_app: p.on_app, status: 'going', guests: p.guests }); },
+        'evt-copy': () => evtShareList(e, going),
         'evt-track-share': () => shareSheet(e.id, e.title),
         'evt-cancel': b => { if (confirmBox(`Cancel “${e.title}”? Everyone gets a notification.`)) busy(b, async () => { await api.saveEvent({ id: e.id, status: 'cancelled' }); await loadEvents(true); toast('Event cancelled'); render(); }); },
-        'evt-del': b => { if (confirmBox(`Delete “${e.title}” with its RSVPs and expenses? This can't be undone.`)) busy(b, async () => { await api.deleteEvent(e.id); await loadEvents(true); location.hash = '#events'; toast('Deleted'); }); }
+        'evt-del': b => { if (confirmBox(`Delete “${e.title}” with its RSVPs and expenses? This can't be undone.`)) busy(b, async () => { if (e.cover_url) await api.eventCover(e.id, null).catch(() => {}); await api.deleteEvent(e.id); await loadEvents(true); location.hash = '#events'; toast('Deleted'); }); }
     };
-    const g = $('#evt-guest'); if (g) g.onchange = () => busy(null, async () => { await api.rsvp(e.id, 'going', g.checked ? 1 : 0); await loadEvents(true); toast(g.checked ? 'Guest added' : 'Guest removed'); render(); });
-    if (!fam && cached && (inGroup || mod)) drawExpenses(e, people, myUid);
+    const g = $('#evt-guest'); if (g) g.onchange = () => busy(null, async () => { try { await api.rsvp(e.id, 'going', g.checked ? 1 : 0); } catch (er) { g.checked = false; throw er; } delete state.evPeople[e.id]; await loadEvents(true); toast(g.checked ? 'Guest added' : 'Guest removed'); render(); });
+    if (!fam && cached && (me || mod)) drawExpenses(e, going, myUid);
+}
+/* ---- WhatsApp sharing: only admins and coordinators (members open the event in the app) ---- */
+function eventShareText(e, heads) {
+    return `📅 *${e.title}*${e.tag ? ` · ${e.tag}` : ''}\n🗓 ${evtWhen(e)}${e.location ? `\n📍 ${e.location}${mapsUrl(e) ? '\n🗺 ' + mapsUrl(e) : ''}` : ''}${e.capacity ? `\n🎟 ${Math.max(e.capacity - heads, 0)} of ${e.capacity} slots left` : heads ? `\n🏍️ ${heads} going` : ''}${e.description ? `\n\n${e.description}` : ''}\n\n👉 Join in the RWB App: https://roninwb.in/app/#events/${e.id}`;
+}
+/* the cover as a JPEG (WhatsApp turns shared WebP pictures into stickers) */
+async function coverJpeg(e) {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = rej; i.src = e.cover_url; });
+    const cv = document.createElement('canvas'); cv.width = img.naturalWidth; cv.height = img.naturalHeight; cv.getContext('2d').drawImage(img, 0, 0);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.86));
+    return new File([blob], `rwb-event-${e.id}.jpg`, { type: 'image/jpeg' });
+}
+async function shareEvent(e, heads) {
+    const text = eventShareText(e, heads);
+    try {   /* phones that can share a picture straight into WhatsApp */
+        if (e.cover_url && navigator.canShare) {
+            const files = [await coverJpeg(e)];
+            if (navigator.canShare({ files, text })) { await navigator.share({ files, text }); return; }
+        }
+    } catch (er) { if (er?.name === 'AbortError') return; }
+    openWA(waShare(text));
+}
+function evtShareList(e, going) {
+    const total = going.length + going.reduce((a, p) => a + p.guests, 0);
+    const text = `📅 *${e.title}*\n🗓 ${evtWhen(e)}\n\n*${evtPast(e) ? 'Went' : 'Going'} (${total})*\n${going.map((p, i) => `${i + 1}. ${p.full_name}${p.nickname ? ` (${p.nickname})` : ''}${p.guests ? ' +1 guest' : ''}`).join('\n')}${evtPast(e) ? '' : `\n\n👉 Not on the list? Join in the RWB App: https://roninwb.in/app/#events/${e.id}`}`;
+    openWA(waShare(text));
 }
 /* ---- RWB team: manage who's going (file 86) ---- */
 const teamErr = er => /event_(team_set|find_members)|schema cache|function/i.test(er?.message || '') ? new Error('This needs a quick update on the RWB server first. Please try again later.') : er;
@@ -2071,43 +2111,36 @@ function evtTeamFind(e) {
         <p class="small muted" style="margin:8px 2px 0">Every RWB member shows here, also those not on the app yet.</p>
         <div id="evf-res" class="group evt-findres"></div>`, body => {
         const q = body.querySelector('#evf-q'), res = body.querySelector('#evf-res'); let t, seq = 0, rows = [];
-        const draw = () => { res.innerHTML = rows.length ? rows.map((m, i) => `<button class="bike-row evt-fr" data-i="${i}">${face(m, 'avatar sm')}<span class="grow"><b>${esc(m.full_name)}</b><span class="small muted">${[m.nickname, m.vrn, m.on_app ? '' : 'Not on the app'].filter(Boolean).map(esc).join(' · ')}</span></span>${m.status ? `<span class="evt-me ${m.status}">${RSVP_TXT[m.status]}</span>` : '<span class="evt-add-go">＋</span>'}</button>`).join('')
+        const draw = () => { res.innerHTML = rows.length ? rows.map((m, i) => `<button class="bike-row evt-fr" data-i="${i}">${face(m, 'avatar sm')}<span class="grow"><b>${esc(m.full_name)}</b><span class="small muted">${[m.nickname, m.vrn, m.on_app ? '' : 'Not on the app'].filter(Boolean).map(esc).join(' · ')}</span></span>${m.status === 'going' ? '<span class="evt-me going">Going</span>' : '<span class="evt-add-go">＋</span>'}</button>`).join('')
             : q.value.trim().length >= 2 ? '<p class="small muted" style="padding:12px">No member found. Try another spelling, the bike number or the phone number.</p>' : ''; };
         const run = async () => { const v = q.value.trim(), my = ++seq; if (v.length < 2) { rows = []; draw(); return; }
             try { const r = await api.eventFind(e.id, v); if (my === seq) { rows = r; draw(); } } catch (er) { if (my === seq) toast(teamErr(er).message, true); } };
         q.oninput = () => { clearTimeout(t); t = setTimeout(run, 300); };
-        res.onclick = ev => { const b = ev.target.closest('.evt-fr'); if (b) evtTeamPick(e, rows[+b.dataset.i], true); };
+        res.onclick = ev => { const b = ev.target.closest('.evt-fr'); if (!b) return; const m = rows[+b.dataset.i];
+            if (m.status === 'going') return evtTeamPick(e, m, true);
+            const nm = m.nickname || m.full_name.split(' ')[0];
+            busy(b, async () => { try { await api.eventTeamSet(e.id, m.member_id, 'going', 0); } catch (er) { throw teamErr(er); }
+                m.status = 'going'; draw(); toast(`${nm} is on the Going list`); evtTeamSaved(e, `${nm} is on the Going list`).catch(() => {}); }); };
         setTimeout(() => q.focus(), 60);
     });
 }
-/* pick Going / Maybe / Can't go / take off the list for one member */
+/* one member on the list: +1 guest, or take them off */
 function evtTeamPick(e, m, fromFind = false) {
     const name = m.nickname || (m.full_name || '').split(' ')[0] || 'this rider', past = evtPast(e);
-    const opts = [['going', '✓ Going'], ['maybe', '? Maybe'], ...(m.on_app ? [['no', "✕ Can't go"]] : [])];
-    openSheet(m.full_name || 'Rider', `<div class="row" style="margin-bottom:12px">${face(m, 'avatar')}<span class="grow"><b>${esc(m.full_name)}</b><span class="small muted" style="display:block">${m.status ? 'Now: ' + RSVP_TXT[m.status] : 'Not on the list yet'}${m.on_app ? '' : ' · not on the app'}</span></span></div>
-        <div class="evt-rsvp" role="group" aria-label="Answer for ${esc(name)}">${opts.map(([k, l]) => `<button class="${m.status === k ? 'on ' + k : ''}" data-x="${k}" aria-pressed="${m.status === k}">${l}</button>`).join('')}</div>
-        ${e.allow_guests ? `<label class="switch" style="margin-top:12px">Bringing a guest (+1)<input type="checkbox" id="evt-tg"${m.guests ? ' checked' : ''}></label>` : ''}
-        ${m.status ? `<button class="btn ghost block evt-offbtn" data-x="off" style="margin-top:14px">Take ${esc(name)} off the list</button>` : ''}
-        <p class="small muted" style="margin-top:12px">${m.on_app ? (past ? 'This only fixes the list. No notification for a past event.' : `${esc(name)} gets a notification and can still change it.`) : `${esc(name)} isn't on the app yet. The place is kept and moves to their account when they sign in.`}</p>
+    openSheet(m.full_name || 'Rider', `<div class="row" style="margin-bottom:12px">${face(m, 'avatar')}<span class="grow"><b>${esc(m.full_name)}</b><span class="small muted" style="display:block">On the ${past ? 'Went' : 'Going'} list${m.on_app ? '' : ' · not on the app yet'}</span></span></div>
+        ${e.allow_guests ? `<label class="switch">Bringing a guest (+1)<input type="checkbox" id="evt-tg"${m.guests ? ' checked' : ''}></label>` : ''}
+        <button class="btn ghost block evt-offbtn" data-x="off" style="margin-top:14px">Take ${esc(name)} off the list</button>
+        <p class="small muted" style="margin-top:12px">${m.on_app ? (past ? 'This only fixes the list. No notification for a past event.' : `${esc(name)} gets a notification.`) : `${esc(name)} isn't on the app yet. The place moves to their account when they sign in.`}</p>
         ${fromFind ? '<button class="btn ghost block" data-x="back" style="margin-top:8px">‹ Back to search</button>' : ''}`, body => {
-        const set = (b, st) => busy(b, async () => {
-            const g = body.querySelector('#evt-tg'), guests = st === 'going' && g?.checked ? 1 : 0;
+        const set = (b, st, guests = 0) => busy(b, async () => {
             try { await api.eventTeamSet(e.id, m.member_id, st, guests); } catch (er) { throw teamErr(er); }
             closeSheet();
-            await evtTeamSaved(e, st === null ? `${name} taken off the list` : st === 'going' ? `${name} is on the Going list` : st === 'maybe' ? `${name} marked as maybe` : `${name} marked as can't go`);
+            await evtTeamSaved(e, st === null ? `${name} taken off the list` : guests ? `+1 guest added for ${name}` : `Guest removed for ${name}`);
         });
-        body.querySelectorAll('.evt-rsvp [data-x]').forEach(b => b.onclick = () => set(b, b.dataset.x));
-        const off = body.querySelector('[data-x=off]'); if (off) off.onclick = () => set(off, null);
-        const g = body.querySelector('#evt-tg'); if (g && m.status === 'going') g.onchange = () => set(null, 'going');
+        body.querySelector('[data-x=off]').onclick = ev => set(ev.currentTarget, null);
+        const g = body.querySelector('#evt-tg'); if (g) g.onchange = () => set(null, 'going', g.checked ? 1 : 0);
         const bk = body.querySelector('[data-x=back]'); if (bk) bk.onclick = () => evtTeamFind(e);
     });
-}
-/* the Going list as text for WhatsApp roll call */
-async function evtCopyList(e, going, maybe) {
-    const line = (p, i) => `${i + 1}. ${p.full_name}${p.nickname ? ` (${p.nickname})` : ''}${p.guests ? ' +1' : ''}`;
-    const total = going.length + going.reduce((a, p) => a + p.guests, 0);
-    const text = `📅 *${e.title}*\n🗓 ${evtWhen(e)}\n\n*Going (${total})*\n${going.map(line).join('\n')}${maybe.length ? `\n\n*Maybe (${maybe.length})*\n${maybe.map(line).join('\n')}` : ''}`;
-    try { await navigator.clipboard.writeText(text); toast('List copied: paste it in WhatsApp'); } catch { openWA(waShare(text)); }
 }
 function gcalUrl(e) {
     const z = iso => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -2155,12 +2188,34 @@ async function importSheetEvents() {
         if (go) go.onclick = () => busy(go, async () => { const n = await api.importEvents(past.map(({ past: _, ...x }) => x)); await loadEvents(true); closeSheet(); toast(n ? `${n} past event${n === 1 ? '' : 's'} added` : 'Already imported'); state.evtTab = 'past'; render(); });
     });
 }
+/* event cover: crop to 16:9 (pos 0–1 slides the crop along the long side) and shrink to ≤ ~260 KB WebP (JPEG where WebP can't be made) */
+async function makeCover(img, pos = .5) {
+    const W0 = img.naturalWidth, H0 = img.naturalHeight, R = 16 / 9;
+    let sw = W0, sh = W0 / R, sx = 0, sy = (H0 - sh) * pos;
+    if (sh > H0) { sh = H0; sw = H0 * R; sy = 0; sx = (W0 - sw) * pos; }
+    let blob;
+    for (const [w0, q] of [[1280, .74], [1280, .62], [1024, .6], [880, .55]]) {
+        const w = Math.min(w0, Math.round(sw)), h = Math.round(w / R);
+        const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        const cx = cv.getContext('2d'); cx.fillStyle = '#000'; cx.fillRect(0, 0, w, h); cx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+        blob = await new Promise(r => cv.toBlob(r, 'image/webp', q));
+        if (!blob || blob.type !== 'image/webp') blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', q + .06));
+        if (blob.size <= 260e3) break;
+    }
+    return new File([blob], blob.type === 'image/webp' ? 'cover.webp' : 'cover.jpg', { type: blob.type });
+}
 const EVT_TAGS = ['Small Ride', 'Sunday Highs Ride', 'Long Tour', 'Training Session', 'Service Camp', 'Event'];
 function eventForm(e = null) {
     const r = e ? { ...e } : { reminder_minutes: 60, allow_guests: false };
     const tagPick = !r.tag ? '' : EVT_TAGS.includes(r.tag) ? r.tag : 'Custom';
     const start = toLocalInput(r.starts_at), end = toLocalInput(r.ends_at), sameDay = !end || end.slice(0, 10) === start.slice(0, 10);
+    const cov = { url: r.cover_url || null, img: null, pos: .5, file: null, changed: false };
     openSheet(e ? 'Edit event' : 'Create event', `<form id="evf" class="evt-form">
+        <div class="evt-cpick"><button type="button" class="evt-cprev" id="cv-prev" aria-label="Cover photo"></button>
+            <input type="file" id="cv-file" accept="${PHOTO_ACCEPT}" hidden>
+            <label id="cv-pos-wrap" hidden>Move the photo<input type="range" id="cv-pos" min="0" max="100" value="50"></label>
+            <div class="btns" id="cv-btns"></div>
+            <p class="small muted">A wide (landscape) photo shows at the top of the event, like WhatsApp events. It is shrunk to about 100 KB.</p></div>
         <input name="title" class="evt-name" required maxlength="100" placeholder="Event name" value="${esc(r.title || '')}" aria-label="Event name">
         <textarea name="description" maxlength="2000" placeholder="Description (optional)" aria-label="Description">${esc(r.description || '')}</textarea>
         <div class="grid2"><label>Date<input type="date" name="d1" required value="${start.slice(0, 10)}"></label><label>Time<input type="time" name="t1" required value="${start.slice(11, 16)}"></label></div>
@@ -2178,6 +2233,22 @@ function eventForm(e = null) {
         <button class="btn block">${e ? 'Save changes' : 'Publish event'}</button>
         ${e ? '' : '<p class="small muted" style="text-align:center">Every member gets a notification.</p>'}</form>`, body => {
         const f = body.querySelector('#evf'), sd = body.querySelector('#same-day');
+        /* cover photo: picked, cropped to 16:9 and shrunk on the phone; saved after the event */
+        const cvPrev = body.querySelector('#cv-prev'), cvFile = body.querySelector('#cv-file'), cvPos = body.querySelector('#cv-pos'), cvBtns = body.querySelector('#cv-btns');
+        const cvDraw = () => {
+            const src = cov.file ? URL.createObjectURL(cov.file) : cov.url;
+            cvPrev.innerHTML = src ? `<img src="${esc(src)}" alt="">` : '<span class="evt-cadd"><b>＋</b>Add a cover photo</span>';
+            cvPrev.classList.toggle('has', !!src);
+            cvBtns.innerHTML = src ? '<button type="button" class="btn sm ghost" data-c="pick">Change photo</button><button type="button" class="btn sm ghost" data-c="del">Remove</button>' : '';
+            const r0 = cov.img ? (cov.img.naturalWidth / cov.img.naturalHeight) : 16 / 9;
+            body.querySelector('#cv-pos-wrap').hidden = !cov.img || Math.abs(r0 - 16 / 9) < .08;
+        };
+        const cvMake = async () => { cov.file = await makeCover(cov.img, cov.pos); cov.changed = true; cvDraw(); };
+        cvPrev.onclick = () => cvFile.click();
+        cvBtns.onclick = ev => { const c = ev.target.closest('[data-c]')?.dataset.c; if (c === 'pick') cvFile.click(); if (c === 'del') { cov.file = null; cov.img = null; cov.url = null; cov.changed = true; cvDraw(); } };
+        cvFile.onchange = () => { const fl = cvFile.files[0]; cvFile.value = ''; if (fl) busy(null, async () => { cov.img = await loadImage(fl); cov.pos = .5; cvPos.value = 50; await cvMake(); }); };
+        let cvT; cvPos.oninput = () => { cov.pos = cvPos.value / 100; clearTimeout(cvT); cvT = setTimeout(() => cvMake().catch(() => {}), 120); };
+        cvDraw();
         const nextDay = d => { const x = new Date(d + 'T12:00'); x.setDate(x.getDate() + 1); return x.toLocaleDateString('en-CA'); };
         const syncEnd = () => {
             const same = sd.checked;
@@ -2200,7 +2271,9 @@ function eventForm(e = null) {
                 location: v.location.trim() || null, map_url: v.map_url.trim() || null, call_link: v.call_link.trim() || null,
                 reminder_minutes: v.reminder === '' ? null : Number(v.reminder), allow_guests: !!f.allow_guests.checked,
                 tag: (v.tag_pick === 'Custom' ? (v.tag || '').trim() : v.tag_pick) || null, capacity: v.capacity ? Math.max(1, Math.round(Number(v.capacity))) : null, on_website: !!f.on_website.checked };
-            busy(ev.submitter, async () => { const saved = await api.saveEvent(rec); await loadEvents(true); closeSheet(); toast(e ? 'Saved. Members are told if the time or place changed.' : 'Published. Members are notified.'); location.hash = '#events/' + (e?.id ?? saved?.id ?? ''); render(); });
+            busy(ev.submitter, async () => { const saved = await api.saveEvent(rec);
+                if (cov.changed) { try { await api.eventCover(e?.id ?? saved.id, cov.file); } catch (er) { toast('The event is saved, but the photo wasn\'t: ' + er.message, true); } }
+                await loadEvents(true); closeSheet(); toast(e ? 'Saved. Members are told if the time or place changed.' : 'Published. Members are notified.'); location.hash = '#events/' + (e?.id ?? saved?.id ?? ''); render(); });
         };
     });
 }
@@ -2237,7 +2310,7 @@ async function drawExpenses(e, people, myUid) {
     if (!box.isConnected) return;
     const names = Object.fromEntries(people.map(p => [p.user_id, p.user_id === myUid ? 'You' : (p.nickname || p.full_name.split(' ')[0])]));
     const nm = u => names[u] || 'Someone';
-    const crowd = people.filter(p => p.status !== 'no');
+    const crowd = people.filter(p => p.status === 'going' && p.user_id);   /* costs are split only between riders going who are on the app */
     const bal = balancesOf(exps), mine = bal.get(myUid) || 0;
     const spent = exps.filter(x => x.kind === 'expense').reduce((a, x) => a + paise(x.amount), 0);
     const myShare = exps.filter(x => x.kind === 'expense').reduce((a, x) => { const W = x.split.reduce((s, y) => s + y.w, 0), me = x.split.find(y => y.u === myUid); return a + (me ? paise(x.amount) * me.w / W : 0); }, 0);
