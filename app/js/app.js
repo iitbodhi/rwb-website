@@ -2001,8 +2001,7 @@ function eventCard(e, d) {
     return `<button class="card tap evt-card v2${off ? ' cancelled' : ''}${past ? ' past' : ''}" data-act="evt" data-id="${e.id}">
         ${evtCover(e, 'sm')}
         <span class="evt-cbody">
-            <span class="evt-crow">${evtTile(e)}<span class="grow">${evtEyebrow(e)}<b>${esc(e.title)}</b><span class="evt-fact">${EVT_ICON.clock}${esc(evtWhen(e, true))}</span>${e.location ? `<span class="evt-fact">${EVT_ICON.pin}${esc(e.location)}</span>` : ''}</span></span>
-            ${!off && !past ? evtSlots(e, n) : ''}
+            <span class="evt-crow">${evtTile(e)}<span class="grow">${evtEyebrow(e)}<b>${esc(e.title)}</b><span class="evt-fact">${EVT_ICON.clock}${esc(evtWhen(e, true))}</span>${e.location ? `<span class="evt-fact">${EVT_ICON.pin}${esc(e.location)}</span>` : ''}${!off && !past ? evtSlots(e, n) : ''}</span></span>
             <span class="evt-meta">${off ? '<span class="badge">Cancelled</span>' : fam ? '<span class="small muted">RWB event</span>' : `${n ? faceStack(c.faces, c.going - c.faces.length) : ''}<span class="small muted">${n ? `${n} ${past ? 'went' : 'going'}` : past ? 'Past event' : 'Be the first to join'}</span>`}
                 ${me ? `<span class="evt-me going">${past ? 'You went' : "You're going"}</span>` : !off && !past && !fam ? '<span class="evt-me ask">Join</span>' : ''}</span>
         </span></button>`;
