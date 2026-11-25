@@ -301,7 +301,7 @@ loadMotomart().then(d => d.items.filter(i => i.kind === 'merch'))
     const ua = navigator.userAgent, android = /android/i.test(ua), ios = /iphone|ipad|ipod/i.test(ua) || (/macintosh/i.test(ua) && 'ontouchend' in document);
     const dl = document.getElementById('app-download'), io = document.getElementById('app-ios'), note = document.getElementById('app-download-note');
     if (dl && CONFIG.APK_URL) dl.href = CONFIG.APK_URL;
-    if (android) { dl?.classList.add('ax-pri'); io?.remove(); if (note) note.textContent = 'Tap Download, open the file and tap Install (allow installs from your browser if Android asks). Then sign in with the Google account from your RWB join form.'; }
+    if (android) { dl?.classList.add('ax-pri'); io?.remove(); if (note) note.textContent = 'Install RWB from Google Play, then sign in with the Google account from your RWB join form.'; }
     else if (ios) { io?.classList.add('ax-pri'); dl?.remove();
         io?.addEventListener('click', e => { e.preventDefault();
             openDialog(`<div class="ios-steps"><h3>RWB App on iPhone</h3>

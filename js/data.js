@@ -16,7 +16,7 @@ const CONFIG = {
     /* RWB Merch and Ronin Accessories come from MotoMart in the RWB App (setup file 65) */
     /* Ronin Maintenance guides now come from the RWB App (Guides → Maintenance → + Add). The old Drive folder is no longer used. */
     /* RWB App for Android (.apk). Leave empty until the file is in the repo; then "Download Now" downloads it */
-    APK_URL: 'download/RWB-App.apk'
+    APK_URL: 'https://play.google.com/store/apps/details?id=in.roninwb.twa'   /* RWB is on Google Play since 26 Nov 2026 (name kept so old code still works) */
 };
 
 /* Team — role: admin | coordinator. Photos live in assets/warriors/ */

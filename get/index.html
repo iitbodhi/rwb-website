@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Get the RWB App</title>
-<meta name="description" content="Download the RWB App: Track, service records, mileage, Motomart, events and more for Ronin Warriors of Bengal.">
+<meta name="description" content="Get the RWB App on Google Play: Track, service records, mileage, Motomart, events and more for Ronin Warriors of Bengal.">
 <meta property="og:title" content="Get the RWB App">
 <meta property="og:description" content="Live Track, SOS, service records, mileage, Motomart and events for RWB members.">
 <meta property="og:image" content="https://roninwb.in/app/icons/icon-512.png">
@@ -17,6 +17,7 @@
 (function () {
   var ua = navigator.userAgent, android = /android/i.test(ua) && !/RWB-Android-App/.test(ua);
   if (!android) location.replace('/app/' + (/iphone|ipad|ipod/i.test(ua) ? '#install' : ''));
+  else location.replace('https://play.google.com/store/apps/details?id=in.roninwb.twa');   /* RWB is on Google Play since 26 Nov 2026 */
 })();
 </script>
 <style>
@@ -41,10 +42,9 @@
   <h1>Get the RWB App</h1>
   <p class="lead">For members of Ronin Warriors of Bengal. Free, no ads.</p>
   <div class="feat"><span>📍 Live Track</span><span>🆘 SOS</span><span>🔧 Service</span><span>⛽ Mileage</span><span>🛒 Motomart</span><span>📅 Events</span><span>🤖 Pookie AI</span></div>
-  <a class="btn" href="../download/RWB-App.apk" download="RWB-App.apk">⬇ Download the RWB App</a>
+  <a class="btn" href="https://play.google.com/store/apps/details?id=in.roninwb.twa">▶ Get it on Google Play</a>
   <ol>
-    <li>Tap <b>Download</b>, then open the file.</li>
-    <li>If Android asks, allow installs from your browser, then tap <b>Install</b> (or <b>Update</b> if you have the RWB app).</li>
+    <li>Tap <b>Get it on Google Play</b>, then <b>Install</b>.</li>
     <li>Open RWB and <b>sign in with Google</b> using the email you gave on the RWB join form.</li>
   </ol>
   <a class="small" href="../#join">Not a member yet? Join RWB</a>
