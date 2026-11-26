@@ -6,6 +6,9 @@
 //     It is told to use nothing else. If the teachings don't cover the question, Pookie says
 //     "I don't know that yet…" and the question goes to Teach Pookie marked URGENT.
 //  3. If every AI is down, Pookie still answers from the best matching teaching (or says it doesn't know).
+//  5. Knowledge pack (pookie-15): RWB's checked notes on the RWB app (every screen), the Ronin (TVS manual) and other
+//     popular bikes, general care, riding and touring. It's a static file on roninwb.in (pookie/kb.json, built from
+//     pookie/src/*.md by tools/pookie/build_kb.py), downloaded and kept for 6 hours: no Supabase storage, no egress.
 //  4. Chat memory (pookie-12): the phone keeps the conversation and sends the last 12 messages. Follow-ups ("and how
 //     often?") and Bengali/Hindi/Banglish questions are first turned into one standalone English search line by a
 //     tiny Groq call (free tier), so the right teachings are found. Nothing extra is stored in Supabase.
@@ -36,8 +39,9 @@ Your name comes from Kaustabh "Pookie" Bhattacharjee, an RWB admin famous for ri
 legend; you are the AI. If asked about Pookie the rider, talk about him. If asked who made you: the RWB team.
 
 THE ONE BIG RULE (facts)
-For facts (bike, maintenance, parts, prices, routes, shops, the app, RWB and its people) answer ONLY from the TEACHINGS,
-RWB NOTES and CORE NOTES below, and from what you already said earlier in THIS chat. Teachings come first. Never use outside
+For facts (bike, maintenance, parts, prices, routes, shops, the app, RWB and its people) answer ONLY from the RWB CHECKED NOTES,
+TEACHINGS, RWB NOTES and CORE NOTES below, and from what you already said earlier in THIS chat. Checked notes are the
+source for numbers and how the app works; riders' teachings add real experience (mention both when they differ). Never use outside
 knowledge for facts, never guess, never invent numbers, prices, part numbers, shops, places or people.
 If they don't answer a factual question, start your reply with exactly:
 [[DONT_KNOW: <the question rewritten as one short, clear, general question in English, no names or personal details>]]
@@ -51,6 +55,12 @@ THIS IS A CONVERSATION
   "ar ki?" refer to the earlier messages: answer them in that context, never as a brand-new question.
 - If something the rider said earlier in the chat (their plan, their bike, their problem) matters, use it.
 - If a follow-up is unclear, ask one short question back instead of saying you don't know.
+- Questions like "can location be shared only with family?", "how do I add a bike?", "where are my documents?" are about
+  the RWB APP unless the rider clearly means another app: answer from the RWB APP teachings. If a question could mean
+  the RWB app OR something else and the teachings don't settle it, ask one short question back ("Do you mean in the
+  RWB app?") instead of DONT_KNOW.
+- When the rider names another bike (Himalayan, XSR, Jawa, KTM, Classic 350…), answer for THAT bike from its teachings,
+  never with Ronin figures. Numbers like tyre pressure and oil: add "check your bike's sticker or manual" once.
 
 MATCH THE MOOD
 - Serious question → helpful, crisp answer with a light touch.
@@ -97,37 +107,15 @@ CORE NOTES (checked by the RWB team)
 TVS Ronin 225: 225.9 cc single cylinder, 4-valve, oil-cooled. About 20.1 bhp at 7,750 rpm, 19.93 Nm at 3,750 rpm. 5-speed,
 assist and slipper clutch. Tank 14 L (reserve about 2.8 L). Claimed 42 km/l, real-world usually mid-to-high 30s.
 41 mm USD fork, rear monoshock with 7-step preload. Brakes 300 mm front, 240 mm rear disc; single-channel ABS on lower
-variants, dual-channel on higher ones. 17-inch tubeless tyres, front 110/70-17 (check the sidewall or manual for the rear).
-Kerb weight about 160 kg, seat 795 mm, ground clearance 181 mm. Manual oil: TVS TRU4 fully synthetic 10W-30, API SL, JASO MA2.
+variants, dual-channel on higher ones. 17-inch tubeless tyres: front 110/70-17, rear 130/70-17; pressure 25 psi front, 28 psi rear solo (32 rear with pillion).
+Kerb weight about 160 kg, seat 795 mm, ground clearance 181 mm. Manual oil: TVS TRU4 fully synthetic 10W-30, API SL, JASO MA2, 1.3 L at an oil change.
 Battery 12 V 6 Ah maintenance-free. Running-in: under about 50 km/h for the first 1,000 km; first free service around
 750 to 1,000 km. A warning lamp (engine MIL, ABS, ISG) that stays ON means a fault: get it checked. TVS customer care 1800-258-7111.
 
-THE RWB APP
+THE RWB APP (details are in the RWB APP teachings)
 Bottom tabs: Home, Service, Mileage, Track (middle), MotoMart, Warriors, Events. Top right: calendar, ? = Guides, bell = News, photo = Me.
-- Guides (the ? button): three categories at the top, App, Maintenance (opens first) and Ride. Inside: short videos,
-  PDFs and pictures, filters (All, Videos, PDFs, Pictures) and a search icon. App has the how-to videos for the app.
-  Only the team adds guides: Bodhi (super admin) App, Maintenance and Ride; admins Maintenance and Ride; coordinators Ride
-  ("+ Add" in Guides, or Admin/Coordinator panel → Guides). Videos up to 60 s (the app shrinks them to 720p), PDFs up to 10 MB.
-- Home: birthdays, quick buttons (Sell gear, Documents, FAM), latest news, fresh MotoMart items, Explore: Teach Pookie,
-  Maintenance guides (opens Guides), New accessories (opens MotoMart → New).
-- Service: log each service (date, km, type, work done, cost, next due, bill photo/PDF).
-- Mileage: "+ Add fuel" after every fill, any amount, full tank or not: litres, ₹, odometer, plus (optional) the
-  "Range left / DTE" km on the dash before filling and the Trip A reading. Turn on "Full tank" only when filled till the
-  nozzle cut off (full to full is the most exact). With 2 or 3 bikes, pick the bike in the form; each bike has its own
-  mileage (chips on top of Mileage). Non-Ronin bikes need their full tank capacity in Me → My bikes.
-- Track: live location on group rides and SOS to the RWB team.
-- MotoMart: one shop with tabs All, New, Pre-owned and RWB Merch, round category buttons, a search icon (top right) and sort
-  (price low to high by default). Pre-owned (used) = members sell their own gear: "+ Sell something", live after an admin or coordinator
-  approves it (an admin's own post goes live at once), buyers message the seller on WhatsApp; mark it sold and it greys out, then it's deleted after 15 days.
-  WhatsApp shares hide the seller's name and number (contact only inside the app). New = new accessories listed by admins
-  and coordinators ("+ List accessory"; a coordinator's listing is approved by an admin or another coordinator); "Check product" opens the store page; RWB doesn't sell them. RWB Merch = official
-  RWB jerseys, stickers etc., listed by the team; "Get now" opens the order form or link posted on it,
-  or else RWB's Instagram DM. Some merch is free. "Coming Soon" merch is a teaser: no price yet and no way to order until it launches. New accessories and merch also show on roninwb.in.
-- Warriors: members and leaderboards. Events: rides, RSVPs and shared expenses.
-- Me: profile, bikes (up to 3), notifications, what other members can see, sign out.
-- Teach Pookie: answer Pookie's questions, earn XP; admins or coordinators check answers before Pookie uses them.
-- Coordinators have a Coordinator panel (Home → Coordinator): approve MotoMart posts and Teach Pookie answers, and handle reports.
-- Sign-in trouble: use the Google account from the RWB join form, or send the short request form for an admin to approve.`;
+Track has no "family only" sharing: while you share, every RWB member on the app and your RWB FAM can see you.
+Sign-in trouble: use the Google account you joined RWB with, or send the short request form for an admin to approve.`;
 
 /** The rider's language, so "I don't know" comes back in it too: Bengali, Hindi, Banglish, Hinglish or English. */
 type Lang = "en" | "bn" | "hi" | "bn-r" | "hi-r";
@@ -153,7 +141,7 @@ const DONT_KNOW = (name: string, lang: Lang = "en") => {
 const DK = /\[\[\s*DONT[\s_-]?KNOW\s*(?::\s*([\s\S]*?))?\]\]/i;
 
 /* ---------------- Teachings: what Pookie knows ---------------- */
-type K = { title: string; content: string; source: string; tw?: Set<string>; cw?: Set<string> };
+type K = { title: string; content: string; source: string; bike?: string; tw?: Set<string>; cw?: Set<string> };
 const STOP = new Set(("the a an and or of to in on for with is are was were be my your you it this that what which how when where do does did have has " +
   "can should would will ronin bike tvs 225 any about from like just get got not but its very much more most also there their them they me we our us " +
   "i im i'm please tell know want need ki ke ka er ar ta kore koto kemon hai kya").split(" "));
@@ -236,20 +224,60 @@ async function learnedRows(server: any): Promise<K[]> {
   return rows;
 }
 
+/* the knowledge pack: pookie/kb.json on roninwb.in (built from pookie/src/*.md). Kept for 6 hours; if roninwb.in can't be
+   reached the last good copy stays (a first failure retries in 10 minutes). Nothing is stored in Supabase. */
+let pack: { at: number; ttl: number; rows: K[] } | null = null;
+async function packRows(): Promise<K[]> {
+  if (pack && Date.now() - pack.at < pack.ttl) return pack.rows;
+  try {
+    const r = await get(`${SITE}/pookie/kb.json?t=${Math.floor(Date.now() / 36e5)}`, 4000);   // ?t= changes hourly: skips stale CDN copies
+    const d = await r.json() as { rows?: { t: string; k?: string; b?: string; c: string }[] };
+    const rows = (d.rows || []).filter((x) => x && x.t && x.c).map((x) => {
+      const k = prep({ title: x.t, content: x.c, source: "pack", bike: x.b || "any" });
+      for (const w of words(x.k || "")) k.tw!.add(w);   // extra search words count like title words
+      return k;
+    });
+    if (!rows.length) throw new Error("empty pack");
+    pack = { at: Date.now(), ttl: 6 * 3600e3, rows };
+  } catch (_) {
+    pack = { at: Date.now(), ttl: 600e3, rows: pack?.rows || [] };
+  }
+  return pack.rows;
+}
+/* which bike a question is about, so a Himalayan question gets Himalayan notes and not Ronin figures */
+const BIKES: [string, RegExp][] = [
+  ["xsr", /\bxsr\b|xsr ?155/], ["himalayan450", /himalayan ?450|new himalayan|sherpa|himalayan 452/], ["himalayan411", /himalayan ?411|old himalayan/],
+  ["himalayan450", /himalayan|himu/], ["guerrilla450", /guer+il+a/], ["re350", /classic ?350|hunter ?350|\bhunter\b|meteor|bullet ?350|\bbullet\b|goan classic|\bclassic\b|royal ?enfield 350|\bre ?350/],
+  ["re650", /interceptor|continental gt|\bgt ?650|super meteor|shotgun|bear ?650|\b650\b/], ["jawa", /jawa|yezdi|perak|42 ?fj|bobber/],
+  ["ktm", /\bktm\b|duke|\brc ?(200|390|125)\b|390 ?adv/], ["cb350", /cb ?350|h'?ness|hness/], ["speed400", /speed ?400|scrambler ?400|400 ?x\b|speed t4|triumph/],
+  ["xpulse", /xpulse|x ?pulse/], ["apache310", /(rtr|rr|apache) ?310/], ["apache160", /apache|rtr ?(160|200)/], ["bajaj", /pulsar|dominar|\bns ?200\b|n250/],
+  ["r15", /\br ?15\b|\bmt ?15\b|mt-15/], ["440", /x ?440|mavrick|scram ?440|harley/]];
+function bikeOf(text: string): string | null {
+  const t = String(text || "").toLowerCase();
+  for (const [b, re] of BIKES) if (re.test(t)) return b;
+  return null;
+}
+
 /** Scores every teaching against the question by shared words. Title words count double. */
-function match(rows: K[], text: string) {
+function match(rows: K[], text: string, bike: string | null = null) {
   const q = words(text);
   if (!q.length) return [];
   return rows.map((k) => {
     let sc = 0, hit = 0;
     for (const w of q) { if (k.tw!.has(w)) { sc += 2; hit++; } else if (k.cw!.has(w)) { sc += 1; hit++; } }
+    /* pack notes about one bike: lift the bike the rider named; without a named bike, the Ronin (RWB's bike) comes first */
+    if (k.bike && sc >= 2 && !["any", "app"].includes(k.bike)) sc = k.bike === (bike || "ronin") ? sc + 2 : sc * 0.5;
+    else if (bike && bike !== "ronin" && k.source !== "pack" && /ronin/i.test(k.title)) sc *= 0.5;   // Ronin riders' tips don't answer a Himalayan question
     return { k, sc, cover: hit / q.length };
   }).filter((x) => x.sc >= (q.length === 1 ? 1 : 2)).sort((a, b) => b.sc - a.sc || b.cover - a.cover);
 }
 function teachingsText(found: ReturnType<typeof match>): string {
-  const tips = found.filter((x) => x.k.source !== "guide").slice(0, 6), guides = found.filter((x) => x.k.source === "guide").slice(0, 3);
+  const tips = found.filter((x) => !["guide", "pack"].includes(x.k.source)).slice(0, 6), guides = found.filter((x) => x.k.source === "guide").slice(0, 3);
+  const notes = found.filter((x) => x.k.source === "pack").slice(0, 4);
   const out: string[] = [];
-  if (tips.length) out.push("TEACHINGS FROM RWB WARRIORS AND ADMINS:\n" + tips.map((x) => `- Q: ${x.k.title}\n  A: ${x.k.content.slice(0, 600)}`).join("\n"));
+  if (notes.length) out.push("RWB CHECKED NOTES (from the RWB team: the RWB app, maker manuals and spec sheets; use these for facts and numbers):\n" +
+    notes.map((x) => `[${x.k.bike === "app" ? "RWB APP" : x.k.bike && x.k.bike !== "any" ? x.k.bike.toUpperCase() : "GENERAL"}] ${x.k.title}\n${x.k.content.slice(0, 900)}`).join("\n\n"));
+  if (tips.length) out.push("TEACHINGS FROM RWB WARRIORS AND ADMINS (riders' own experience):\n" + tips.map((x) => `- Q: ${x.k.title}\n  A: ${x.k.content.slice(0, 600)}`).join("\n"));
   if (guides.length) out.push("FROM THE RWB MAINTENANCE GUIDES:\n" + guides.map((x) => `[${x.k.title}]\n${x.k.content.slice(0, 1000)}`).join("\n\n"));
   return out.join("\n\n") || "TEACHINGS: (nothing taught about this yet)";
 }
@@ -259,6 +287,7 @@ function plainAnswer(found: ReturnType<typeof match>, name: string): string | nu
   if (!best) return null;
   const hi = name ? `${name}, ` : "";
   return best.k.source === "guide" ? `${hi}here's what the RWB guide **${best.k.title}** says:\n\n${best.k.content.slice(0, 900)}`
+    : best.k.source === "pack" ? `${hi}${best.k.content.slice(0, 900)}`
     : `${hi}here's what RWB taught me about *${best.k.title}*:\n\n${best.k.content.slice(0, 900)}`;
 }
 
@@ -460,7 +489,7 @@ async function standalone(key: string, models: string[], turns: { role: string; 
   return "";
 }
 
-const VERSION = "pookie-14";
+const VERSION = "pookie-15";
 const list = (s: unknown, dflt: string) => String(s || dflt).split(",").map((x) => x.trim()).filter(Boolean);
 
 /* ---------------- Request ---------------- */
@@ -479,8 +508,8 @@ Deno.serve(async (req) => {
     const cfg = await server.rpc("chat_config");
     const c = cfg.data || {};
     log.push(cfg.error ? "settings: ERROR " + cfg.error.message : `settings: OK. Groq key ${c.groq_key ? "present" : "MISSING"}, Gemini key ${c.key ? "present" : "not added"}`);
-    const [sr, lr] = await Promise.all([siteRows(), learnedRows(server)]);
-    log.push(`teachings: ${lr.length} pieces from Teach Pookie, admins and guides; ${sr.length} from the website (team, guides list, gear)`);
+    const [sr, lr, pr] = await Promise.all([siteRows(), learnedRows(server), packRows()]);
+    log.push(`teachings: ${lr.length} pieces from Teach Pookie, admins and guides; ${sr.length} from the website (team, guides list, gear); ${pr.length} checked notes (knowledge pack)`);
     const un = await server.rpc("pookie_log_unknown", { p_question: "" });
     log.push(un.error ? "URGENT questions: NOT READY. Run setup file 61. " + un.error.message : "URGENT questions: OK");
     if (c.groq_key) {
@@ -569,7 +598,7 @@ Deno.serve(async (req) => {
   }
 
   /* ---------------- A rider's question ---------------- */
-  const [quota, cfgRes, sRows, lRows] = await Promise.all([asUser.rpc("chat_take_quota"), server.rpc("chat_config"), siteRows(), learnedRows(server)]);
+  const [quota, cfgRes, sRows, lRows, pRows] = await Promise.all([asUser.rpc("chat_take_quota"), server.rpc("chat_config"), siteRows(), learnedRows(server), packRows()]);
   if (quota.error) return json({ error: quota.error.message }, 429);
   const refund = async () => { await asUser.rpc("chat_refund"); };
 
@@ -588,8 +617,10 @@ Deno.serve(async (req) => {
 
     // what RWB taught Pookie that fits this question (the last question counts most)
     const asked = turns.filter((t) => t.role === "user").slice(-2).map((t) => t.text).join(" ");
-    const all = [...lRows, ...sRows];
-    const direct = match(all, lastQ);
+    const all = [...lRows, ...sRows, ...pRows];
+    const userText = turns.filter((t) => t.role === "user").map((t) => t.text).join(" ");
+    let bike = bikeOf(lastQ) || bikeOf(userText) || bikeOf(String((context as Record<string, unknown> | null)?.bike || ""));
+    const direct = match(all, lastQ, bike);
     // a follow-up, a Bengali/Hindi question, or a weak match → find the teachings with a standalone English search line
     const prior = turns.length > 1, weak = !direct.length || direct[0].cover < 0.5;
     const short = words(lastQ).length <= 6 || /\b(it|that|this|those|them|same|also|why|which|aur|ar|tarpor|seta|eta|oita|ota|wo|woh|ye|isko|usko|uska)\b/i.test(lastQ);
@@ -598,7 +629,8 @@ Deno.serve(async (req) => {
       line = await standalone(cfg.groq_key, list(cfg.rewrite_models, ""), turns, log);
       if (/^CHAT\b/i.test(line)) line = "";
     }
-    const found = [...(line ? match(all, line) : []), ...direct, ...match(all, asked)].filter((x, i, a) => a.findIndex((y) => y.k === x.k) === i);
+    if (line && !bikeOf(lastQ)) bike = bikeOf(line) || bike;
+    const found = [...(line ? match(all, line, bike) : []), ...direct, ...match(all, asked, bike)].filter((x, i, a) => a.findIndex((y) => y.k === x.k) === i);
 
     // "I don't know" → Pookie's message, the question goes to Teach Pookie as URGENT, and the question is free
     let logged = false;
