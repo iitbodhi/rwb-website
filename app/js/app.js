@@ -507,7 +507,7 @@ const SOCIAL = [
     ['WhatsApp channel', 'https://whatsapp.com/channel/0029VaiK6QHEgGfTItym9t2H', /channel/i, 'img/social-whatsapp.png']];
 const FOLLOW = SOCIAL.filter(x => x[1]);
 const SKIP_Q = /^(timestamp|email( address)?|score|which bike do you ride now\?|where are you with a ronin\?|anything you'd like to tell us\?)$/i;
-const isExtraQ = q => !SKIP_Q.test(String(q).trim()) && !/^\s*[0-9.]*\s*$/.test(String(q)) && !formKey(q);
+const isExtraQ = q => q !== WHY_Q && !SKIP_Q.test(String(q).trim()) && !/^\s*[0-9.]*\s*$/.test(String(q)) && !formKey(q);
 const ansText = a => Array.isArray(a) ? a.join(', ') : String(a ?? '').trim();
 /* the join-form answers that don't have their own field in the profile (sticker, social media and so on) */
 const extraAnswers = m => Object.entries(m?.form_answers || {}).filter(([q, a]) => isExtraQ(q) && ansText(a));
@@ -548,15 +548,19 @@ const RONIN_Q = 'Do you own a Ronin bike?', R_YES = 'Yeah!', R_BOOKED = 'Booked,
 const OTHER_BIKE_Q = 'Which bike do you ride now?', STICKER_Q = 'Have you received RWB sticker?';
 const PLAN_Q = 'Where are you with a Ronin?', P_BUY = 'Planning to buy one', P_OTHER = 'I ride another bike', P_NONE = 'No bike yet';
 const NOTE_Q = 'Anything you\'d like to tell us?';
+/* Nov 26 2026 (Bodhi): riders without a Ronin also say why they'd like to join, and riders on another bike give its VRN (the admins still check it) */
+const WHY_Q = 'No Ronin yet? Tell us why you\'d like to join RWB';
+const ridesOther = a => ronin(a) === R_NOT && a[PLAN_Q] === P_OTHER;
 const TNC_Q = 'Please read carefully before proceeding\nRWB Terms & Conditions\nBy choosing “Understood & agreed”, you confirm that:\n• You are 18 or older and hold a valid motorcycle driving licence. Membership is free and mainly for TVS Ronin owners; admins may approve or decline any registration.\n• Your details are true and complete, and the VRN you give is your own. Admins may verify it. One membership per person.\n• You take part in rides and events voluntarily and at your own risk. You will obey traffic laws, wear an ISI-certified helmet and proper gear, keep your papers valid, and never ride drunk, race or perform stunts. RWB, its admins, coordinators and volunteers are not liable for any accident, injury, loss or damage.\n• You will respect every member and the public, and follow ride leads. No harassment, hate, spam, scams or unapproved promotions in RWB groups, the app or at events.\n• RWB is a free, non-profit, volunteer community and is not affiliated with TVS Motor Company.\n• Photos and videos from RWB rides and events may be shared on RWB’s website and social media.\n• Your details are used only to run the community. Other members see only your name, nickname and photo unless you choose to share more. RWB never sells your data.\n• Admins may remove members who break these rules. You can leave any time, and your app data is then deleted. \nFull Terms & Conditions: https://roninwb.in/terms.html\nPrivacy Policy: https://roninwb.in/privacy.html';
 const ronin = a => a[RONIN_Q] || '';
 const DONE = ['Done!', 'Maybe later'];
 const JOIN_DEF = { title: '', description: '', items: [
     { type: 'SECTION_HEADER', title: 'Warm welcome!', help: 'A few details so the RWB team knows you, and can act fast in an emergency on a ride. Every rider is welcome, with or without a Ronin.' },
     { type: 'MULTIPLE_CHOICE', title: RONIN_Q, required: true, choices: [{ value: R_YES }, { value: R_BOOKED }, { value: R_NOT }] },
-    { type: 'TEXT', title: 'VRN please', required: true, help: 'Your Ronin\'s registration number, for example WB02AB1234. Not the engine or chassis number. An admin may verify it.', show: a => ronin(a) === R_YES },
     { type: 'MULTIPLE_CHOICE', title: PLAN_Q, required: true, choices: [{ value: P_BUY }, { value: P_OTHER }, { value: P_NONE }], show: a => ronin(a) === R_NOT },
     { type: 'TEXT', title: OTHER_BIKE_Q, required: true, help: 'For example, Royal Enfield Hunter 350.', show: a => ronin(a) === R_NOT && a[PLAN_Q] === P_OTHER },
+    { type: 'TEXT', title: 'VRN please', required: true, help: 'Your bike\'s registration number, for example WB02AB1234. Not the engine or chassis number. An admin may verify it.', show: a => ronin(a) === R_YES || ridesOther(a) },
+    { type: 'PARAGRAPH_TEXT', title: WHY_Q, required: true, help: 'RWB is mainly a family of Ronin riders. Do you know someone in RWB, or is this a special request? Let us know.', max: 500, show: a => ronin(a) === R_NOT },
     { type: 'PAGE_BREAK', title: 'About you' },
     { type: 'TEXT', title: 'Full Name', required: true },
     { type: 'DATE', title: 'Date of Birth', required: true, help: 'RWB is for riders aged 18 and over.' },
@@ -593,6 +597,12 @@ const roninKind = x => { const r = ronin(x?.answers || x?.form_answers || {}), b
     if (r === R_NOT || /^nope/i.test(r)) return 'no';
     if (r === R_YES || /ronin/i.test(b) || /^\s*(yes|yeah|yep)\b/i.test(b)) return 'yes';
     return b ? 'no' : 'yes'; };
+/* what a Non-Ronin request still lacks under the Nov 26 2026 rules (requests sent before them, or from the old Google Form) */
+const notBikeAns = v => !v || /^\s*(nope|no|nah|not yet|none|n\/?a|yes|yeah|-+)\b|^no bike/i.test(v);
+const joinRides = r => { const a = r?.answers || {}; return a[PLAN_Q] === P_OTHER || (!a[PLAN_Q] && !notBikeAns(a[OTHER_BIKE_Q] || (roninKind(r) === 'no' ? r?.bike : ''))); };
+const joinNeeds = r => { if (roninKind(r) !== 'no') return [];
+    return [joinRides(r) && String(r?.vrn || '').replace(/[^A-Za-z0-9]/g, '').length < 6 && 'vrn', !String(r?.answers?.[WHY_Q] || '').trim() && 'why'].filter(Boolean); };
+const NEED_TXT = { vrn: 'Your bike\'s VRN (registration number)', why: 'Why you\'d like to join RWB' };
 const RONIN_TAG = { booked: '<span class="badge ronin-tag booked">Ronin booked</span>', no: '<span class="badge ronin-tag">Non-Ronin</span>', yes: '' };
 let joinFormDef;   // loaded once
 async function loadJoinForm() { joinFormDef = JOIN_DEF; return joinFormDef; }
@@ -751,6 +761,7 @@ async function viewAccess(status, sess, noJump = false) {
     if (status === 'pending' || status === 'hold' || status === 'rejected') {
         const mine = await api.myJoin().catch(() => null) || { status };
         const canApply = mine.can_apply !== false;
+        const needs = status === 'rejected' ? [] : joinNeeds(mine);
         actions.edit = b => busy(b, () => startJoin(sess, mine));
         /* Google Play: anyone who can make an account in the app can delete it there too */
         actions.delreq = () => openSheet('Delete my request', `<p style="margin-bottom:10px">This deletes your RWB join request and your sign-in (<b>${esc(sess.email)}</b>) from RWB. The admins won't see your request any more.</p>
@@ -775,13 +786,13 @@ async function viewAccess(status, sess, noJump = false) {
             <li class="done"><i aria-hidden="true"></i><span><b>Request sent</b><small>${ago(mine.created_at) || 'Done'}</small></span></li>
             <li class="${status === 'hold' ? 'paused' : 'now'}"><i aria-hidden="true"></i><span><b>Admin check</b><small>${status === 'hold' ? 'On hold' + (mine.decided_at ? ' · ' + ago(mine.decided_at) : '') : 'Usually within a day'}</small></span></li>
             <li><i aria-hidden="true"></i><span><b>Welcome to RWB</b><small>The app opens with ${esc(sess.email)}</small></span></li></ol>`;
-        const note = status === 'hold' && mine.hold_note ? ['Note from the admins', mine.hold_note] : status === 'rejected' && mine.reason ? ['Reason', mine.reason] : null;
-        const tip = { pending: 'You\'ll get a notification and a WhatsApp message once you\'re approved.', hold: 'Changed something, or got your Ronin? Update your answers and the request goes back to the admins.',
+        const note = needs.length ? ['One more step', needs.map(n => NEED_TXT[n]).join(' · ')] : status === 'hold' && mine.hold_note ? ['Note from the admins', mine.hold_note] : status === 'rejected' && mine.reason ? ['Reason', mine.reason] : null;
+        const tip = needs.length ? (status === 'hold' && mine.hold_note ? `Note from the admins: ${esc(mine.hold_note)}` : 'The admins need this before they can approve you.') : { pending: 'You\'ll get a notification and a WhatsApp message once you\'re approved.', hold: 'Changed something, or got your Ronin? Update your answers and the request goes back to the admins.',
             rejected: canApply ? 'If things have changed, or you think this was a mistake, you can apply again.' : 'You can\'t send a new request. If you think this is a mistake, contact RWB.' }[status];
-        const btns = { pending: '<button class="btn block" data-act="recheck">Check again</button><button class="btn ghost block" data-act="edit">Edit my answers</button>',
-            hold: '<button class="btn block" data-act="edit">Update my answers</button><a class="btn ghost block" href="${RWB_IG_DM}" target="_blank" rel="noopener">Contact RWB</a>',
+        const btns = needs.length ? `<button class="btn block" data-act="edit">Add ${needs.length > 1 ? 'them' : 'it'} now</button><a class="btn ghost block" href="${RWB_IG_DM}" target="_blank" rel="noopener">Contact RWB</a>` : { pending: '<button class="btn block" data-act="recheck">Check again</button><button class="btn ghost block" data-act="edit">Edit my answers</button>',
+            hold: `<button class="btn block" data-act="edit">Update my answers</button><a class="btn ghost block" href="${RWB_IG_DM}" target="_blank" rel="noopener">Contact RWB</a>`,
             rejected: (canApply ? '<button class="btn block" data-act="edit">Apply again</button>' : '') + `<a class="btn ${canApply ? 'ghost ' : ''}block" href="${RWB_IG_DM}" target="_blank" rel="noopener">Contact RWB</a>` }[status];
-        const links = { pending: '<a class="link-btn" href="${RWB_IG_DM}" target="_blank" rel="noopener">Contact RWB</a><span aria-hidden="true">·</span><button class="link-btn" data-act="out">Sign out</button>',
+        const links = { pending: `<a class="link-btn" href="${RWB_IG_DM}" target="_blank" rel="noopener">Contact RWB</a><span aria-hidden="true">·</span><button class="link-btn" data-act="out">Sign out</button>`,
             hold: '<button class="link-btn" data-act="recheck">Check again</button><span aria-hidden="true">·</span><button class="link-btn" data-act="out">Sign out</button>',
             rejected: '<button class="link-btn" data-act="out">Sign out</button>' }[status];
         app.innerHTML = `${demoBar()}<section class="jx ${status}">
@@ -4158,12 +4169,13 @@ function checksOf(r) {
         : c.entry === 'dup' ? { ok: false, warn: true, t: 'Possible duplicate', s: 'Flagged for a closer look' + by('entry') }
         : { ok: e.ok, warn: e.warn, t: e.t, s: e.s };
     const kind = c.ronin === 'ok' ? 'yes' : c.ronin === 'booked' ? 'booked' : c.ronin === 'no' ? 'no' : roninKind(r);
-    const notBike = v => !v || /^\s*(nope|no|nah|not yet|none|n\/?a|yes|yeah|-+)\b|^no bike/i.test(v);
-    const other = [r.answers?.[OTHER_BIKE_Q], kind === 'no' ? r.bike : ''].find(v => !notBike(v)) || '';
+    const other = [r.answers?.[OTHER_BIKE_Q], kind === 'no' ? r.bike : ''].find(v => !notBikeAns(v)) || '';
+    const needs = kind === 'no' ? joinNeeds(r) : [], needVrn = kind === 'yes' || (kind === 'no' && (r.answers?.[PLAN_Q] === P_OTHER || !!other));
     const ronin = kind === 'yes' ? { ok: true, t: 'Owns a Ronin', s: c.ronin ? 'Confirmed' + by('ronin') : `Answer: ${r.answers?.[RONIN_Q] || r.bike || '–'}` }
         : kind === 'booked' ? { ok: true, t: 'Ronin booked', s: 'Delivery pending' + by('ronin') }
-        : { ok: true, t: 'Non-Ronin rider', s: (r.answers?.[PLAN_Q] === P_BUY ? 'Planning to buy a Ronin' : other ? `Rides: ${other}` : r.answers?.[PLAN_Q] === P_NONE ? 'No bike yet' : 'No Ronin yet') + by('ronin') + ' · welcome too' };
-    const vrn = kind !== 'yes' && !r.vrn_verified ? { ok: true, t: 'No VRN needed', s: kind === 'booked' ? 'They can add it in Me after delivery' : 'Non-Ronin rider' }
+        : { ok: !needs.includes('why'), warn: needs.includes('why'), t: 'Non-Ronin rider', s: (r.answers?.[PLAN_Q] === P_BUY ? 'Planning to buy a Ronin' : other ? `Rides: ${other}` : r.answers?.[PLAN_Q] === P_NONE ? 'No bike yet' : 'No Ronin yet') + by('ronin') + (needs.includes('why') ? ' · hasn\'t said why they\'d like to join' : '') };
+    const vrn = !needVrn && !r.vrn_verified ? { ok: true, t: 'No VRN needed', s: kind === 'booked' ? 'They can add it in Me after delivery' : 'No bike yet' }
+        : needs.includes('vrn') && !r.vrn_verified && c.vrn !== 'no' ? { ok: false, warn: true, t: 'VRN not given yet', s: 'Ask them for it (Message)' }
         : r.vrn_verified ? { ok: true, t: 'VRN verified', s: (c.vrn === 'ok' ? 'Checked' : 'Ticked') + by('vrn') }
         : c.vrn === 'no' ? { ok: false, t: 'VRN couldn\'t be verified', s: 'Marked' + by('vrn') }
         : r.vrn_known ? { ok: true, t: 'VRN verified', s: 'Verified earlier, same VRN on their record' }
@@ -4177,7 +4189,7 @@ function checksOf(r) {
 function reqCard(r) {
     const cks = checksOf(r), all = cks.every(c => c.ok), st = r.status || 'pending';
     const ico = c => c.ok ? '✓' : c.pending ? '' : c.warn || c.unk ? '!' : '✕';
-    const btns = st === 'rejected' ? `<button class="btn ghost" data-act="ask" data-id="${r.id}">💬 Message</button><button class="btn ghost" data-act="reopen" data-id="${r.id}">Move back to New</button>`
+    const btns = st === 'rejected' ? `<button class="btn ghost" data-act="ask" data-id="${r.id}">💬 Message</button><button class="btn ghost" data-act="reopen" data-id="${r.id}">Move to New</button><button class="btn ghost" data-act="hold" data-id="${r.id}">On hold</button><button class="btn" data-act="approve" data-id="${r.id}">Approve</button>`
         : `<button class="btn ghost" data-act="ask" data-id="${r.id}" aria-label="Message ${esc(r.full_name)} on WhatsApp">💬 Message</button>${st === 'hold' ? `<button class="btn ghost" data-act="reopen" data-id="${r.id}">Back to New</button>` : `<button class="btn ghost" data-act="hold" data-id="${r.id}">On hold</button>`}<button class="btn ghost" data-act="reject" data-id="${r.id}">Reject</button><button class="btn" data-act="approve" data-id="${r.id}">Approve</button>`;
     return `<div class="card req-card st-${st}" data-id="${r.id}">
         <div class="row" style="gap:8px;align-items:flex-start"><div class="grow"><h3>${esc(r.full_name)} ${RONIN_TAG[roninKind(r)]}</h3>
@@ -4186,6 +4198,7 @@ function reqCard(r) {
             ${st === 'rejected' ? `<p class="req-note rej">Rejected${r.decided_by ? ` by ${esc(r.decided_by)}` : ''} ${r.decided_at ? timeAgo(r.decided_at) : ''}${r.spam ? ' · <span class="badge danger-tag">Spam: can\'t apply again</span>' : ''}${r.reject_reason ? `<b>“${esc(r.reject_reason)}”</b>` : ''}</p>` : ''}
             ${st === 'pending' && r.updated_at && Date.now() - Date.parse(r.updated_at) < 3 * 864e5 ? `<span class="upd-tag">✏️ Updated ${timeAgo(r.updated_at)}</span>` : ''}</div>
             <span class="req-score ${all ? 'ok' : ''}">${cks.filter(c => c.ok).length}/4</span></div>
+        ${r.answers?.[WHY_Q] ? `<div class="req-msg why"><span>🙋 Why ${esc(firstName(r))} would like to join</span><p>${esc(r.answers[WHY_Q])}</p></div>` : ''}
         ${r.answers?.[NOTE_Q] ? `<div class="req-msg"><span>💬 Message from ${esc(firstName(r))}</span><p>${esc(r.answers[NOTE_Q])}</p></div>` : ''}
         <ul class="checks">${cks.map(c => `<li class="${c.ok ? 'yes' : c.pending ? 'no pend' : c.warn || c.unk ? 'warn' : 'no'} tap-chk" data-act="chk" data-id="${r.id}" data-k="${c.k}" role="button" tabindex="0" aria-label="${esc(c.t)}: change">
             <span class="ci">${ico(c)}</span><span class="grow"><b>${esc(c.t)}</b>${c.k === 'vrn' ? `<small>${c.t === 'No VRN needed' ? '' : `<span class="vrn">${esc(r.vrn || r.member_vrn || 'No VRN given')}</span>`}${c.s ? (c.t === 'No VRN needed' ? '' : ' · ') + esc(c.s) : ''}</small>` : c.s ? `<small>${esc(c.s)}</small>` : ''}</span><span class="chk-edit" aria-hidden="true">›</span>
@@ -4474,8 +4487,9 @@ function bindFollowUps(inc, all) {
 }
 /* Ask the applicant for something before deciding (they can update their details; the card refreshes by itself) */
 function askSheet(r) {
-    const ASKS = ['Confirm your bike\'s VRN (registration number)', 'Share a photo of your RC', 'Confirm that you own a TVS Ronin', 'Agree to the RWB Terms & Conditions', 'Add an emergency contact number', 'Check your WhatsApp number'];
-    const pre = [roninKind(r) === 'yes' && !(r.vrn_verified || r.vrn_known) && ASKS[0], !(r.tnc === true || r.member_tnc === true) && ASKS[3], !r.emergency_phone && ASKS[4]].filter(Boolean);
+    const ASKS = ['Confirm your bike\'s VRN (registration number)', 'Share a photo of your RC', 'Confirm that you own a TVS Ronin', 'Agree to the RWB Terms & Conditions', 'Add an emergency contact number', 'Check your WhatsApp number', 'Tell us why you\'d like to join RWB (do you know someone in RWB, or is it a special request?)'];
+    const needs = joinNeeds(r), vrnAsk = (roninKind(r) === 'yes' || needs.includes('vrn') || (roninKind(r) === 'no' && joinRides(r))) && !(r.vrn_verified || r.vrn_known);
+    const pre = [vrnAsk && ASKS[0], !(r.tnc === true || r.member_tnc === true) && ASKS[3], !r.emergency_phone && ASKS[4], needs.includes('why') && ASKS[6]].filter(Boolean);
     openSheet(`Message ${firstName(r)}`, `<p class="small muted" style="margin-bottom:8px">Pick what you need from them. When they update their details, this card refreshes by itself.</p>
         <div class="chips" id="ask-chips" style="margin-bottom:10px">${ASKS.map(a => `<button type="button" class="chip" aria-pressed="${pre.includes(a)}" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div>
         <textarea id="wa-text" rows="11" style="font-size:.9rem;line-height:1.45"></textarea>

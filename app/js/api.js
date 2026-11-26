@@ -1014,7 +1014,7 @@ function demoApi() {
                 db.requests.forEach(r => { if (st(r) in counts) counts[st(r)]++; });
                 return wait({ list: db.requests.filter(r => st(r) === status), counts });
             },
-            async hold(id, note = '') { Object.assign(db.requests.find(x => x.id === id), { status: 'hold', hold_note: note || null, decided_at: new Date().toISOString(), decided_by: me().nickname || me().full_name.split(' ')[0] }); save(); return 'hold'; },
+            async hold(id, note = '') { Object.assign(db.requests.find(x => x.id === id), { status: 'hold', hold_note: note || null, reject_reason: null, spam: false, decided_at: new Date().toISOString(), decided_by: me().nickname || me().full_name.split(' ')[0] }); save(); return 'hold'; },
             async reopen(id) { Object.assign(db.requests.find(x => x.id === id), { status: 'pending', hold_note: null, reject_reason: null, spam: false, decided_at: null, decided_by: null }); save(); return 'pending'; },
             async approve(id) {
                 const r = db.requests.find(x => x.id === id);

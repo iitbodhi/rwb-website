@@ -2857,3 +2857,6 @@ html.calm:not(#_) .pookie-fab,html.calm:not(#_) .pookie-fab *,html.calm:not(#_) 
 html.calm:not(#_) .svc-dot,html.calm:not(#_) .get-app,html.calm:not(#_) .tq-urgent,
 html.calm:not(#_) .trk-live .dot,html.calm:not(#_) .trk-live-pill .dot,html.calm:not(#_) .trk-signal .sig-ico,html.calm:not(#_) .trk-me-dot,
 html.calm:not(#_) .lb-hero::before,html.calm:not(#_) .lb-cup,html.calm:not(#_) .lb-rays,html.calm:not(#_) .lb-spark,html.calm:not(#_) .lp-ring,html.calm:not(#_) .lb-trophy{animation-play-state:paused!important}
+/* Join requests: why a Non-Ronin rider would like to join (Nov 26 2026) */
+.req-msg.why{background:color-mix(in srgb,var(--orange) 9%,transparent);border-color:color-mix(in srgb,var(--orange) 24%,transparent)}
+.req-msg.why span{color:var(--orange)}

@@ -231,6 +231,7 @@ k: join rwb, membership, how to join, register, application, apply, add warriors
 b: app
 New riders join in the RWB App or at roninwb.in/join: sign in with Google and fill the short join form. An admin checks it, usually within a day. Your status screen shows Request sent, On hold (with a note) or Not approved (with a reason).
 Every rider is welcome: Ronin owners, Ronin booked, planning to buy, or riding another bike. Questions before joining go to RWB's Instagram DM, never admins' numbers.
+Riders without a Ronin also tell the admins why they'd like to join (for example, they know someone in RWB, or it's a special request). Riders on another bike give that bike's VRN, which an admin checks, the same as for Ronin owners. If something is missing, the status screen says "One more step" with an "Add it now" button.
 
 ## Sign-in problems in the RWB app
 k: can't login, sign in, google sign in, wrong account, not a member error, login issue
