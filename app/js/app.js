@@ -142,42 +142,68 @@ const load = {
     news: async (force) => (state.news = !force && state.news || (await api.news().catch(() => [])).filter(n => !isFam() || n.kind === 'announcement')),   /* RWB FAM: admin announcements only */
     docs: async (force) => (state.docs = !force && state.docs || await api.docs().catch(() => [])),
     reminders: async () => state.reminders !== undefined ? state.reminders : (state.reminders = await api.myReminders().catch(() => [])),   /* null: setup file 62 not run yet */
+    bikes: async (force) => {
+        if (force || !state.myBikes) {
+            const [b, c] = await Promise.all([api.myBikes().catch(() => state.myBikes || []), api.myChanges().catch(() => [])]);
+            state.myBikes = b || []; state.bikeWait = (c || []).filter(x => x.kind === 'bike' && x.status === 'pending');
+        }
+        return bikeList();
+    },
     ride: async (force) => (state.ride = !force && state.ride || { parts: await api.rideParts().catch(() => null), name: await api.rideName().catch(() => '') })
 };
 
-/* ---------- mileage maths (Nov 2026: works with part fills, no Trip A needed) ----------
-   The app follows how much petrol is in the tank. It knows the level at "anchors":
-     • a full tank: the tank is at its full size (TVS Ronin 225: 14 L, owner's manual);
-     • a fill-up with "Range left" (the dash's DTE) read before filling. On the Ronin, DTE counts down to the
-       manual's "empty" level (~2 L: no bars, low-fuel light on, DTE shows "--"), so
-       fuel left ≈ 2 L + range ÷ mileage. Other bikes: fuel left ≈ range ÷ mileage.
-   Between two anchors: fuel used = fuel at the first + litres filled in between − fuel left at the second;
-   distance = odometer difference. Full → full is exact (no tank size needed). Anything else is an estimate (≈).
-   Fills without an anchor are added into the next reading. Exact duplicates are skipped. */
+/* ---------- bikes: the main bike is on the member record; bikes 2 and 3 in member_bikes (or waiting for approval) ----------
+   Fill-ups belong to a bike (fuel_logs.bike_slot + bike_vrn). Bike 2/3 fill-ups count only while the plate is the same.
+   Full-tank capacity: Ronins are 14 L (owner's manual) and never asked; other vehicles keep theirs in members.tanks,
+   keyed by plate ('main' for a main bike without a plate). */
 const RONIN_TANK = 14, RONIN_EMPTY = 2, KMPL_GUESS = 40;
-function tankSpec(me = state.me) {
-    const bike = String(me?.bike || 'TVS Ronin 225').toLowerCase(), ronin = bike.includes('ronin') || !me?.bike;
-    const own = Number(me?.tank_l) > 0 ? Number(me.tank_l) : null;
-    return { ronin, size: own ?? (ronin ? RONIN_TANK : null), empty: ronin ? RONIN_EMPTY : 0 };
+const isRonin = model => !model || /ronin|no bike/i.test(model);
+const bikeKey = (slot, vrn) => vrnKey(vrn) || (slot === 1 ? 'main' : 'slot' + slot);
+function bikeList() {
+    const m = state.me || {}, raw = [{ slot: 1, vrn: m.vrn || '', model: m.bike || '' }];
+    for (const b of state.myBikes || []) if (b.slot > 1) raw.push({ slot: b.slot, vrn: b.vrn, model: b.model || '' });
+    for (const c of state.bikeWait || []) if (c.slot > 1 && !raw.some(x => x.slot === c.slot)) raw.push({ slot: c.slot, vrn: c.new_value, model: c.new_model || '', pending: true });
+    return raw.map(b => { const r = isRonin(b.model), key = bikeKey(b.slot, b.vrn);
+        return { ...b, key, ronin: r, tank: r ? RONIN_TANK : (Number(m.tanks?.[key]) || null), name: b.model || (b.slot === 1 ? 'Main bike' : 'Bike ' + b.slot) }; });
 }
-const fuelKey = f => `${f.fill_date}|${f.odometer_km}|${Number(f.litres)}|${!!f.full_tank}`;
+const mainBike = () => bikeList()[0];
+const needTank = b => !b.ronin && !b.tank;
+const bikeOf = (f, bikes = bikeList()) => bikes.find(b => b.slot === (f.bike_slot ?? 1)) || bikes[0];
+const bikeLogs = (logs, b) => (logs || []).filter(f => (f.bike_slot ?? 1) === b.slot && (b.slot === 1 || !f.bike_vrn || vrnKey(f.bike_vrn) === vrnKey(b.vrn)));
+const mainLogs = logs => (logs || []).filter(f => (f.bike_slot ?? 1) === 1);
+const tankSpec = (b = mainBike()) => ({ ronin: b.ronin, size: b.tank, empty: b.ronin ? RONIN_EMPTY : 0 });
+
+/* ---------- mileage maths (Nov 2026: part fills, DTE, Trip A, per bike) ----------
+   The app follows how much petrol is in the tank. It knows the level at "anchors":
+     • a full tank: the tank is at its capacity (TVS Ronin 225: 14 L incl. reserve, owner's manual);
+     • a fill-up with "Range left / DTE" read before filling. The Ronin's DTE counts down to the manual's "empty"
+       level (~2 L: no bars, low-fuel light on, DTE shows "--"), so fuel left ≈ 2 L + DTE ÷ k; other vehicles DTE ÷ k.
+       k (km per litre the bike's DTE assumes) is learnt from full-tank fill-ups that also had a DTE reading
+       (fuel left = capacity − litres filled), median; without those, the rider's own mileage (two passes).
+   Between two anchors: fuel used = fuel at the first + litres filled in between − fuel left at the second.
+   Distance: Trip A when it matches the odometer gap (within 3% or 5 km, so Trip A was reset at the start of the
+   stretch; it has the 0.1 km digit), else the odometer gap. Full → full is exact; the rest are estimates (≈).
+   Fills without an anchor are added into the next reading. Exact duplicates are skipped.
+   Same maths on the server: private.fuel_pass / fuel_readings (files 90, 91). */
+const fuelKey = f => `${f.bike_slot ?? 1}|${f.fill_date}|${f.odometer_km}|${Number(f.litres)}|${!!f.full_tank}`;
+const numOr = v => v == null || v === '' ? null : Number(v);
 function fuelReadings(logs, spec, k) {
     const out = [], seen = new Set();
     let anc = null, add = 0;
     for (const f of logs) {
         const key = fuelKey(f); if (seen.has(key)) continue; seen.add(key);
-        const L = Number(f.litres), odo = Number(f.odometer_km), full = !!f.full_tank, rng = f.range_km == null || f.range_km === '' ? null : Number(f.range_km);
+        const L = Number(f.litres), odo = Number(f.odometer_km), full = !!f.full_tank, rng = numOr(f.range_km), trip = numOr(f.trip_a_km);
         const before = full ? (spec.size ? Math.max(spec.size - L, 0) : null) : rng != null ? spec.empty + rng / k : null;
         if (anc) {
             let dist = odo - anc.odo;
-            if (dist <= 0 && anc.full && full && f.trip_a_km > 0) dist = Number(f.trip_a_km);
+            if (trip > 0 && (dist <= 0 || Math.abs(trip - dist) <= Math.max(5, dist * 0.03))) dist = trip;
             const exact = anc.full && full;
             const used = exact ? add + L : anc.level != null && before != null ? anc.level + add - before : null;
             if (used != null && dist > 0 && used > 0.2) {
                 const kmpl = dist / used;
                 if (exact || (kmpl >= 10 && kmpl <= 100)) out.push({ end: f, dist, litres: used, kmpl, exact });
             }
-        } else if (full && f.trip_a_km > 0) out.push({ end: f, dist: Number(f.trip_a_km), litres: L, kmpl: f.trip_a_km / L, exact: true });   /* older entries: Trip A reset at an unlogged full tank */
+        } else if (full && trip > 0) out.push({ end: f, dist: trip, litres: L, kmpl: trip / L, exact: true });   /* older entries: Trip A reset at an unlogged full tank */
         if (full) { anc = { odo, level: spec.size, full: true }; add = 0; }
         else if (before != null) { anc = { odo, level: spec.size ? Math.min(spec.size, before + L) : before + L, full: false }; add = 0; }
         else if (anc) add += L;
@@ -185,16 +211,22 @@ function fuelReadings(logs, spec, k) {
     return out;
 }
 const sumKmpl = t => { const d = t.reduce((a, x) => a + x.dist, 0), l = t.reduce((a, x) => a + x.litres, 0); return l ? d / l : null; };
-function tanks(logs, spec = tankSpec()) {
-    /* the rider's own mileage turns "range left" into litres: a first pass with a guess, then again with the result */
-    const first = fuelReadings(logs, spec, KMPL_GUESS), ex = first.filter(x => x.exact);
-    const k = Math.min(Math.max(sumKmpl(ex.length ? ex : first) || KMPL_GUESS, 15), 80);
-    return fuelReadings(logs, spec, k);
+const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), h = s.length >> 1; return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2; };
+function dteFactor(logs, spec) {
+    if (!spec.size) return null;
+    return median(logs.filter(f => f.full_tank && numOr(f.range_km) > 0 && spec.size - f.litres - spec.empty > 0.5).map(f => Number(f.range_km) / (spec.size - f.litres - spec.empty)));
 }
-function mileageStats(logs) {
-    const t = tanks(logs), avg = sumKmpl(t);
+/* logs: ONE bike's fill-ups, sorted by odometer */
+function tanks(logs, spec = tankSpec()) {
+    let k = dteFactor(logs, spec);
+    if (k == null) { const first = fuelReadings(logs, spec, KMPL_GUESS), ex = first.filter(x => x.exact); k = sumKmpl(ex.length ? ex : first) || KMPL_GUESS; }
+    return fuelReadings(logs, spec, Math.min(Math.max(k, 10), 90));
+}
+/* stats for one bike (default: the main bike, which also feeds the Warriorboards) */
+function mileageStats(allLogs, b = mainBike()) {
+    const logs = bikeLogs(allLogs, b), t = tanks(logs, tankSpec(b)), avg = sumKmpl(t);
     const priced = logs.filter(f => f.amount != null && Number(f.litres) > 0), pl = priced.reduce((a, f) => a + Number(f.litres), 0), pa = priced.reduce((a, f) => a + Number(f.amount), 0);
-    return { tanks: t, avg, last: t.at(-1)?.kmpl ?? null, lastExact: t.at(-1)?.exact ?? true, best: t.length ? Math.max(...t.map(x => x.kmpl)) : null, cpk: avg && pl ? pa / pl / avg : null };
+    return { tanks: t, logs, avg, last: t.at(-1)?.kmpl ?? null, lastExact: t.at(-1)?.exact ?? true, best: t.length ? Math.max(...t.map(x => x.kmpl)) : null, cpk: avg && pl ? pa / pl / avg : null };
 }
 
 /* ---------- router ---------- */
@@ -848,7 +880,7 @@ const DOC_ICON = ICON.folder;
 /* the newest odometer reading: from whichever entry (service or fill-up) has the latest date */
 function latestOdo(services = [], fuel = []) {
     const me = state.me || {}, manual = me.odo_km != null && me.odo_date ? [{ km: me.odo_km, d: me.odo_date, src: 'update', manual: true }] : [];
-    const all = [...manual, ...services.map(s => ({ km: s.odometer_km, d: s.service_date, src: 'service' })), ...fuel.map(f => ({ km: f.odometer_km, d: f.fill_date, src: 'fill-up' }))]
+    const all = [...manual, ...services.map(s => ({ km: s.odometer_km, d: s.service_date, src: 'service' })), ...mainLogs(fuel).map(f => ({ km: f.odometer_km, d: f.fill_date, src: 'fill-up' }))]
         .filter(x => x.km > 0).sort((a, b) => b.d.localeCompare(a.d) || b.km - a.km);
     return all[0] || null;
 }
@@ -1011,10 +1043,18 @@ const fromLog = (w, services) => services.filter(s => (s.items || []).some(i => 
 const curParts = parts => (parts || []).filter(p => !p.retired_on);
 const rideTitle = r => (r?.name || '').trim() || 'My Ride';
 
+/* Home: mileage of the rider's other bikes (the main bike is in My Ride) */
+function otherBikes(fuel) {
+    const bikes = bikeList().slice(1);
+    if (!bikes.length) return '';
+    return `<section class="ob-list">${bikes.map(b => { const ms = mileageStats(fuel, b);
+        return `<a class="card tap ob-row" href="#mileage/${b.slot}"><span class="ob-ico">${ICON.fuel}</span><span class="grow"><b>${esc(b.name)}</b><span class="small muted">${esc(b.vrn || '')}${b.pending ? ' · waiting for approval' : ''}</span></span>
+            <span class="ob-k">${ms.avg ? `<b>${ms.avg.toFixed(1)}</b><em>km/l</em>` : '<em>Add fuel</em>'}</span>${ICON.chev}</a>`; }).join('')}</section>`;
+}
 function rideWidget(services, fuel, ride) {
     const last = latestOdo(services, fuel), odo = last?.km || 0, ms = mileageStats(fuel);
     const n = nextService(services, odo), state_ = odo ? n.status : '';
-    const lastFill = [...fuel].sort((a, b) => b.fill_date.localeCompare(a.fill_date) || b.odometer_km - a.odometer_km)[0];
+    const lastFill = mainLogs(fuel).sort((a, b) => b.fill_date.localeCompare(a.fill_date) || b.odometer_km - a.odometer_km)[0];
     const lastSvc = services[0];
     const tracked = curParts(ride?.parts).filter(p => p.kind === 'wear').map(p => ({ p, w: partWear(p, odo) })).filter(x => x.w.known).sort((a, b) => b.w.pc - a.w.pc);
     /* odometer: mechanical-style digit wheels that roll into place */
@@ -1276,6 +1316,7 @@ async function viewHome() {
     const feed = visibleNews(news);
     app.innerHTML = top(`Hi, ${firstName(state.me)}`) + `
         ${rideWidget(services, fuel, ride)}
+        ${otherBikes(fuel)}
         <nav class="quick" aria-label="Quick actions">
             <button data-act="add-fuel"><span>${ICON.fuel}</span>Add fuel</button>
             <button data-act="add-service"><span>${ICON.wrench}</span>Log service</button>
@@ -2838,41 +2879,46 @@ function docForm(d) {
 const HOWTO = `<details class="howto" id="howto"><summary>How mileage works</summary>
     <ol>
         <li>Add every fill-up: <b>litres</b>, <b>₹</b> and the <b>odometer</b>. Any amount works, full tank or not.</li>
-        <li>Before filling, note the <b>range</b> (km to empty) on your dash and add it. That gives a mileage for every fill-up.</li>
+        <li>Before filling, note the <b>range left / DTE</b> on your dash and add it. That gives a mileage for every fill-up.</li>
         <li>Filled till the nozzle cut off? Turn on <b>Full tank</b>. Full tank to full tank is the most exact reading.</li>
+        <li>Reset Trip A at every fill-up? Add the <b>Trip A</b> reading too, for the exact distance.</li>
     </ol>
     <div class="formula">Mileage = km ridden ÷ petrol used</div>
-    <p class="muted small">No range or full tank this time? The litres are added into your next reading. Trip A isn't needed.</p>
+    <p class="muted small">Adding the DTE on full-tank fill-ups teaches the app how your bike's DTE reads, so DTE-only readings get closer.</p>
 </details>`;
 
 async function viewMileage() {
-    const [logs, svcs] = await Promise.all([load.fuel(), load.services()]), ms = mileageStats(logs);
+    const [logs, svcs, bikes] = await Promise.all([load.fuel(), load.services(), load.bikes()]);
     syncKmpl(logs);
+    const want = Number(state.param) || state.mileSlot || 1, b = bikes.find(x => x.slot === want) || bikes[0];
+    state.mileSlot = b.slot;
+    const ms = mileageStats(logs, b), mine = ms.logs;
     const byEnd = new Map(ms.tanks.map(t => [t.end.id, t]));
     const f1 = v => v == null ? '–' : v.toFixed(1);
-    app.innerHTML = top('Mileage') + HOWTO + `
+    app.innerHTML = top('Mileage') + (bikes.length > 1 ? `<div class="chips bike-chips" role="tablist">${bikes.map(x => `<button class="chip" data-act="bk" data-slot="${x.slot}" aria-pressed="${x.slot === b.slot}">${esc(x.name)}</button>`).join('')}</div>` : '') + HOWTO + `
         <section class="section"><div class="stats">
             <div class="stat accent"><b>${f1(ms.avg)}</b><span>Average km/l</span></div>
             <div class="stat"><b>${ms.last != null && !ms.lastExact ? '≈' : ''}${f1(ms.last)}</b><span>Last reading</span></div>
             <div class="stat"><b>${f1(ms.best)}</b><span>Best reading</span></div>
             <div class="stat"><b>${ms.cpk ? '₹' + ms.cpk.toFixed(2) : '–'}</b><span>Fuel cost / km</span></div>
         </div></section>
-        <section class="section"><h2>You vs RWB</h2><div class="card vs" id="vs"><p class="small muted">Comparing…</p></div></section>
+        ${b.slot === 1 ? `<section class="section"><h2>You vs RWB</h2><div class="card vs" id="vs"><p class="small muted">Comparing…</p></div></section>` : ''}
         ${TIPS}
-        ${logs.length || svcs.length ? `<section class="section"><h2>Spends and mileage</h2><div class="card trend" id="trend"></div></section>` : ''}
-        <section class="section"><h2>Fill-ups</h2>${logs.length ? `<div class="list">${[...logs].reverse().map(f => fuelCard(f, byEnd.get(f.id))).join('')}</div>` :
-            `<div class="card empty"><b>No fill-ups yet</b>Add litres, ₹, odometer and the range on your dash.</div>`}</section>
+        ${mine.length || (b.slot === 1 && svcs.length) ? `<section class="section"><h2>Spends and mileage</h2><div class="card trend" id="trend"></div></section>` : ''}
+        <section class="section"><h2>Fill-ups${bikes.length > 1 ? ` · ${esc(b.name)}` : ''}</h2>${mine.length ? `<div class="list">${[...mine].reverse().map(f => fuelCard(f, byEnd.get(f.id))).join('')}</div>` :
+            `<div class="card empty"><b>No fill-ups yet</b>Add litres, ₹, odometer and the range left / DTE on your dash.</div>`}</section>
         <button class="btn fab" data-act="add-fuel">＋ Add fuel</button>`;
-    actions = { open: el => fuelForm(logs.find(f => String(f.id) === el.dataset.id)) };
-    if ($('#trend')) drawTrend($('#trend'), logs, svcs, ms.tanks);
-    drawVs($('#vs'), ms.avg);
+    actions = { open: el => fuelForm(logs.find(f => String(f.id) === el.dataset.id)), 'add-fuel': () => fuelForm(null, b.slot),
+        bk: el => { state.mileSlot = Number(el.dataset.slot); state.param ? (location.hash = '#mileage') : render(); } };
+    if ($('#trend')) drawTrend($('#trend'), mine, b.slot === 1 ? svcs : [], ms.tanks);
+    if ($('#vs')) drawVs($('#vs'), ms.avg);
 }
 function fuelCard(f, t) {
     const p = parts(f.fill_date);
     return `<button class="card tap item" data-act="open" data-id="${f.id}">
         <div class="date"><b>${p.d}</b><span>${MONTHS[p.m - 1]} ${String(p.y).slice(2)}</span></div>
         <div><p style="font-weight:600">${Number(f.litres).toFixed(2)} L ${f.full_tank ? '<span class="badge ok">Full</span>' : '<span class="badge">Top-up</span>'}</p>
-            <p class="small muted">${km(f.odometer_km)}${f.range_km != null ? ` · Range ${Number(f.range_km)} km` : ''}${f.amount != null ? ` · ${rs(f.amount)}` : ''}</p></div>
+            <p class="small muted">${km(f.odometer_km)}${f.range_km != null ? ` · DTE ${Number(f.range_km)}` : ''}${f.trip_a_km != null ? ` · Trip A ${Number(f.trip_a_km).toLocaleString('en-IN')}` : ''}${f.amount != null ? ` · ${rs(f.amount)}` : ''}</p></div>
         <div class="right">${t ? `<span class="kmpl">${t.exact ? '' : '≈'}${t.kmpl.toFixed(1)}</span><br><span class="small muted">km/l</span>` : ''}</div></button>`;
 }
 function chart(t, avg) {
@@ -2890,61 +2936,74 @@ function chart(t, avg) {
     </svg><p class="small muted" style="margin-top:6px">km/l per tank · dashed line is your average</p>`;
 }
 
-function fuelForm(f = null) {
-    const logs = state.fuel || [];
-    const prev = logs.filter(x => !f || x.id !== f.id);
-    const r = f ? { ...f } : { fill_date: todayISO(), full_tank: false, odometer_km: currentOdo() };
-    const spec = tankSpec();
+/* odometer to suggest for a bike: the main bike's latest reading, or that bike's last fill-up */
+function bikeOdo(slot) {
+    if (slot === 1) return currentOdo();
+    const b = bikeList().find(x => x.slot === slot), l = b ? bikeLogs(state.fuel, b) : [];
+    return l.length ? Math.max(...l.map(f => Number(f.odometer_km))) : '';
+}
+function fuelForm(f = null, slot = 1) {
+    const logs = state.fuel || [], bikes = bikeList();
+    let bike = f ? bikeOf(f, bikes) : bikes.find(x => x.slot === slot) || bikes[0];
+    const r = f ? { ...f } : { fill_date: todayISO(), full_tank: false, odometer_km: bikeOdo(bike.slot) };
     openSheet(f ? 'Edit fill-up' : 'Add fuel', `<form id="ff">
+        ${bikes.length > 1 ? `<div class="chips bike-chips" id="ff-bikes">${bikes.map(x => `<button type="button" class="chip" data-slot="${x.slot}" aria-pressed="${x.slot === bike.slot}">${esc(x.name)}</button>`).join('')}</div>` : ''}
         <div class="grid2">
             <label>Litres filled<input type="number" name="litres" required min="0.1" max="99" step="0.01" inputmode="decimal" value="${esc(r.litres ?? '')}"></label>
             <label>Amount paid (₹)<input type="number" name="amount" min="0" step="0.01" inputmode="decimal" value="${esc(r.amount ?? '')}"></label>
         </div>
         <div class="grid2">
             <label>Odometer (km)<input type="number" name="odometer_km" required min="0" inputmode="numeric" value="${esc(r.odometer_km ?? '')}"></label>
-            <label id="rng-wrap">Range left (km)<input type="number" name="range_km" min="0" max="999" inputmode="numeric" placeholder="Optional" value="${esc(r.range_km ?? '')}"></label>
+            <label>Range left / DTE (km)<input type="number" name="range_km" min="0" max="999" inputmode="numeric" placeholder="Optional" value="${esc(r.range_km ?? '')}"></label>
+        </div>
+        <div class="grid2">
+            <label>Trip A (km)<input type="number" name="trip_a_km" min="0" max="99999" step="0.1" inputmode="decimal" placeholder="Optional" value="${esc(r.trip_a_km ?? '')}"></label>
+            <label>Date<input type="date" name="fill_date" required max="${todayISO()}" value="${esc(r.fill_date)}"></label>
         </div>
         <label class="switch">Full tank<input type="checkbox" name="full_tank"${r.full_tank ? ' checked' : ''}></label>
-        ${spec.ronin ? '' : `<label>Tank size (litres)<input type="number" name="tank_l" min="3" max="40" step="0.1" inputmode="decimal" placeholder="e.g. 13" value="${esc(state.me?.tank_l ?? '')}"></label>`}
         <p class="calc" id="calc"></p>
-        <div class="grid2">
-            <label>Date<input type="date" name="fill_date" required max="${todayISO()}" value="${esc(r.fill_date)}"></label>
-            <label>Notes<input name="notes" maxlength="500" placeholder="Pump, highway run…" value="${esc(r.notes || '')}"></label>
-        </div>
+        <label>Notes<input name="notes" maxlength="500" placeholder="Pump, highway run…" value="${esc(r.notes || '')}"></label>
         <button class="btn block">${f ? 'Save changes' : 'Save fill-up'}</button>
         ${f ? '<button type="button" class="btn danger block" id="del">Delete this fill-up</button>' : ''}
     </form>`, body => {
         const form = body.querySelector('#ff'), calc = body.querySelector('#calc');
-        const tankNow = () => { const v = form.tank_l ? num(form.tank_l.value) : null; return v > 0 ? { ...spec, size: v } : spec; };
+        let odoTouched = !!f;
+        const others = () => bikeLogs(logs, bike).filter(x => !f || x.id !== f.id);
         const draftOf = () => {
-            const d = Object.fromEntries(new FormData(form)), full = form.full_tank.checked;
-            return { id: f?.id ?? '__new', fill_date: d.fill_date, odometer_km: num(d.odometer_km), litres: num(d.litres), amount: num(d.amount), full_tank: full,
-                     range_km: full ? null : num(d.range_km), trip_a_km: f?.trip_a_km ?? null, notes: (d.notes || '').trim() || null };
+            const d = Object.fromEntries(new FormData(form));
+            return { fill_date: d.fill_date, odometer_km: num(d.odometer_km), litres: num(d.litres), amount: num(d.amount), full_tank: form.full_tank.checked,
+                     range_km: num(d.range_km), trip_a_km: num(d.trip_a_km), notes: (d.notes || '').trim() || null, bike_slot: bike.slot, bike_vrn: bike.vrn || null };
         };
         const update = () => {
-            const rec = draftOf(); body.querySelector('#rng-wrap').hidden = rec.full_tank;
-            const msg = [];
+            const rec = draftOf(), msg = [];
             if (rec.litres && rec.amount) msg.push(`₹${(rec.amount / rec.litres).toFixed(2)}/L`);
             if (rec.litres && rec.odometer_km != null) {
-                const seq = [...prev, { ...rec, id: '__new' }].sort((a, b) => a.odometer_km - b.odometer_km || a.fill_date.localeCompare(b.fill_date));
-                const t = tanks(seq, tankNow()).find(x => x.end.id === '__new');
-                if (t) msg.push(`<b style="color:var(--orange)">${t.exact ? '' : '≈ '}${t.kmpl.toFixed(1)} km/l</b> · ${Math.round(t.dist)} km on ${t.litres.toFixed(1)} L`);
+                const seq = [...others(), { ...rec, id: '__new' }].sort((a, b) => a.odometer_km - b.odometer_km || a.fill_date.localeCompare(b.fill_date));
+                const t = tanks(seq, tankSpec(bike)).find(x => x.end.id === '__new');
+                if (t) msg.push(`<b style="color:var(--orange)">${t.exact ? '' : '≈ '}${t.kmpl.toFixed(1)} km/l</b> · ${(Math.round(t.dist * 10) / 10).toLocaleString('en-IN')} km on ${t.litres.toFixed(1)} L`);
             }
             calc.innerHTML = msg.join(' · ');
         };
+        form.odometer_km.addEventListener('input', () => { odoTouched = true; });
+        const chips = body.querySelector('#ff-bikes');
+        if (chips) chips.onclick = e => { const c = e.target.closest('[data-slot]'); if (!c) return;
+            bike = bikes.find(x => x.slot === Number(c.dataset.slot)) || bike;
+            chips.querySelectorAll('[data-slot]').forEach(x => x.setAttribute('aria-pressed', x === c));
+            if (!odoTouched) form.odometer_km.value = bikeOdo(bike.slot);
+            update(); };
         form.oninput = update; update();
         const del = body.querySelector('#del');
         if (del) del.onclick = () => { if (confirmBox('Delete this fill-up?')) busy(del, async () => { await api.deleteFuel(f); await load.fuel(true); state.board = null; closeSheet(); render(); toast('Deleted'); }); };
         form.onsubmit = e => {
             e.preventDefault();
-            const { id: _i, ...rest } = draftOf(), rec = { id: f?.id, ...rest };
+            const rec = { id: f?.id, ...draftOf() }, prev = others();
             if (!f && prev.some(x => fuelKey(x) === fuelKey(rec))) { toast('This fill-up is already saved'); return; }
             const before = prev.filter(x => x.fill_date <= rec.fill_date).sort((a, b) => b.odometer_km - a.odometer_km)[0];
             if (before && rec.odometer_km < before.odometer_km && !confirmBox(`The odometer (${km(rec.odometer_km)}) is lower than an earlier fill-up (${km(before.odometer_km)}). Save anyway?`)) return;
-            const tl = form.tank_l ? num(form.tank_l.value) : null;
             busy(e.submitter, async () => {
-                if (form.tank_l && (tl ?? null) !== (state.me?.tank_l == null ? null : Number(state.me.tank_l))) { await api.updateMe({ tank_l: tl }).catch(() => null); state.me.tank_l = tl; }
-                await api.saveFuel(rec); await load.fuel(true); state.board = null; closeSheet(); location.hash === '#mileage' ? render() : (location.hash = '#mileage'); toast(f ? 'Saved' : 'Fill-up added');
+                await api.saveFuel(rec); await load.fuel(true); state.board = null; state.mileSlot = bike.slot; closeSheet();
+                location.hash.startsWith('#mileage') ? (location.hash === '#mileage' ? render() : (location.hash = '#mileage')) : (location.hash = '#mileage');
+                toast(f ? 'Saved' : 'Fill-up added');
             });
         };
     });
@@ -3711,8 +3770,8 @@ async function gateFor(m) {
     if ('tnc_agreed' in m && !tncOk(m)) return 'tnc';
     let miss = missingOf(m).filter(x => x !== 'rules');
     if (miss.includes('VRN') && (state.vrnSent || (await api.myChanges().catch(() => [])).some(c => c.kind === 'vrn' && c.status === 'pending'))) { state.vrnSent = true; miss = miss.filter(x => x !== 'VRN'); }
-    await loadJoinForm();
-    return miss.length || moreMissing(m).length ? 'profile' : null;
+    const [, bikes] = await Promise.all([loadJoinForm(), load.bikes().catch(() => bikeList())]);
+    return miss.length || moreMissing(m).length || bikes.some(needTank) ? 'profile' : null;
 }
 const gateTop = title => `${demoBar()}<header class="top gate-top"><img class="logo" src="icons/logo-128.webp" alt="RWB" decoding="sync"><h1>${esc(title)}</h1></header>`;
 function tncGate() {
@@ -3741,7 +3800,8 @@ async function adminsSheet() {
             <a class="btn sm wa" target="_blank" rel="noopener" href="${waTo(a.phone, `Hi ${firstName(a)}, it's ${me} from RWB. I have a question about the RWB Terms & Conditions.`)}">WhatsApp</a></div>`).join('') : '<p class="small muted" style="padding:12px">Could not load the admins. Please try again.</p>'}</div>`);
 }
 function profileGate() {
-    const m = state.me, miss = [...missingOf(m).filter(x => x !== 'rules' && !(x === 'VRN' && state.vrnSent)), ...(moreMissing(m).length ? ['More from RWB'] : [])];
+    const m = state.me, tk = bikeList().filter(needTank);
+    const miss = [...missingOf(m).filter(x => x !== 'rules' && !(x === 'VRN' && state.vrnSent)), ...(moreMissing(m).length ? ['More from RWB'] : []), ...(tk.length ? ['Full tank capacity'] : [])];
     const qs = moreQs(m);
     app.innerHTML = gateTop('RWB') + `<section class="gate card">
         <p class="gate-kicker">Almost there, ${esc(firstName(m))}</p>
@@ -3750,10 +3810,13 @@ function profileGate() {
         <div class="fu-miss" style="margin-bottom:14px">${miss.map(x => `<span>${esc(x)}</span>`).join('')}</div>
         <form id="mf">${joinFields(m, 'me')}
             ${qs.length ? `<h3 class="gate-sub">More from RWB</h3>${moreFieldsHtml(m, qs, true)}` : ''}
+            ${tk.length ? `<h3 class="gate-sub">Full tank capacity</h3>${tk.map(b => tankField(b, `tank|${b.key}`, true)).join('')}` : ''}
             <button class="btn block">Save and continue</button></form></section>`;
     actions = {};
     $('#mf').onsubmit = e => { e.preventDefault(); const form = e.target, more = readMore(form, m, qs);
+        const tanks = readTanks(form);
         saveMyDetails(form, m, e.submitter, async () => {
+            if (Object.keys(tanks).length) await saveTanks(tanks).catch(err => toast(err.message, true));
             if (Object.keys(more).length) { const saved = await api.updateMyAnswers(more).catch(err => { toast(err.message, true); return {}; }); state.me.form_answers = { ...(state.me.form_answers || {}), ...saved }; }
             render(); }); };
 }
@@ -3767,6 +3830,13 @@ function rulesSheet(m, done) {
         if (d) d.onclick = () => { if (confirmBox('No longer agree to the RWB Terms & Conditions? Your access to the RWB App pauses until you agree again, and the admins are told.')) busy(d, async () => { await api.withdrawTnc(); state.me = await api.me(); closeSheet(); render(); }); };
     });
 }
+/* full-tank capacity of a non-Ronin vehicle (Ronins are 14 L and never asked) */
+const tankField = (b, name, req) => `<label><span>${esc(b.name)}${b.vrn ? ` <span class="muted">· ${esc(b.vrn)}</span>` : ''} (litres)${req ? ' <span class="req">*</span>' : ''}</span><input type="number" name="${esc(name)}" min="3" max="80" step="0.1" inputmode="decimal" placeholder="e.g. 13"${req ? ' required' : ''} value="${esc(b.tank ?? '')}"></label>`;
+const readTanks = form => Object.fromEntries([...form.querySelectorAll('input[name^="tank|"]')].filter(i => Number(i.value) >= 3).map(i => [i.name.slice(5), Math.round(Number(i.value) * 10) / 10]));
+async function saveTanks(add) {
+    const tanks = { ...(state.me.tanks || {}), ...add };
+    await api.updateMe({ tanks }); state.me.tanks = tanks;
+}
 const BIKE_MODELS = ['TVS Ronin 225', 'TVS Apache RTR 160 4V', 'TVS Apache RTR 200 4V', 'TVS Apache RTR 310', 'Royal Enfield Hunter 350', 'Royal Enfield Classic 350', 'Honda CB350', 'Bajaj Pulsar', 'KTM Duke'];
 function bikeSheet(slot, b, done) {
     const main = slot === 1;
@@ -3774,11 +3844,16 @@ function bikeSheet(slot, b, done) {
         <label><span>VRN <span class="req">*</span></span><input name="vrn" required autocapitalize="characters" placeholder="WB 02 AB 1234" value="${esc(b?.vrn || '')}"></label>
         <label><span>Model</span><input name="model" list="bike-models" value="${esc(b?.model || 'TVS Ronin 225')}"><small class="hint">${main ? 'Changing only the model saves straight away. A new VRN is checked and approved by an admin.' : 'Change it if it\'s a different bike. An admin checks the VRN and approves it.'}</small></label>
         <datalist id="bike-models">${BIKE_MODELS.map(x => `<option value="${esc(x)}">`).join('')}</datalist>
+        <label id="bk-tank"${isRonin(b?.model || 'TVS Ronin 225') ? ' hidden' : ''}><span>Full tank capacity (litres) <span class="req">*</span></span><input type="number" name="tank" min="3" max="80" step="0.1" inputmode="decimal" placeholder="e.g. 13" value="${esc(state.me.tanks?.[bikeKey(slot, b?.vrn)] ?? '')}"></label>
         <button class="btn block">Save bike</button>${b && !main ? '<button type="button" class="btn danger block" data-x="del" style="margin-top:8px">Remove this bike</button>' : ''}</form>`, body => {
-        body.querySelector('#bk').onsubmit = e => {
+        const fm = body.querySelector('#bk'), tw = body.querySelector('#bk-tank');
+        const tankOn = () => { const on = !isRonin(fm.model.value.trim()); tw.hidden = !on; fm.tank.required = on; };
+        fm.model.addEventListener('input', tankOn); tankOn();
+        fm.onsubmit = e => {
             e.preventDefault(); const v = e.target.vrn.value.replace(/\s+/g, ' ').trim().toUpperCase();
             if (v.replace(/[^A-Z0-9]/g, '').length < 6) return toast('Please check the VRN (for example WB 02 AB 1234)', true);
-            busy(e.submitter, async () => { const r = main ? await api.requestChange('vrn', v, null, e.target.model.value.trim()) : await api.saveBike(slot, v, e.target.model.value.trim()); if (main) state.me = await api.me(); closeSheet(); state.dir = null; toast(r === 'pending' ? 'Sent to the admins for approval' : r === 'unchanged' ? 'Nothing changed' : 'Bike saved'); main ? render() : done(); });
+            const tl = !tw.hidden && Number(fm.tank.value) >= 3 ? Math.round(Number(fm.tank.value) * 10) / 10 : null;
+            busy(e.submitter, async () => { if (tl) await saveTanks({ [bikeKey(slot, v)]: tl, ...(b?.vrn ? { [bikeKey(slot, b.vrn)]: tl } : {}) }); state.myBikes = null; const r = main ? await api.requestChange('vrn', v, null, e.target.model.value.trim()) : await api.saveBike(slot, v, e.target.model.value.trim()); if (main) state.me = await api.me(); closeSheet(); state.dir = null; toast(r === 'pending' ? 'Sent to the admins for approval' : r === 'unchanged' ? 'Nothing changed' : 'Bike saved'); main ? render() : done(); });
         };
         const del = body.querySelector('[data-x=del]');
         if (del) del.onclick = () => { if (confirmBox('Remove this bike from your profile?')) busy(del, async () => { await api.saveBike(slot, ''); closeSheet(); state.dir = null; toast('Bike removed'); done(); }); };
@@ -5494,10 +5569,11 @@ async function adminAI() {
 /* =================== RWB: leaderboards =================== */
 const MEDAL = ['🥇', '🥈', '🥉'];
 const kmTxt = n => Number(n).toLocaleString('en-IN') + ' km';
+const bikeShort = b => String(b).replace(/^TVS\s+/i, '').trim();
 const kmplTxt = v => Number(v).toFixed(1) + ' km/l';
 const BOARDS = {
     gps: { title: 'Track Warriors', sub: 'Kilometres ridden while sharing live location with Track', how: 'How to get on it: tap <b>Track</b> (the middle button) → <b>Share</b> before you ride. Every km you ride while sharing counts, checked by GPS.', has: r => r.km > 0, val: r => Number(r.km), big: r => `${Number(r.km).toLocaleString('en-IN', { maximumFractionDigits: r.km < 100 ? 1 : 0 })} km`, small: r => r.rides ? `${r.rides} ride${r.rides === 1 ? '' : 's'}` : '', empty: 'No one yet! Tap Track → Share on your next ride to be the first Track Warrior.' },
-    mileage: { title: 'Mileage Warriors', sub: 'Best average km/l, from fill-ups', subP: 'Best average km/l in this period', has: r => r.kmpl > 0, val: r => Number(r.kmpl), big: r => kmplTxt(r.kmpl), small: r => r.km ? kmTxt(r.km) : '', empty: 'Add two fill-ups with the range on your dash to get on this board.' },
+    mileage: { title: 'Mileage Warriors', sub: 'Best average km/l of each rider\'s main bike', subP: 'Best average km/l of main bikes in this period', has: r => r.kmpl > 0, val: r => Number(r.kmpl), big: r => kmplTxt(r.kmpl), small: r => r.bike ? bikeShort(r.bike) : '', empty: 'Add two fill-ups with the range on your dash to get on this board.' },
     service: { title: 'Service Warriors', sub: 'Most services logged in the app', subP: 'Most services done in this period', has: r => r.services > 0, val: r => r.services * 1e5 + (r.last_service ? Date.parse(r.last_service) / 864e5 : 0), big: r => `${r.services} service${r.services === 1 ? '' : 's'}`, small: r => [r.kmpl ? kmplTxt(r.kmpl) : '', r.last_service ? 'last ' + fmtDayMonth(r.last_service) : ''].filter(Boolean).join(' · '), empty: 'Log your services to get on this board.' },
     road: { title: 'Road Warriors', sub: 'Most km on the odometer', subP: 'Most km ridden, from odometer readings', has: r => r.km > 0, val: r => r.km, big: r => kmTxt(r.km), small: r => r.kmpl ? kmplTxt(r.kmpl) : '', empty: 'Update your odometer on Home, or add a fill-up or service, to get on this board.' },
     pookie: { title: 'Pookie Warriors', sub: 'Most XP from teaching Pookie about the Ronin', subP: 'Most XP earned teaching Pookie in this period', how: 'How to get on it: open <a href="#teach"><b>Teach Pookie</b></a> and answer its questions. <b>10 XP</b> for every answer the admins approve, 2 XP while it waits.', has: r => r.xp > 0, val: r => r.xp * 1000 + r.approved, big: r => `${r.xp} XP`, small: r => `${r.approved} taught`, empty: 'Answer a question in Teach Pookie to get on this board.' }
@@ -5522,7 +5598,7 @@ function boardHtml(key, raw) {
     const sub = (state.boardPer || 'all') !== 'all' && B.subP ? B.subP : B.sub;
     return `<div class="lb-head"><span class="lb-ico">${LB_ICON[key]}</span><div class="grow"><h2 class="board-title">${B.title}</h2><p class="small muted">${sub}</p></div><span class="lb-n"><b class="lb-count">${board.length}</b><small>rider${board.length === 1 ? '' : 's'}</small></span>${isMod() && !isFam() ? `<button class="lb-share" data-act="lb-share" aria-label="Share ${B.title}">${EVT_ICON.share}</button>` : ''}</div>
         ${board.length ? `<div class="lb-stage"><i class="lb-rays"></i>${[1, 2, 3].map(i => `<i class="lb-spark s${i}"></i>`).join('')}<div class="lb-podium">${pod(top3[1], 2)}${pod(top3[0], 1)}${pod(top3[2], 3)}</div></div>`
-            + (rest.length ? `<ol class="lb-list" start="4">${rest.map((r, i) => `<li class="${r.is_me ? 'me' : ''}" style="--i:${i}"><span class="rk">${r.rank}</span>${face(r, 'avatar sm')}<span class="grow"><b>${esc(r.full_name)}</b><span class="small muted">${esc(r.bike || '')}</span></span><span class="num km"><span class="lb-count">${B.big(r)}</span><small>${esc(B.small(r))}</small></span></li>`).join('')}</ol>` : '')
+            + (rest.length ? `<ol class="lb-list" start="4">${rest.map((r, i) => `<li class="${r.is_me ? 'me' : ''}" style="--i:${i}"><span class="rk">${r.rank}</span>${face(r, 'avatar sm')}<span class="grow"><b>${esc(r.full_name)}</b><span class="small muted">${esc(r.bike || '')}</span></span><span class="num km"><span class="lb-count">${B.big(r)}</span><small>${key === 'mileage' ? '' : esc(B.small(r))}</small></span></li>`).join('')}</ol>` : '')
             + (me && me.rank > 10 ? `<p class="lb-me">You're <b>#${me.rank}</b> of ${board.length} with ${B.big(me)}. ${board[me.rank - 2] ? `Just <b>${esc(lbGap(key, board[me.rank - 2], me))}</b> behind #${me.rank - 1}.` : ''}</p>` : '')
             + (!me && !isFam() ? `<p class="small muted lb-note">${state.me.show_on_leaderboard === false ? 'You\'re hidden from the Warriorboards (Me → Privacy).' : B.empty}</p>` : '')
           : `<div class="lb-empty"><span class="lb-trophy">${TROPHY}</span><b>Be the first!</b><span class="muted">${B.empty}</span></div>`}

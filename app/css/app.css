@@ -2829,3 +2829,19 @@ html.lite .tab-track.live .brand-ring::after{animation-iteration-count:infinite!
 .tp-pin{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--c);box-shadow:0 2px 8px rgba(0,0,0,.35);transition:opacity .2s}
 .tp-pin .avatar.xs{width:26px;height:26px;border:2px solid #fff}
 .tp-pin-wrap.off{opacity:0}.tp-pin-wrap.done .tp-pin{opacity:.6}
+
+/* ---------- Mileage per bike (Nov 2026) ---------- */
+.bike-chips{display:flex;gap:8px;overflow-x:auto;flex-wrap:nowrap;margin:2px 0 12px;scrollbar-width:none}
+.bike-chips::-webkit-scrollbar{display:none}
+.bike-chips .chip{flex:none}
+#ff .bike-chips{margin:0 0 12px}
+.ob-list{display:grid;gap:8px;margin:10px 0 4px}
+.ob-row{display:flex;align-items:center;gap:12px;padding:12px 14px;text-decoration:none;color:inherit}
+.ob-row .grow{display:flex;flex-direction:column;min-width:0}
+.ob-row .grow b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ob-ico{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:color-mix(in srgb,var(--orange) 14%,transparent);color:var(--orange);flex:none}
+.ob-ico svg{width:19px;height:19px}
+.ob-k{display:flex;align-items:baseline;gap:4px;flex:none}
+.ob-k b{font-size:1.25rem;color:var(--orange)}
+.ob-k em{font-style:normal;font-size:.8rem;opacity:.7}
+.ob-row>svg{width:16px;height:16px;opacity:.5;flex:none}

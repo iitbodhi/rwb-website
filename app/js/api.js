@@ -644,6 +644,10 @@ function demoApi() {
             { id: 2, kind: 'motomart', title: 'New on RWB MotoMart', body: 'Axor Apex helmet · ₹4,500', url: '#motomart/1', audience: 'all', created_at: new Date(Date.now() - 36e5 * 26).toISOString() },
             { id: 3, kind: 'member', title: 'A new Ronin joined the app 🏍️', body: 'Say hello to Rahul Ghosh!', url: '#home', audience: 'all', created_at: new Date(Date.now() - 36e5 * 50).toISOString() }
         ];
+        /* a second bike (not a Ronin) with its own fill-ups: its tank size is asked on the profile screen */
+        members[0].member_bikes = [{ slot: 2, vrn: 'WB 06 HC 4321', model: 'Royal Enfield Hunter 350', verified: true }]; members[0].tanks = {};
+        [[12000, 10, true, null], [12290, 7.5, false, 165], [12560, 9.2, true, null], [12850, 8.6, true, null]].forEach(([o, l, full, dte], i) =>
+            fuel.push({ id: id++, fill_date: daysAgo(48 - i * 12), odometer_km: o, litres: l, amount: Math.round(l * 104.9), full_tank: full, trip_a_km: null, range_km: dte, bike_slot: 2, bike_vrn: 'WB 06 HC 4321', notes: '' }));
         return { signedIn: false, members, services, fuel, requests, listings, news, nextId: 100 };
     }
     let db; try { db = JSON.parse(localStorage.getItem(KEY)); } catch { /* storage blocked */ }
@@ -713,7 +717,7 @@ function demoApi() {
         myJoin() { const r = (db.requests || []).find(x => x.id === db.myJoinId); return wait(r ? { ...r, status: r.status || 'pending', hold_note: r.hold_note, reason: r.reject_reason, can_apply: !r.spam } : null); },
         myRequest: () => wait(null),
         me: () => wait(me()),
-        async updateMe(f) { const bad = Object.keys(f).filter(k => !['full_name', 'nickname', 'dob', 'phone', 'alt_phone', 'bike', 'vrn', 'blood_group', 'locality', 'hideout', 'emergency_phone', 'avatar_url', 'show_on_leaderboard', 'notify', 'odo_km', 'odo_date', 'avg_kmpl', 'kmpl_tanks', 'tank_l'].includes(k)); if (bad.length) throw new Error(`Could not find the '${bad[0]}' column of 'members' in the schema cache`); Object.assign(me(), f); save(); return wait(me()); },   /* strict like the real database */
+        async updateMe(f) { const bad = Object.keys(f).filter(k => !['full_name', 'nickname', 'dob', 'phone', 'alt_phone', 'bike', 'vrn', 'blood_group', 'locality', 'hideout', 'emergency_phone', 'avatar_url', 'show_on_leaderboard', 'notify', 'odo_km', 'odo_date', 'avg_kmpl', 'kmpl_tanks', 'tanks'].includes(k)); if (bad.length) throw new Error(`Could not find the '${bad[0]}' column of 'members' in the schema cache`); Object.assign(me(), f); save(); return wait(me()); },   /* strict like the real database */
         async setAvatar(file) { me().avatar_url = file ? await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); }) : null; save(); return wait(me()); },
         joinForm: () => wait(window.DEMO_JOIN_FORM || null),
         vrnHint: (vrn, phone) => { const k = x => String(x || '').replace(/[^a-z0-9]/gi, '').toUpperCase(), d = String(phone || '').replace(/\D/g, '').slice(-10);
