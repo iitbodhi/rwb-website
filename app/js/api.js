@@ -71,7 +71,7 @@ function demoRides() {
     const leadIn = (lat, lng, n) => route(lat, lng, 80, n);
     demoRideCache = [mk(901, 2, 'Arjun Sen', 'Sultan', start, ride, 0, 0, true), mk(902, 3, 'Priya Dutta', '', start, ride, 40, 0.00025, true),
         mk(903, 4, 'Rahul Ghosh', 'Rocket', start, ride, 95, -0.00022, true), mk(904, 1, 'You', '', start, ride, 140, 0.00045, true),
-        mk(905, 5, 'Sourav Paul', '', Date.now() - 3 * 36e5, leadIn(22.5420, 88.3380, 300), 0, 0, false)];
+        mk(905, 5, 'Sourav Paul', '', Date.now() - 50 * 36e5, leadIn(22.5420, 88.3380, 300), 0, 0, false)];
     return demoRideCache;
 }
 const must = ({ data, error }) => { if (error) throw friendly(error); return data; };

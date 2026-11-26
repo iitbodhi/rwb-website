@@ -6734,9 +6734,10 @@ const PAUSE_I = '<svg viewBox="0 0 24 24"><path d="M8 5h3v14H8zM13 5h3v14h-3z" c
 const CLOSE_I = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 const TRASH_I = '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
 const LINE_COLORS = ['#f57d43', '#3b82f6', '#22c55e', '#e11d48', '#a855f7', '#eab308', '#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#14b8a6', '#f43f5e'];
+const hmTxt = t => new Date(t).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
 const clockTxt = t => { const d = new Date(t), y = new Date(); y.setDate(y.getDate() - 1);
     const hm = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
-    return d.toDateString() === new Date().toDateString() ? hm : d.toDateString() === y.toDateString() ? 'Yesterday ' + hm : hm; };
+    return d.toDateString() === new Date().toDateString() ? hm : d.toDateString() === y.toDateString() ? 'Yesterday ' + hm : d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) + ', ' + hm; };
 async function loadRides(force) {
     if (isFam() || !$('#trk-rides')) return;
     if (!force && trk.rides && Date.now() - trk.ridesAt < 120000) return drawRides();
@@ -6751,21 +6752,27 @@ function drawRides() {
     const evs = new Map(), items = [];
     list.forEach(r => { if (r.event_id) { const g = evs.get(r.event_id) || { id: r.event_id, title: r.event, rides: [] }; g.rides.push(r); evs.set(r.event_id, g); }
         else items.push({ t: Date.parse(r.ended_at), html: `<button class="trk-row ride" data-act="trk-play" data-r="${r.id}"><span class="tr-face">${face({ full_name: r.name, avatar_url: r.avatar }, 'avatar sm')}</span>
-            <span class="grow"><b class="tr-name">${esc(r.name)}${r.me ? ' <span class="muted">(you)</span>' : ''}</b><span class="tr-meta">${[rideKm({ ride_km: r.km }), avgKmh({ ride_km: r.km, move_s: r.move_s, top_spd: r.top_spd }) ? `avg ${avgKmh({ ride_km: r.km, move_s: r.move_s, top_spd: r.top_spd })} km/h` : '', clockTxt(Date.parse(r.ended_at))].filter(Boolean).join(' · ')}</span></span>
+            <span class="grow"><b class="tr-name">${esc(r.name)}${r.me ? ' <span class="muted">(you)</span>' : ''}</b><span class="tr-meta">${[rideKm({ ride_km: r.km }), avgKmh({ ride_km: r.km, move_s: r.move_s, top_spd: r.top_spd }) ? `avg ${avgKmh({ ride_km: r.km, move_s: r.move_s, top_spd: r.top_spd })} km/h` : '', hmTxt(Date.parse(r.ended_at))].filter(Boolean).join(' · ')}</span></span>
             <span class="tr-play">${PLAY_I}</span></button>` }); });
     evs.forEach(g => { const t = Math.max(...g.rides.map(r => Date.parse(r.ended_at))), n = g.rides.length;
         items.push({ t, html: `<button class="trk-row ride ev" data-act="trk-play" data-e="${g.id}"><span class="tr-face">${faceStack(g.rides.slice(0, 3).map(r => ({ full_name: r.name, avatar_url: r.avatar })), n - 3)}</span>
-            <span class="grow"><b class="tr-name">🏍️ ${esc(g.title || 'Event ride')}</b><span class="tr-meta">${n} ${n === 1 ? 'rider' : 'riders'} · ${clockTxt(t)}</span></span>
+            <span class="grow"><b class="tr-name">🏍️ ${esc(g.title || 'Event ride')}</b><span class="tr-meta">${n} ${n === 1 ? 'rider' : 'riders'} · ${hmTxt(t)}</span></span>
             <span class="tr-play">${PLAY_I}</span></button>` }); });
     items.sort((a, b) => b.t - a.t);
-    box.innerHTML = `<h3 class="trk-sub">Recent rides</h3>${items.map(i => i.html).join('')}`;
+    /* 7 days of rides (file 89): grouped by day, 8 at a time */
+    const show = items.slice(0, trk.ridesN || 8), day = t => { const d = new Date(t), y = new Date(); y.setDate(y.getDate() - 1);
+        return d.toDateString() === new Date().toDateString() ? 'Today' : d.toDateString() === y.toDateString() ? 'Yesterday' : d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }); };
+    let last = '', html = '';
+    show.forEach(i => { const d = day(i.t); if (d !== last) { html += `<h3 class="trk-sub">${d === 'Today' ? 'Recent rides · Today' : d}</h3>`; last = d; } html += i.html; });
+    box.innerHTML = html + (items.length > show.length ? `<button type="button" class="btn ghost block" data-x="more-rides">Show more</button>` : '');
+    box.querySelector('[data-x=more-rides]')?.addEventListener('click', () => { trk.ridesN = (trk.ridesN || 8) + 8; drawRides(); });
 }
 async function ridePlay(rid, eid) {
     let L; try { L = trk.L || await loadLeaflet(); } catch (e) { toast(e.message, true); return; }
     const key = eid ? 'e' + eid : 'r' + rid, info = eid ? (trk.rides || []).find(r => r.event_id === eid) : (trk.rides || []).find(r => r.id === rid);
     const lay = gdOverlay('trk-play', 'Ride playback'), el = lay.el;
     el.innerHTML = `<div class="tp-top"><button type="button" class="tf" data-x="close" aria-label="Close">${CLOSE_I}</button>
-        <span class="tp-title grow"><b>${esc(eid ? info?.event || 'Event ride' : info?.name || 'Ride')}</b><small>${info ? clockTxt(Date.parse(info.started_at)) + ' – ' + clockTxt(Date.parse(info.ended_at)).replace('Yesterday ', '') : ''}</small></span><span class="tp-del"></span></div>
+        <span class="tp-title grow"><b>${esc(eid ? info?.event || 'Event ride' : info?.name || 'Ride')}</b><small>${info ? clockTxt(Date.parse(info.started_at)) + ' – ' + hmTxt(Date.parse(info.ended_at)) : ''}</small></span><span class="tp-del"></span></div>
         <div class="tp-map"></div><div class="tp-panel">${SKEL(1)}</div>`;
     el.querySelector('[data-x=close]').onclick = () => gdClose();
     trk.lines ??= new Map();
