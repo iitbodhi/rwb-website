@@ -111,8 +111,8 @@ Bottom tabs: Home, Service, Mileage, Track (middle), MotoMart, Warriors, Events.
 - Home: birthdays, quick buttons (Sell gear, Documents, FAM), latest news, fresh MotoMart items, Explore: Teach Pookie,
   Maintenance guides (opens Guides), New accessories (opens MotoMart → New).
 - Service: log each service (date, km, type, work done, cost, next due, bill photo/PDF).
-- Mileage: "+ Add fuel" after each fill. Fill to full and reset Trip A; next time fill to full, enter litres and Trip A km.
-  Top-ups: turn "Full tank" off and don't reset Trip A.
+- Mileage: "+ Add fuel" after every fill, any amount: litres, ₹, odometer, and the "Range left" km on the dash before
+  filling (optional). Turn on "Full tank" only when filled till the nozzle cut off. Trip A isn't needed any more.
 - Track: live location on group rides and SOS to the RWB team.
 - MotoMart: one shop with tabs All, New, Pre-owned and RWB Merch, round category buttons, a search icon (top right) and sort
   (price low to high by default). Pre-owned (used) = members sell their own gear: "+ Sell something", live after an admin or coordinator
