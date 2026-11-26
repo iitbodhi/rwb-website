@@ -2790,3 +2790,8 @@ html.lite .tab-track.live .brand-ring::after{animation-iteration-count:infinite!
 /* Screen changes are instant, like iOS tab switches (Nov 26 2026). The 6 px slide-in made the phone build a new
    layer for every block of the new screen, and Android WebView showed those layers blank for one frame. */
 #app.enter:not(.same) > *:not(.top):not(.demo-bar){animation:none}
+/* "Rate Us" card (rateAsk) */
+.rate-ask .promo-card{gap:10px;padding-top:24px}
+.rate-ico{width:64px;height:64px;border-radius:16px;margin:0 auto;box-shadow:0 10px 24px -10px rgba(0,0,0,.5)}
+.rate-stars{font-size:1.6rem;letter-spacing:.18em;color:#f5b301;line-height:1}
+.rate-ask .promo-card p{margin-bottom:4px}

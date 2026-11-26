@@ -5820,7 +5820,7 @@ async function boot() {
                 api.linkAccount().then(st => { if (st === 'moved') location.reload(); }).catch(() => {});
             });
         }
-        if (!trk.resumed) { trk.resumed = true; resumeShare(); if (NATIVE) { nativePushOn(false).catch(() => {}); setTimeout(nativeUpdateAsk, 2500); if (sharing()) setTimeout(() => RwbTrack()?.perms?.().then(p => notifCheck({ notif: p?.notifications })).catch(() => {}), 1500); } else setTimeout(appPromo, 1500); }
+        if (!trk.resumed) { trk.resumed = true; resumeShare(); if (NATIVE) { nativePushOn(false).catch(() => {}); setTimeout(nativeUpdateAsk, 2500); if (sharing()) setTimeout(() => RwbTrack()?.perms?.().then(p => notifCheck({ notif: p?.notifications })).catch(() => {}), 1500); } else setTimeout(appPromo, 1500); setTimeout(rateAsk, 4000); }
     } catch (e) {
         tabbar.hidden = true;
         const off = !navigator.onLine || /offline|internet/i.test(e.message || '');
@@ -7086,6 +7086,39 @@ function appPromo() {
     el.addEventListener('click', e => { const x = e.target.closest('[data-x]')?.dataset.x; if (e.target === el || x === 'later' || x === 'get') { seen(); if (x !== 'get') e.preventDefault(); el.remove(); } });
     document.body.append(el);
 }
+/* "Rate Us" card (Nov 26 2026, Bodhi's choice): Play Store copy only. First ask 12 h after the app is first opened, then
+   every 12 h (on open or coming back to the app) until the rider taps "Rate now", which opens RWB's Play page. The app
+   can't see whether they really rated, so tapping Rate is taken as done. Same Rate button for everyone (Play policy: no
+   rewards, no "do you like it?" filter). Not over the Track screen, a blocker, a sheet or another card.
+   Test in a browser: localStorage['rwb-rate-test']='1' (shows it on every open). */
+const RATE_KEY = 'rwb-rate', RATE_GAP = 12 * 36e5;
+async function rateAsk() {
+    let test = false; try { test = localStorage.getItem('rwb-rate-test') === '1'; } catch { /* ignore */ }
+    if (!test && (!NATIVE || (await nativeInfo()).channel !== 'play')) return;
+    if (!state.me || document.hidden || document.body.classList.contains('blocked') || document.body.dataset.route === 'track'
+        || document.querySelector('.promo, dialog[open]')) return;
+    let s = {}; try { s = JSON.parse(localStorage.getItem(RATE_KEY) || '{}') || {}; } catch { /* ignore */ }
+    const save = () => { try { localStorage.setItem(RATE_KEY, JSON.stringify(s)); } catch { /* ignore */ } };
+    if (s.done) return;
+    if (!test) {
+        if (!s.first) { s.first = Date.now(); save(); return; }
+        if (Date.now() - Math.max(s.first, s.last || 0) < RATE_GAP) return;
+    }
+    s.last = Date.now(); save();
+    const el = document.createElement('div'); el.className = 'promo rate-ask'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-labelledby', 'rate-h');
+    el.innerHTML = `<div class="promo-card"><img src="icons/app-icon-256.webp" alt="" class="rate-ico" width="64" height="64">
+        <h2 id="rate-h">Rate Us</h2><div class="rate-stars" aria-hidden="true">★★★★★</div>
+        <p>Rate RWB on Google Play.</p>
+        <button class="btn block" data-x="rate">Rate now</button>
+        <button class="btn ghost block" data-x="later">Later</button></div>`;
+    el.addEventListener('click', e => { const x = e.target.closest('[data-x]')?.dataset.x;
+        if (e.target !== el && !x) return;
+        el.remove();
+        if (x === 'rate') { s.done = Date.now(); save();
+            (RwbTrack()?.openStore?.() || Promise.reject()).catch(() => (Native('Browser')?.open({ url: PLAY_URL }) || Promise.reject()).catch(() => { location.href = PLAY_URL; })); } });
+    document.body.append(el);
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(rateAsk, 2500); });
 /* =================== Pookie bubble: floats gently; drag it anywhere with a finger, it sticks to the nearest side =================== */
 (function pookieDrag() {
     const fab = document.getElementById('pookie-fab'); if (!fab) return;
