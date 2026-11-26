@@ -289,6 +289,14 @@ const stillHere = n => n === navN;
     addEventListener('touchmove', on, { passive: true });
     addEventListener('wheel', on, { passive: true });
     addEventListener('pointerdown', on, { passive: true });
+    /* battery (Nov 26 2026): ~10 s after the last touch, key or screen change the decorations rest (html.calm, CSS at the end of
+       app.css) and the gallery strip stops rolling, so a phone left on a screen stops redrawing it; any touch wakes them */
+    let c = 0;
+    const wake = () => { if (root.classList.contains('calm')) root.classList.remove('calm'); clearTimeout(c); c = setTimeout(() => root.classList.add('calm'), 10000); };
+    ['pointerdown', 'keydown', 'hashchange', 'focus'].forEach(ev => addEventListener(ev, wake, { passive: true }));
+    addEventListener('scroll', wake, { passive: true, capture: true });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
+    wake();
     /* lighter phones (4 GB memory or less, or few cores): keep the decorations still all the time */
     const mem = navigator.deviceMemory, cores = navigator.hardwareConcurrency;
     if ((mem && mem <= 4) || (cores && cores <= 4)) root.classList.add('lite');
@@ -1458,20 +1466,25 @@ function galRoll(view, onOpen) {
     const measure = () => { m.period = strip.children[n] ? strip.children[n].offsetLeft - strip.children[0].offsetLeft : 0; };
     const wrap = () => { if (m.period) { m.x %= m.period; if (m.x > 0) m.x -= m.period; } };
     const place = () => { strip.style.transform = `translate3d(${m.x.toFixed(1)}px,0,0)`; };
+    /* battery: ~30 steps a second (not the screen's 60–120), and it rolls to a stop when the rider is idle (html.calm) */
     function frame(now) {
         if (!view.isConnected) { m.raf = 0; return; }
+        if (!m.held && !m.v && now - m.last < 30) { m.raf = m.seen && !document.hidden ? requestAnimationFrame(frame) : 0; return; }
         const dt = Math.min(now - m.last, 64) / 1000; m.last = now;
-        const target = m.held || still || root.classList.contains('scrolling') || gdLayer ? 0 : SPEED;
+        const calm = root.classList.contains('calm');
+        const target = m.held || still || calm || root.classList.contains('scrolling') || gdLayer ? 0 : SPEED;
         m.cur += (target - m.cur) * (1 - Math.exp(-dt * 2.6));
         if (!m.held) { m.x += (m.cur + m.v) * dt; m.v *= Math.exp(-dt * 3.2); if (Math.abs(m.v) < 2) m.v = 0; }
         if (!m.period) measure();
         wrap(); place();
+        if (calm && !m.held && !m.v && Math.abs(m.cur) < 0.5) { m.cur = 0; m.raf = 0; return; }   /* stopped: sleep until a touch */
         m.raf = m.seen && !document.hidden ? requestAnimationFrame(frame) : 0;
     }
     const wake = () => { if (!m.raf && m.seen && !document.hidden && view.isConnected) { m.last = performance.now(); m.raf = requestAnimationFrame(frame); } };
+    const calmObs = new MutationObserver(() => { if (!root.classList.contains('calm')) wake(); }); calmObs.observe(root, { attributes: true, attributeFilter: ['class'] });
     const io = new IntersectionObserver(e => { m.seen = e[0].isIntersecting; galSecure('strip', m.seen); wake(); }, { rootMargin: '80px 0px' }); io.observe(view);
     document.addEventListener('visibilitychange', wake);
-    new MutationObserver((_, o) => { if (!view.isConnected) { io.disconnect(); galSecure('strip', false); document.removeEventListener('visibilitychange', wake); o.disconnect(); } }).observe(app, { childList: true });
+    new MutationObserver((_, o) => { if (!view.isConnected) { io.disconnect(); calmObs.disconnect(); galSecure('strip', false); document.removeEventListener('visibilitychange', wake); o.disconnect(); } }).observe(app, { childList: true });
     let sx = 0, sy = 0, lx = 0, lt = 0, vel = 0, id = null, decided = false;
     view.addEventListener('pointerdown', e => { if (e.button > 0) return; id = e.pointerId; sx = lx = e.clientX; sy = e.clientY; lt = performance.now(); vel = 0; decided = false; m.dragged = false; m.held = true; m.v = 0; wake(); });
     view.addEventListener('pointermove', e => {
@@ -6817,7 +6830,6 @@ function trkGlide() {
     const step = ts => {
         trk.raf = null;
         if (!trk.map || !location.hash.startsWith('#track') || document.visibilityState !== 'visible') return;
-        if (last && ts - last < 50) { trk.raf = requestAnimationFrame(step); return; }   /* ~20 frames a second is smooth enough */
         const k = 1 - Math.exp(-(last ? Math.min(ts - last, 400) : 50) / 650), now = Date.now(); last = ts;
         let more = false;
         trk.markers.forEach(m => {
@@ -6834,8 +6846,11 @@ function trkGlide() {
             more = true; m.setLatLng([c.lat + dl * k, c.lng + dg * k]);
         });
         if (trk.follow && trk.follow !== 'me' && ts - (trk.panAt || 0) > 1000) { const m = trk.markers.get(trk.follow); if (m) { trk.panAt = ts; trk.map.panTo(m.getLatLng(), { animate: true, duration: 0.9 }); } }
-        if (more) trk.raf = requestAnimationFrame(step);
+        if (more) next();
     };
+    /* battery (Nov 26 2026): ~12 steps a second on a timer, so the phone isn't woken for every screen refresh (60–120 a second);
+       a pin moves about a pixel per step at street zoom, which still looks smooth */
+    const next = () => { trk.raf = setTimeout(() => requestAnimationFrame(step), 80); };
     trk.raf = requestAnimationFrame(step);
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && location.hash.startsWith('#track')) trkGlide(); });

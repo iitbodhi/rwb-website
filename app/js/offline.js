@@ -165,6 +165,7 @@ export function withOffline(api) {
     const real = {};
     async function sync() {
         if (syncing || !navigator.onLine || !ns) return;
+        if (!(await getOutbox()).length) return;   /* nothing waiting: no sign-in check, no network (battery) */
         const s = await real.session?.().catch(() => null);
         if (!s || s.email !== ns) return;   /* only the account that made the changes sends them */
         syncing = true;
@@ -219,7 +220,7 @@ export function withOffline(api) {
     };
     window.addEventListener('online', () => setTimeout(sync, 800));
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sync(); });
-    setInterval(() => { if (navigator.onLine) sync(); }, 60000);
+    setInterval(() => { if (navigator.onLine && !document.hidden) sync(); }, 60000);
     setTimeout(sync, 4000);
     return api;
 }

@@ -2845,3 +2845,15 @@ html.lite .tab-track.live .brand-ring::after{animation-iteration-count:infinite!
 .ob-k b{font-size:1.25rem;color:var(--orange)}
 .ob-k em{font-style:normal;font-size:.8rem;opacity:.7}
 .ob-row>svg{width:16px;height:16px;opacity:.5;flex:none}
+
+/* ---- Battery (Nov 26 2026): the app was redrawing the whole screen 60–120 times a second even when nobody touched it
+   (the drifting aurora lights under the blurred header and tab bar, Pookie's float, the spinning rings).
+   Now the aurora stands still (same look), and the other endless decorations play only while the rider is using the app:
+   html.calm is set ~10 s after the last touch / screen change (app.js) and pauses them where they are.
+   Spinners, skeletons, the sync pill, typing dots and SOS keep moving. Don't add new endless animations outside this list. ---- */
+html body .bg i:nth-child(n),html .bg::before,html .bg::after{animation:none!important;will-change:auto}
+html.calm:not(#_) .tabbar .brand-ring::after,html.calm:not(#_) .tab-track.live .brand-ring::after,
+html.calm:not(#_) .pookie-fab,html.calm:not(#_) .pookie-fab *,html.calm:not(#_) .pookie-fab::after,
+html.calm:not(#_) .svc-dot,html.calm:not(#_) .get-app,html.calm:not(#_) .tq-urgent,
+html.calm:not(#_) .trk-live .dot,html.calm:not(#_) .trk-live-pill .dot,html.calm:not(#_) .trk-signal .sig-ico,html.calm:not(#_) .trk-me-dot,
+html.calm:not(#_) .lb-hero::before,html.calm:not(#_) .lb-cup,html.calm:not(#_) .lb-rays,html.calm:not(#_) .lb-spark,html.calm:not(#_) .lp-ring,html.calm:not(#_) .lb-trophy{animation-play-state:paused!important}
