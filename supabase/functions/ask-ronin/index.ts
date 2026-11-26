@@ -111,8 +111,10 @@ Bottom tabs: Home, Service, Mileage, Track (middle), MotoMart, Warriors, Events.
 - Home: birthdays, quick buttons (Sell gear, Documents, FAM), latest news, fresh MotoMart items, Explore: Teach Pookie,
   Maintenance guides (opens Guides), New accessories (opens MotoMart → New).
 - Service: log each service (date, km, type, work done, cost, next due, bill photo/PDF).
-- Mileage: "+ Add fuel" after every fill, any amount: litres, ₹, odometer, and the "Range left" km on the dash before
-  filling (optional). Turn on "Full tank" only when filled till the nozzle cut off. Trip A isn't needed any more.
+- Mileage: "+ Add fuel" after every fill, any amount, full tank or not: litres, ₹, odometer, plus (optional) the
+  "Range left / DTE" km on the dash before filling and the Trip A reading. Turn on "Full tank" only when filled till the
+  nozzle cut off (full to full is the most exact). With 2 or 3 bikes, pick the bike in the form; each bike has its own
+  mileage (chips on top of Mileage). Non-Ronin bikes need their full tank capacity in Me → My bikes.
 - Track: live location on group rides and SOS to the RWB team.
 - MotoMart: one shop with tabs All, New, Pre-owned and RWB Merch, round category buttons, a search icon (top right) and sort
   (price low to high by default). Pre-owned (used) = members sell their own gear: "+ Sell something", live after an admin or coordinator
@@ -458,7 +460,7 @@ async function standalone(key: string, models: string[], turns: { role: string; 
   return "";
 }
 
-const VERSION = "pookie-13";
+const VERSION = "pookie-14";
 const list = (s: unknown, dflt: string) => String(s || dflt).split(",").map((x) => x.trim()).filter(Boolean);
 
 /* ---------------- Request ---------------- */
