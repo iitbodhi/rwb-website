@@ -5874,13 +5874,13 @@ async function keepAwake(on) {
     } catch { /* not supported */ }
 }
 
-/* send a position when it matters: every 10-20 s while moving, every 60 s when stopped */
+/* send a position when it matters: every 5 s while riding, 20 s when crawling, 60 s when stopped */
 function onFix(p) {
     trk.last = p;
     if (!sharing() || trk.svc) return;   /* the RWB Track service sends positions itself */
     const now = Date.now(), gap = now - trk.sentAt, moved = trk.sent ? distM(trk.sent, p) : Infinity;
-    const fast = (p.spd ?? 0) > 8, every = fast ? 10000 : 20000;
-    if ((moved >= 30 && gap >= every) || gap >= 60000 || (!trk.sent && p.acc <= 100)) sendFix(p);
+    const fast = (p.spd ?? 0) > 3, every = fast ? 5000 : 20000, far = fast ? 20 : 30;
+    if ((moved >= far && gap >= every) || gap >= 60000 || (!trk.sent && p.acc <= 100)) sendFix(p);
 }
 async function sendFix(p) {
     trk.sent = p; trk.sentAt = Date.now();
@@ -6421,9 +6421,9 @@ const TRK_STYLES = [['street', 'Street', 'Every lane and landmark'], ['clean', '
 const trkStyle = () => { try { const s = localStorage.getItem(TRK_STYLE_KEY); return TRK_STYLES.some(x => x[0] === s) ? s : 'street'; } catch { return 'street'; } };
 const OSM_ATTR = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 const ESRI = n => `https://server.arcgisonline.com/ArcGIS/rest/services/${n}/MapServer/tile/{z}/{y}/{x}`;
-function trkTiles(L, map) {
-    (trk.tiles || []).forEach(t => map.removeLayer(t)); trk.tiles = [];
-    const s = trkStyle(), dark = darkMode(), add = (url, o) => trk.tiles.push(L.tileLayer(url, { maxZoom: 19, ...o }).addTo(map));
+function trkTiles(L, map, st = trk) {
+    (st.tiles || []).forEach(t => map.removeLayer(t)); st.tiles = [];
+    const s = trkStyle(), dark = darkMode(), add = (url, o) => st.tiles.push(L.tileLayer(url, { maxZoom: 19, ...o }).addTo(map));
     if (s === 'satellite') {
         add(ESRI('World_Imagery'), { maxNativeZoom: 18, attribution: 'Imagery © Esri, Maxar, Earthstar Geographics' });
         add(ESRI('Reference/World_Boundaries_and_Places'), { maxNativeZoom: 18, className: 'trk-labels' });
@@ -6452,6 +6452,11 @@ function rState(r) {
 }
 const evName = r => r.event || (r.event_id ? (state.evd?.events || []).find(e => e.id === r.event_id)?.title : '') || '';
 const rideKm = r => (r.ride_km > 0 ? `${Number(r.ride_km).toLocaleString('en-IN', { maximumFractionDigits: 1 })} km` : '');
+const avgKmh = r => {   /* file 88: distance ÷ time spent moving (hidden when it can't be right, e.g. a ride already going when file 88 ran) */
+    if (!r || !(r.move_s >= 60) || !(r.ride_km > 0.2)) return null;
+    const v = r.ride_km / (r.move_s / 3600), top = r.top_spd ? r.top_spd * 3.6 : 0;
+    return v > 150 || (top && v > top + 2) ? null : Math.round(v);
+};
 const distTxt = m => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`);
 
 const TI = {   /* small line icons for the map buttons */
@@ -6488,15 +6493,17 @@ async function viewTrack() {
             <div class="trk-actions"${isFam() ? ' hidden' : ''}><button class="btn" data-act="trk-share" id="trk-share"></button><button class="btn sos-btn" data-act="trk-sos">🆘 SOS</button></div>
         </div>
         <div class="trk-stats" id="trk-stats"></div>
-        <div id="trk-list" class="trk-list">${SKEL(3)}</div></section>`;
+        <div id="trk-list" class="trk-list">${SKEL(3)}</div>
+        <div id="trk-rides" class="trk-list trk-rides"></div></section>`;
     actions = { 'trk-share': () => shareSheet(trk.filter, trk.filter ? (state.evd?.events || []).find(e => e.id === trk.filter)?.title : ''), 'trk-sos': () => sosSheet(),
         'trk-all': () => setFilter(null), 'trk-ev': el => setFilter(Number(el.dataset.e)), 'trk-rider': el => openRider(el.dataset.k), 'trk-fit': () => { trkFollow(null); fitAll(true); },
         'trk-me': () => centreMe(), 'trk-layers': () => layersSheet(), 'trk-full': () => trkFull(), 'trk-zin': () => trk.map?.zoomIn(), 'trk-zout': () => trk.map?.zoomOut(),
-        'trk-unfollow': () => trkFollow(null) };
+        'trk-unfollow': () => trkFollow(null), 'trk-play': el => ridePlay(Number(el.dataset.r) || null, Number(el.dataset.e) || null) };
     $('#trk-box').addEventListener('click', e => {   /* full screen: the box sits outside the page, so its buttons need their own listener */
         if (app.contains(e.currentTarget)) return;
         const el = e.target.closest('[data-act]'), fn = el && actions[el.dataset.act]; if (fn) { e.preventDefault(); fn(el); }
     });
+    trk.fullAt = 0; trk.posAt = 0; trk.listAt = 0; trk.noPos = false;
     trk.fitted = false; trk.sosFocused = false; trk.focus = null; trk.follow = null; trk.markers.clear(); trk.sosMarkers.clear(); trk.map = null; trk.meDot = null; trk.tiles = []; document.querySelectorAll('body > .trk-map-box').forEach(b => b.remove()); trk.boxHome = null; document.body.classList.remove('trk-full-on');
     let L; try { L = trk.L = await loadLeaflet(); } catch (e) { $('#trk-map').innerHTML = `<p class="warn" style="margin:16px">${esc(e.message)}</p>`; }
     if (L && $('#trk-map')) {
@@ -6509,7 +6516,7 @@ async function viewTrack() {
     await refreshTrack();
     viewWatch(true);
     clearInterval(trk.poll);
-    trk.poll = setInterval(() => { if (!location.hash.startsWith('#track')) { viewWatch(false); return clearInterval(trk.poll); } if (document.visibilityState === 'visible') refreshTrack(); }, 15000);
+    trk.poll = setInterval(trkTick, 5000);
     clearInterval(trk.sigTick);
     trk.sigTick = setInterval(() => { if (!location.hash.startsWith('#track')) return clearInterval(trk.sigTick); trackSignal(); hud(); }, 7000);
 }
@@ -6570,7 +6577,7 @@ function hud() {
     const mine = trk.data?.riders.find(r => r.me), top = Math.round(Math.max(mine?.top_spd ? mine.top_spd * 3.6 : 0, trk.myTop || 0));
     el.hidden = false;
     el.innerHTML = `<span class="hud-spd"><b>${p.kmh == null ? '–' : Math.round(p.kmh)}</b><small>km/h</small></span><span class="hud-sub">${sharing()
-        ? `<span class="dot"></span>${mine && rideKm(mine) ? `${rideKm(mine)} this ride` : 'Live'}${top ? ` · top ${top}` : ''}`
+        ? `<span class="dot"></span>${mine && rideKm(mine) ? `${rideKm(mine)} this ride` : 'Live'}${avgKmh(mine) ? ` · avg ${avgKmh(mine)}` : ''}${top ? ` · top ${top}` : ''}`
         : 'Your speed'}${p.acc > 60 ? ' · weak GPS' : ''}</span>`;
 }
 async function centreMe() {
@@ -6591,10 +6598,10 @@ function trkFollow(who) {
     el.hidden = !r;
     if (r) el.innerHTML = `<span>Following <b>${esc(r.nick || firstName({ full_name: r.name }))}</b></span><button type="button" data-act="trk-unfollow" aria-label="Stop following">✕</button>`;
 }
-async function refreshTrack(redraw) {
+async function refreshTrack(redraw, light) {
     if (!$('#trk-status')) return;
     let d = trk.data;
-    if (!redraw || !d) { try { d = trk.data = await api.trackView(); liveRide.n = (d.riders || []).length; liveRide.at = Date.now(); trackBadge(); } catch (e) { $('#trk-status').innerHTML = `<span class="warn small">${esc(e.message)}</span>`; if ($('#trk-list .skel')) $('#trk-list').innerHTML = ''; return; } }
+    if (!redraw || !d) { try { d = await api.trackView(); trkClock(d.riders || [], d.now ? Date.parse(d.now) : 0); const gone = (trk.data?.riders || []).some(r => !(d.riders || []).some(x => x.id === r.id)); trk.data = d; trk.fullAt = Date.now(); if (!d.fam) loadRides(gone); liveRide.n = (d.riders || []).length; liveRide.at = Date.now(); trackBadge(); } catch (e) { $('#trk-status').innerHTML = `<span class="warn small">${esc(e.message)}</span>`; if ($('#trk-list .skel')) $('#trk-list').innerHTML = ''; return; } }
     if (!$('#trk-status')) return;
     const f = trk.filter, onEv = r => f && r.event_id === f;
     const ev = f ? (state.evd?.events || []).find(e => e.id === f) || { title: d.riders.find(onEv)?.event || 'this ride' } : null;
@@ -6615,11 +6622,12 @@ async function refreshTrack(redraw) {
     /* numbers at a glance */
     const group = f ? d.riders.filter(onEv) : d.riders;
     let spread = 0; if (f && group.length > 1) group.forEach((a, i) => group.slice(i + 1).forEach(b => { spread = Math.max(spread, distM(a, b)); }));
-    const gm = group.filter(r => rState(r).k === 'move'), avg = gm.length ? Math.round(gm.reduce((s, r) => s + kmhOf(r), 0) / gm.length) : 0;
+    const ga = group.map(avgKmh).filter(Boolean), gm = group.filter(r => rState(r).k === 'move');
+    const avg = ga.length ? Math.round(ga.reduce((s, v) => s + v, 0) / ga.length) : gm.length ? Math.round(gm.reduce((s, r) => s + kmhOf(r), 0) / gm.length) : 0;
     const tile = (v, l) => `<span class="ts"><b>${v}</b><small>${l}</small></span>`;
     const stats = $('#trk-stats');
     if (stats) stats.innerHTML = !d.riders.length ? '' : f
-        ? tile(group.length, 'on this ride') + tile(group.length > 1 ? distTxt(spread) : '–', 'group spread') + tile(avg ? avg : '–', 'avg km/h moving')
+        ? tile(group.length, 'on this ride') + tile(group.length > 1 ? distTxt(spread) : '–', 'group spread') + tile(avg ? avg : '–', 'avg km/h')
         : tile(d.riders.length, d.riders.length === 1 ? 'rider live' : 'riders live') + tile(moving.length, 'on the move') + tile(d.riders.filter(r => r.event_id).length, 'on RWB events');
     /* the list: SOS, you, this ride's riders, then the closest */
     const here = trk.vfix || trk.last, near = r => (here ? distM(here, r) : 0);
@@ -6628,15 +6636,16 @@ async function refreshTrack(redraw) {
         return `<button class="trk-row ${st.k}${f && !r.sos && !onEv(r) ? ' dim' : ''}" data-act="trk-rider" data-k="${r.k}"><span class="tr-face">${face({ full_name: r.name, avatar_url: r.avatar }, 'avatar sm')}</span>
         <span class="grow"><b class="tr-name">${r.sos ? '🆘 ' : ''}${esc(r.name)}${r.me ? ' <span class="muted">(you)</span>' : r.mine ? ' <span class="muted">(your rider)</span>' : ''}</b>
             ${en ? `<span class="tr-ev">🏍️ ${esc(en)}</span>` : ''}${r.note && !r.sos ? `<span class="trk-note-txt">“${esc(r.note)}”</span>` : ''}
-            <span class="tr-meta">${r.sos ? 'SOS ' + timeAgo(r.at) : [st.k === 'move' ? '' : st.txt, here && !r.me ? distTxt(near(r)) + ' away' : '', km ? km + ' ridden' : ''].filter(Boolean).join(' · ') || 'Live'}</span></span>
+            <span class="tr-meta">${r.sos ? 'SOS ' + timeAgo(r.at) : [st.k === 'move' ? '' : st.txt, here && !r.me ? distTxt(near(r)) + ' away' : '', km ? km + ' ridden' + (avgKmh(r) ? ` · avg ${avgKmh(r)} km/h` : '') : ''].filter(Boolean).join(' · ') || 'Live'}</span></span>
         ${st.k === 'move' ? `<span class="tr-spd"><b>${st.kmh}</b><small>km/h</small></span>` : '<span class="chev">›</span>'}</button>`; };
     const sosRows = d.sos.map(s => row({ ...s, k: 's' + s.id, sos: true })).join('');
     const mainRows = sorted.filter(r => !f || r.me || onEv(r)).map(r => row({ ...r, k: 'r' + r.id })).join('');
     const otherRows = f ? sorted.filter(r => !r.me && !onEv(r)).map(r => row({ ...r, k: 'r' + r.id })).join('') : '';
-    $('#trk-list').innerHTML = sosRows + (mainRows || (f ? '<p class="small muted trk-empty">No one is sharing for this ride yet.</p>' : '')) + (otherRows ? `<h3 class="trk-sub">Also riding now</h3>${otherRows}` : '');
+    if (!light || Date.now() - trk.listAt > 15000 || !$('#trk-list .trk-row')) { trk.listAt = Date.now();   /* quick refreshes (every 5 s) redraw the list only every 15 s */
+    $('#trk-list').innerHTML = sosRows + (mainRows || (f ? '<p class="small muted trk-empty">No one is sharing for this ride yet.</p>' : '')) + (otherRows ? `<h3 class="trk-sub">Also riding now</h3>${otherRows}` : ''); }
     drawMarkers(d.riders, d.sos);
     drawMe(); hud();
-    if (trk.follow && trk.follow !== 'me' && trk.map) { const r = d.riders.find(x => x.id === trk.follow); if (r) trk.map.panTo([r.lat, r.lng]); else trkFollow(null); }
+    if (trk.follow && trk.follow !== 'me' && trk.map && !d.riders.some(x => x.id === trk.follow)) trkFollow(null);
     if (!trk.fitted && trk.map) { trk.fitted = true; fitAll(false); }
     if (state.param === 'sos' && d.sos[0] && trk.map && !trk.sosFocused) { trk.sosFocused = true; trk.map.setView([d.sos[0].lat, d.sos[0].lng], 15); }
     if (d.staff) alertNewSos(d.sos);
@@ -6651,11 +6660,192 @@ function drawMarkers(riders, sos) {
             const ic = riderIcon(L, r, isSos, !isSos && trk.filter && r.event_id !== trk.filter && !r.me);
             const z = isSos ? 1000 : r.me ? 500 : trk.filter && r.event_id === trk.filter ? 300 : 0;
             if (!m) { m = L.marker([r.lat, r.lng], { icon: ic.icon(), zIndexOffset: z }).addTo(map); m.on('click', () => openRider((isSos ? 's' : 'r') + r.id)); m._h = ic.html; store.set(k, m); }
-            else { if (!(r.me && trk.vfix)) m.setLatLng([r.lat, r.lng]); if (m._h !== ic.html) { m.setIcon(ic.icon()); m._h = ic.html; } m.setZIndexOffset(z); } });
+            else { if (m._h !== ic.html) { m.setIcon(ic.icon()); m._h = ic.html; } m.setZIndexOffset(z); }
+            /* pins glide to the new spot (and on along the road for a few seconds) instead of jumping */
+            if (isSos) m.setLatLng([r.lat, r.lng]);
+            else if (r.me && trk.vfix) m._tgt = null;
+            else { m._tgt = { lat: r.lat, lng: r.lng, spd: r.spd, hdg: r.hdg, at: Date.parse(r.at) || Date.now(), mv: rState(r).k === 'move' };
+                if (distM(m.getLatLng(), r) > 3000) m.setLatLng([r.lat, r.lng]); } });
         [...store.keys()].forEach(k => { if (!keep.has(k)) { map.removeLayer(store.get(k)); store.delete(k); } });
     };
     sync(trk.markers, riders, false); sync(trk.sosMarkers, sos, true);
+    trkGlide();
 }
+/* the server's clock vs the phone's: times are moved onto the phone's clock, so "moving" / "no signal" stay right */
+function trkClock(riders, serverNow) {
+    const sk = serverNow ? serverNow - Date.now() : 0; if (Math.abs(sk) < 5000) return;
+    riders.forEach(r => ['at', 'moved_at'].forEach(k => { if (r[k]) r[k] = new Date(Date.parse(r[k]) - sk).toISOString(); }));
+}
+/* every 5 s while the map is open: just the positions (tiny); the full list once a minute or when someone joins / leaves */
+async function trkTick() {
+    if (!location.hash.startsWith('#track')) { viewWatch(false); clearInterval(trk.poll); return; }
+    if (document.visibilityState !== 'visible' || trk.ticking || !trk.data) return;
+    const now = Date.now(), moving = trk.data.riders.some(r => rState(r).k === 'move');
+    trk.ticking = true;
+    try {
+        if (now - trk.fullAt >= 60000 || (trk.noPos && now - trk.fullAt >= 15000)) { await refreshTrack(); return; }
+        if (trk.noPos || (!moving && now - trk.posAt < 20000)) return;   /* nobody moving: every 20 s is plenty */
+        let res; try { res = await api.trackPos(); } catch (e) { if (/could not find|function|schema/i.test(e.message || '')) trk.noPos = true; return; }
+        trk.posAt = Date.now(); applyPos(res);
+    } finally { trk.ticking = false; }
+}
+function applyPos(res) {
+    const d = trk.data; if (!d || !Array.isArray(res?.p) || !$('#trk-status')) return;
+    const ids = new Set(res.p.map(p => p[0]));
+    if (ids.size !== d.riders.length || d.riders.some(r => !ids.has(r.id))) { refreshTrack(); return; }
+    const by = new Map(d.riders.map(r => [r.id, r])), iso = s => new Date(s * 1000).toISOString();
+    res.p.forEach(([id, lat, lng, spd, hdg, at, mv, km, ms]) => Object.assign(by.get(id), { lat, lng, spd, hdg, at: iso(at), moved_at: iso(mv), ride_km: km, move_s: ms }));
+    trkClock(res.p.map(p => by.get(p[0])), res.now ? res.now * 1000 : 0);
+    refreshTrack(true, true);
+}
+/* the pins slide smoothly to each new position and carry on along the road (speed + direction) for up to 10 s */
+function trkGlide() {
+    if (trk.raf) return;
+    let last = 0;
+    const step = ts => {
+        trk.raf = null;
+        if (!trk.map || !location.hash.startsWith('#track') || document.visibilityState !== 'visible') return;
+        if (last && ts - last < 50) { trk.raf = requestAnimationFrame(step); return; }   /* ~20 frames a second is smooth enough */
+        const k = 1 - Math.exp(-(last ? Math.min(ts - last, 400) : 50) / 650), now = Date.now(); last = ts;
+        let more = false;
+        trk.markers.forEach(m => {
+            const t = m._tgt; if (!t) return;
+            let lat = t.lat, lng = t.lng;
+            const age = (now - t.at) / 1000;
+            if (t.mv && t.spd >= 2 && t.hdg != null && age > 0) {
+                const s = Math.min(age, 10) * t.spd, h = t.hdg * Math.PI / 180;
+                lat += s * Math.cos(h) / 111320; lng += s * Math.sin(h) / (111320 * Math.cos(t.lat * Math.PI / 180));
+                if (age < 10) more = true;
+            }
+            const c = m.getLatLng(), dl = lat - c.lat, dg = lng - c.lng;
+            if (Math.abs(dl) < 3e-7 && Math.abs(dg) < 3e-7) return;
+            more = true; m.setLatLng([c.lat + dl * k, c.lng + dg * k]);
+        });
+        if (trk.follow && trk.follow !== 'me' && ts - (trk.panAt || 0) > 1000) { const m = trk.markers.get(trk.follow); if (m) { trk.panAt = ts; trk.map.panTo(m.getLatLng(), { animate: true, duration: 0.9 }); } }
+        if (more) trk.raf = requestAnimationFrame(step);
+    };
+    trk.raf = requestAnimationFrame(step);
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && location.hash.startsWith('#track')) trkGlide(); });
+
+/* ---------- ride lines: rides that ended in the last 24 hours, played back on a map (file 88) ---------- */
+const PLAY_I = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" class="fill"/></svg>';
+const PAUSE_I = '<svg viewBox="0 0 24 24"><path d="M8 5h3v14H8zM13 5h3v14h-3z" class="fill"/></svg>';
+const CLOSE_I = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+const TRASH_I = '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
+const LINE_COLORS = ['#f57d43', '#3b82f6', '#22c55e', '#e11d48', '#a855f7', '#eab308', '#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#14b8a6', '#f43f5e'];
+const clockTxt = t => { const d = new Date(t), y = new Date(); y.setDate(y.getDate() - 1);
+    const hm = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+    return d.toDateString() === new Date().toDateString() ? hm : d.toDateString() === y.toDateString() ? 'Yesterday ' + hm : hm; };
+async function loadRides(force) {
+    if (isFam() || !$('#trk-rides')) return;
+    if (!force && trk.rides && Date.now() - trk.ridesAt < 120000) return drawRides();
+    if (trk.ridesBusy) return; trk.ridesBusy = true;
+    try { trk.rides = await api.trackRidesToday(); trk.ridesAt = Date.now(); } catch { trk.rides = trk.rides || []; } finally { trk.ridesBusy = false; }
+    drawRides();
+}
+function drawRides() {
+    const box = $('#trk-rides'); if (!box) return;
+    const list = trk.rides || [];
+    if (!list.length) { box.innerHTML = ''; return; }
+    const evs = new Map(), items = [];
+    list.forEach(r => { if (r.event_id) { const g = evs.get(r.event_id) || { id: r.event_id, title: r.event, rides: [] }; g.rides.push(r); evs.set(r.event_id, g); }
+        else items.push({ t: Date.parse(r.ended_at), html: `<button class="trk-row ride" data-act="trk-play" data-r="${r.id}"><span class="tr-face">${face({ full_name: r.name, avatar_url: r.avatar }, 'avatar sm')}</span>
+            <span class="grow"><b class="tr-name">${esc(r.name)}${r.me ? ' <span class="muted">(you)</span>' : ''}</b><span class="tr-meta">${[rideKm({ ride_km: r.km }), avgKmh({ ride_km: r.km, move_s: r.move_s, top_spd: r.top_spd }) ? `avg ${avgKmh({ ride_km: r.km, move_s: r.move_s, top_spd: r.top_spd })} km/h` : '', clockTxt(Date.parse(r.ended_at))].filter(Boolean).join(' · ')}</span></span>
+            <span class="tr-play">${PLAY_I}</span></button>` }); });
+    evs.forEach(g => { const t = Math.max(...g.rides.map(r => Date.parse(r.ended_at))), n = g.rides.length;
+        items.push({ t, html: `<button class="trk-row ride ev" data-act="trk-play" data-e="${g.id}"><span class="tr-face">${faceStack(g.rides.slice(0, 3).map(r => ({ full_name: r.name, avatar_url: r.avatar })), n - 3)}</span>
+            <span class="grow"><b class="tr-name">🏍️ ${esc(g.title || 'Event ride')}</b><span class="tr-meta">${n} ${n === 1 ? 'rider' : 'riders'} · ${clockTxt(t)}</span></span>
+            <span class="tr-play">${PLAY_I}</span></button>` }); });
+    items.sort((a, b) => b.t - a.t);
+    box.innerHTML = `<h3 class="trk-sub">Recent rides</h3>${items.map(i => i.html).join('')}`;
+}
+async function ridePlay(rid, eid) {
+    let L; try { L = trk.L || await loadLeaflet(); } catch (e) { toast(e.message, true); return; }
+    const key = eid ? 'e' + eid : 'r' + rid, info = eid ? (trk.rides || []).find(r => r.event_id === eid) : (trk.rides || []).find(r => r.id === rid);
+    const lay = gdOverlay('trk-play', 'Ride playback'), el = lay.el;
+    el.innerHTML = `<div class="tp-top"><button type="button" class="tf" data-x="close" aria-label="Close">${CLOSE_I}</button>
+        <span class="tp-title grow"><b>${esc(eid ? info?.event || 'Event ride' : info?.name || 'Ride')}</b><small>${info ? clockTxt(Date.parse(info.started_at)) + ' – ' + clockTxt(Date.parse(info.ended_at)).replace('Yesterday ', '') : ''}</small></span><span class="tp-del"></span></div>
+        <div class="tp-map"></div><div class="tp-panel">${SKEL(1)}</div>`;
+    el.querySelector('[data-x=close]').onclick = () => gdClose();
+    trk.lines ??= new Map();
+    let lines = trk.lines.get(key);
+    if (!lines) { try { lines = await api.trackRideLines(rid, eid); trk.lines.set(key, lines); } catch (e) { if (gdLayer === lay) el.querySelector('.tp-panel').innerHTML = `<p class="warn small">${esc(e.message)}</p>`; return; } }
+    if (gdLayer !== lay) return;
+    lines = (lines || []).filter(x => x.pts?.length >= 2);
+    if (!lines.length) { el.querySelector('.tp-panel').innerHTML = '<p class="small muted">This ride is no longer available.</p>'; return; }
+    /* each rider: times on one clock, distance so far at every point */
+    const R = lines.map((x, i) => { const ts = x.pts.map(p => (x.t0 + p[2]) * 1000), ll = x.pts.map(p => [p[0], p[1]]), cum = [0];
+        for (let j = 1; j < ll.length; j++) cum.push(cum[j - 1] + distM({ lat: ll[j - 1][0], lng: ll[j - 1][1] }, { lat: ll[j][0], lng: ll[j][1] }));
+        return { ...x, ts, ll, cum, color: LINE_COLORS[i % LINE_COLORS.length] }; });
+    const T0 = Math.min(...R.map(r => r.ts[0])), T1 = Math.max(...R.map(r => r.ts.at(-1))), span = Math.max(T1 - T0, 1000);
+    const SPEEDS = [30, 60, 120, 300, 600];
+    const st = { t: T0, play: false, speed: SPEEDS.find(s => span / s <= 90000) || 600, focus: R.length === 1 ? R[0] : null, raf: null, last: 0, drawAt: 0 };
+    const mine = R.find(r => r.me), canDel = mine || (isAdmin() && R.length === 1);
+    if (canDel) el.querySelector('.tp-del').innerHTML = `<button type="button" class="tf" data-x="del" aria-label="Delete ride">${TRASH_I}</button>`;
+    const map = L.map(el.querySelector('.tp-map'), { zoomControl: false, attributionControl: true, zoomSnap: 0.5 });
+    map.attributionControl.setPrefix(false); const tl = { tiles: [] }; trkTiles(L, map, tl);
+    R.forEach(r => {
+        r.base = L.polyline(r.ll, { color: r.color, weight: 4, opacity: 0.3, interactive: false }).addTo(map);
+        r.prog = L.polyline([], { color: r.color, weight: 5, opacity: 0.95, interactive: false }).addTo(map);
+        r.mk = L.marker(r.ll[0], { interactive: false, icon: L.divIcon({ className: 'tp-pin-wrap', iconSize: [34, 34], iconAnchor: [17, 17],
+            html: `<span class="tp-pin" style="--c:${r.color}">${face({ full_name: r.name, avatar_url: r.avatar }, 'avatar xs')}</span>` }) }).addTo(map);
+    });
+    map.fitBounds(R.flatMap(r => r.ll), { padding: [30, 30], maxZoom: 15 });
+    lay.cleanup.push(() => { cancelAnimationFrame(st.raf); map.remove(); });
+    const panel = el.querySelector('.tp-panel');
+    panel.innerHTML = `${R.length > 1 ? `<div class="tp-legend">${R.map((r, i) => `<button type="button" class="tp-chip" data-i="${i}" style="--c:${r.color}"><i></i>${esc(r.nick || firstName({ full_name: r.name }))}<small></small></button>`).join('')}</div>` : ''}
+        <div class="tp-stats"></div>
+        <div class="tp-ctrl"><button type="button" class="tp-pp" data-x="pp" aria-label="Play">${PLAY_I}</button><input type="range" class="tp-range" min="0" max="1000" value="0" aria-label="Ride time"><button type="button" class="tp-spd" data-x="spd">${st.speed}×</button></div>`;
+    const range = panel.querySelector('.tp-range'), pp = panel.querySelector('[data-x=pp]');
+    /* where a rider is at time t */
+    const at = (r, t) => {
+        if (t <= r.ts[0]) return { i: 0, f: 0, pos: r.ll[0], kmh: 0, km: 0, on: t >= r.ts[0] };
+        if (t >= r.ts.at(-1)) { const n = r.ts.length - 1; return { i: n, f: 0, pos: r.ll[n], kmh: 0, km: r.cum[n] / 1000, done: true, on: true }; }
+        let lo = 0, hi = r.ts.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (r.ts[m] <= t) lo = m; else hi = m; }
+        const f = (t - r.ts[lo]) / Math.max(1, r.ts[hi] - r.ts[lo]), a = r.ll[lo], b = r.ll[hi];
+        return { i: lo, f, pos: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f], kmh: r.pts[hi][3], km: (r.cum[lo] + (r.cum[hi] - r.cum[lo]) * f) / 1000, on: true };
+    };
+    const tile = (v, l) => `<span class="ts"><b>${v}</b><small>${l}</small></span>`;
+    const draw = full => {
+        const t = st.t, now = performance.now(), lines2 = now - st.drawAt > 150 || full; if (lines2) st.drawAt = now;
+        const P = R.map(r => { const p = at(r, t); r.mk.setLatLng(p.pos); r.mk.getElement()?.classList.toggle('off', !p.on); r.mk.getElement()?.classList.toggle('done', !!p.done);
+            if (lines2) r.prog.setLatLngs([...r.ll.slice(0, p.i + 1), p.pos]);
+            const dim = st.focus && st.focus !== r; r.mk.setZIndexOffset(st.focus === r ? 1000 : 0); r.base.setStyle({ opacity: dim ? 0.12 : 0.3 }); r.prog.setStyle({ opacity: dim ? 0.3 : 0.95 });
+            return p; });
+        range.value = Math.round((t - T0) / span * 1000);
+        if (R.length > 1) panel.querySelectorAll('.tp-chip').forEach((c, i) => { c.classList.toggle('on', st.focus === R[i]); c.querySelector('small').textContent = P[i].on && !P[i].done && P[i].kmh ? P[i].kmh + ' km/h' : P[i].done ? '🏁' : ''; });
+        const f = st.focus, fp = f && P[R.indexOf(f)];
+        let spread = 0; const live = R.map((r, i) => ({ r, p: P[i] })).filter(x => x.p.on && !x.p.done);
+        if (!f) live.forEach((a, i) => live.slice(i + 1).forEach(b => { spread = Math.max(spread, distM({ lat: a.p.pos[0], lng: a.p.pos[1] }, { lat: b.p.pos[0], lng: b.p.pos[1] })); }));
+        const hm = new Date(t).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }).split(' ');
+        panel.querySelector('.tp-stats').innerHTML = tile(`${hm[0]}<small> ${hm[1] || ''}</small>`, 'time') + (f
+            ? tile(fp.on && !fp.done ? fp.kmh : 0, 'km/h') + tile(`${fp.km.toFixed(1)}<small>/${Number(f.km).toFixed(1)}</small>`, 'km') + tile(avgKmh({ ride_km: f.km, move_s: f.move_s, top_spd: f.top_spd }) || '–', 'avg km/h')
+            : tile(live.length, 'on the road') + tile(live.length > 1 ? distTxt(spread) : '–', 'group spread') + tile(R.length, 'riders'));
+    };
+    const loop = ts => {
+        st.raf = null; if (!st.play || gdLayer !== lay) return;
+        const dt = st.last ? Math.min(ts - st.last, 200) : 16; st.last = ts;
+        st.t = Math.min(T1, st.t + dt * st.speed);
+        draw();
+        if (st.t >= T1) { setPlay(false); return; }
+        st.raf = requestAnimationFrame(loop);
+    };
+    const setPlay = on => { st.play = on; pp.innerHTML = on ? PAUSE_I : PLAY_I; pp.setAttribute('aria-label', on ? 'Pause' : 'Play');
+        if (on) { if (st.t >= T1) st.t = T0; st.last = 0; st.raf ??= requestAnimationFrame(loop); } else { cancelAnimationFrame(st.raf); st.raf = null; draw(true); } };
+    pp.onclick = () => setPlay(!st.play);
+    range.oninput = () => { st.t = T0 + span * range.value / 1000; draw(true); };
+    panel.querySelector('[data-x=spd]').onclick = e => { st.speed = SPEEDS[(SPEEDS.indexOf(st.speed) + 1) % SPEEDS.length]; e.currentTarget.textContent = st.speed + '×'; };
+    panel.querySelectorAll('.tp-chip').forEach(c => c.onclick = () => { const r = R[c.dataset.i]; st.focus = st.focus === r ? null : r; draw(true); if (st.focus) map.fitBounds(r.ll, { padding: [30, 30], maxZoom: 15 }); });
+    el.querySelector('[data-x=del]')?.addEventListener('click', e => {
+        const r = mine || R[0];
+        if (!confirmBox(mine ? 'Delete your line from this ride? It can’t be brought back.' : `Delete ${r.name}'s ride line?`)) return;
+        busy(e.currentTarget, async () => { await api.trackRideDelete(r.id); trk.lines.clear(); trk.rides = (trk.rides || []).filter(x => x.id !== r.id); drawRides(); gdClose(); toast('Ride line deleted'); });
+    });
+    draw(true);
+    setTimeout(() => { map.invalidateSize(); setPlay(true); }, 250);
+}
+
 function fitAll(animate) {
     const map = trk.map, d = trk.data; if (!map || !d) return;
     const group = trk.filter ? d.riders.filter(r => r.event_id === trk.filter) : d.riders;
@@ -6676,8 +6866,8 @@ function openRider(k) {
         <span class="small muted">${sos ? 'Sent SOS ' + timeAgo(r.at) : `<span class="rs-state ${st.k}">${st.k === 'move' ? 'Moving' : st.k === 'stop' ? st.txt : 'Signal lost'}</span> · updated ${timeAgo(r.at)}${r.acc ? ' · ±' + Math.round(r.acc) + ' m' : ''}`}</span></span></div>
         ${en ? `<a class="rs-ev" href="#events/${r.event_id}">🏍️ <span class="grow"><small>Riding</small><b>${esc(en)}</b></span>›</a>` : ''}
         ${r.note && !sos ? `<p class="trk-note-txt big">“${esc(r.note)}”</p>` : ''}
-        ${sos ? '' : `<div class="rs-grid">${stat(st.k === 'move' ? st.kmh : 0, 'km/h now')}${stat(top || '–', 'top km/h')}${stat(rideKm(r) || '0 km', 'this ride')}
-            ${stat(r.since ? durTxt(Date.now() - Date.parse(r.since)).replace(' h', 'h').replace(' min', 'm') : '–', 'sharing for')}${stat(here && !mine ? distTxt(distM(here, r)) : '–', mine ? 'that’s you' : 'from you')}${stat(r.until ? (Date.parse(r.until) - Date.now() > 11 * 36e5 ? 'Open' : new Date(r.until).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })) : '–', 'sharing till')}</div>`}
+        ${sos ? '' : `<div class="rs-grid">${stat(st.k === 'move' ? st.kmh : 0, 'km/h now')}${stat(avgKmh(r) || '–', 'avg km/h')}${stat(top || '–', 'top km/h')}
+            ${stat(rideKm(r) || '0 km', 'this ride')}${stat(r.since ? durTxt(Date.now() - Date.parse(r.since)).replace(' h', 'h').replace(' min', 'm') : '–', r.until && Date.parse(r.until) - Date.now() <= 11 * 36e5 ? 'till ' + new Date(r.until).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }) : 'sharing for')}${stat(here && !mine ? distTxt(distM(here, r)) : '–', mine ? 'that’s you' : 'from you')}</div>`}
         <div class="btns rs-btns">${r.phone ? `<a class="btn" href="tel:+91${esc(r.phone)}">📞 Call</a>` : ''}<a class="btn ghost" href="https://www.google.com/maps/dir/?api=1&destination=${r.lat},${r.lng}" target="_blank" rel="noopener">🧭 Directions</a>${!sos && !mine ? `<button class="btn ghost" data-x="follow">${trk.follow === r.id ? '✓ Following' : '🎯 Follow'}</button>` : ''}</div>
         ${sos && (mine || d.staff) ? `<button class="btn ${mine ? '' : 'ghost'} block" data-x="safe" style="margin-top:12px">${mine ? "✅ I'm safe now" : '✅ Mark as resolved'}</button>` : ''}`, body => {
         body.querySelector('[data-x=safe]')?.addEventListener('click', e => busy(e.currentTarget, async () => { await api.trackSosResolve(r.id); closeSheet(); toast('SOS closed. The RWB team is told.'); refreshTrack(); }));

@@ -53,8 +53,8 @@ import java.util.Locale;
  *   high-priority push message (RwbMessagingService → wake()), which also lets Android restart the service.
  *
  * Location
- * - Riding: GPS, a fix every 10 s (Android may batch them a little to save power), sent every 15 s when you've
- *   moved 40 m or more, and at least once a minute.
+ * - Riding: GPS, a fix every 5 s, sent every 5 s when you've moved 20 m or more (smooth live map), and at least
+ *   once a minute.
  * - Stopped for 3 minutes (tea break, parked): GPS OFF. Wi-Fi and mobile-network location every 60 s, sent once a
  *   minute; as soon as you move away (or speed up), GPS comes back on.
  * - A position older than 2 minutes is never sent as "now" (the map would show you somewhere you no longer are).
@@ -187,17 +187,17 @@ public class TrackService extends Service {
         handler.post(() -> { request(true); askFix("start"); handler.postDelayed(tick, TICK); });
     }
 
-    /* riding: GPS every 10 s; stopped: no GPS, Wi-Fi / mobile-network location every 60 s */
+    /* riding: GPS every 5 s; stopped: no GPS, Wi-Fi / mobile-network location every 60 s */
     @SuppressLint("MissingPermission")
     private void request(boolean move) {
         moving = move; registered = true; registeredAt = System.currentTimeMillis();
-        long interval = move ? 10000L : 60000L;
+        long interval = move ? 5000L : 60000L;
         try {
             if (fused == null) fused = LocationServices.getFusedLocationProviderClient(this);
             fused.removeLocationUpdates(fusedCb);
             LocationRequest req = new LocationRequest.Builder(move ? Priority.PRIORITY_HIGH_ACCURACY : Priority.PRIORITY_BALANCED_POWER_ACCURACY, interval)
-                .setMinUpdateIntervalMillis(move ? 5000L : 30000L).setMinUpdateDistanceMeters(0f)
-                .setMaxUpdateDelayMillis(move ? 15000L : 90000L).setWaitForAccurateLocation(false).build();
+                .setMinUpdateIntervalMillis(move ? 3000L : 30000L).setMinUpdateDistanceMeters(0f)
+                .setMaxUpdateDelayMillis(move ? 5000L : 90000L).setWaitForAccurateLocation(false).build();
             fused.requestLocationUpdates(req, fusedCb, thread.getLooper());
             stat("provider", move ? "riding" : "stopped");
         } catch (Throwable t) {   /* no Google Play services: the phone's GPS directly */
@@ -255,7 +255,7 @@ public class TrackService extends Service {
         long gap = lastFixAt - sentAt;
         float moved = sent == null ? Float.MAX_VALUE : sent.distanceTo(l);
         boolean retry = failed && System.currentTimeMillis() - triedAt >= 20000L;
-        if (sent == null || retry || (!failed && ((moving && moved >= 40 && gap >= 15000L) || gap >= 60000L))) send(l, null);
+        if (sent == null || retry || (!failed && ((moving && moved >= 20 && gap >= 5000L) || gap >= 60000L))) send(l, null);
     }
 
     /* every 10 s: time limit, a fix if GPS went quiet, re-start GPS if it stays quiet, re-send after no signal */

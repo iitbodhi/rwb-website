@@ -43,6 +43,37 @@ function friendly(error) {
     if (/JWT|session/i.test(m)) return new Error('Your sign-in has expired. Please sign in again.');
     return new Error(m.replace(/^.*?ERROR:\s*/, ''));
 }
+/* Track demo: moving riders glide on (loops every 10 minutes) */
+const demoT0 = Date.now();
+function demoMove(r, t) {
+    if (!(r.spd >= 2) || r.hdg == null) return r;
+    const s = ((t - demoT0) / 1000 % 600) * r.spd, h = r.hdg * Math.PI / 180, iso = new Date(t - 2500).toISOString();
+    return { ...r, lat: r.lat + s * Math.cos(h) / 111320, lng: r.lng + s * Math.sin(h) / (111320 * Math.cos(r.lat * Math.PI / 180)), at: iso, moved_at: iso };
+}
+/* Track demo: yesterday's / this morning's rides with lines (an event ride with 4 riders, plus one solo ride) */
+let demoRideCache = null;
+function demoRides() {
+    if (demoRideCache) return demoRideCache;
+    let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const dist = (a, b) => { const R = 6371000, r = x => x * Math.PI / 180, dLa = r(b[0] - a[0]), dLo = r(b[1] - a[1]); const q = Math.sin(dLa / 2) ** 2 + Math.cos(r(a[0])) * Math.cos(r(b[0])) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(q)); };
+    /* a road-ish route: points every 10 s, gentle turns, speed 25-75 km/h, a tea break in the middle */
+    const route = (lat, lng, hdg, n) => { const pts = []; let h = hdg, v = 12, tt = 0;
+        for (let i = 0; i < n; i++) { if (i === Math.floor(n * 0.55)) tt += 900; h += (rnd() - 0.5) * 22; v = Math.min(21, Math.max(7, v + (rnd() - 0.5) * 3)); const s = v * 10, hr = h * Math.PI / 180;
+            lat += s * Math.cos(hr) / 111320; lng += s * Math.sin(hr) / (111320 * Math.cos(lat * Math.PI / 180)); tt += 10; pts.push([lat, lng, tt, v]); }
+        return pts; };
+    const trim = pts => { const a = pts[0], b = pts.at(-1); return pts.filter(p => dist(a, p) > 300 && dist(b, p) > 300); };
+    const mk = (id, mid, name, nick, start, base, lag, off, ev) => { const raw = base.map(p => [p[0] + off, p[1] - off, p[2] + lag, p[3] * (0.92 + rnd() * 0.16)]);
+        let km = 0, ms = 0, top = 0; for (let i = 1; i < raw.length; i++) { km += dist(raw[i - 1], raw[i]) / 1000; if (raw[i][2] - raw[i - 1][2] <= 45) ms += raw[i][2] - raw[i - 1][2]; top = Math.max(top, raw[i][3]); }
+        const t0 = Math.floor(start / 1000), pts = trim(raw).map(p => [+p[0].toFixed(5), +p[1].toFixed(5), p[2], Math.round(p[3] * 3.6)]);
+        return { id, member_id: mid, name, nick, avatar: null, started_at: new Date(start).toISOString(), ended_at: new Date(start + raw.at(-1)[2] * 1000).toISOString(), km: +km.toFixed(1), move_s: ms, top_spd: top,
+            event_id: ev ? 501 : null, event: ev ? 'Sunday breakfast ride' : null, me: mid === 1, t0, pts }; };
+    const start = Date.now() - 6 * 36e5, ride = route(22.5726, 88.4330, 35, 620);
+    const leadIn = (lat, lng, n) => route(lat, lng, 80, n);
+    demoRideCache = [mk(901, 2, 'Arjun Sen', 'Sultan', start, ride, 0, 0, true), mk(902, 3, 'Priya Dutta', '', start, ride, 40, 0.00025, true),
+        mk(903, 4, 'Rahul Ghosh', 'Rocket', start, ride, 95, -0.00022, true), mk(904, 1, 'You', '', start, ride, 140, 0.00045, true),
+        mk(905, 5, 'Sourav Paul', '', Date.now() - 3 * 36e5, leadIn(22.5420, 88.3380, 300), 0, 0, false)];
+    return demoRideCache;
+}
 const must = ({ data, error }) => { if (error) throw friendly(error); return data; };
 
 /* ======================= Supabase ======================= */
@@ -173,6 +204,10 @@ async function supabaseApi(url, key) {
         trackPing: async (lat, lng, acc, spd, hdg) => must(await sb.rpc('track_ping', { p_lat: lat, p_lng: lng, p_acc: acc, p_spd: spd, p_hdg: hdg })),
         trackStop: async () => must(await sb.rpc('track_stop')),
         trackView: async () => must(await sb.rpc('track_view')),
+        trackPos: async () => must(await sb.rpc('track_pos')),   /* setup file 88: positions only, every few seconds */
+        trackRidesToday: async () => must(await sb.rpc('track_rides_today')),
+        trackRideLines: async (ride, ev) => must(await sb.rpc('track_ride_lines', { p_ride: ride || null, p_event: ev || null })),
+        trackRideDelete: async id => must(await sb.rpc('track_ride_delete', { p_ride: id })),
         trackLiveCount: async () => must(await sb.rpc('track_live_count')),
         trackToken: async () => must(await sb.rpc('track_token')),
         trackSos: async (lat, lng, acc) => must(await sb.rpc('track_sos', { p_lat: lat, p_lng: lng, p_acc: acc })),
@@ -749,14 +784,19 @@ function demoApi() {
             if (demoFam()) { if (!db.famMe?.approved && db.famMe) return Promise.reject(new Error('Members only'));
                 return wait({ riders: [{ id: m.id, name: m.full_name, nick: m.nickname, avatar: m.avatar_url, lat: 22.6120, lng: 88.4020, spd: 0, at: ago(260), moved_at: ago(900), since: ago(4000), ride_km: 31.5, top_spd: 19, event_id: 501, event: 'Sunday breakfast ride', note: 'towards Simlipal!', mine: true, me: false, phone: null },
                     { id: 3, name: 'Priya Dutta', lat: 22.6050, lng: 88.3950, spd: 11, hdg: 120, at: ago(30), moved_at: ago(30), since: ago(4000), ride_km: 29.9, top_spd: 20, event_id: 501, event: 'Sunday breakfast ride', mine: false, me: false, phone: null }], sos: [], staff: false, fam: true, rider: m.id, now: new Date(t).toISOString() }); }
-            const riders = [{ id: 2, name: 'Arjun Sen', nick: 'Sultan', lat: 22.5850, lng: 88.4170, spd: 14, hdg: 40, at: ago(20), moved_at: ago(20), since: ago(5400), until: new Date(t + 3 * 36e5).toISOString(), ride_km: 38.6, top_spd: 21.4, note: 'Tea break at Kona', event_id: 501, event: 'Sunday breakfast ride' },
-                { id: 4, name: 'Rahul Ghosh', nick: 'Rocket', lat: 22.6420, lng: 88.4310, spd: 0, at: ago(400), moved_at: ago(1500), since: ago(9000), until: new Date(t + 864e5).toISOString(), ride_km: 61.2, top_spd: 24.8 },
-                { id: 3, name: 'Priya Dutta', lat: 22.5000, lng: 88.3600, spd: 9, hdg: 200, at: ago(45), moved_at: ago(45), since: ago(3600), until: new Date(t + 36e5).toISOString(), ride_km: 22.4, top_spd: 18.1, event_id: 501, event: 'Sunday breakfast ride', event_auto: true },
-                { id: 5, name: 'Sourav Paul', lat: 22.5420, lng: 88.3380, spd: 0.4, at: ago(15), moved_at: ago(480), since: ago(2400), until: new Date(t + 2 * 36e5).toISOString(), ride_km: 9.8, top_spd: 15.2 }]
-                .map(r => ({ ...r, avatar: null, role: 'member', phone: ['superadmin', 'admin', 'coordinator'].includes(m.role) ? '90000000' + String(r.id).padStart(2, '0') : null, me: false }));
+            const riders = [{ id: 2, name: 'Arjun Sen', nick: 'Sultan', lat: 22.5850, lng: 88.4170, spd: 14, hdg: 40, at: ago(20), moved_at: ago(20), since: ago(5400), until: new Date(t + 3 * 36e5).toISOString(), ride_km: 38.6, move_s: 3310, top_spd: 21.4, note: 'Tea break at Kona', event_id: 501, event: 'Sunday breakfast ride' },
+                { id: 4, name: 'Rahul Ghosh', nick: 'Rocket', lat: 22.6420, lng: 88.4310, spd: 0, at: ago(400), moved_at: ago(1500), since: ago(9000), until: new Date(t + 864e5).toISOString(), ride_km: 61.2, move_s: 5020, top_spd: 24.8 },
+                { id: 3, name: 'Priya Dutta', lat: 22.5000, lng: 88.3600, spd: 9, hdg: 200, at: ago(45), moved_at: ago(45), since: ago(3600), until: new Date(t + 36e5).toISOString(), ride_km: 22.4, move_s: 2350, top_spd: 18.1, event_id: 501, event: 'Sunday breakfast ride', event_auto: true },
+                { id: 5, name: 'Sourav Paul', lat: 22.5420, lng: 88.3380, spd: 0.4, at: ago(15), moved_at: ago(480), since: ago(2400), until: new Date(t + 2 * 36e5).toISOString(), ride_km: 9.8, move_s: 1180, top_spd: 15.2 }]
+                .map(r => demoMove(r, t)).map(r => ({ ...r, avatar: null, role: 'member', phone: ['superadmin', 'admin', 'coordinator'].includes(m.role) ? '90000000' + String(r.id).padStart(2, '0') : null, me: false }));
             if (db.track && Date.parse(db.track.until) > t) riders.push({ id: m.id, name: m.full_name, nick: m.nickname, avatar: m.avatar_url, moved_at: db.track.at, ride_km: 4.2, top_spd: 16.5, ...db.track, event: (db.events || []).find(e => e.id === db.track.event_id)?.title || null, me: true, phone: null });
             const sos = (db.sos || []).filter(s => !s.resolved).map(s => ({ ...s, name: m.full_name, avatar: m.avatar_url, me: true }));
             return wait({ riders, sos, staff: ['superadmin', 'admin', 'coordinator'].includes(m.role), now: new Date().toISOString() }); },
+        async trackPos() { const v = await this.trackView(), sec = x => Math.floor(Date.parse(x) / 1000);
+            return { now: Math.floor(Date.now() / 1000), p: v.riders.map(r => [r.id, r.lat, r.lng, r.spd ?? null, r.hdg ?? null, sec(r.at), sec(r.moved_at || r.at), r.ride_km || 0, r.move_s || 0]) }; },
+        trackRidesToday: () => wait(demoRides().filter(r => !(db.goneRides || []).includes(r.id)).map(({ pts, t0, ...r }) => (r.me ? { ...r, name: me().full_name, nick: me().nickname, avatar: me().avatar_url } : r))),
+        trackRideLines: (ride, ev) => wait(demoRides().filter(r => !(db.goneRides || []).includes(r.id) && (r.id === ride || (ev && r.event_id === ev))).map(r => (r.me ? { ...r, name: me().full_name, nick: me().nickname, avatar: me().avatar_url } : r))),
+        trackRideDelete: id => { db.goneRides = [...(db.goneRides || []), id]; save(); return wait('ok'); },
         trackSos: (lat, lng, acc) => { db.sos = [{ id: Date.now(), lat, lng, acc, at: new Date().toISOString() }]; save(); return wait(db.sos[0].id); },
         trackSosResolve: id => { (db.sos || []).forEach(s => { if (s.id === id) s.resolved = true; }); save(); return wait('done'); },
         appSeen: async () => {},
