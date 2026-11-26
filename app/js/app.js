@@ -246,7 +246,7 @@ async function doRender() {
     if (name === 'admin' && param) state.adminTab = param;
     tabbar.hidden = false;
     if (name !== 'chat') state.cameFrom = name;
-    if (name === 'motomart' && document.body.dataset.route !== 'motomart') Object.assign(mmState, { branch: 'all', cat: 'all', q: '', mine: false, review: false });   /* MotoMart always opens on All */
+    if (name === 'motomart' && document.body.dataset.route !== 'motomart') Object.assign(mmState, { branch: 'used', cat: 'all', sort: 'newest', q: '', mine: false, review: false });   /* MotoMart always opens on Pre-owned, newest first (Bodhi, Nov 26 2026) */
     if (name === 'guides' && document.body.dataset.route !== 'guides') Object.assign(gState, { cat: isFam() ? 'app' : 'maint', type: 'all', q: '' });   /* Guides always opens on Maintenance */
     document.body.dataset.route = name;
     tabbar.querySelectorAll('a').forEach(a => a.toggleAttribute('aria-current', a.dataset.tab === (name === 'members' ? 'crew' : name)));
@@ -4757,7 +4757,7 @@ const MERCH_CATS = MERCH_GROUP.map(i => i[0]);
 const MM_SHORT = Object.fromEntries([...MM_GROUPS.flatMap(([, items]) => items), ...MERCH_GROUP].map(([n, s]) => [n, s || n.split(/ and |, /)[0]]));
 const MM_KIND = { used: 'Pre-owned', new: 'New', merch: 'RWB Merch' };
 const SOLD_DAYS = 15;
-const mmState = { branch: 'all', cat: 'all', sort: 'price-asc', q: '', mine: false, review: false, swept: false };
+const mmState = { branch: 'used', cat: 'all', sort: 'newest', q: '', mine: false, review: false, swept: false };
 const price = n => Number(n) === 0 ? 'Free' : '₹' + Number(n).toLocaleString('en-IN');
 /* a "Coming soon" merch post has no price yet: it shows "Coming soon" and can't be ordered */
 const soon = l => kindOf(l) === 'merch' && !!l.coming_soon;
