@@ -200,36 +200,59 @@ const bikeLogs = (logs, b) => (logs || []).filter(f => (f.bike_slot ?? 1) === b.
 const mainLogs = logs => (logs || []).filter(f => (f.bike_slot ?? 1) === 1);
 const tankSpec = (b = mainBike()) => { const [lo, soft, hi] = KMPL_RANGE[b.ronin ? 'ronin' : 'other']; return { ronin: b.ronin, size: b.tank, lo, soft, hi }; };
 
-/* ---------- mileage maths (Nov 28 2026: fill to fill, mistakes left out automatically) ----------
-   Riders log litres + odometer at every fill-up (any amount). Each fill-up's litres refill what was used since the
-   previous fill-up, so a reading = km since the previous fill-up ÷ litres of this one. Mistakes are caught by what a
-   bike can really do (TVS Ronin 225: 25–55 km/l, but 50–55 only in a run of 3+ readings in a row; other bikes 12–80 km/l):
-     • a reading too high (a part fill, a fill-up not logged, an odometer typo) is joined with the next fill-up(s), up to 3;
-       if it still isn't realistic, only the first of them is left out (marked "Check") and the rest are
-       read again from it, so one missed fill-up costs one reading;
-     • a reading too low, or litres more than the tank holds, is left out and marked "Check";
-     • the same odometer twice (not updated) joins with the next fill-up; exact duplicates are skipped.
-   Average = all good km ÷ all good litres. Boards need 200+ km of good readings (MIN_BOARD_KM).
-   Full tank / DTE / Trip A are no longer asked; old values are ignored. Same maths on the server: private.fuel_readings (file 97). */
+/* ---------- mileage maths (Nov 28 2026) ----------
+   The app follows the petrol in the tank. A reading at a fill-up = km since the last good reading ÷ petrol used.
+   Petrol used, best first:
+     • both ends measured: level after the last reading's fill-up + litres in between − level now.
+       Level after: "Full tank" → tank size (Ronin 14 L); "DTE before filling" → level before + litres.
+       Level before: Full tank → size − litres; DTE → empty level (Ronin ~2 L, TVS manual: no bars, DTE "--") + DTE ÷ k,
+       k = km per litre the dash uses, learnt from fill-ups with both Full tank and DTE (median), else the rider's average.
+     • otherwise fill to fill: the litres filled since (each fill-up refills what was used).
+   So a part fill with DTE gets its own reading at once; one without waits ("Pending") and is joined with the next.
+   A "Full tank" that can't be (expected level + litres < size − 2.5 L) counts as a part fill and shows "Check" until the
+   rider says yes (fuel_logs.full_sure). Mistakes are caught by what a bike can really do (TVS Ronin 225: 25–55 km/l, but
+   50–55 only in a run of 3+ readings in a row; other bikes 12–80 km/l):
+     • too high → joined with the next fill-up(s), up to 3; still unrealistic → only the first after the last good reading
+       is left out ("Check") and the rest are read again from it, so one missed fill-up costs one reading;
+     • too low, or litres more than the tank holds → left out ("Check"); the same odometer twice joins with the next.
+   Two passes: the first, km and litres only, gives the average used for k and the expected levels.
+   Average = all good km ÷ all good petrol. Boards need 200+ km of good readings (MIN_BOARD_KM).
+   Same maths on the server: private.fuel_readings (file 99): keep both the same. */
 /* [lowest, highest normal, highest possible]: readings between the last two count only in a run of 3+ in a row (Bodhi, Nov 28 2026:
    owners online claim up to 55 km/l on gentle highway runs; one-off 50+ readings are usually a missed fill-up) */
-const KMPL_RANGE = { ronin: [25, 50, 55], other: [12, 80, 80] }, MIN_BOARD_KM = 200, HIGH_RUN = 3;
+const KMPL_RANGE = { ronin: [25, 50, 55], other: [12, 80, 80] }, MIN_BOARD_KM = 200, HIGH_RUN = 3, RONIN_EMPTY = 2;
 const fuelKey = f => `${f.bike_slot ?? 1}|${f.fill_date}|${f.odometer_km}|${Number(f.litres)}|${!!f.full_tank}`;
-function fuelReadings(logs, spec) {
-    const rows = [], seen = new Set(), out = [], bad = new Set(), cap = spec.size || 20;
+const dteOf = f => f.range_km == null || f.range_km === '' ? null : Number(f.range_km);
+function fuelReadings(logs, spec, lv = null) {
+    const rows = [], seen = new Set(), out = [], bad = new Set(), sus = new Set(), expect = new Map();
     for (const f of logs) { const key = fuelKey(f); if (!seen.has(key)) { seen.add(key); rows.push(f); } }
-    const odo = j => Number(rows[j].odometer_km);
-    let base = -1, i = 0;
+    const cap = spec.size || 20, size = lv ? spec.size || null : null, empty = spec.ronin ? RONIN_EMPTY : 0;
+    const O = j => Number(rows[j].odometer_km), L = j => Number(rows[j].litres);
+    /* level after a fill-up that starts a stretch, from its own data only */
+    const own = j => !lv ? null : size && rows[j].full_tank && !sus.has(rows[j].id) ? size : dteOf(rows[j]) != null ? Math.min(size || 99, empty + dteOf(rows[j]) / lv.k + L(j)) : null;
+    let base = -1, A = null, Afull = false, i = 0;
+    const setBase = j => { base = j; A = own(j); Afull = !!(lv && size && rows[j].full_tank && !sus.has(rows[j].id)); };
     while (i < rows.length) {
-        if (Number(rows[i].litres) > cap + 0.5) { for (let j = base + 1; j <= i; j++) bad.add(rows[j].id); base = i++; continue; }
-        if (base < 0) { base = i++; continue; }
-        const n = i - base, d = odo(i) - odo(base);
-        let l = 0; for (let j = base + 1; j <= i; j++) l += Number(rows[j].litres);
-        const k = d / l;
-        if (d > 0 && k >= spec.lo && k <= spec.hi) { out.push({ end: rows[i], dist: d, litres: l, kmpl: k, exact: true }); base = i++; continue; }
-        /* can't add up: leave out only the first fill-up after the last good one and try again from it
-           (a missed fill-up then costs one reading, not the good ones after it) */
-        if (d > 0 ? k < spec.lo || n >= 3 || l > cap * 2 : n >= 3) { bad.add(rows[base + 1].id); base++; i = base + 1; continue; }
+        if (L(i) > cap + 0.5) { for (let j = base + 1; j <= i; j++) bad.add(rows[j].id); setBase(i); i++; continue; }
+        if (base < 0) { setBase(i); i++; continue; }
+        const n = i - base, d = O(i) - O(base), f = rows[i];
+        let between = 0; for (let j = base + 1; j < i; j++) between += L(j);
+        let ok = false, B = null;
+        if (lv) {
+            const exp = A != null ? A + between - d / lv.avg : null;
+            if (exp != null) expect.set(f.id, exp);
+            if (size && f.full_tank) {
+                ok = !!f.full_sure || exp == null || exp + L(i) >= size - 2.5;
+                if (!ok) sus.add(f.id);
+            }
+            B = ok ? Math.max(0, size - L(i)) : dteOf(f) != null ? empty + dteOf(f) / lv.k : null;
+        }
+        const lvl = B != null && A != null, used = lvl ? A + between - B : between + L(i), k = d / used;
+        if (d > 0 && used > 0.3 && k >= spec.lo && k <= spec.hi) {
+            out.push({ end: f, dist: d, litres: used, kmpl: k, exact: !lvl || (Afull && ok) });
+            base = i; A = !lv ? null : ok ? size : B != null ? Math.min(size || 99, B + L(i)) : A; Afull = ok; i++; continue;
+        }
+        if (d > 0 ? k < spec.lo || used <= 0.3 || n >= 3 || between + L(i) > cap * 2 : n >= 3) { bad.add(rows[base + 1].id); setBase(base + 1); i = base + 1; continue; }
         i++;
     }
     /* over the normal top (Ronin 50): keep only runs of HIGH_RUN+ such readings in a row */
@@ -240,59 +263,25 @@ function fuelReadings(logs, spec) {
         if (b - a < HIGH_RUN) for (let j = a; j < b; j++) { keep[j] = false; bad.add(out[j].end.id); }
         a = b;
     }
-    return { out: out.filter((_, j) => keep[j]), bad, open: rows.slice(base + 1).map(f => f.id) };
-}
-/* ---------- per fill-up mileage from the tank level (Nov 28 2026, Bodhi) ----------
-   Shown on each fill-up card; never used for the average or the Warriorboards (those stay on fuelReadings above).
-   The app follows the petrol in the tank:
-     • "Full tank" on → after filling the tank holds its capacity (Ronin 14 L), so before filling it had capacity − litres;
-     • "DTE before filling" → fuel left ≈ empty level (Ronin ~2 L: no bars, DTE "--", TVS manual) + DTE ÷ k,
-       k = km per litre the dash assumes, learnt from fill-ups with both Full tank and DTE, else the rider's average;
-     • neither → the level is carried on: last level − km ÷ average + litres (an estimate, gives no reading of its own).
-   Reading at a fill-up whose level before filling is known = km since the last fill-up ÷ (level after the last one − level now).
-   Both ends measured (full/DTE) → shown; Full tank to Full tank is exact, the rest "≈". Readings outside the bike's range are not shown. */
-const RONIN_EMPTY = 2;
-function fillLevels(logs, spec, avg) {
-    const res = new Map(), seen = new Set(), cap = spec.size, empty = spec.ronin ? RONIN_EMPTY : 0;
-    const a = avg && avg > 5 ? avg : 40;
-    const ks = cap ? logs.filter(f => f.full_tank && Number(f.range_km) > 0 && cap - Number(f.litres) - empty > 0.5)
-        .map(f => Number(f.range_km) / (cap - Number(f.litres) - empty)).filter(k => k > 10 && k < 90).sort((x, y) => x - y) : [];
-    const k = ks.length ? ks[ks.length >> 1] : a;
-    let after = null, known = false, fullPrev = false, prev = null;
-    for (const f of logs) {
-        const key = fuelKey(f); if (seen.has(key)) continue; seen.add(key);
-        const L = Number(f.litres), odo = Number(f.odometer_km), dte = f.range_km == null || f.range_km === '' ? null : Number(f.range_km);
-        const km = prev ? odo - Number(prev.odometer_km) : 0;
-        let before = null;
-        if (cap && f.full_tank) before = Math.max(0, cap - L);
-        else if (dte != null) before = empty + dte / k;
-        const est = after != null && km > 0 ? Math.max(0, after - km / a) : null;
-        if (before != null && after != null && known && km > 0) {
-            const used = after - before, r = used > 0.3 ? km / used : null;
-            if (r && r >= spec.lo && r <= spec.hi) res.set(f.id, { kmpl: r, exact: fullPrev && !!f.full_tank, km, used });
-        }
-        res.set('est:' + f.id, est);
-        const lvl = before != null ? before : est;
-        after = cap && f.full_tank ? cap : lvl != null ? Math.min(cap || 99, lvl + L) : null;
-        known = before != null; fullPrev = !!(cap && f.full_tank); prev = f;
-    }
-    return res;
+    sus.forEach(id => bad.add(id));
+    return { out: out.filter((_, j) => keep[j]), bad, sus, expect, open: rows.slice(base + 1).map(f => f.id) };
 }
 const sumKmpl = t => { const d = t.reduce((a, x) => a + x.dist, 0), l = t.reduce((a, x) => a + x.litres, 0); return l ? d / l : null; };
 /* logs: ONE bike's fill-ups, sorted by odometer */
 function tanks(logs, spec = tankSpec()) {
-    const r = fuelReadings(logs, spec);
-    return Object.assign(r.out, { bad: r.bad, open: r.open });
+    const avg = sumKmpl(fuelReadings(logs, spec).out) || 40, empty = spec.ronin ? RONIN_EMPTY : 0, size = spec.size;
+    const ks = size ? logs.filter(f => f.full_tank && dteOf(f) > 0 && size - Number(f.litres) - empty > 0.5)
+        .map(f => dteOf(f) / (size - Number(f.litres) - empty)).filter(k => k >= 10 && k <= 90).sort((x, y) => x - y) : [];
+    const k = Math.min(90, Math.max(10, ks.length ? (ks.length % 2 ? ks[ks.length >> 1] : (ks[ks.length / 2 - 1] + ks[ks.length / 2]) / 2) : avg));
+    const r = fuelReadings(logs, spec, { k, avg });
+    return Object.assign(r.out, { bad: r.bad, sus: r.sus, expect: r.expect, open: r.open });
 }
 /* stats for one bike (default: the main bike, which also feeds the Warriorboards) */
 function mileageStats(allLogs, b = mainBike()) {
     const spec = tankSpec(b), logs = bikeLogs(allLogs, b), t = tanks(logs, spec), avg = sumKmpl(t);
     const priced = logs.filter(f => f.amount != null && Number(f.litres) > 0), pl = priced.reduce((a, f) => a + Number(f.litres), 0), pa = priced.reduce((a, f) => a + Number(f.amount), 0);
-    /* what each fill-up card shows: its own tank-level reading when there is one, else the fill-to-fill reading */
-    const lv = fillLevels(logs, spec, avg), byEnd = new Map(t.map(x => [x.end.id, x])), per = new Map();
-    for (const f of logs) { const l = lv.get(f.id), x = byEnd.get(f.id); if (l) per.set(f.id, { kmpl: l.kmpl, exact: l.exact }); else if (x) per.set(f.id, { kmpl: x.kmpl, exact: true }); }
-    const vals = logs.filter(f => per.has(f.id)).map(f => per.get(f.id));
-    return { tanks: t, logs, avg, per, levels: lv, last: vals.at(-1)?.kmpl ?? null, lastExact: vals.at(-1)?.exact ?? true, best: vals.length ? Math.max(...vals.map(x => x.kmpl)) : null, cpk: avg && pl ? pa / pl / avg : null, km: t.reduce((a, x) => a + x.dist, 0) };
+    const per = new Map(t.map(x => [x.end.id, { kmpl: x.kmpl, exact: x.exact }]));
+    return { tanks: t, logs, avg, per, last: t.at(-1)?.kmpl ?? null, lastExact: t.at(-1)?.exact ?? true, best: t.length ? Math.max(...t.map(x => x.kmpl)) : null, cpk: avg && pl ? pa / pl / avg : null, km: t.reduce((a, x) => a + x.dist, 0) };
 }
 
 /* ---------- router ---------- */
@@ -2978,7 +2967,7 @@ const HOWTO = `<details class="howto" id="howto"><summary>How mileage works</sum
         <li>For a mileage on every fill-up, add the <b>DTE</b> on your dash before filling, and turn on <b>Full tank</b> when you fill to the top.</li>
     </ol>
     <div class="formula">Mileage = km ridden ÷ petrol used</div>
-    <p class="muted small">A part fill without DTE shows <b>Pending</b> and counts with your next fill-up. Fill-ups that don't add up (a typo, a missed fill-up) show <b>Check</b>. Your average and the Warriorboards use the km and litres only.</p>
+    <p class="muted small">A part fill without DTE shows <b>Pending</b> and counts with your next fill-up. Fill-ups that don't add up (a typo, a missed fill-up, a Full tank that can't be) show <b>Check</b>: tap one to fix it.</p>
 </details>`;
 
 async function viewMileage() {
@@ -2999,7 +2988,7 @@ async function viewMileage() {
         ${b.slot === 1 ? `<section class="section"><h2>You vs RWB</h2><div class="card vs" id="vs"><p class="small muted">Comparing…</p></div></section>` : ''}
         ${TIPS}
         ${mine.length || (b.slot === 1 && svcs.length) ? `<section class="section"><h2>Spends and mileage</h2><div class="card trend" id="trend"></div></section>` : ''}
-        <section class="section"><h2>Fill-ups${bikes.length > 1 ? ` · ${esc(b.name)}` : ''}</h2>${mine.length ? `<div class="list">${[...mine].reverse().map(f => fuelCard(f, ms.per.get(f.id), ms.per.has(f.id) ? '' : ms.tanks.bad.has(f.id) ? 'bad' : ms.tanks.open.includes(f.id) ? 'open' : '')).join('')}</div>` :
+        <section class="section"><h2>Fill-ups${bikes.length > 1 ? ` · ${esc(b.name)}` : ''}</h2>${mine.length ? `<div class="list">${[...mine].reverse().map(f => fuelCard(f, ms.per.get(f.id), ms.tanks.sus.has(f.id) ? 'bad' : ms.per.has(f.id) ? '' : ms.tanks.bad.has(f.id) ? 'bad' : ms.tanks.open.includes(f.id) ? 'open' : '')).join('')}</div>` :
             `<div class="card empty"><b>No fill-ups yet</b>Add litres, ₹ and the odometer at every fill-up.</div>`}</section>
         <button class="btn fab" data-act="add-fuel">＋ Add fuel</button>`;
     actions = { open: el => fuelForm(logs.find(f => String(f.id) === el.dataset.id)), 'add-fuel': () => fuelForm(null, b.slot),
@@ -3065,7 +3054,7 @@ function fuelForm(f = null, slot = 1) {
         const draftOf = () => {
             const d = Object.fromEntries(new FormData(form));
             return { fill_date: d.fill_date, odometer_km: num(d.odometer_km), litres: num(d.litres), amount: num(d.amount), range_km: num(d.range_km),
-                     full_tank: form.full_tank.checked, bike_slot: bike.slot, bike_vrn: bike.vrn || null };
+                     full_tank: form.full_tank.checked, full_sure: form.full_tank.checked && !!(f?.full_sure && f.full_tank && Number(f.litres) === num(d.litres) && Number(f.odometer_km) === num(d.odometer_km)), bike_slot: bike.slot, bike_vrn: bike.vrn || null };
         };
         /* this fill-up among the others: its own reading (tank level, else fill to fill), the tank level the app expected
            just before it, and whether it's realistic for the bike */
@@ -3078,12 +3067,10 @@ function fuelForm(f = null, slot = 1) {
             const d = rec.odometer_km - Number(before.odometer_km);
             if (d <= 0) return { d, before, why: `Same odometer as your fill-up on ${fmtDate(before.fill_date)}.` };
             const seq = [...others(), { ...rec, id: '__new' }].sort((a, b) => a.odometer_km - b.odometer_km || a.fill_date.localeCompare(b.fill_date));
-            const base = tanks(seq, spec), lv = fillLevels(seq, spec, sumKmpl(base) || mileageStats(state.fuel || [], bike).avg);
-            const own = lv.get('__new'), joined = base.find(x => x.end.id === '__new'), est = lv.get('est:__new');
-            const out = { d, before, est, own };
-            if (own) return { ...out, k: own.kmpl, approx: !own.exact };
+            const base = tanks(seq, spec), mine = base.find(x => x.end.id === '__new');
+            const out = { d, before, est: base.expect.get('__new'), sus: base.sus.has('__new') };
+            if (mine) return { ...out, k: mine.kmpl, approx: !mine.exact, joinedKm: mine.dist };
             const k = d / rec.litres;
-            if (joined) return { ...out, k: joined.kmpl, joinedKm: joined.dist };
             if (k > spec.hi && d <= cap * spec.hi) return { ...out, note: 'Part fill: its mileage shows after your next fill-up.' };
             return { ...out, why: k > spec.hi ? `${d.toLocaleString('en-IN')} km on ${rec.litres} L is more than one tank can do. Missed logging a fill-up, or an odometer typo?`
                                     : k < spec.lo ? `${k.toFixed(0)} km/l is too low. Check the odometer and litres.` : null };
@@ -3126,9 +3113,9 @@ function fuelForm(f = null, slot = 1) {
             const later = prev.filter(x => x.fill_date < rec.fill_date).sort((a, b) => b.odometer_km - a.odometer_km)[0];
             if (later && rec.odometer_km < later.odometer_km && !confirmBox(`The odometer (${km(rec.odometer_km)}) is lower than an earlier fill-up (${km(later.odometer_km)}). Save anyway?`)) return;
             /* Full tank: the petrol the app expects was left + these litres should come close to the tank's size */
-            if (rec.full_tank && cap && c.est != null && c.est + rec.litres < cap - 2.5 && !sure.full) {
+            if (rec.full_tank && cap && c.sus && !sure.full) {
                 const ok = await askSure('full', 'Full tank?', `After ${c.d.toLocaleString('en-IN')} km the tank should still have about ${Math.max(0, c.est).toFixed(1)} L, so ${rec.litres} L would only bring it to about ${(c.est + rec.litres).toFixed(1)} of ${cap} L. Did you fill till the nozzle clicked off?`, 'Yes, it was a full tank', 'No, it was a part fill');
-                if (!ok) { form.full_tank.checked = false; rec.full_tank = false; }
+                if (!ok) { form.full_tank.checked = false; rec.full_tank = false; } else rec.full_sure = true;
                 sure.full = true;
             }
             /* DTE: more range than a full tank holds is a typo */
