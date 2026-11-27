@@ -118,7 +118,7 @@ k: add fuel, fill up, petrol log, kmpl, fuel log, mileage calculation, km per li
 b: app
 After EVERY fill (any amount, full tank or not) tap "+ Add fuel": litres, ₹ paid, odometer and date. That's all: Full tank, DTE and Trip A are no longer needed.
 Each fill-up's mileage = km since your previous fill-up ÷ litres of this fill-up; your average = all km ÷ all litres. Don't skip logging a fill-up.
-Fill-ups that don't add up (an odometer typo, a missed fill-up, more litres than the tank holds, mileage a bike can't do: a Ronin over 50 or under 25 km/l) show "Check" and are left out until fixed. A small part fill is joined with the next fill-up automatically. Missed logging a fill-up? Only that one reading is left out (Check); add the missed fill-up to fix it.
+Fill-ups that don't add up (an odometer typo, a missed fill-up, more litres than the tank holds, mileage a bike can't do: a Ronin over 55 or under 25 km/l; over 50 counts only when 3 readings in a row are over 50) show "Check" and are left out until fixed. A small part fill is joined with the next fill-up automatically. Missed logging a fill-up? Only that one reading is left out (Check); add the missed fill-up to fix it.
 The Mileage Warriorboard needs at least 200 km of good readings. Typed something wrong? Tap the fill-up and fix it, or add the fill-up you missed.
 
 ## Mileage with more than one bike, and tank capacity

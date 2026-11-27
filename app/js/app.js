@@ -198,12 +198,12 @@ const needTank = b => !b.ronin && !b.tank;
 const bikeOf = (f, bikes = bikeList()) => bikes.find(b => b.slot === (f.bike_slot ?? 1)) || bikes[0];
 const bikeLogs = (logs, b) => (logs || []).filter(f => (f.bike_slot ?? 1) === b.slot && (b.slot === 1 || !f.bike_vrn || vrnKey(f.bike_vrn) === vrnKey(b.vrn)));
 const mainLogs = logs => (logs || []).filter(f => (f.bike_slot ?? 1) === 1);
-const tankSpec = (b = mainBike()) => { const [lo, hi] = KMPL_RANGE[b.ronin ? 'ronin' : 'other']; return { ronin: b.ronin, size: b.tank, lo, hi }; };
+const tankSpec = (b = mainBike()) => { const [lo, soft, hi] = KMPL_RANGE[b.ronin ? 'ronin' : 'other']; return { ronin: b.ronin, size: b.tank, lo, soft, hi }; };
 
 /* ---------- mileage maths (Nov 28 2026: fill to fill, mistakes left out automatically) ----------
    Riders log litres + odometer at every fill-up (any amount). Each fill-up's litres refill what was used since the
    previous fill-up, so a reading = km since the previous fill-up ÷ litres of this one. Mistakes are caught by what a
-   bike can really do (TVS Ronin 225: 25–50 km/l; other bikes 12–80 km/l):
+   bike can really do (TVS Ronin 225: 25–55 km/l, but 50–55 only in a run of 3+ readings in a row; other bikes 12–80 km/l):
      • a reading too high (a part fill, a fill-up not logged, an odometer typo) is joined with the next fill-up(s), up to 3;
        if it still isn't realistic, only the first of them is left out (marked "Check") and the rest are
        read again from it, so one missed fill-up costs one reading;
@@ -211,7 +211,9 @@ const tankSpec = (b = mainBike()) => { const [lo, hi] = KMPL_RANGE[b.ronin ? 'ro
      • the same odometer twice (not updated) joins with the next fill-up; exact duplicates are skipped.
    Average = all good km ÷ all good litres. Boards need 200+ km of good readings (MIN_BOARD_KM).
    Full tank / DTE / Trip A are no longer asked; old values are ignored. Same maths on the server: private.fuel_readings (file 97). */
-const KMPL_RANGE = { ronin: [25, 50], other: [12, 80] }, MIN_BOARD_KM = 200;
+/* [lowest, highest normal, highest possible]: readings between the last two count only in a run of 3+ in a row (Bodhi, Nov 28 2026:
+   owners online claim up to 55 km/l on gentle highway runs; one-off 50+ readings are usually a missed fill-up) */
+const KMPL_RANGE = { ronin: [25, 50, 55], other: [12, 80, 80] }, MIN_BOARD_KM = 200, HIGH_RUN = 3;
 const fuelKey = f => `${f.bike_slot ?? 1}|${f.fill_date}|${f.odometer_km}|${Number(f.litres)}|${!!f.full_tank}`;
 function fuelReadings(logs, spec) {
     const rows = [], seen = new Set(), out = [], bad = new Set(), cap = spec.size || 20;
@@ -230,7 +232,15 @@ function fuelReadings(logs, spec) {
         if (d > 0 ? k < spec.lo || n >= 3 || l > cap * 2 : n >= 3) { bad.add(rows[base + 1].id); base++; i = base + 1; continue; }
         i++;
     }
-    return { out, bad, open: rows.slice(base + 1).map(f => f.id) };
+    /* over the normal top (Ronin 50): keep only runs of HIGH_RUN+ such readings in a row */
+    const keep = out.map(() => true);
+    for (let a = 0; a < out.length;) {
+        if (out[a].kmpl <= spec.soft) { a++; continue; }
+        let b = a; while (b < out.length && out[b].kmpl > spec.soft) b++;
+        if (b - a < HIGH_RUN) for (let j = a; j < b; j++) { keep[j] = false; bad.add(out[j].end.id); }
+        a = b;
+    }
+    return { out: out.filter((_, j) => keep[j]), bad, open: rows.slice(base + 1).map(f => f.id) };
 }
 const sumKmpl = t => { const d = t.reduce((a, x) => a + x.dist, 0), l = t.reduce((a, x) => a + x.litres, 0); return l ? d / l : null; };
 /* logs: ONE bike's fill-ups, sorted by odometer */
