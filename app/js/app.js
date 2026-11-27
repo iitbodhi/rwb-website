@@ -1865,7 +1865,7 @@ function serviceForm(s = null) {
     openSheet(s ? 'Edit service' : 'Add service', `<form id="sf">
         <div class="grid2">
             <label>Date<input type="date" name="service_date" required max="${todayISO()}" value="${esc(r.service_date)}"></label>
-            <label>Odometer (km)<input type="number" name="odometer_km" required min="0" inputmode="numeric" value="${esc(r.odometer_km ?? '')}"></label>
+            <label>Odometer (km)<input type="number" name="odometer_km" required min="0"${opt.before ? ` max="${Number(opt.before.odometer_km) - 1}" placeholder="Below ${esc(Number(opt.before.odometer_km).toLocaleString('en-IN'))}"` : ''} inputmode="numeric" value="${esc(r.odometer_km ?? '')}"></label>
         </div>
         <div class="grid2">
             <label>Service type<select name="service_type">${Object.entries(SERVICE_TYPES).map(([k, v]) => `<option value="${k}"${k === r.service_type ? ' selected' : ''}>${v}</option>`).join('')}</select></label>
@@ -3001,7 +3001,7 @@ async function viewMileage() {
         <section class="section"><h2>Fill-ups${bikes.length > 1 ? ` · ${esc(b.name)}` : ''}</h2>${mine.length ? `<div class="list">${[...mine].reverse().map(f => fuelCard(f, ms.per.get(f.id), ms.tanks.sus.has(f.id) || ms.tanks.tripFix.has(f.id) ? 'bad' : ms.per.has(f.id) ? '' : ms.tanks.bad.has(f.id) ? 'bad' : ms.tanks.open.includes(f.id) ? 'open' : '')).join('')}</div>` :
             `<div class="card empty"><b>No fill-ups yet</b>Add litres, ₹ and the odometer at every fill-up.</div>`}</section>
         <button class="btn fab" data-act="add-fuel">＋ Add fuel</button>`;
-    actions = { open: el => fuelForm(logs.find(f => String(f.id) === el.dataset.id)), 'add-fuel': () => fuelForm(null, b.slot),
+    actions = { open: el => { const f = logs.find(x => String(x.id) === el.dataset.id); fuelForm(f, b.slot, { check: !!f && (ms.tanks.bad.has(f.id) || ms.tanks.tripFix.has(f.id) || ms.tanks.open.includes(f.id)) }); }, 'add-fuel': () => fuelForm(null, b.slot),
         bk: el => { state.mileSlot = Number(el.dataset.slot); state.param ? (location.hash = '#mileage') : render(); } };
     if ($('#trend')) drawTrend($('#trend'), mine, b.slot === 1 ? svcs : [], ms.tanks);
     if ($('#vs')) drawVs($('#vs'), ms.avg);
@@ -3035,10 +3035,10 @@ function bikeOdo(slot) {
     const b = bikeList().find(x => x.slot === slot), l = b ? bikeLogs(state.fuel, b) : [];
     return l.length ? Math.max(...l.map(f => Number(f.odometer_km))) : '';
 }
-function fuelForm(f = null, slot = 1) {
+function fuelForm(f = null, slot = 1, opt = {}) {
     const logs = state.fuel || [], bikes = bikeList();
     let bike = f ? bikeOf(f, bikes) : bikes.find(x => x.slot === slot) || bikes[0];
-    const r = f ? { ...f } : { fill_date: todayISO(), odometer_km: bikeOdo(bike.slot) };
+    const r = f ? { ...f } : { fill_date: todayISO(), odometer_km: bikeOdo(bike.slot), ...(opt.preset || {}) };
     openSheet(f ? 'Edit fill-up' : 'Add fuel', `<form id="ff">
         ${bikes.length > 1 ? `<div class="chips bike-chips" id="ff-bikes">${bikes.map(x => `<button type="button" class="chip" data-slot="${x.slot}" aria-pressed="${x.slot === bike.slot}">${esc(x.name)}</button>`).join('')}</div>` : ''}
         <div class="grid2">
@@ -3046,7 +3046,7 @@ function fuelForm(f = null, slot = 1) {
             <label>Amount paid (₹)<input type="number" name="amount" min="0" step="0.01" inputmode="decimal" value="${esc(r.amount ?? '')}"></label>
         </div>
         <div class="grid2">
-            <label>Odometer (km)<input type="number" name="odometer_km" required min="0" inputmode="numeric" value="${esc(r.odometer_km ?? '')}"></label>
+            <label>Odometer (km)<input type="number" name="odometer_km" required min="0"${opt.before ? ` max="${Number(opt.before.odometer_km) - 1}" placeholder="Below ${esc(Number(opt.before.odometer_km).toLocaleString('en-IN'))}"` : ''} inputmode="numeric" value="${esc(r.odometer_km ?? '')}"></label>
             <label>Date<input type="date" name="fill_date" required max="${todayISO()}" value="${esc(r.fill_date)}"></label>
         </div>
         <div class="grid2 ff-opt">
@@ -3056,6 +3056,7 @@ function fuelForm(f = null, slot = 1) {
         <label class="switch ff-full">Full tank<input type="checkbox" name="full_tank"${r.full_tank ? ' checked' : ''}></label>
         <p class="calc" id="calc"></p>
         <div class="ff-ask" id="ff-ask" hidden></div>
+        ${f && opt.check ? `<button type="button" class="btn ghost block ff-missed" id="ff-missed">＋ Add a missed fill-up before this one</button>` : ''}
         <div id="ff-btns"><button class="btn block">${f ? 'Save changes' : 'Save fill-up'}</button>
         ${f ? '<button type="button" class="btn danger block" id="del">Delete this fill-up</button>' : ''}</div>
     </form>`, body => {
@@ -3117,6 +3118,10 @@ function fuelForm(f = null, slot = 1) {
             if (!odoTouched) form.odometer_km.value = bikeOdo(bike.slot);
             update(); };
         form.oninput = () => { sure = {}; update(); }; update();
+        if (opt.before) setTimeout(() => form.odometer_km.focus(), 250);
+        /* a fill-up the rider forgot: opens Add fuel dated like this one, odometer left for them (it goes before this one) */
+        const missed = body.querySelector('#ff-missed');
+        if (missed) missed.onclick = () => fuelForm(null, bike.slot, { preset: { fill_date: f.fill_date, odometer_km: '' }, before: f });
         const del = body.querySelector('#del');
         if (del) del.onclick = () => { if (confirmBox('Delete this fill-up?')) busy(del, async () => { await api.deleteFuel(f); await load.fuel(true); state.board = null; closeSheet(); render(); toast('Deleted'); }); };
         form.onsubmit = async e => {

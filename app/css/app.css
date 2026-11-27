@@ -2916,3 +2916,4 @@ body[data-fam] .tp-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
 .ff-ask p{margin:0 0 12px;color:var(--stone);font-size:.92rem;line-height:1.4}
 .ff-ask-btns{display:grid;gap:8px}
 .ff-ask-btns .btn{margin:0}
+.ff-missed{margin:0 0 10px}
