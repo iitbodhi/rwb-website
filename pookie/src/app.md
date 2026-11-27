@@ -37,7 +37,7 @@ An event link (from the event page) highlights only that ride; other riders are 
 k: ride history, route replay, playback, recent rides, past ride, ride path, line, delete ride
 b: app
 After a ride shared on Track (1 km or more), a line of the route appears under "Recent rides" on the Track screen for 7 days, grouped by day and by event. Tap it to replay the ride on a map (play/pause, slider, speed up to 600×; event rides play every rider together).
-Privacy: the part within about 300 m of the start and end of every line is never shown, so nobody sees where you live. Only members see lines, never RWB FAM. You (or an admin) can delete your own line any time; lines are deleted automatically 7 days after the ride.
+Privacy: the part within about 300 m of the start and end of every line is never shown, so nobody sees where you live. Members see every ride; RWB FAM (family) can play back and save their own rider's rides and the event rides their rider was on, without top speed. You (or an admin) can delete your own line any time; lines are deleted automatically 7 days after the ride.
 
 ## Save a ride to my phone, keep a ride forever, top speed of a ride
 k: save ride, download ride, keep ride, saved rides, offline ride, ride gone after 7 days, top speed, highest speed, max speed, speed wrong, speedometer

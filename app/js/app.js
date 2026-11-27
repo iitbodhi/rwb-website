@@ -6784,7 +6784,7 @@ function trkFollow(who) {
 async function refreshTrack(redraw, light) {
     if (!$('#trk-status')) return;
     let d = trk.data;
-    if (!redraw || !d) { try { d = await api.trackView(); trkClock(d.riders || [], d.now ? Date.parse(d.now) : 0); const gone = (trk.data?.riders || []).some(r => !(d.riders || []).some(x => x.id === r.id)); trk.data = d; trk.fullAt = Date.now(); if (!d.fam) loadRides(gone); liveRide.n = (d.riders || []).length; liveRide.at = Date.now(); trackBadge(); } catch (e) { $('#trk-status').innerHTML = `<span class="warn small">${esc(e.message)}</span>`; if ($('#trk-list .skel')) $('#trk-list').innerHTML = ''; return; } }
+    if (!redraw || !d) { try { d = await api.trackView(); trkClock(d.riders || [], d.now ? Date.parse(d.now) : 0); const gone = (trk.data?.riders || []).some(r => !(d.riders || []).some(x => x.id === r.id)); trk.data = d; trk.fullAt = Date.now(); loadRides(gone); liveRide.n = (d.riders || []).length; liveRide.at = Date.now(); trackBadge(); } catch (e) { $('#trk-status').innerHTML = `<span class="warn small">${esc(e.message)}</span>`; if ($('#trk-list .skel')) $('#trk-list').innerHTML = ''; return; } }
     if (!$('#trk-status')) return;
     const f = trk.filter, onEv = r => f && r.event_id === f;
     const ev = f ? (state.evd?.events || []).find(e => e.id === f) || { title: d.riders.find(onEv)?.event || 'this ride' } : null;
@@ -6936,14 +6936,14 @@ const savedRidePut = rec => ridesTx('readwrite', st => st.put(rec, rideOwner() +
 const savedRideDel = key => ridesTx('readwrite', st => st.delete(rideOwner() + key));
 const savedRideAll = () => ridesTx('readonly', st => st.getAll(IDBKeyRange.bound(rideOwner(), rideOwner() + '\uffff')))
     .then(a => (a || []).sort((x, y) => Date.parse(y.ended_at) - Date.parse(x.ended_at))).catch(() => []);
-const topKmh = r => Math.round(Math.max(r?.top_spd ? r.top_spd * 3.6 : 0, ...(r?.pts || []).map(p => p[3] || 0)));
+const topKmh = r => isFam() ? 0 : Math.round(Math.max(r?.top_spd ? r.top_spd * 3.6 : 0, ...(r?.pts || []).map(p => p[3] || 0)));
 const LINE_COLORS = ['#f57d43', '#3b82f6', '#22c55e', '#e11d48', '#a855f7', '#eab308', '#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#14b8a6', '#f43f5e'];
 const hmTxt = t => new Date(t).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
 const clockTxt = t => { const d = new Date(t), y = new Date(); y.setDate(y.getDate() - 1);
     const hm = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
     return d.toDateString() === new Date().toDateString() ? hm : d.toDateString() === y.toDateString() ? 'Yesterday ' + hm : d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) + ', ' + hm; };
 async function loadRides(force) {
-    if (isFam() || !$('#trk-rides')) return;
+    if (!$('#trk-rides')) return;   /* RWB FAM get their rider's rides (file 94) */
     if (!force && trk.rides && Date.now() - trk.ridesAt < 120000) return drawRides();
     if (trk.ridesBusy) return; trk.ridesBusy = true;
     try { trk.rides = await api.trackRidesToday(); trk.ridesAt = Date.now(); } catch { trk.rides = trk.rides || []; } finally { trk.ridesBusy = false; }
@@ -6954,7 +6954,7 @@ const rideMeta = (r, when) => [rideKm({ ride_km: r.km }), avgKmh({ ride_km: r.km
     topKmh(r) ? `top ${topKmh(r)} km/h` : '', when].filter(Boolean).join(' · ');
 const dayTxt = t => new Date(t).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: new Date(t).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
 function drawRides() {
-    const box = $('#trk-rides'); if (!box || isFam()) return;
+    const box = $('#trk-rides'); if (!box) return;
     const list = trk.rides || [], saved = trk.saved || [];
     if (!list.length && !saved.length) { box.innerHTML = ''; return; }
     const evs = new Map(), items = [];
@@ -6985,7 +6985,6 @@ function drawRides() {
     box.querySelector('[data-x=more-saved]')?.addEventListener('click', () => { trk.savedN = (trk.savedN || 5) + 10; drawRides(); });
 }
 async function ridePlay(rid, eid, skey) {
-    if (isFam()) return;   /* RWB FAM never sees ride lines or top speeds */
     let L; try { L = trk.L || await loadLeaflet(); } catch (e) { toast(e.message, true); return; }
     const key = skey || (eid ? 'e' + eid : 'r' + rid), kept = await savedRideGet(key);
     if (kept) { eid = kept.event_id || null; rid = eid ? null : kept.lines[0]?.id; }
@@ -7009,7 +7008,7 @@ async function ridePlay(rid, eid, skey) {
     const T0 = Math.min(...R.map(r => r.ts[0])), T1 = Math.max(...R.map(r => r.ts.at(-1))), span = Math.max(T1 - T0, 1000);
     const SPEEDS = [30, 60, 120, 300, 600];
     const st = { t: T0, play: false, speed: SPEEDS.find(s => span / s <= 90000) || 600, focus: R.length === 1 ? R[0] : null, raf: null, last: 0, drawAt: 0 };
-    const mine = R.find(r => r.me), canDel = live && (mine || (isAdmin() && R.length === 1));
+    const mine = R.find(r => r.me), canDel = live && !isFam() && (mine || (isAdmin() && R.length === 1));
     /* Save to phone: a copy of this ride on this phone (no server, never deleted after 7 days) */
     const saveBox = el.querySelector('.tp-save');
     let isKept = !!kept;
@@ -7068,8 +7067,8 @@ async function ridePlay(rid, eid, skey) {
         if (!f) onRoad.forEach((a, i) => onRoad.slice(i + 1).forEach(b => { spread = Math.max(spread, distM({ lat: a.p.pos[0], lng: a.p.pos[1] }, { lat: b.p.pos[0], lng: b.p.pos[1] })); }));
         const hm = new Date(t).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }).split(' ');
         panel.querySelector('.tp-stats').innerHTML = tile(hm[0], hm[1] || 'time') + (f
-            ? tile(fp.on && !fp.done ? fp.kmh : 0, 'km/h') + tile(fp.km.toFixed(1), `of ${Number(f.km).toFixed(1)} km`) + tile(avgKmh({ ride_km: f.km, move_s: f.move_s, top_spd: f.top_spd }) || '–', 'avg km/h') + tile(topKmh(f) || '–', 'top km/h', 'ts-top')
-            : tile(onRoad.length, 'on the road') + tile(onRoad.length > 1 ? distTxt(spread) : '–', 'group spread') + tile(R.length, 'riders') + tile(groupTop || '–', 'top km/h', 'ts-top'));
+            ? tile(fp.on && !fp.done ? fp.kmh : 0, 'km/h') + tile(fp.km.toFixed(1), `of ${Number(f.km).toFixed(1)} km`) + tile(avgKmh({ ride_km: f.km, move_s: f.move_s, top_spd: f.top_spd }) || '–', 'avg km/h') + (isFam() ? '' : tile(topKmh(f) || '–', 'top km/h', 'ts-top'))
+            : tile(onRoad.length, 'on the road') + tile(onRoad.length > 1 ? distTxt(spread) : '–', 'group spread') + tile(R.length, 'riders') + (isFam() ? '' : tile(groupTop || '–', 'top km/h', 'ts-top')));
     };
     const loop = ts => {
         st.raf = null; if (!st.play || gdLayer !== lay) return;

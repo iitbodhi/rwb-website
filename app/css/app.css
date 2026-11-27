@@ -2880,3 +2880,4 @@ html.calm:not(#_) .lb-hero::before,html.calm:not(#_) .lb-cup,html.calm:not(#_) .
 .dn-prev{display:flex;align-items:center;gap:12px;padding:12px 14px;margin:2px 0 14px;border-radius:16px;background:color-mix(in srgb,var(--orange) 8%,var(--card));border:1px solid var(--glass-edge)}
 .dn-prev .grow{display:flex;flex-direction:column}
 .dn-prev b{font-size:1.05rem}
+body[data-fam] .tp-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
