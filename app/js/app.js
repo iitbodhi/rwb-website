@@ -1399,7 +1399,8 @@ async function viewHome() {
         api.admin.dupes().then(g => { state.dupes = g; const a = $('#ad-dupes'); if (!a || !g.length) return;
             a.innerHTML = `<span class="b-ico">${ICON.alert}</span><span class="grow"><b>${g.length} possible duplicate${g.length > 1 ? 's' : ''}</b> in the sheet · you choose which entry stays</span>${ICON.chev}`; a.hidden = false;
             app.querySelector('.admin-dock')?.classList.add('busy'); }).catch(() => {});
-        api.admin.pookiePending?.().then(n => { pookieBadge(n); const a = $('#ad-pookie'); if (!a || !n) return;
+        api.admin.waTodo().then(l => { const c = $('#wa-count'); if (c && l.length) c.textContent = ` (${l.length})`; }).catch(() => {});
+    api.admin.pookiePending?.().then(n => { pookieBadge(n); const a = $('#ad-pookie'); if (!a || !n) return;
             a.innerHTML = `<span class="b-ico">${ICON.chat}</span><span class="grow"><b>${n} Pookie answer${n > 1 ? 's' : ''}</b> to check · approve what's right</span>${ICON.chev}`; a.hidden = false;
             app.querySelector('.admin-dock')?.classList.add('busy'); }).catch(() => {});
         api.admin.stats().then(s => {
@@ -4060,7 +4061,7 @@ async function viewAdmin() {
             <button role="tab" aria-selected="${tab === 'motomart'}" data-act="tab" data-tab="motomart">MotoMart<span id="mm-count"></span></button>
             <button role="tab" aria-selected="${tab === 'dupes'}" data-act="tab" data-tab="dupes">Duplicates<span id="dupe-count"></span></button>
             <button role="tab" aria-selected="${tab === 'members'}" data-act="tab" data-tab="members">Members</button>
-            <button role="tab" aria-selected="${tab === 'whatsapp'}" data-act="tab" data-tab="whatsapp">WhatsApp check</button>
+            <button role="tab" aria-selected="${tab === 'whatsapp'}" data-act="tab" data-tab="whatsapp">WhatsApp<span id="wa-count"></span></button>
             <button role="tab" aria-selected="${tab === 'bdays'}" data-act="tab" data-tab="bdays">Birthdays</button>
             <button role="tab" aria-selected="${tab === 'reports'}" data-act="tab" data-tab="reports">Reports<span id="rep-count"></span></button>
             <button role="tab" aria-selected="${tab === 'ai'}" data-act="tab" data-tab="ai">Pookie<span id="ai-count"></span></button>
@@ -4295,9 +4296,10 @@ function waMsg(kind, x = {}) {
     /* one place for every rider, whether they joined in the app, on the website or on the old Google Form */
     const joinLink = `roninwb.in/join and continue with Google using ${x.email ? x.email : 'the email you joined with'}`;
     const T = {
-        welcome: `Hi ${first}! 🎉\n\nWelcome to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nMeanwhile, get the RWB App: ${getLink()}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}. Your details are already there.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
+        welcome: `Hi ${first}! 🎉\n\nWelcome to Ronin Warriors of Bengal! ${x.group ? `Join our official RWB WhatsApp group here: ${x.group}\nTap the link and ask to join; we'll let you in.` : `We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.`}\n\nMeanwhile, get the RWB App: ${getLink()}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}. Your details are already there.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
         existing: `Hi Warrior ${first}! 👋\n\nYou're already in our RWB WhatsApp group, so nothing to worry about. Your RWB App account is ready: just open the app and explore.\n\n📍 Track: live location on rides, SOS to the RWB team\n🔧 Service: records, bills and next-service reminders\n⛽ Mileage: your real km/l and fuel spends\n🛒 MotoMart: buy and sell used riding gear\n📘 Guides: maintenance help and tested gear\n📅 Events: rides, RSVPs and shared expenses\n🗓️ Calendar: events plus renewal, service and parts due dates, with reminders\n🏍️ RWB: members and leaderboards\n🤖 Pookie: our AI for any bike question\n\nPlease also update your details in the Me tab (you can set your bike model and add up to 3 bikes).\n\n${getLink()}\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
-        returning: `Hi ${first}! 🎉\n\nWelcome back to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.\n\nThe RWB App: ${getLink()}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
+        returning: `Hi ${first}! 🎉\n\nWelcome back to Ronin Warriors of Bengal! ${x.group ? `Join our official RWB WhatsApp group here: ${x.group}\nTap the link and ask to join; we'll let you in.` : `We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.`}\n\nThe RWB App: ${getLink()}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
+        group: `Hi ${first}! 👋\n\nHere's the link to join the official RWB WhatsApp group: ${x.group}\n\nTap it and ask to join; we'll let you in. See you on the road! 🏍️\n– ${me}, RWB`,
         rejected: `Hi ${first},\n\nThank you for your interest in Ronin Warriors of Bengal. We're sorry, we couldn't approve your registration this time${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'}\n\nIf things change, you can apply again: open ${joinLink}. If you think this is a mistake, just reply here.\n\nRide safe! 🙏\n– ${me}, RWB`,
         hold: `Hi ${first}! 👋\n\nThanks for your interest in Ronin Warriors of Bengal. Your join request is on hold for now${x.note ? `: ${x.note.replace(/[.\s]+$/, '')}.` : '.'}\n\nTo see your request or update your answers, open ${joinLink}. Any questions? Just reply here.\n– ${me}, RWB`,
         change_ok: `Hi ${first}! ✅ Your ${x.what || 'profile'} update in the RWB App is approved. Thanks for keeping your details up to date.\n– ${me}, RWB`,
@@ -4440,11 +4442,50 @@ function waCompare(all, paste) {
         matched: live.filter(m => hit.has(m.id)).length, live: live.length
     };
 }
+/* The RWB WhatsApp group step after approving / restoring (add) or removing (remove) someone. WhatsApp lets no app add or
+   remove group members, so "now" does the most WhatsApp allows: add = send them the group link (they ask to join, an
+   admin lets them in: "Approve new participants" is on in the group); remove = copy their number and open the group.
+   "Later" keeps it on the shared list in Admin → WhatsApp (wa_todo, file 96). opts.welcome = the approval message kind. */
+function waGroupSheet(m, action, opts = {}) {
+    const add = action === 'add', link = state.settings?.wa_group_link, first = realFirst(m), welcome = opts.welcome;
+    const done = () => (m.id ? api.admin.waTodoDone(m.id).catch(() => {}) : Promise.resolve()).then(() => opts.after?.());
+    openSheet(add ? `Add ${first} to the RWB WhatsApp group` : `Remove ${first} from the RWB WhatsApp group`, `
+        <div class="card row" style="gap:10px;margin-bottom:12px">${face(m, 'avatar sm')}<div class="grow"><div class="who">${esc(m.full_name)}</div><div class="meta">${esc(phoneTxt(ph10(m.phone)))}</div></div></div>
+        ${add && !link ? '<p class="warn" style="margin-bottom:10px">Save the group\'s invite link first (Approvals → follow-ups → RWB WhatsApp group link), so Add now can send it.</p>' : ''}
+        <p class="small muted" style="margin-bottom:12px">${add ? `Add now sends ${esc(first)} the group link on WhatsApp; you let them in when they ask to join.` : 'Remove now copies their number and opens the group: tap the group name → 🔍 → paste → Remove.'}</p>
+        <button class="btn wa block" data-x="now">${add ? 'Add now' : 'Remove now'}</button>
+        <button class="btn ghost block" data-x="later" style="margin-top:8px">${add ? 'Add later' : 'Remove later'}</button>
+        <button class="link-btn block" data-x="skip" style="margin:12px auto 0">${add ? 'Already in the group' : 'Not in the group'}</button>`, body => {
+        body.querySelector('[data-x=now]').onclick = async () => {
+            if (add) {
+                if (welcome) { done(); return tellOnWhatsApp(`Let ${first} know`, m.phone, waMsg(welcome, { ...m, group: link })); }
+                if (!link) return toast('Save the group link first', true);
+                openWA(waTo(m.phone, waMsg('group', { ...m, group: link }))); closeSheet(); done(); return;
+            }
+            const num = '+91 ' + phoneTxt(ph10(m.phone));
+            try { await navigator.clipboard.writeText(num); toast(`${num} copied`); } catch { toast(num); }
+            closeSheet(); done();
+            if (link) setTimeout(() => openWA(link), 600); else toast('Open the RWB group in WhatsApp and remove them');
+        };
+        body.querySelector('[data-x=later]').onclick = e => busy(e.target, async () => {
+            if (!m.id) { toast('Couldn\'t save it for later. Find them in Admin → WhatsApp → check', true); return; }
+            await api.admin.waTodoAdd(m.id, action); toast('Saved in Admin → WhatsApp'); opts.after?.();
+            if (welcome) tellOnWhatsApp(`Let ${first} know`, m.phone, waMsg(welcome, m)); else closeSheet();
+        });
+        body.querySelector('[data-x=skip]').onclick = () => { done(); if (welcome) tellOnWhatsApp(`Let ${first} know`, m.phone, waMsg(welcome, m)); else closeSheet(); };
+    });
+}
 async function adminWhatsApp() {
     state.adminMembers ??= await api.admin.members();
     const all = state.adminMembers;
     state.waPaste ??= '';
-    $('#admin-body').innerHTML = `<details class="howto"${state.waPaste ? '' : ' open'}><summary>How to copy the group list</summary>
+    const todo = await api.admin.waTodo().catch(() => []);
+    const c = $('#wa-count'); if (c) c.textContent = todo.length ? ` (${todo.length})` : '';
+    const tRow = t => `<div class="card row wa-todo" style="gap:10px;align-items:center"><div class="grow" style="min-width:0"><div class="who">${esc(t.full_name || '')} <span class="badge ${t.action === 'add' ? 'ok' : 'gone-tag removed'}">${t.action === 'add' ? 'Add' : 'Remove'}</span></div>
+        <div class="meta">${esc(phoneTxt(ph10(t.phone)))}${t.added_by ? ` · by ${esc(t.added_by)}` : ''} · ${timeAgo(t.created_at)}</div></div>
+        <button class="btn sm wa" data-act="wa-do" data-id="${t.member_id}">${t.action === 'add' ? 'Add now' : 'Remove now'}</button><button class="btn sm ghost" data-act="wa-done" data-id="${t.member_id}" aria-label="Done">✓</button></div>`;
+    $('#admin-body').innerHTML = `${todo.length ? `<h2 class="group-title">To do in the WhatsApp group (${todo.length})</h2><div class="list" style="margin-bottom:18px">${todo.map(tRow).join('')}</div>` : ''}
+        <h2 class="group-title">Check the group against RWB</h2><details class="howto"${state.waPaste ? '' : ' open'}><summary>How to copy the group list</summary>
         <ol class="small"><li>On a computer, open <b>web.whatsapp.com</b> and this app (<b>roninwb.in/app</b> → Admin → WhatsApp) side by side.</li>
             <li>Open the RWB WhatsApp group and wait a few seconds: the line under the group name turns into everyone's names and numbers.</li>
             <li>Triple-click that line, copy it (Ctrl+C) and paste it below (Ctrl+V).</li>
@@ -4483,7 +4524,9 @@ async function adminWhatsApp() {
         },
         'wa-clear': () => { state.waPaste = ''; state.waRes = null; $('#wa-paste').value = ''; draw(); },
         'wa-inv': b => { const m = all.find(x => String(x.id) === b.dataset.id); if (m) tellOnWhatsApp(`Invite ${realFirst(m)}`, m.phone, waMsg('invite', m)); },
-        member: el => memberSheet(all.find(m => String(m.id) === el.dataset.id))
+        member: el => memberSheet(all.find(m => String(m.id) === el.dataset.id)),
+        'wa-do': b => { const t = todo.find(x => String(x.member_id) === b.dataset.id); if (t) waGroupSheet({ ...t, id: t.member_id }, t.action, { after: adminWhatsApp }); },
+        'wa-done': b => busy(b, async () => { await api.admin.waTodoDone(Number(b.dataset.id)); toast('Done'); await adminWhatsApp(); })
     });
 }
 async function adminRequests() {
@@ -4524,9 +4567,11 @@ async function adminRequests() {
             const r = byId(b.dataset.id), miss = checksOf(r).filter(c => !c.ok).map(c => c.t);
             if (miss.length && !confirmBox(`Not all 4 checks are green:\n• ${miss.join('\n• ')}\n\nApprove ${r.full_name} anyway?`)) return;
             busy(b, async () => {
-                await api.admin.approve(r.id); state.adminMembers = null; state.dir = null; toast(`${r.full_name} approved. Now add them to the RWB WhatsApp group.`); await viewAdmin();
+                await api.admin.approve(r.id); state.adminMembers = null; state.dir = null; toast(`${r.full_name} approved`); await viewAdmin();
                 const kind = r.check_entry === 'existing' || r.check_entry === 'recent' ? 'existing' : r.check_entry === 'returning' ? 'returning' : 'welcome';
-                tellOnWhatsApp(`Let ${firstName(r)} know`, r.phone, waMsg(kind, r));
+                if (kind === 'existing') return tellOnWhatsApp(`Let ${firstName(r)} know`, r.phone, waMsg(kind, r));
+                const mid = r.member_id || (await api.admin.members().then(all => { state.adminMembers = all; return all.find(m => !isGone(m) && r.email && m.email && m.email.toLowerCase() === r.email.toLowerCase()) || all.find(m => !isGone(m) && ph10(m.phone) === ph10(r.phone)); }).catch(() => null))?.id;
+                waGroupSheet({ ...r, id: mid }, 'add', { welcome: kind });
             });
         },
         reject: b => rejectSheet(byId(b.dataset.id)),
@@ -4768,7 +4813,7 @@ function removeSheet(m) {
             e.preventDefault();
             if (f.ok.value.trim().toUpperCase() !== 'REMOVE') { toast('Type REMOVE to confirm', true); return; }
             const why = f.why.value, note = f.note.value.trim();
-            busy(e.submitter, async () => { await api.admin.remove(m.id, m.user_id, why, note); state.adminMembers = null; closeSheet(); toast(`${m.full_name} moved to Left / removed`); state.dir = null; state.board = null; render(); });
+            busy(e.submitter, async () => { await api.admin.remove(m.id, m.user_id, why, note); state.adminMembers = null; closeSheet(); toast(`${m.full_name} moved to Left / removed`); state.dir = null; state.board = null; render(); setTimeout(() => waGroupSheet(m, 'remove'), 350); });
         };
     });
 }
@@ -4783,7 +4828,7 @@ function goneSheet(m) {
         </dl>
         <button class="btn block" data-x="restore">Restore to RWB</button>
         <p class="small muted" style="margin-top:8px">Adds them back to the member list and the RWB contact sheet with a <b>New Member</b> tag. If they had the app, they sign in again and an admin approves them. People who register again through the form or the app are restored automatically.</p>`, body => {
-        body.querySelector('[data-x=restore]').onclick = e => busy(e.target, async () => { await api.admin.restore(m.id); state.adminMembers = null; state.dir = null; closeSheet(); toast(`${m.full_name} restored`); render(); });
+        body.querySelector('[data-x=restore]').onclick = e => busy(e.target, async () => { await api.admin.restore(m.id); state.adminMembers = null; state.dir = null; closeSheet(); toast(`${m.full_name} restored`); render(); setTimeout(() => waGroupSheet(m, 'add'), 350); });
     });
 }
 function memberEdit(m) {

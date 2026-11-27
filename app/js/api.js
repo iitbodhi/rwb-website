@@ -532,6 +532,9 @@ async function supabaseApi(url, key) {
             incomplete: async () => must(await sb.rpc('admin_incomplete')),
             setCheck: async (id, check, value) => must(await sb.rpc('admin_set_request_check', { p_id: id, p_check: check, p_value: value })),
             setSetting: async (key, value) => must(await sb.rpc('admin_set_setting', { p_key: key, p_value: value || '' })),
+            waTodo: async () => must(await sb.rpc('admin_wa_todo')) || [],
+            waTodoAdd: async (member, action) => must(await sb.rpc('admin_wa_todo_add', { p_member: member, p_action: action })),
+            waTodoDone: async member => must(await sb.rpc('admin_wa_todo_done', { p_member: member })),
             remindIncomplete: async () => must(await sb.rpc('remind_incomplete', { p_force: false })),
             markReminded: async id => must(await sb.rpc('admin_mark_reminded', { p_member_id: id })),
             setTnc: async (id, v) => must(await sb.rpc('admin_set_tnc', { p_member_id: id, p_agreed: v })),
@@ -1027,6 +1030,9 @@ function demoApi() {
             async reject(id, reason = '', spam = false) { Object.assign(db.requests.find(x => x.id === id), { status: 'rejected', reject_reason: reason || null, spam: !!spam, decided_at: new Date().toISOString(), decided_by: me().nickname || me().full_name.split(' ')[0] }); save(); return 'rejected'; },
             changes: () => wait((db.changes || []).filter(c => c.status === 'pending')),
             async setSetting(k, v) { db.groupLink = v || null; save(); return v || ''; },
+            waTodo: () => wait((db.waTodo || []).map(t => { const m = db.members.find(x => x.id === t.member_id) || {}; return { ...t, full_name: m.full_name, phone: m.phone, status: m.status }; })),
+            async waTodoAdd(member, action) { db.waTodo = (db.waTodo || []).filter(t => t.member_id !== member); db.waTodo.push({ id: Date.now(), member_id: member, action, added_by: 'Demo', created_at: new Date().toISOString() }); save(); },
+            async waTodoDone(member) { db.waTodo = (db.waTodo || []).filter(t => t.member_id !== member); save(); },
             async setCheck(id, k, v) {
                 const r = db.requests.find(x => x.id === id), c = r.checks ||= {};
                 if (k === 'tnc' && !('tnc_orig' in c)) c.tnc_orig = r.tnc ?? null;
