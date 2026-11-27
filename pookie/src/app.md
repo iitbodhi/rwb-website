@@ -116,10 +116,11 @@ The app follows the TVS Ronin service chart: 1st free at 750–1,000 km (or 30�
 ## Mileage screen: how to add fuel and how mileage is calculated
 k: add fuel, fill up, petrol log, kmpl, fuel log, mileage calculation, km per litre, full tank, DTE, range left, trip A, check badge, wrong mileage, unrealistic mileage
 b: app
-After EVERY fill (any amount, full tank or not) tap "+ Add fuel": litres, ₹ paid, odometer and date. Optional: "DTE before filling (km)" from your dash, and "Full tank" if you filled till the nozzle clicked off.
+After EVERY fill (any amount, full tank or not) tap "+ Add fuel": litres, ₹ paid, odometer and date. Optional: "DTE before filling (km)" from your dash, "Trip A (km)" (reset it at every fill-up for the most exact distance) and "Full tank" if you filled till the nozzle clicked off. Trip A gives the exact distance; Full tank or DTE tell the app how much petrol you used.
 The app follows the petrol in your tank: mileage = km since your last reading ÷ petrol used. With Full tank or DTE it knows the level (Ronin: fuel left ≈ 2 L + DTE ÷ the km per litre your dash uses, which the app learns), so even a part fill gets its own mileage at once (≈ when DTE is used) and counts in your average.
 Without DTE/Full tank, a fill-up's mileage = km since your previous fill-up ÷ its litres; a part fill shows "Pending" and is joined with the next fill-up.
-"Full tank" on a fill that can't reach the top makes the app ask "Full tank?" first (Yes / No, it was a part fill); older ones like that show "Check" until you open and save them.
+"Full tank" on a fill that can't reach the top makes the app ask "Full tank?" first (Yes / No, it was a part fill); older ones like that show "Check" until you open and save them. If Trip A and the odometer disagree, the app asks "Check the odometer"; when the odometer gives an impossible mileage but Trip A doesn't, Trip A is used (and the fill-up shows Check so you can fix the odometer).
+Works for every bike in Me → My bikes: the app uses that bike's full tank capacity.
 Fill-ups that don't add up (an odometer typo, a missed fill-up, more litres than the tank holds, mileage a bike can't do: a Ronin over 55 or under 25 km/l; over 50 counts only when 3 readings in a row are over 50) show "Check" and are left out until fixed.
 Your average and the Mileage Warriorboard use the same readings and need at least 200 km of good readings. Typed something wrong? Tap the fill-up and fix it, or add the fill-up you missed.
 

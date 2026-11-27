@@ -5,6 +5,9 @@
 -- k = km per litre the dash uses: median of fill-ups with Full tank + DTE, else the rider's km-and-litres average.
 -- A "Full tank" that can't be (expected level + litres < size − 2.5 L) counts as a part fill until the rider confirms it
 -- in the app (fuel_logs.full_sure). Ranges, joining, "leave out one" and the 3-in-a-row rule are as in files 97/98.
+-- Distance: the odometer, or Trip A when it matches the odometer (0.1 km); when the odometer since the last fill-up gives a
+-- mileage the bike can't do but Trip A does, Trip A wins (odometer typo / fill-up not logged). Works for every bike with a
+-- tank size (Ronin 14 L; others from members.tanks; DTE empty level 0 for non-Ronins).
 -- Same maths as fuelReadings()/tanks() in app/js/app.js: keep both the same. Recalculates everyone once. Safe to run twice.
 
 alter table public.fuel_logs add column if not exists full_sure boolean not null default false;
@@ -14,14 +17,14 @@ create or replace function private.fuel_pass(p_user uuid, p_slot int, p_levels b
 returns table(end_d date, dist numeric, used numeric, exact boolean)
 language plpgsql stable security definer set search_path = public as $$
 declare m record; model text; vk text; ronin boolean; cap numeric; size numeric; empty numeric; lo numeric; hi numeric; soft numeric;
-        os numeric[]; ls numeric[]; ds date[]; fu boolean[]; su boolean[]; rg numeric[]; sus boolean[];
+        os numeric[]; ls numeric[]; ds date[]; fu boolean[]; su boolean[]; rg numeric[]; tp numeric[]; sus boolean[]; gap numeric; t numeric;
         rd date[] := '{}'; rk numeric[] := '{}'; ru numeric[] := '{}'; rx boolean[] := '{}'; keep boolean[] := '{}';
         cnt int; base int := 0; i int := 1; n int; d numeric; btw numeric; u numeric; r numeric;
         aa numeric; afull boolean := false; bb numeric; ok boolean; ex numeric; lvl boolean; ra int; rb int; rj int;
 begin
   select * into m from members where user_id = p_user limit 1;
   if p_slot = 1 then model := m.bike; vk := coalesce(private.vrn_key(m.vrn), 'main');
-  else select b.model, private.vrn_key(b.vrn) into model, vk from member_bikes b where b.member_id = m.id and b.slot = p_slot; end if;
+  else select b.model, coalesce(private.vrn_key(b.vrn), 'slot' || p_slot) into model, vk from member_bikes b where b.member_id = m.id and b.slot = p_slot; end if;
   ronin := private.is_ronin(model);
   size := case when ronin then 14 else nullif(m.tanks ->> vk, '')::numeric end;
   cap := coalesce(size, 20);
@@ -32,8 +35,9 @@ begin
   soft := case when ronin then 50 else 80 end;
   select array_agg(x.odometer_km::numeric order by x.odometer_km, x.fill_date, x.id), array_agg(x.litres::numeric order by x.odometer_km, x.fill_date, x.id),
          array_agg(x.fill_date order by x.odometer_km, x.fill_date, x.id), array_agg(coalesce(x.full_tank, false) order by x.odometer_km, x.fill_date, x.id),
-         array_agg(coalesce(x.full_sure, false) order by x.odometer_km, x.fill_date, x.id), array_agg(x.range_km::numeric order by x.odometer_km, x.fill_date, x.id)
-    into os, ls, ds, fu, su, rg
+         array_agg(coalesce(x.full_sure, false) order by x.odometer_km, x.fill_date, x.id), array_agg(x.range_km::numeric order by x.odometer_km, x.fill_date, x.id),
+         array_agg(coalesce(x.trip_a_km, 0)::numeric order by x.odometer_km, x.fill_date, x.id)
+    into os, ls, ds, fu, su, rg, tp
     from (select distinct on (f.fill_date, f.odometer_km, f.litres::numeric, f.full_tank) f.*
             from fuel_logs f where f.user_id = p_user and f.bike_slot = p_slot
              and (p_slot = 1 or f.bike_vrn is null or private.vrn_key(f.bike_vrn) = vk)
@@ -49,7 +53,9 @@ begin
                  when rg[i] is not null then least(coalesce(size, 99), empty + rg[i] / p_k + ls[i]) end;
       i := i + 1; continue;
     end if;
-    n := i - base; d := os[i] - os[base];
+    n := i - base; gap := os[i] - os[base]; t := tp[i];
+    -- Trip A that matches the odometer (within 5 km / 3%) was reset at the stretch's start: its 0.1 km is the distance
+    d := case when t > 0 and abs(t - gap) <= greatest(5, gap * 0.03) then t else gap end;
     select coalesce(sum(ls[j]), 0) into btw from generate_series(base + 1, i - 1) j;
     ok := false; bb := null;
     if p_levels then
@@ -62,6 +68,8 @@ begin
     end if;
     lvl := bb is not null and aa is not null;
     u := case when lvl then aa + btw - bb else btw + ls[i] end;
+    -- odometer typo / fill-up not logged: the odometer gives a mileage the bike can't do but Trip A (reset at the last fill-up) does
+    if n = 1 and t > 0 and d = gap and u > 0.3 and not (gap > 0 and gap / u between lo and hi) and t / u between lo and hi then d := t; end if;
     r := case when u <> 0 then d / u end;
     if d > 0 and u > 0.3 and r between lo and hi then
       rd := rd || ds[i]; rk := rk || d; ru := ru || u; rx := rx || (not lvl or (afull and ok)); keep := keep || true;
@@ -101,7 +109,7 @@ declare m record; model text; vk text; ronin boolean; size numeric; empty numeri
 begin
   select * into m from members where user_id = p_user limit 1;
   if p_slot = 1 then model := m.bike; vk := coalesce(private.vrn_key(m.vrn), 'main');
-  else select b.model, private.vrn_key(b.vrn) into model, vk from member_bikes b where b.member_id = m.id and b.slot = p_slot; end if;
+  else select b.model, coalesce(private.vrn_key(b.vrn), 'slot' || p_slot) into model, vk from member_bikes b where b.member_id = m.id and b.slot = p_slot; end if;
   ronin := private.is_ronin(model);
   size := case when ronin then 14 else nullif(m.tanks ->> vk, '')::numeric end;
   empty := case when ronin then 2 else 0 end;
