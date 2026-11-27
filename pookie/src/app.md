@@ -114,11 +114,12 @@ b: app
 The app follows the TVS Ronin service chart: 1st free at 750–1,000 km (or 30–45 days), 2nd free at about 6,000 km (6 months), 3rd free at about 12,000 km (12 months), then every 6,000 km or 6 months, whichever comes first. Log your last service so the dates are exact. The Calendar and a reminder notification also show it.
 
 ## Mileage screen: how to add fuel and how mileage is calculated
-k: add fuel, fill up, petrol log, kmpl, fuel log, mileage calculation, km per litre, full tank, DTE, range left, trip A
+k: add fuel, fill up, petrol log, kmpl, fuel log, mileage calculation, km per litre, full tank, DTE, range left, trip A, check badge, wrong mileage, unrealistic mileage
 b: app
-After EVERY fill (any amount, full tank or not) tap "+ Add fuel": litres, ₹ paid and odometer. Optional but very helpful: "Range left / DTE (km)" from your dash BEFORE filling, and Trip A.
-Turn on "Full tank" only if you filled till the nozzle cut off. Full-to-full is the most exact; fills with DTE give good estimates (shown with ≈).
-Your average shows at once on Mileage and Home, plus "You vs RWB". Typed something wrong? Tap the fill-up and fix it.
+After EVERY fill (any amount, full tank or not) tap "+ Add fuel": litres, ₹ paid, odometer and date. That's all: Full tank, DTE and Trip A are no longer needed.
+Each fill-up's mileage = km since your previous fill-up ÷ litres of this fill-up; your average = all km ÷ all litres. Don't skip logging a fill-up.
+Fill-ups that don't add up (an odometer typo, a missed fill-up, more litres than the tank holds, mileage a bike can't do: a Ronin over 50 or under 25 km/l) show "Check" and are left out until fixed. A small part fill is joined with the next fill-up automatically.
+The Mileage Warriorboard needs at least 200 km of good readings. Typed something wrong? Tap the fill-up and fix it, or add the fill-up you missed.
 
 ## Mileage with more than one bike, and tank capacity
 k: second bike, multiple bikes, other bike mileage, tank capacity, non ronin mileage

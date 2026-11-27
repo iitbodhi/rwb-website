@@ -183,7 +183,7 @@ const load = {
    Fill-ups belong to a bike (fuel_logs.bike_slot + bike_vrn). Bike 2/3 fill-ups count only while the plate is the same.
    Full-tank capacity: Ronins are 14 L (owner's manual) and never asked; other vehicles keep theirs in members.tanks,
    keyed by plate ('main' for a main bike without a plate). */
-const RONIN_TANK = 14, RONIN_EMPTY = 2, KMPL_GUESS = 40;
+const RONIN_TANK = 14;
 const isRonin = model => !model || /ronin|no bike/i.test(model);
 const bikeKey = (slot, vrn) => vrnKey(vrn) || (slot === 1 ? 'main' : 'slot' + slot);
 function bikeList() {
@@ -198,62 +198,48 @@ const needTank = b => !b.ronin && !b.tank;
 const bikeOf = (f, bikes = bikeList()) => bikes.find(b => b.slot === (f.bike_slot ?? 1)) || bikes[0];
 const bikeLogs = (logs, b) => (logs || []).filter(f => (f.bike_slot ?? 1) === b.slot && (b.slot === 1 || !f.bike_vrn || vrnKey(f.bike_vrn) === vrnKey(b.vrn)));
 const mainLogs = logs => (logs || []).filter(f => (f.bike_slot ?? 1) === 1);
-const tankSpec = (b = mainBike()) => ({ ronin: b.ronin, size: b.tank, empty: b.ronin ? RONIN_EMPTY : 0 });
+const tankSpec = (b = mainBike()) => { const [lo, hi] = KMPL_RANGE[b.ronin ? 'ronin' : 'other']; return { ronin: b.ronin, size: b.tank, lo, hi }; };
 
-/* ---------- mileage maths (Nov 2026: part fills, DTE, Trip A, per bike) ----------
-   The app follows how much petrol is in the tank. It knows the level at "anchors":
-     • a full tank: the tank is at its capacity (TVS Ronin 225: 14 L incl. reserve, owner's manual);
-     • a fill-up with "Range left / DTE" read before filling. The Ronin's DTE counts down to the manual's "empty"
-       level (~2 L: no bars, low-fuel light on, DTE shows "--"), so fuel left ≈ 2 L + DTE ÷ k; other vehicles DTE ÷ k.
-       k (km per litre the bike's DTE assumes) is learnt from full-tank fill-ups that also had a DTE reading
-       (fuel left = capacity − litres filled), median; without those, the rider's own mileage (two passes).
-   Between two anchors: fuel used = fuel at the first + litres filled in between − fuel left at the second.
-   Distance: Trip A when it matches the odometer gap (within 3% or 5 km, so Trip A was reset at the start of the
-   stretch; it has the 0.1 km digit), else the odometer gap. Full → full is exact; the rest are estimates (≈).
-   Fills without an anchor are added into the next reading. Exact duplicates are skipped.
-   Same maths on the server: private.fuel_pass / fuel_readings (files 90, 91). */
+/* ---------- mileage maths (Nov 28 2026: fill to fill, mistakes left out automatically) ----------
+   Riders log litres + odometer at every fill-up (any amount). Each fill-up's litres refill what was used since the
+   previous fill-up, so a reading = km since the previous fill-up ÷ litres of this one. Mistakes are caught by what a
+   bike can really do (TVS Ronin 225: 25–50 km/l; other bikes 12–80 km/l):
+     • a reading too high (a part fill, a fill-up not logged, an odometer typo) is joined with the next one(s), up to 3
+       fill-ups; if it still isn't realistic, those fill-ups are left out and marked "Check";
+     • a reading too low, or litres more than the tank holds, is left out and marked "Check";
+     • the same odometer twice (not updated) joins with the next fill-up; exact duplicates are skipped.
+   Average = all good km ÷ all good litres. Boards need 200+ km of good readings (MIN_BOARD_KM).
+   Full tank / DTE / Trip A are no longer asked; old values are ignored. Same maths on the server: private.fuel_readings (file 97). */
+const KMPL_RANGE = { ronin: [25, 50], other: [12, 80] }, MIN_BOARD_KM = 200;
 const fuelKey = f => `${f.bike_slot ?? 1}|${f.fill_date}|${f.odometer_km}|${Number(f.litres)}|${!!f.full_tank}`;
-const numOr = v => v == null || v === '' ? null : Number(v);
-function fuelReadings(logs, spec, k) {
-    const out = [], seen = new Set();
-    let anc = null, add = 0;
+function fuelReadings(logs, spec) {
+    const out = [], bad = new Set(), seen = new Set(), cap = spec.size || 20;
+    let prev = null, d = 0, l = 0, n = 0, chain = [];
+    const drop = () => { chain.forEach(x => bad.add(x.id)); d = l = n = 0; chain = []; };
     for (const f of logs) {
         const key = fuelKey(f); if (seen.has(key)) continue; seen.add(key);
-        const L = Number(f.litres), odo = Number(f.odometer_km), full = !!f.full_tank, rng = numOr(f.range_km), trip = numOr(f.trip_a_km);
-        const before = full ? (spec.size ? Math.max(spec.size - L, 0) : null) : rng != null ? spec.empty + rng / k : null;
-        if (anc) {
-            let dist = odo - anc.odo;
-            if (trip > 0 && (dist <= 0 || Math.abs(trip - dist) <= Math.max(5, dist * 0.03))) dist = trip;
-            const exact = anc.full && full;
-            const used = exact ? add + L : anc.level != null && before != null ? anc.level + add - before : null;
-            if (used != null && dist > 0 && used > 0.2) {
-                const kmpl = dist / used;
-                if (exact || (kmpl >= 10 && kmpl <= 100)) out.push({ end: f, dist, litres: used, kmpl, exact });
-            }
-        } else if (full && trip > 0) out.push({ end: f, dist: trip, litres: L, kmpl: trip / L, exact: true });   /* older entries: Trip A reset at an unlogged full tank */
-        if (full) { anc = { odo, level: spec.size, full: true }; add = 0; }
-        else if (before != null) { anc = { odo, level: spec.size ? Math.min(spec.size, before + L) : before + L, full: false }; add = 0; }
-        else if (anc) add += L;
+        const L = Number(f.litres), odo = Number(f.odometer_km);
+        if (L > cap + 0.5) { if (prev) { chain.push(f); drop(); } else bad.add(f.id); prev = f; continue; }
+        if (!prev) { prev = f; continue; }
+        d += odo - Number(prev.odometer_km); l += L; n++; chain.push(f); prev = f;
+        if (d <= 0) continue;
+        const k = d / l;
+        if (k >= spec.lo && k <= spec.hi) { out.push({ end: f, dist: d, litres: l, kmpl: k, exact: true }); d = l = n = 0; chain = []; }
+        else if (k < spec.lo || n >= 3 || l > cap * 2) drop();
     }
-    return out;
+    return { out, bad, open: chain.map(x => x.id) };
 }
 const sumKmpl = t => { const d = t.reduce((a, x) => a + x.dist, 0), l = t.reduce((a, x) => a + x.litres, 0); return l ? d / l : null; };
-const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), h = s.length >> 1; return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2; };
-function dteFactor(logs, spec) {
-    if (!spec.size) return null;
-    return median(logs.filter(f => f.full_tank && numOr(f.range_km) > 0 && spec.size - f.litres - spec.empty > 0.5).map(f => Number(f.range_km) / (spec.size - f.litres - spec.empty)));
-}
 /* logs: ONE bike's fill-ups, sorted by odometer */
 function tanks(logs, spec = tankSpec()) {
-    let k = dteFactor(logs, spec);
-    if (k == null) { const first = fuelReadings(logs, spec, KMPL_GUESS), ex = first.filter(x => x.exact); k = sumKmpl(ex.length ? ex : first) || KMPL_GUESS; }
-    return fuelReadings(logs, spec, Math.min(Math.max(k, 10), 90));
+    const r = fuelReadings(logs, spec);
+    return Object.assign(r.out, { bad: r.bad, open: r.open });
 }
 /* stats for one bike (default: the main bike, which also feeds the Warriorboards) */
 function mileageStats(allLogs, b = mainBike()) {
     const logs = bikeLogs(allLogs, b), t = tanks(logs, tankSpec(b)), avg = sumKmpl(t);
     const priced = logs.filter(f => f.amount != null && Number(f.litres) > 0), pl = priced.reduce((a, f) => a + Number(f.litres), 0), pa = priced.reduce((a, f) => a + Number(f.amount), 0);
-    return { tanks: t, logs, avg, last: t.at(-1)?.kmpl ?? null, lastExact: t.at(-1)?.exact ?? true, best: t.length ? Math.max(...t.map(x => x.kmpl)) : null, cpk: avg && pl ? pa / pl / avg : null };
+    return { tanks: t, logs, avg, last: t.at(-1)?.kmpl ?? null, lastExact: t.at(-1)?.exact ?? true, best: t.length ? Math.max(...t.map(x => x.kmpl)) : null, cpk: avg && pl ? pa / pl / avg : null, km: t.reduce((a, x) => a + x.dist, 0) };
 }
 
 /* ---------- router ---------- */
@@ -948,7 +934,7 @@ function odoSheet() {
 }
 function syncKmpl(fuel) {
     if (!state.me || !fuel) return;
-    const ms = mileageStats(fuel), v = ms.avg && ms.avg >= 5 && ms.avg <= 120 ? Math.round(ms.avg * 100) / 100 : null, t = ms.tanks.length;
+    const ms = mileageStats(fuel), v = ms.avg && ms.km >= MIN_BOARD_KM ? Math.round(ms.avg * 100) / 100 : null, t = ms.tanks.length;
     const cur = state.me.avg_kmpl == null ? null : Number(state.me.avg_kmpl);
     if (cur === v && (state.me.kmpl_tanks ?? 0) === t) return;
     Object.assign(state.me, { avg_kmpl: v, kmpl_tanks: t }); state.board = null; state.dir = null;
@@ -2930,13 +2916,11 @@ function docForm(d) {
 /* =================== Mileage =================== */
 const HOWTO = `<details class="howto" id="howto"><summary>How mileage works</summary>
     <ol>
-        <li>Add every fill-up: <b>litres</b>, <b>₹</b> and the <b>odometer</b>. Any amount works, full tank or not.</li>
-        <li>Before filling, note the <b>range left / DTE</b> on your dash and add it. That gives a mileage for every fill-up.</li>
-        <li>Filled till the nozzle cut off? Turn on <b>Full tank</b>. Full tank to full tank is the most exact reading.</li>
-        <li>Reset Trip A at every fill-up? Add the <b>Trip A</b> reading too, for the exact distance.</li>
+        <li>Add every fill-up: <b>litres</b>, <b>₹</b> and the <b>odometer</b>. Any amount works.</li>
+        <li>Don't skip one: each fill-up's mileage is the km since the last one ÷ its litres.</li>
     </ol>
     <div class="formula">Mileage = km ridden ÷ petrol used</div>
-    <p class="muted small">Adding the DTE on full-tank fill-ups teaches the app how your bike's DTE reads, so DTE-only readings get closer.</p>
+    <p class="muted small">Fill-ups that don't add up (a typo, a missed fill-up) show <b>Check</b> and are left out until fixed.</p>
 </details>`;
 
 async function viewMileage() {
@@ -2950,28 +2934,28 @@ async function viewMileage() {
     app.innerHTML = top('Mileage') + (bikes.length > 1 ? `<div class="chips bike-chips" role="tablist">${bikes.map(x => `<button class="chip" data-act="bk" data-slot="${x.slot}" aria-pressed="${x.slot === b.slot}">${esc(x.name)}</button>`).join('')}</div>` : '') + HOWTO + `
         <section class="section"><div class="stats">
             <div class="stat accent"><b>${f1(ms.avg)}</b><span>Average km/l</span></div>
-            <div class="stat"><b>${ms.last != null && !ms.lastExact ? '≈' : ''}${f1(ms.last)}</b><span>Last reading</span></div>
+            <div class="stat"><b>${f1(ms.last)}</b><span>Last reading</span></div>
             <div class="stat"><b>${f1(ms.best)}</b><span>Best reading</span></div>
             <div class="stat"><b>${ms.cpk ? '₹' + ms.cpk.toFixed(2) : '–'}</b><span>Fuel cost / km</span></div>
         </div></section>
         ${b.slot === 1 ? `<section class="section"><h2>You vs RWB</h2><div class="card vs" id="vs"><p class="small muted">Comparing…</p></div></section>` : ''}
         ${TIPS}
         ${mine.length || (b.slot === 1 && svcs.length) ? `<section class="section"><h2>Spends and mileage</h2><div class="card trend" id="trend"></div></section>` : ''}
-        <section class="section"><h2>Fill-ups${bikes.length > 1 ? ` · ${esc(b.name)}` : ''}</h2>${mine.length ? `<div class="list">${[...mine].reverse().map(f => fuelCard(f, byEnd.get(f.id))).join('')}</div>` :
-            `<div class="card empty"><b>No fill-ups yet</b>Add litres, ₹, odometer and the range left / DTE on your dash.</div>`}</section>
+        <section class="section"><h2>Fill-ups${bikes.length > 1 ? ` · ${esc(b.name)}` : ''}</h2>${mine.length ? `<div class="list">${[...mine].reverse().map(f => fuelCard(f, byEnd.get(f.id), ms.tanks.bad.has(f.id) || ms.tanks.open.includes(f.id))).join('')}</div>` :
+            `<div class="card empty"><b>No fill-ups yet</b>Add litres, ₹ and the odometer at every fill-up.</div>`}</section>
         <button class="btn fab" data-act="add-fuel">＋ Add fuel</button>`;
     actions = { open: el => fuelForm(logs.find(f => String(f.id) === el.dataset.id)), 'add-fuel': () => fuelForm(null, b.slot),
         bk: el => { state.mileSlot = Number(el.dataset.slot); state.param ? (location.hash = '#mileage') : render(); } };
     if ($('#trend')) drawTrend($('#trend'), mine, b.slot === 1 ? svcs : [], ms.tanks);
     if ($('#vs')) drawVs($('#vs'), ms.avg);
 }
-function fuelCard(f, t) {
+function fuelCard(f, t, bad) {
     const p = parts(f.fill_date);
     return `<button class="card tap item" data-act="open" data-id="${f.id}">
         <div class="date"><b>${p.d}</b><span>${MONTHS[p.m - 1]} ${String(p.y).slice(2)}</span></div>
-        <div><p style="font-weight:600">${Number(f.litres).toFixed(2)} L ${f.full_tank ? '<span class="badge ok">Full</span>' : '<span class="badge">Top-up</span>'}</p>
-            <p class="small muted">${km(f.odometer_km)}${f.range_km != null ? ` · DTE ${Number(f.range_km)}` : ''}${f.trip_a_km != null ? ` · Trip A ${Number(f.trip_a_km).toLocaleString('en-IN')}` : ''}${f.amount != null ? ` · ${rs(f.amount)}` : ''}</p></div>
-        <div class="right">${t ? `<span class="kmpl">${t.exact ? '' : '≈'}${t.kmpl.toFixed(1)}</span><br><span class="small muted">km/l</span>` : ''}</div></button>`;
+        <div><p style="font-weight:600">${Number(f.litres).toFixed(2)} L${bad ? ' <span class="badge warn">Check</span>' : ''}</p>
+            <p class="small muted">${km(f.odometer_km)}${f.amount != null ? ` · ${rs(f.amount)}` : ''}</p></div>
+        <div class="right">${t ? `<span class="kmpl">${t.kmpl.toFixed(1)}</span><br><span class="small muted">km/l</span>` : ''}</div></button>`;
 }
 function chart(t, avg) {
     const W = 600, H = 200, P = { l: 34, r: 12, t: 12, b: 24 };
@@ -2997,7 +2981,7 @@ function bikeOdo(slot) {
 function fuelForm(f = null, slot = 1) {
     const logs = state.fuel || [], bikes = bikeList();
     let bike = f ? bikeOf(f, bikes) : bikes.find(x => x.slot === slot) || bikes[0];
-    const r = f ? { ...f } : { fill_date: todayISO(), full_tank: false, odometer_km: bikeOdo(bike.slot) };
+    const r = f ? { ...f } : { fill_date: todayISO(), odometer_km: bikeOdo(bike.slot) };
     openSheet(f ? 'Edit fill-up' : 'Add fuel', `<form id="ff">
         ${bikes.length > 1 ? `<div class="chips bike-chips" id="ff-bikes">${bikes.map(x => `<button type="button" class="chip" data-slot="${x.slot}" aria-pressed="${x.slot === bike.slot}">${esc(x.name)}</button>`).join('')}</div>` : ''}
         <div class="grid2">
@@ -3006,15 +2990,9 @@ function fuelForm(f = null, slot = 1) {
         </div>
         <div class="grid2">
             <label>Odometer (km)<input type="number" name="odometer_km" required min="0" inputmode="numeric" value="${esc(r.odometer_km ?? '')}"></label>
-            <label>Range left / DTE (km)<input type="number" name="range_km" min="0" max="999" inputmode="numeric" placeholder="Optional" value="${esc(r.range_km ?? '')}"></label>
-        </div>
-        <div class="grid2">
-            <label>Trip A (km)<input type="number" name="trip_a_km" min="0" max="99999" step="0.1" inputmode="decimal" placeholder="Optional" value="${esc(r.trip_a_km ?? '')}"></label>
             <label>Date<input type="date" name="fill_date" required max="${todayISO()}" value="${esc(r.fill_date)}"></label>
         </div>
-        <label class="switch">Full tank<input type="checkbox" name="full_tank"${r.full_tank ? ' checked' : ''}></label>
         <p class="calc" id="calc"></p>
-        <label>Notes<input name="notes" maxlength="500" placeholder="Pump, highway run…" value="${esc(r.notes || '')}"></label>
         <button class="btn block">${f ? 'Save changes' : 'Save fill-up'}</button>
         ${f ? '<button type="button" class="btn danger block" id="del">Delete this fill-up</button>' : ''}
     </form>`, body => {
@@ -3023,16 +3001,27 @@ function fuelForm(f = null, slot = 1) {
         const others = () => bikeLogs(logs, bike).filter(x => !f || x.id !== f.id);
         const draftOf = () => {
             const d = Object.fromEntries(new FormData(form));
-            return { fill_date: d.fill_date, odometer_km: num(d.odometer_km), litres: num(d.litres), amount: num(d.amount), full_tank: form.full_tank.checked,
-                     range_km: num(d.range_km), trip_a_km: num(d.trip_a_km), notes: (d.notes || '').trim() || null, bike_slot: bike.slot, bike_vrn: bike.vrn || null };
+            return { fill_date: d.fill_date, odometer_km: num(d.odometer_km), litres: num(d.litres), amount: num(d.amount), bike_slot: bike.slot, bike_vrn: bike.vrn || null };
+        };
+        /* this fill-up against the one before it: km, litres, km/l, and whether that's realistic for the bike */
+        const check = rec => {
+            const spec = tankSpec(bike), cap = spec.size || 20;
+            if (rec.litres > cap + 0.5) return { why: `${bike.ronin ? "A Ronin's" : "This bike's"} tank holds ${cap} L.` };
+            const before = others().filter(x => Number(x.odometer_km) < rec.odometer_km || (Number(x.odometer_km) === rec.odometer_km && x.fill_date < rec.fill_date))
+                .sort((a, b) => b.odometer_km - a.odometer_km || b.fill_date.localeCompare(a.fill_date))[0];
+            if (!before) return {};
+            const d = rec.odometer_km - Number(before.odometer_km), k = d / rec.litres;
+            if (d <= 0) return { d, before, why: `Same odometer as your fill-up on ${fmtDate(before.fill_date)}.` };
+            return { d, k, before, why: k > spec.hi ? `${k.toFixed(0)} km/l is more than a ${bike.ronin ? 'Ronin' : 'bike'} can do. Missed logging a fill-up, or an odometer typo?`
+                                    : k < spec.lo ? `${k.toFixed(0)} km/l is too low. Check the odometer and litres.` : null };
         };
         const update = () => {
             const rec = draftOf(), msg = [];
             if (rec.litres && rec.amount) msg.push(`₹${(rec.amount / rec.litres).toFixed(2)}/L`);
             if (rec.litres && rec.odometer_km != null) {
-                const seq = [...others(), { ...rec, id: '__new' }].sort((a, b) => a.odometer_km - b.odometer_km || a.fill_date.localeCompare(b.fill_date));
-                const t = tanks(seq, tankSpec(bike)).find(x => x.end.id === '__new');
-                if (t) msg.push(`<b style="color:var(--orange)">${t.exact ? '' : '≈ '}${t.kmpl.toFixed(1)} km/l</b> · ${(Math.round(t.dist * 10) / 10).toLocaleString('en-IN')} km on ${t.litres.toFixed(1)} L`);
+                const c = check(rec);
+                if (c.why) msg.push(`<span class="warn">${esc(c.why)}</span>`);
+                else if (c.k) msg.push(`<b style="color:var(--orange)">${c.k.toFixed(1)} km/l</b> · ${c.d.toLocaleString('en-IN')} km since ${fmtDayMonth(c.before.fill_date)}`);
             }
             calc.innerHTML = msg.join(' · ');
         };
@@ -3049,9 +3038,12 @@ function fuelForm(f = null, slot = 1) {
         form.onsubmit = e => {
             e.preventDefault();
             const rec = { id: f?.id, ...draftOf() }, prev = others();
-            if (!f && prev.some(x => fuelKey(x) === fuelKey(rec))) { toast('This fill-up is already saved'); return; }
-            const before = prev.filter(x => x.fill_date <= rec.fill_date).sort((a, b) => b.odometer_km - a.odometer_km)[0];
-            if (before && rec.odometer_km < before.odometer_km && !confirmBox(`The odometer (${km(rec.odometer_km)}) is lower than an earlier fill-up (${km(before.odometer_km)}). Save anyway?`)) return;
+            if (!f && prev.some(x => fuelKey(x) === fuelKey({ ...rec, full_tank: x.full_tank }))) { toast('This fill-up is already saved'); return; }
+            const c = check(rec), cap = tankSpec(bike).size || 20;
+            if (rec.litres > cap + 0.5) { toast(c.why); form.litres.focus(); return; }
+            const later = prev.filter(x => x.fill_date < rec.fill_date).sort((a, b) => b.odometer_km - a.odometer_km)[0];
+            if (later && rec.odometer_km < later.odometer_km && !confirmBox(`The odometer (${km(rec.odometer_km)}) is lower than an earlier fill-up (${km(later.odometer_km)}). Save anyway?`)) return;
+            if (c.why && !(later && rec.odometer_km < later.odometer_km) && !confirmBox(`${c.why} It won't count until it adds up. Save anyway?`)) return;
             busy(e.submitter, async () => {
                 await api.saveFuel(rec); await load.fuel(true); state.board = null; state.mileSlot = bike.slot; closeSheet();
                 location.hash.startsWith('#mileage') ? (location.hash === '#mileage' ? render() : (location.hash = '#mileage')) : (location.hash = '#mileage');

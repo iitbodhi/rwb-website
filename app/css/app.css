@@ -2881,3 +2881,9 @@ html.calm:not(#_) .lb-hero::before,html.calm:not(#_) .lb-cup,html.calm:not(#_) .
 .dn-prev .grow{display:flex;flex-direction:column}
 .dn-prev b{font-size:1.05rem}
 body[data-fam] .tp-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
+
+/* Mileage check (Nov 28 2026): fill-ups left out of the maths */
+.badge.warn{background:rgba(242,163,58,.18);color:#b46a0c}
+:root[data-theme=dark] .badge.warn{color:#f2a33a}
+@media (prefers-color-scheme:dark){:root[data-theme=system] .badge.warn{color:#f2a33a}}
+.calc .warn{color:#d97706;font-weight:600}
