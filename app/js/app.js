@@ -6954,7 +6954,7 @@ const rideMeta = (r, when) => [rideKm({ ride_km: r.km }), avgKmh({ ride_km: r.km
     topKmh(r) ? `top ${topKmh(r)} km/h` : '', when].filter(Boolean).join(' · ');
 const dayTxt = t => new Date(t).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: new Date(t).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
 function drawRides() {
-    const box = $('#trk-rides'); if (!box) return;
+    const box = $('#trk-rides'); if (!box || isFam()) return;
     const list = trk.rides || [], saved = trk.saved || [];
     if (!list.length && !saved.length) { box.innerHTML = ''; return; }
     const evs = new Map(), items = [];
@@ -6985,6 +6985,7 @@ function drawRides() {
     box.querySelector('[data-x=more-saved]')?.addEventListener('click', () => { trk.savedN = (trk.savedN || 5) + 10; drawRides(); });
 }
 async function ridePlay(rid, eid, skey) {
+    if (isFam()) return;   /* RWB FAM never sees ride lines or top speeds */
     let L; try { L = trk.L || await loadLeaflet(); } catch (e) { toast(e.message, true); return; }
     const key = skey || (eid ? 'e' + eid : 'r' + rid), kept = await savedRideGet(key);
     if (kept) { eid = kept.event_id || null; rid = eid ? null : kept.lines[0]?.id; }
@@ -7113,7 +7114,7 @@ function openRider(k) {
         <span class="small muted">${sos ? 'Sent SOS ' + timeAgo(r.at) : `<span class="rs-state ${st.k}">${st.k === 'move' ? 'Moving' : st.k === 'stop' ? st.txt : 'Signal lost'}</span> · updated ${timeAgo(r.at)}${r.acc ? ' · ±' + Math.round(r.acc) + ' m' : ''}`}</span></span></div>
         ${en ? `<a class="rs-ev" href="#events/${r.event_id}">🏍️ <span class="grow"><small>Riding</small><b>${esc(en)}</b></span>›</a>` : ''}
         ${r.note && !sos ? `<p class="trk-note-txt big">“${esc(r.note)}”</p>` : ''}
-        ${sos ? '' : `<div class="rs-grid">${stat(st.k === 'move' ? st.kmh : 0, 'km/h now')}${stat(avgKmh(r) || '–', 'avg km/h')}${stat(top || '–', 'top km/h')}
+        ${sos ? '' : `<div class="rs-grid">${stat(st.k === 'move' ? st.kmh : 0, 'km/h now')}${stat(avgKmh(r) || '–', 'avg km/h')}${isFam() ? '' : stat(top || '–', 'top km/h')}
             ${stat(rideKm(r) || '0 km', 'this ride')}${stat(r.since ? durTxt(Date.now() - Date.parse(r.since)).replace(' h', 'h').replace(' min', 'm') : '–', r.until && Date.parse(r.until) - Date.now() <= 11 * 36e5 ? 'till ' + new Date(r.until).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }) : 'sharing for')}${stat(here && !mine ? distTxt(distM(here, r)) : '–', mine ? 'that’s you' : 'from you')}</div>`}
         <div class="btns rs-btns">${r.phone ? `<a class="btn" href="tel:+91${esc(r.phone)}">📞 Call</a>` : ''}<a class="btn ghost" href="https://www.google.com/maps/dir/?api=1&destination=${r.lat},${r.lng}" target="_blank" rel="noopener">🧭 Directions</a>${!sos && !mine ? `<button class="btn ghost" data-x="follow">${trk.follow === r.id ? '✓ Following' : '🎯 Follow'}</button>` : ''}</div>
         ${sos && (mine || d.staff) ? `<button class="btn ${mine ? '' : 'ghost'} block" data-x="safe" style="margin-top:12px">${mine ? "✅ I'm safe now" : '✅ Mark as resolved'}</button>` : ''}`, body => {
