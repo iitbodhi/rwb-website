@@ -289,4 +289,4 @@ The RWB app is built and run by the RWB team; Bodhi, RWB's admin for tech, is th
 ## How do I set a nickname? How do I change the name shown in the app?
 k: nickname, display name, shown as, first name, change my name in the app, call me, name on track, name on warriorboard
 b: app
-Me → Name in the app → "Shown as". Pick First name (the default) or Nickname and type it (2 to 20 letters). That name then shows everywhere in the RWB app: Home, Track map, Warriorboards, events and Going lists, members list and notifications. WhatsApp messages from the RWB team always use your real first name. To change your full name itself, use Me → Edit profile (an admin checks it first).
+Me → Name in the app → "Shown as". Pick First name (the default) or Nickname and type it (2 to 20 letters). Everyone shows by first name unless they pick a nickname. Your chosen name shows on Home, Warriorboards, events and Going lists, the members list and notifications. The Track map, ride replays and WhatsApp messages from the RWB team always use your real first name. To change your full name itself, use Me → Edit profile (an admin checks it first).

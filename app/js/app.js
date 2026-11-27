@@ -39,7 +39,8 @@ const NAME_SKIP = /^(md|mohd|mr|mrs|ms|dr|er|sk|sri|shri|smt)\.?$/i;
 const firstOf = full => { const w = String(full || '').trim().split(/\s+/).filter(Boolean), f = (w.find(x => !NAME_SKIP.test(x)) || w[0] || '').replace(/[.,]+$/, '');
     return f && (f === f.toUpperCase() || f === f.toLowerCase()) ? f[0].toUpperCase() + f.slice(1).toLowerCase() : f; };
 const firstName = m => String(m?.nickname ?? m?.nick ?? '').trim() || firstOf(m?.full_name ?? m?.name) || 'Rider';
-const rName = r => firstName({ nickname: r?.nick, full_name: r?.name });
+/* Track (map, pins, list, ride replays) always shows the real first name, never the nickname (Bodhi) */
+const rName = r => firstOf(r?.name) || 'Rider';
 /* WhatsApp messages and share cards always use the rider's real first name, never the nickname (Bodhi, Nov 27 2026) */
 const realFirst = m => firstOf(m?.full_name ?? m?.name) || 'Warrior';
 const SERVICE_TYPES = { free: 'Free service', paid: 'Paid service', amc: 'AMC service', repair: 'Repair', self: 'Self / DIY' };
@@ -3898,7 +3899,7 @@ function nameSheet(m, done) {
     let mode = m.nickname ? 'nick' : 'first';
     openSheet('Your name in the app', `<form id="dnf">
         <div class="seg" role="radiogroup" aria-label="Show my">${[['first', 'First name'], ['nick', 'Nickname']].map(([k, l]) => `<button type="button" role="radio" data-k="${k}" aria-checked="${mode === k}" aria-selected="${mode === k}">${l}</button>`).join('')}</div>
-        <label id="dn-nick"${mode === 'nick' ? '' : ' hidden'}>Nickname<input name="nick" maxlength="20" autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(m.nickname || '')}"></label>
+        <label id="dn-nick"${mode === 'nick' ? '' : ' hidden'}>Nickname<input name="nick" maxlength="20" autocomplete="off" autocapitalize="words" enterkeyhint="done" value="${esc(m.nickname || m.nick_old || '')}"></label>
         <div class="dn-prev">${face(m, 'avatar')}<span class="grow"><b id="dn-show"></b><span class="small muted">${esc(ROLE[m.role] || 'Member')}</span></span></div>
         <button class="btn block">Save</button></form>`, body => {
         const f = body.querySelector('#dnf'), box = body.querySelector('#dn-nick'), inp = f.nick, show = body.querySelector('#dn-show');
@@ -6788,7 +6789,7 @@ async function refreshTrack(redraw, light) {
     if (!$('#trk-status')) return;
     const f = trk.filter, onEv = r => f && r.event_id === f;
     const ev = f ? (state.evd?.events || []).find(e => e.id === f) || { title: d.riders.find(onEv)?.event || 'this ride' } : null;
-    const rider = d.fam ? d.riders.find(r => r.mine) : null, famNm = esc(firstName(state.fam?.member));
+    const rider = d.fam ? d.riders.find(r => r.mine) : null, famNm = esc(realFirst(state.fam?.member));
     if (NATIVE && sharing()) svcHealth();
     if (!d.fam) staleSelf(d);
     if (!d.fam) { const mine = d.sos.find(x => x.me); if (mine) setMySos({ id: mine.id, at: Date.parse(mine.at) || Date.now() }); else setMySos(null); }
@@ -7223,7 +7224,7 @@ function famJoinScreen(sess, code = famCodeSaved()) {
     const f = $('#fj'), who = $('#fj-who');
     const look = async () => { const c = famCodeNorm(f.code.value); if (c.length < 8) { who.hidden = true; return; }
         const r = await api.famInviteInfo(c).catch(() => null); who.hidden = false;
-        who.innerHTML = !r ? '<span class="warn">That code isn\'t valid. Check it with the person who invited you.</span>' : r.left > 0 ? `✓ Invited by <b>${esc(rName(r))}</b>` : `<span class="warn">${esc(rName(r))}'s RWB FAM is full (3 of 3).</span>`; };
+        who.innerHTML = !r ? '<span class="warn">That code isn\'t valid. Check it with the person who invited you.</span>' : r.left > 0 ? `✓ Invited by <b>${esc(r.name)}</b>` : `<span class="warn">${esc(r.name)}'s RWB FAM is full (3 of 3).</span>`; };
     f.code.addEventListener('change', look); f.code.addEventListener('blur', look); if (code) look();
     app.querySelector('[data-x=tnc]').onclick = () => openSheet('RWB Terms & Conditions', tncDoc());
     app.querySelector('[data-x=out]').onclick = () => api.signOut();
