@@ -4060,6 +4060,7 @@ async function viewAdmin() {
             <button role="tab" aria-selected="${tab === 'motomart'}" data-act="tab" data-tab="motomart">MotoMart<span id="mm-count"></span></button>
             <button role="tab" aria-selected="${tab === 'dupes'}" data-act="tab" data-tab="dupes">Duplicates<span id="dupe-count"></span></button>
             <button role="tab" aria-selected="${tab === 'members'}" data-act="tab" data-tab="members">Members</button>
+            <button role="tab" aria-selected="${tab === 'whatsapp'}" data-act="tab" data-tab="whatsapp">WhatsApp check</button>
             <button role="tab" aria-selected="${tab === 'bdays'}" data-act="tab" data-tab="bdays">Birthdays</button>
             <button role="tab" aria-selected="${tab === 'reports'}" data-act="tab" data-tab="reports">Reports<span id="rep-count"></span></button>
             <button role="tab" aria-selected="${tab === 'ai'}" data-act="tab" data-tab="ai">Pookie<span id="ai-count"></span></button>
@@ -4080,7 +4081,7 @@ async function viewAdmin() {
     });
     api.admin.pookiePending?.().then(n => { pookieBadge(n); const c = $('#ai-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
     api.admin.reports?.().then(rs => { const n = (rs || []).filter(r => r.status === 'open').length; const c = $('#rep-count'); if (c && n) c.textContent = ` (${n})`; }).catch(() => {});
-    try { await (({ requests: adminRequests, motomart: adminMotoMart, dupes: adminDupes, members: adminMembers, bdays: adminBdays, reports: adminReports, ai: adminAI, guides: adminGuides })[tab] || adminRequests)(); }
+    try { await (({ requests: adminRequests, motomart: adminMotoMart, dupes: adminDupes, members: adminMembers, whatsapp: adminWhatsApp, bdays: adminBdays, reports: adminReports, ai: adminAI, guides: adminGuides })[tab] || adminRequests)(); }
     catch (e) { $('#admin-body').innerHTML = `<div class="card empty"><b>Could not load</b>${esc(e.message)}</div>`; }
 }
 /* Coordinators' panel (setup file 65): MotoMart posts, Teach Pookie answers and reports. They check other people's
@@ -4385,6 +4386,104 @@ async function adminDupes() {
             busy(b, async () => { await api.admin.resolveDupe(g.key, rm.map(e => e.id)); state.adminMembers = null; state.dir = null; toast('Done. The sheet updates in a few seconds'); await adminDupes(); });
         },
         'dupe-skip': b => { const g = groupOf(b); if (confirmBox('Keep all of these entries? This group won\'t be shown again.')) busy(b, async () => { await api.admin.resolveDupe(g.key, [], true); toast('Marked as not a duplicate'); await adminDupes(); }); }
+    });
+}
+/* ---------- WhatsApp check: an admin pastes the RWB WhatsApp group's member list (names and numbers, as WhatsApp shows them)
+   and the app compares it with RWB members on the phone. Nothing is added or removed by itself; admins act from the lists.
+   WhatsApp shows numbers for people the admin hasn't saved and the saved name for the rest, so names are matched too. ---------- */
+const WA_SKIP = /^(group admin|admin|online|typing.*|(click|tap) here for group info|view all.*|search.*|\d+ (members?|participants?).*|add (members?|participants?).*|invite.*link.*|exit group|report group|community.*|.*last seen.*|hey there!? i am using whatsapp\.?|available|busy|at work|in a meeting|urgent calls only|members?|participants?|group info|media.*|starred messages|disappearing messages.*|encryption.*|mute notifications)$/i;
+const waKey = s => String(s || '').toLowerCase().replace(/ronin warriors? of bengal|\brwb\b|\bronin\b/g, ' ').replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
+const ph10 = p => { const d = String(p || '').replace(/\D/g, ''); return d.length === 12 && d.startsWith('91') ? d.slice(2) : d.length === 11 && d.startsWith('0') ? d.slice(1) : d.length > 10 && !d.startsWith('91') ? d : d.slice(-10); };
+function waParse(text) {
+    const phones = new Set(), names = new Set(); let me = false;
+    String(text || '').split(/[\n,;]+/).forEach(raw => {
+        let t = raw.replace(/[​-‏‪-‮⁦-⁩]/g, '').replace(/^[~\s•·*-]+/, '').trim();
+        if (!t) return;
+        const num = t.match(/\+?\d[\d\s().-]{8,}\d/);
+        if (num) { const d = ph10(num[0]); if (d.length >= 10) phones.add(d); t = t.replace(num[0], '').replace(/^[~\s•·*:-]+|[~\s•·*:-]+$/g, '').trim(); if (!t) return; }
+        if (/^you$/i.test(t)) { me = true; return; }
+        if (WA_SKIP.test(t) || t.length > 40 || t.split(/\s+/).length > 5 || !/[a-zঀ-৿]/i.test(t)) return;
+        names.add(t);
+    });
+    return { phones: [...phones], names: [...names], me };
+}
+function waCompare(all, paste) {
+    const byPhone = new Map(), byName = new Map();
+    const add = (map, k, m) => { if (!k) return; const l = map.get(k) || []; if (!l.includes(m)) l.push(m); map.set(k, l); };
+    for (const m of all) {
+        add(byPhone, ph10(m.phone), m);
+        for (const n of [m.full_name, m.nickname, m.nick_old]) {
+            const k = waKey(n), w = k.split(' ');
+            add(byName, k, m); if (w.length > 2) add(byName, w[0] + ' ' + w[w.length - 1], m);
+        }
+        add(byName, '1:' + waKey(firstOf(m.full_name)), m);
+    }
+    const pick = l => { const live = (l || []).filter(m => !isGone(m)); return live.length ? live : (l || []); };
+    const hit = new Map(), strangers = [], unsure = [], unknownNames = [];
+    for (const p of paste.phones) { const l = pick(byPhone.get(p)); if (l.length) l.forEach(m => hit.set(m.id, 'number')); else strangers.push(p); }
+    for (const n of paste.names) {
+        const k = waKey(n), w = k.split(' ');
+        let l = pick(byName.get(k)); if (!l.length && w.length > 1) l = pick(byName.get(w[0] + ' ' + w[w.length - 1]));
+        if (!l.length && w.length === 1) l = pick(byName.get('1:' + k));
+        if (l.length === 1) { if (!hit.has(l[0].id)) hit.set(l[0].id, 'name'); }
+        else if (l.length > 1) unsure.push({ name: n, who: l });
+        else unknownNames.push(n);
+    }
+    const meM = paste.me && all.find(m => m.user_id && m.user_id === state.me?.user_id); if (meM) hit.set(meM.id, 'you');
+    const live = all.filter(m => !isGone(m));
+    return {
+        hit, strangers, unsure, unknownNames,
+        appOut: azSort(live.filter(m => m.user_id && !hit.has(m.id))),
+        sheetOut: azSort(live.filter(m => !m.user_id && !hit.has(m.id))),
+        noApp: azSort(live.filter(m => !m.user_id && hit.has(m.id))),
+        goneIn: azSort(all.filter(m => isGone(m) && hit.has(m.id))),
+        matched: live.filter(m => hit.has(m.id)).length, live: live.length
+    };
+}
+async function adminWhatsApp() {
+    state.adminMembers ??= await api.admin.members();
+    const all = state.adminMembers;
+    state.waPaste ??= '';
+    $('#admin-body').innerHTML = `<details class="howto"${state.waPaste ? '' : ' open'}><summary>How to copy the group list</summary>
+        <ol class="small"><li>On a computer, open <b>web.whatsapp.com</b> and this app (<b>roninwb.in/app</b> → Admin → WhatsApp) side by side.</li>
+            <li>Open the RWB WhatsApp group and wait a few seconds: the line under the group name turns into everyone's names and numbers.</li>
+            <li>Triple-click that line, copy it (Ctrl+C) and paste it below (Ctrl+V).</li>
+            <li>If that doesn't copy everyone: open Group info → the member list, select the names with the mouse, copy and paste; scroll and repeat. Pasting the same person twice is fine.</li></ol>
+        <p class="small muted">Numbers match exactly. People saved in your contacts come as the name you saved, and the app matches those to member names where it can. Nothing is changed by itself: you decide what to do with each list.</p></details>
+        <textarea id="wa-paste" rows="6" placeholder="Paste the WhatsApp group's member list here" style="margin-top:12px;font-size:.88rem">${esc(state.waPaste)}</textarea>
+        <div class="row" style="gap:8px;margin:8px 0 14px"><button class="btn grow" data-act="wa-check">Check</button><button class="btn ghost" data-act="wa-clear">Clear</button></div>
+        <div id="wa-out"></div>`;
+    const out = $('#wa-out');
+    const row = (m, extra = '') => `<div class="row" style="gap:8px;align-items:center"><button class="card tap row member-row grow" data-act="member" data-id="${m.id}" style="min-width:0">${face(m, 'avatar sm')}
+        <div class="grow"><div class="who">${esc(m.full_name)} ${roleBadge(m)}${isGone(m) ? ` <span class="badge gone-tag ${m.status}">${GONE_TXT[m.status]}</span>` : ''}</div>
+        <div class="meta">${esc([phoneTxt(m.phone), m.vrn, m.locality].filter(Boolean).join(' · '))}${state.waRes?.hit.get(m.id) === 'name' ? ' · <i>matched by name</i>' : ''}</div></div>${m.user_id ? '<span class="badge ok">On app</span>' : ''}</button>${extra}</div>`;
+    const box = (title, n, lead, body, open) => `<details class="howto" style="margin-bottom:10px"${open && n ? ' open' : ''}><summary>${title} (${n})</summary>${n ? `<p class="small muted">${lead}</p><div class="list" style="margin-bottom:12px">${body}</div>` : '<p class="small muted">Nobody.</p>'}</details>`;
+    const draw = () => {
+        const r = state.waRes; if (!r) { out.innerHTML = ''; return; }
+        const low = r.matched < r.live * 0.4;
+        out.innerHTML = `<div class="stats" style="margin-bottom:12px"><div class="stat"><b>${r.matched}</b><span>In the group</span></div><div class="stat ${r.appOut.length ? 'accent' : ''}"><b>${r.appOut.length}</b><span>On app, not in group</span></div><div class="stat"><b>${r.strangers.length + r.unknownNames.length}</b><span>Not found in RWB</span></div></div>
+            ${low ? `<p class="warn" style="margin-bottom:12px">Only ${r.matched} of ${r.live} members were found in what you pasted. Was the whole list copied? Check before acting on the lists below.</p>` : ''}
+            ${box('On the app, not in the WhatsApp group', r.appOut.length, 'They use the RWB app but weren\'t in the list you pasted. Tap someone to see their profile; remove them from RWB there if they\'ve left, or add them back to the group. Someone you saved under a different name can land here too.', r.appOut.map(m => row(m)).join(''), true)}
+            ${box('Left or removed from RWB, still in the group', r.goneIn.length, 'Marked as left/removed in the app but still in the WhatsApp group. Remove them from the group in WhatsApp, or restore them here.', r.goneIn.map(m => row(m)).join(''), true)}
+            ${box('In the group, not found in RWB', r.strangers.length + r.unknownNames.length, 'In the WhatsApp group but not in the RWB member list (or saved in your phone under a name the app doesn\'t know). Ask them to join through the app, or check who they are.',
+                r.strangers.map(p => `<div class="card row" style="gap:8px;align-items:center"><div class="grow"><div class="who">${esc(phoneTxt(p))}</div><div class="meta">Number not in RWB</div></div><a class="btn sm ghost" href="${waTo(p)}" target="_blank" rel="noopener">Chat</a></div>`).join('')
+                + r.unknownNames.map(n => `<div class="card row"><div class="grow"><div class="who">${esc(n)}</div><div class="meta">Saved name, no member matches it</div></div></div>`).join(''), true)}
+            ${r.unsure.length ? box('Names that fit more than one member', r.unsure.length, 'The saved name matches several members, so they weren\'t counted. Check these by hand.', r.unsure.map(u => `<div class="card"><div class="who">${esc(u.name)}</div><div class="meta">Could be ${esc(u.who.map(m => m.full_name).join(', '))}</div></div>`).join(''), false) : ''}
+            ${box('In the group, not on the app yet', r.noApp.length, 'RWB members in the WhatsApp group who haven\'t signed in to the app. Tap Invite to send them the app link from your WhatsApp.', r.noApp.map(m => row(m, `<button class="btn sm ghost" data-act="wa-inv" data-id="${m.id}">Invite</button>`)).join(''), false)}
+            ${box('Not on the app and not in the group', r.sheetOut.length, 'In the RWB member list, but neither on the app nor in the list you pasted.', r.sheetOut.map(m => row(m)).join(''), false)}`;
+    };
+    draw();
+    Object.assign(actions, {
+        'wa-check': () => {
+            state.waPaste = $('#wa-paste').value;
+            const p = waParse(state.waPaste);
+            if (!p.phones.length && !p.names.length) return toast('Paste the group\'s member list first', true);
+            state.waRes = waCompare(all, p); draw();
+            out.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        },
+        'wa-clear': () => { state.waPaste = ''; state.waRes = null; $('#wa-paste').value = ''; draw(); },
+        'wa-inv': b => { const m = all.find(x => String(x.id) === b.dataset.id); if (m) tellOnWhatsApp(`Invite ${realFirst(m)}`, m.phone, waMsg('invite', m)); },
+        member: el => memberSheet(all.find(m => String(m.id) === el.dataset.id))
     });
 }
 async function adminRequests() {
