@@ -43,6 +43,25 @@ const firstName = m => String(m?.nickname ?? m?.nick ?? '').trim() || firstOf(m?
 const rName = r => firstOf(r?.name) || 'Rider';
 /* WhatsApp messages and share cards always use the rider's real first name, never the nickname (Bodhi, Nov 27 2026) */
 const realFirst = m => firstOf(m?.full_name ?? m?.name) || 'Warrior';
+/* Names for one group list: different riders often share a first name (5 Abhijits, 3 "Arnab Das"), which looked like
+   repeats. Unique first names stay as they are; shared ones get the surname initial ("Abhijit C."), then the place
+   ("Arnab D. (Chakdaha)"), then the last 4 of the VRN. The same member is listed once. Returns [{ m, label }] A–Z. */
+const groupLabels = list => {
+    const seen = new Set(), rows = azSort(list).filter(m => !seen.has(m.id) && seen.add(m.id));
+    const tidy = s => s && (s === s.toUpperCase() || s === s.toLowerCase()) ? s[0].toUpperCase() + s.slice(1).toLowerCase() : s;
+    const words = m => String(m.full_name || '').trim().split(/\s+/).filter(w => w && !NAME_SKIP.test(w));
+    const place = m => String(m.locality || '').split(/[,(\-–|/]/)[0].trim().replace(/\s+/g, ' ').slice(0, 22);
+    const steps = [m => realFirst(m),
+        m => { const w = words(m), last = w.length > 1 ? w[w.length - 1].replace(/[^A-Za-z]/g, '') : ''; return realFirst(m) + (last ? ` ${last[0].toUpperCase()}.` : ''); },
+        m => { const p = place(m); return steps[1](m) + (p ? ` (${tidy(p)})` : ''); },
+        m => { const v = String(m.vrn || '').replace(/\W/g, '').slice(-4); return steps[2](m) + (v ? ` · ${v}` : ''); }];
+    const out = rows.map(m => ({ m, label: steps[0](m) }));
+    for (let s = 1; s < steps.length; s++) {
+        const count = {}; out.forEach(r => { const k = r.label.toLowerCase(); count[k] = (count[k] || 0) + 1; });
+        out.forEach(r => { if (count[r.label.toLowerCase()] > 1) r.label = steps[s](r.m); });
+    }
+    return out;
+};
 const SERVICE_TYPES = { free: 'Free service', paid: 'Paid service', amc: 'AMC service', repair: 'Repair', self: 'Self / DIY' };
 
 /* ---------- toast + sheet ---------- */
@@ -4644,11 +4663,11 @@ function bindFollowUps(inc, all) {
     };
     const shareAll = (pick = { tnc: true, other: true, app: true, gone: true, sticker: true }) => {
         const t = inTab(), tnc = pick.tnc ? t.tnc : [], other = pick.other ? t.other : [], notApp = pick.app ? t.app : [], left = pick.gone ? t.gone : [], sticker = pick.sticker ? t.sticker : [];
-        const firstNames = l => azSort(l).map(m => `• ${realFirst(m)}`).join('\n');
+        const firstNames = l => groupLabels(l).map(r => `• ${r.label}`).join('\n');
         if (state.fuView === 'gone') return `🏍️ *We miss these warriors!* 🧡\n\n${firstNames(left)}\n\nIf you're in touch with them, let them know they're always welcome back. They can rejoin with the join form at roninwb.in or the RWB App: ${getLink()}\n\nExplore. Evolve. Inspire.`;
         return `🏍️ *RWB App: a quick to-do for some of our warriors* 🙏\n`
             + (tnc.length ? `\n📜 *Please respond to the RWB Terms & Conditions in the app*\nOpen it directly: https://roninwb.in/app/#terms\n(or RWB App → Me → Terms & Conditions → Read & agree)\n${firstNames(tnc)}\n` : '')
-            + (other.length ? `\n✍️ *Please add your missing details* (RWB App → Me → Edit)\n${azSort(other).map(m => `• ${realFirst(m)}: ${m.missing.join(', ')}`).join('\n')}\n` : '')
+            + (other.length ? `\n✍️ *Please add your missing details* (RWB App → Me → Edit)\n${groupLabels(other).map(({ m, label }) => `• ${label}: ${m.missing.join(', ')}`).join('\n')}\n` : '')
             + (sticker.length ? `\n🏷️ *RWB sticker not received yet?*\nCollect it at our next meet-up or ride. Already got one? Update it in the RWB App → Me → More from RWB: https://roninwb.in/app/#me\n${firstNames(sticker)}\n` : '')
             + (notApp.length ? `\n📲 *Not on the RWB App yet?* Get it: ${getLink()}\nSign in with the email you gave on the join form.${playOnly() ? '' : `\nAndroid guide: ${INSTALL_ANDROID}`}\niPhone guide: ${INSTALL_IPHONE}\n${firstNames(notApp)}\n` : '')
             + `\nThank you! Explore. Evolve. Inspire.`;
