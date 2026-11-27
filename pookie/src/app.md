@@ -166,7 +166,7 @@ Don't want to appear? Me → Privacy → turn off "Show me on the Warriorboards"
 ## RWB Members list: find a rider, team contacts
 k: member list, directory, find member, search rider, contact admin, members page
 b: app
-Warriors → RWB Members lists every rider and the RWB team. Members always see each other's name, nickname and photo; other details (VRN, bike model, locality, mileage) show only if that rider shares them (Me → Privacy). Admins and coordinators can see full details.
+Warriors → RWB Members lists every rider and the RWB team. Everyone in the app is shown by their first name (or their nickname, if they set one) and photo; other details (VRN, bike model, locality, mileage) show only if that rider shares them (Me → Privacy). Admins and coordinators can see full details.
 
 ## VRN check: is this bike's rider in RWB?
 k: number plate check, registration check, vrn, spotted a ronin, is he a member
@@ -187,7 +187,7 @@ Me → Edit profile → change the email. An admin approves it; then you're sign
 ## Privacy settings: what other members can see about me
 k: privacy, hide my number, hide bike, hide locality, show mileage, data sharing, who sees my details
 b: app
-Me → Privacy. Members always see your name, nickname and photo. Choose whether they also see: VRN and bike numbers, bike model, locality and average mileage ("Share all"/"Hide all" button too). Your phone number is not shown to members. RWB admins and coordinators can always see your details. Documents are private to you only.
+Me → Privacy. Members see you by your first name (or nickname) and photo. Choose whether they also see: VRN and bike numbers, bike model, locality and average mileage ("Share all"/"Hide all" button too). Your phone number is not shown to members. RWB admins and coordinators can always see your details. Documents are private to you only.
 
 ## Notifications in the RWB app: turn on or off
 k: notifications, alerts, push, not getting notifications, turn off alerts, bell
@@ -285,3 +285,8 @@ Love the app? Rate it on the Google Play Store (the app shows a short "Rate Us" 
 k: developer, who built, app creator, tech team
 b: app
 The RWB app is built and run by the RWB team; Bodhi, RWB's admin for tech, is the super admin behind the website, app and designs. It's free for every warrior.
+
+## How do I set a nickname? How do I change the name shown in the app?
+k: nickname, display name, shown as, first name, change my name in the app, call me, name on track, name on warriorboard
+b: app
+Me → Name in the app → "Shown as". Pick First name (the default) or Nickname and type it (2 to 20 letters). That name then shows everywhere in the RWB app: Home, Track map, Warriorboards, events and Going lists, members list, notifications and the WhatsApp messages the team sends from the app. To change your full name itself, use Me → Edit profile (an admin checks it first).

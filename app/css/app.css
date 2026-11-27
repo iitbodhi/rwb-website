@@ -2870,3 +2870,13 @@ html.calm:not(#_) .lb-hero::before,html.calm:not(#_) .lb-cup,html.calm:not(#_) .
 .tp-stats .ts.ts-top b{color:var(--orange)}
 .tp-save:empty{display:none}
 .tp-save .tf.on{background:var(--orange);border-color:var(--orange);color:#fff}
+
+/* Name in the app (Me → Shown as) */
+.st-group.kv > .dn-row{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:0;color:inherit;font:inherit;cursor:pointer}
+.dn-row .rt small{font-weight:400;opacity:.8}
+.dn-chev{color:var(--muted);font-size:1.3rem;line-height:1;margin-left:-4px}
+#dnf .seg{margin-bottom:12px}
+#dnf label{margin-bottom:12px}
+.dn-prev{display:flex;align-items:center;gap:12px;padding:12px 14px;margin:2px 0 14px;border-radius:16px;background:color-mix(in srgb,var(--orange) 8%,var(--card));border:1px solid var(--glass-edge)}
+.dn-prev .grow{display:flex;flex-direction:column}
+.dn-prev b{font-size:1.05rem}
