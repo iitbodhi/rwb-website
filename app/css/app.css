@@ -2908,3 +2908,11 @@ body[data-fam] .tp-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
 :root[data-theme=dark] .vs-tag.best b{color:#f0bd45}
 @media (prefers-color-scheme:dark){:root[data-theme=system] .vs-tag.best b{color:#f0bd45}}
 .calc .ff-note{display:block;margin-top:4px;color:var(--muted);font-weight:500}
+/* Add fuel: optional DTE + Full tank, and the "are you sure" step (Nov 28 2026) */
+.ff-opt{align-items:end}
+.ff-opt .ff-full{align-self:end;min-height:48px;margin:0}
+.ff-ask{border:1.5px solid rgba(242,163,58,.55);background:rgba(242,163,58,.1);border-radius:14px;padding:14px;margin:4px 0 12px}
+.ff-ask b{display:block;font-size:1.02rem;margin-bottom:4px}
+.ff-ask p{margin:0 0 12px;color:var(--stone);font-size:.92rem;line-height:1.4}
+.ff-ask-btns{display:grid;gap:8px}
+.ff-ask-btns .btn{margin:0}
