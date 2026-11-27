@@ -40,6 +40,8 @@ const firstOf = full => { const w = String(full || '').trim().split(/\s+/).filte
     return f && (f === f.toUpperCase() || f === f.toLowerCase()) ? f[0].toUpperCase() + f.slice(1).toLowerCase() : f; };
 const firstName = m => String(m?.nickname ?? m?.nick ?? '').trim() || firstOf(m?.full_name ?? m?.name) || 'Rider';
 const rName = r => firstName({ nickname: r?.nick, full_name: r?.name });
+/* WhatsApp messages and share cards always use the rider's real first name, never the nickname (Bodhi, Nov 27 2026) */
+const realFirst = m => firstOf(m?.full_name ?? m?.name) || 'Warrior';
 const SERVICE_TYPES = { free: 'Free service', paid: 'Paid service', amc: 'AMC service', repair: 'Repair', self: 'Self / DIY' };
 
 /* ---------- toast + sheet ---------- */
@@ -118,7 +120,7 @@ const TEAM_WISHES = [
 ];
 function wishSheet(people) {
     if (!people.length) return;
-    const names = andList(people.map(firstName)), team = isMod();
+    const names = andList(people.map(realFirst)), team = isMod();
     openSheet(`Wish ${people.length > 1 ? 'them' : firstName(people[0])}`, `
         <p class="small muted" style="margin-bottom:10px">Write a wish for <b>${esc(names)}</b>, then choose the RWB group in WhatsApp.</p>
         ${team ? `<p class="small muted" style="margin-bottom:6px">Team templates (tap to use, then edit if you like)</p><div class="chips" style="margin-bottom:10px">${TEAM_WISHES.map(([k], i) => `<button type="button" class="chip" data-tpl="${i}">${esc(k)}</button>`).join('')}</div>` : ''}
@@ -2244,7 +2246,7 @@ async function shareEvent(e, heads) {
 }
 function evtShareList(e, going) {
     const total = going.length + going.reduce((a, p) => a + p.guests, 0);
-    const text = `📅 *${e.title}*\n🗓 ${evtWhen(e)}\n\n*${evtPast(e) ? 'Went' : 'Going'} (${total})*\n${going.map((p, i) => `${i + 1}. ${firstName(p)}${p.guests ? ' +1 guest' : ''}`).join('\n')}${evtPast(e) ? '' : `\n\n👉 Not on the list? Join in the RWB App: https://roninwb.in/app/#events/${e.id}`}`;
+    const text = `📅 *${e.title}*\n🗓 ${evtWhen(e)}\n\n*${evtPast(e) ? 'Went' : 'Going'} (${total})*\n${going.map((p, i) => `${i + 1}. ${realFirst(p)}${p.guests ? ' +1 guest' : ''}`).join('\n')}${evtPast(e) ? '' : `\n\n👉 Not on the list? Join in the RWB App: https://roninwb.in/app/#events/${e.id}`}`;
     openWA(waShare(text));
 }
 /* ---- RWB team: manage who's going (file 86) ---- */
@@ -2517,7 +2519,7 @@ function expenseForm(e, crowd, myUid, x = null) {
     });
 }
 function settleSheet(e, bal, transfers, people, myUid, nm, spent) {
-    const full = u => { const p = people.find(x => x.user_id === u); return p ? firstName(p) : 'Someone'; };
+    const full = u => { const p = people.find(x => x.user_id === u); return p ? realFirst(p) : 'Someone'; };
     const lines = [...bal].filter(([, v]) => v).sort((a, b) => b[1] - a[1]);
     const shareText = () => `💸 *${e.title}*: settle up\nGroup spent ${rsP(spent)}\n\n${transfers.length ? transfers.map(t => `• ${full(t.from)} → ${full(t.to)}: *${rsP(t.amt)}*`).join('\n') : 'Everyone is settled ✅'}\n\nDetails in the RWB App: https://roninwb.in/app/#events/${e.id}`;
     openSheet('Settle up', `
@@ -3823,10 +3825,10 @@ function tncGate() {
 }
 async function adminsSheet() {
     const list = await api.rwbAdmins().catch(() => []);
-    const me = firstName(state.me);
+    const me = realFirst(state.me);
     openSheet('Message an admin', `<p class="small muted" style="margin-bottom:10px">Choose who to message on WhatsApp.</p>
         <div class="group">${list.length ? list.map(a => `<div class="bike-row"><span class="g-ico">🛡️</span><span class="grow"><b>${esc(firstName(a))}</b><span class="small muted">${a.role === 'superadmin' ? 'Super admin' : 'Admin'}</span></span>
-            <a class="btn sm wa" target="_blank" rel="noopener" href="${waTo(a.phone, `Hi ${firstName(a)}, it's ${me} from RWB. I have a question about the RWB Terms & Conditions.`)}">WhatsApp</a></div>`).join('') : '<p class="small muted" style="padding:12px">Could not load the admins. Please try again.</p>'}</div>`);
+            <a class="btn sm wa" target="_blank" rel="noopener" href="${waTo(a.phone, `Hi ${realFirst(a)}, it's ${me} from RWB. I have a question about the RWB Terms & Conditions.`)}">WhatsApp</a></div>`).join('') : '<p class="small muted" style="padding:12px">Could not load the admins. Please try again.</p>'}</div>`);
 }
 function profileGate() {
     const m = state.me, tk = bikeList().filter(needTank);
@@ -4120,7 +4122,7 @@ async function pingCopy() {
     try { await api.appSeen(copy, build); localStorage.setItem('rwb-seen-2', key); } catch { /* try again next time */ }
 }
 const COPY_NAME = { play: 'Play Store', apk: 'Old APK', browser: 'Browser only', none: 'Not seen lately' };
-const nudgeText = m => `Hi ${firstName(m)}! 👋\n\nThe RWB App is now on the Google Play Store! 🎉 The app you have now won't get updates any more, so please move to the Play Store version (2 minutes):\n\n1️⃣ Uninstall the RWB app you have now (press and hold its icon → Uninstall).\n2️⃣ Install RWB from Google Play: ${PLAY_URL}\n3️⃣ Open RWB and sign in with Google as before. All your data is still there.\n\nRide safe! 🏍️`;
+const nudgeText = m => `Hi ${realFirst(m)}! 👋\n\nThe RWB App is now on the Google Play Store! 🎉 The app you have now won't get updates any more, so please move to the Play Store version (2 minutes):\n\n1️⃣ Uninstall the RWB app you have now (press and hold its icon → Uninstall).\n2️⃣ Install RWB from Google Play: ${PLAY_URL}\n3️⃣ Open RWB and sign in with Google as before. All your data is still there.\n\nRide safe! 🏍️`;
 /* Admin: how many members use each copy, and who to nudge to the Play test */
 async function appCopies() {
     const box = $('#copies'); if (!box) return;
@@ -4287,7 +4289,7 @@ let PLAY_APP = false;
 const getLink = () => PLAY_APP || PLAY_LIVE ? PLAY_URL : 'https://roninwb.in/get';
 const playOnly = () => PLAY_APP || PLAY_LIVE;
 function waMsg(kind, x = {}) {
-    const first = firstName(x) || 'Warrior', me = firstName(state.me) || 'RWB';
+    const first = realFirst(x), me = firstOf(state.me?.full_name) || 'RWB';
     /* one place for every rider, whether they joined in the app, on the website or on the old Google Form */
     const joinLink = `roninwb.in/join and continue with Google using ${x.email ? x.email : 'the email you joined with'}`;
     const T = {
@@ -4403,7 +4405,7 @@ async function adminRequests() {
     later.then(([inc, all]) => { if (!inc || !fuBox?.isConnected) return; fuBox.outerHTML = followUps(inc, all); bindFollowUps(inc, all); }).catch(() => {});
     Object.assign(actions, {
         digest: () => openWA(waShare(digest())),
-        'chg-msg': b => { const c = byCid(b.dataset.cid); tellOnWhatsApp(`Message ${firstName(c)}`, c.phone, `Hi ${firstName(c)}! 👋 About your ${CHANGE_TXT[c.kind].toLowerCase()} update in the RWB App: \n\n– ${firstName(state.me)}, RWB`); },
+        'chg-msg': b => { const c = byCid(b.dataset.cid); tellOnWhatsApp(`Message ${firstName(c)}`, c.phone, `Hi ${realFirst(c)}! 👋 About your ${CHANGE_TXT[c.kind].toLowerCase()} update in the RWB App: \n\n– ${realFirst(state.me)}, RWB`); },
         'chg-ok': b => { const c = byCid(b.dataset.cid); if ((c.kind === 'vrn' || c.kind === 'bike') && !c.vrn_verified && !confirmBox('The VRN isn\'t ticked as verified. Approve anyway?')) return;
             busy(b, async () => { await api.admin.decideChange(c.id, true); state.adminMembers = null; state.dir = null; toast(c.kind === 'tnc' ? 'Recorded' : 'Change approved'); await viewAdmin();
                 if (c.kind !== 'tnc') tellOnWhatsApp(`Let ${firstName(c)} know`, c.phone, waMsg('change_ok', { ...c, what: CHANGE_TXT[c.kind].toLowerCase() })); }); },
@@ -4493,11 +4495,11 @@ function bindFollowUps(inc, all) {
     };
     const shareAll = (pick = { tnc: true, other: true, app: true, gone: true, sticker: true }) => {
         const t = inTab(), tnc = pick.tnc ? t.tnc : [], other = pick.other ? t.other : [], notApp = pick.app ? t.app : [], left = pick.gone ? t.gone : [], sticker = pick.sticker ? t.sticker : [];
-        const firstNames = l => azSort(l).map(m => `• ${firstName(m)}`).join('\n');
+        const firstNames = l => azSort(l).map(m => `• ${realFirst(m)}`).join('\n');
         if (state.fuView === 'gone') return `🏍️ *We miss these warriors!* 🧡\n\n${firstNames(left)}\n\nIf you're in touch with them, let them know they're always welcome back. They can rejoin with the join form at roninwb.in or the RWB App: ${getLink()}\n\nExplore. Evolve. Inspire.`;
         return `🏍️ *RWB App: a quick to-do for some of our warriors* 🙏\n`
             + (tnc.length ? `\n📜 *Please respond to the RWB Terms & Conditions in the app*\nOpen it directly: https://roninwb.in/app/#terms\n(or RWB App → Me → Terms & Conditions → Read & agree)\n${firstNames(tnc)}\n` : '')
-            + (other.length ? `\n✍️ *Please add your missing details* (RWB App → Me → Edit)\n${azSort(other).map(m => `• ${firstName(m)}: ${m.missing.join(', ')}`).join('\n')}\n` : '')
+            + (other.length ? `\n✍️ *Please add your missing details* (RWB App → Me → Edit)\n${azSort(other).map(m => `• ${realFirst(m)}: ${m.missing.join(', ')}`).join('\n')}\n` : '')
             + (sticker.length ? `\n🏷️ *RWB sticker not received yet?*\nCollect it at our next meet-up or ride. Already got one? Update it in the RWB App → Me → More from RWB: https://roninwb.in/app/#me\n${firstNames(sticker)}\n` : '')
             + (notApp.length ? `\n📲 *Not on the RWB App yet?* Get it: ${getLink()}\nSign in with the email you gave on the join form.${playOnly() ? '' : `\nAndroid guide: ${INSTALL_ANDROID}`}\niPhone guide: ${INSTALL_IPHONE}\n${firstNames(notApp)}\n` : '')
             + `\nThank you! Explore. Evolve. Inspire.`;
@@ -4712,7 +4714,7 @@ function memberEdit(m) {
 async function adminBdays() {
     state.bdays = await api.birthdays(7);
     const today = state.bdays.filter(b => b.day === todayISO()), later = state.bdays.filter(b => b.day !== todayISO());
-    const personal = b => `Happy Birthday ${firstName(b)}! 🎂 Have a fantastic day and many more miles ahead. — RWB 🧡`;
+    const personal = b => `Happy Birthday ${realFirst(b)}! 🎂 Have a fantastic day and many more miles ahead. — RWB 🧡`;
     $('#admin-body').innerHTML = `
         <div class="card bday"><h3>Today</h3>${today.length ? `<ul>${today.map(b => `<li class="row" style="justify-content:space-between;margin:6px 0"><span>${esc(b.full_name)}</span>${b.phone ? `<a class="btn sm ghost" href="${waTo(b.phone, personal(b))}" target="_blank" rel="noopener">Message</a>` : ''}</li>`).join('')}</ul>
             <p class="small muted" style="margin-bottom:10px">“Wish in group” opens WhatsApp with the message ready. Pick the RWB community, then type @ and their name to tag them before sending.</p>
@@ -5694,7 +5696,7 @@ async function boardCard1080(key, raw) {
     const W = 1080, H = 1350, L = 64, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     const x = cv.getContext('2d'), D = "'Barlow Condensed','Arial Narrow',sans-serif", F = "'Barlow',system-ui,sans-serif";
     await Promise.all(['800 100px "Barlow Condensed"', '600 40px "Barlow"', '700 40px "Barlow"'].map(f => document.fonts?.load(f).catch(() => {})));
-    const name = r => firstName(r);
+    const name = r => realFirst(r);
     const fit = (t, mw) => { while (x.measureText(t).width > mw && t.length > 3) t = t.slice(0, -2).trimEnd() + '…'; return t; };
     const lin = (x0, y0, x1, y1, stops) => { const g = x.createLinearGradient(x0, y0, x1, y1); stops.forEach(([o, c]) => g.addColorStop(o, c)); return g; };
     const rad = (cx, cy, r, c0, c1) => { const g = x.createRadialGradient(cx, cy, 0, cx, cy, r); g.addColorStop(0, c0); g.addColorStop(1, c1); return g; };
@@ -5771,7 +5773,7 @@ async function boardCard1080(key, raw) {
 }
 async function shareBoard(key, raw) {
     const B = BOARDS[key], top3 = lbRows(key, raw).slice(0, 3);
-    const text = `🏆 *RWB ${B.title}* · ${lbPerLabel(state.boardPer || 'all')}\n${top3.map((r, i) => `${MEDAL[i]} ${firstName(r)} · ${B.big(r)}`).join('\n')}\n\n👉 https://roninwb.in`;
+    const text = `🏆 *RWB ${B.title}* · ${lbPerLabel(state.boardPer || 'all')}\n${top3.map((r, i) => `${MEDAL[i]} ${realFirst(r)} · ${B.big(r)}`).join('\n')}\n\n👉 https://roninwb.in`;
     await shareCard(await boardCard1080(key, raw), text, B.title);
 }
 /* how far behind the next rider you are, in the board's own units */
