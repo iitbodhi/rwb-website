@@ -39,6 +39,12 @@ b: app
 After a ride shared on Track (1 km or more), a line of the route appears under "Recent rides" on the Track screen for 7 days, grouped by day and by event. Tap it to replay the ride on a map (play/pause, slider, speed up to 600×; event rides play every rider together).
 Privacy: the part within about 300 m of the start and end of every line is never shown, so nobody sees where you live. Only members see lines, never RWB FAM. You (or an admin) can delete your own line any time; lines are deleted automatically 7 days after the ride.
 
+## Save a ride to my phone, keep a ride forever, top speed of a ride
+k: save ride, download ride, keep ride, saved rides, offline ride, ride gone after 7 days, top speed, highest speed, max speed, speed wrong, speedometer
+b: app
+In a ride's playback, tap the download button at the top right ("Save to phone"). The ride is kept inside the RWB app on your phone only (not on RWB's server), stays after the 7 days and plays even without internet. Saved rides are listed under "Saved on this phone" on the Track screen; tap the orange tick in playback to remove one. It stays on that phone only, so it's gone if you uninstall the app or clear its data.
+Playback and Recent rides show each ride's top speed ("top km/h"). Top speed comes from the phone's GPS, which is the true speed; a bike's speedometer reads about 5–8% higher by law (it may never show less than the real speed), so 120 km/h on GPS is about 128 on the bike's speedometer. The phone sends its speed about every 5 seconds, so a very short burst can be missed.
+
 ## SOS in the RWB app: how to send an emergency alert
 k: emergency, accident, help, breakdown alert, danger, sos button, cancel sos, i'm safe
 b: app

@@ -6637,7 +6637,7 @@ async function viewTrack() {
     actions = { 'trk-share': () => shareSheet(trk.filter, trk.filter ? (state.evd?.events || []).find(e => e.id === trk.filter)?.title : ''), 'trk-sos': () => sosSheet(),
         'trk-all': () => setFilter(null), 'trk-ev': el => setFilter(Number(el.dataset.e)), 'trk-rider': el => openRider(el.dataset.k), 'trk-fit': () => { trkFollow(null); fitAll(true); },
         'trk-me': () => centreMe(), 'trk-layers': () => layersSheet(), 'trk-full': () => trkFull(), 'trk-zin': () => trk.map?.zoomIn(), 'trk-zout': () => trk.map?.zoomOut(),
-        'trk-unfollow': () => trkFollow(null), 'trk-play': el => ridePlay(Number(el.dataset.r) || null, Number(el.dataset.e) || null) };
+        'trk-unfollow': () => trkFollow(null), 'trk-play': el => ridePlay(Number(el.dataset.r) || null, Number(el.dataset.e) || null, el.dataset.s || null) };
     $('#trk-box').addEventListener('click', e => {   /* full screen: the box sits outside the page, so its buttons need their own listener */
         if (app.contains(e.currentTarget)) return;
         const el = e.target.closest('[data-act]'), fn = el && actions[el.dataset.act]; if (fn) { e.preventDefault(); fn(el); }
@@ -6874,6 +6874,25 @@ const PLAY_I = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" class="fi
 const PAUSE_I = '<svg viewBox="0 0 24 24"><path d="M8 5h3v14H8zM13 5h3v14h-3z" class="fill"/></svg>';
 const CLOSE_I = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 const TRASH_I = '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
+const SAVE_I = '<svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg>';
+const SAVED_I = '<svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg>';
+/* Saved rides (Nov 27 2026): "Save to phone" in playback keeps the ride's lines on this phone only (IndexedDB 'rwb-rides',
+   one copy per member, never sent anywhere, not cleared by the 7-day clean-up or by signing out). Plays back offline. */
+let ridesDbP = null;
+const ridesDb = () => ridesDbP ??= new Promise(res => { try { const r = indexedDB.open('rwb-rides', 1); r.onupgradeneeded = () => r.result.createObjectStore('rides');
+    r.onsuccess = () => res(r.result); r.onerror = () => res(null); } catch { res(null); } });
+const rideOwner = () => String(state.me?.id || 'x') + '|';
+async function ridesTx(mode, fn) {
+    const db = await ridesDb(); if (!db) throw new Error('This phone doesn’t allow saving rides in the app.');
+    return new Promise((ok, no) => { const t = db.transaction('rides', mode), q = fn(t.objectStore('rides')); let out;
+        if (q) q.onsuccess = () => { out = q.result; }; t.oncomplete = () => ok(out); t.onerror = () => no(t.error || new Error('Could not save on this phone (storage full?)')); });
+}
+const savedRideGet = key => ridesTx('readonly', st => st.get(rideOwner() + key)).catch(() => null);
+const savedRidePut = rec => ridesTx('readwrite', st => st.put(rec, rideOwner() + rec.key));
+const savedRideDel = key => ridesTx('readwrite', st => st.delete(rideOwner() + key));
+const savedRideAll = () => ridesTx('readonly', st => st.getAll(IDBKeyRange.bound(rideOwner(), rideOwner() + '\uffff')))
+    .then(a => (a || []).sort((x, y) => Date.parse(y.ended_at) - Date.parse(x.ended_at))).catch(() => []);
+const topKmh = r => Math.round(Math.max(r?.top_spd ? r.top_spd * 3.6 : 0, ...(r?.pts || []).map(p => p[3] || 0)));
 const LINE_COLORS = ['#f57d43', '#3b82f6', '#22c55e', '#e11d48', '#a855f7', '#eab308', '#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#14b8a6', '#f43f5e'];
 const hmTxt = t => new Date(t).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
 const clockTxt = t => { const d = new Date(t), y = new Date(); y.setDate(y.getDate() - 1);
@@ -6884,16 +6903,20 @@ async function loadRides(force) {
     if (!force && trk.rides && Date.now() - trk.ridesAt < 120000) return drawRides();
     if (trk.ridesBusy) return; trk.ridesBusy = true;
     try { trk.rides = await api.trackRidesToday(); trk.ridesAt = Date.now(); } catch { trk.rides = trk.rides || []; } finally { trk.ridesBusy = false; }
+    trk.saved = await savedRideAll();
     drawRides();
 }
+const rideMeta = (r, when) => [rideKm({ ride_km: r.km }), avgKmh({ ride_km: r.km, move_s: r.move_s, top_spd: r.top_spd }) ? `avg ${avgKmh({ ride_km: r.km, move_s: r.move_s, top_spd: r.top_spd })}` : '',
+    topKmh(r) ? `top ${topKmh(r)} km/h` : '', when].filter(Boolean).join(' · ');
+const dayTxt = t => new Date(t).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: new Date(t).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
 function drawRides() {
     const box = $('#trk-rides'); if (!box) return;
-    const list = trk.rides || [];
-    if (!list.length) { box.innerHTML = ''; return; }
+    const list = trk.rides || [], saved = trk.saved || [];
+    if (!list.length && !saved.length) { box.innerHTML = ''; return; }
     const evs = new Map(), items = [];
     list.forEach(r => { if (r.event_id) { const g = evs.get(r.event_id) || { id: r.event_id, title: r.event, rides: [] }; g.rides.push(r); evs.set(r.event_id, g); }
         else items.push({ t: Date.parse(r.ended_at), html: `<button class="trk-row ride" data-act="trk-play" data-r="${r.id}"><span class="tr-face">${face({ full_name: r.name, avatar_url: r.avatar }, 'avatar sm')}</span>
-            <span class="grow"><b class="tr-name">${esc(r.name)}${r.me ? ' <span class="muted">(you)</span>' : ''}</b><span class="tr-meta">${[rideKm({ ride_km: r.km }), avgKmh({ ride_km: r.km, move_s: r.move_s, top_spd: r.top_spd }) ? `avg ${avgKmh({ ride_km: r.km, move_s: r.move_s, top_spd: r.top_spd })} km/h` : '', hmTxt(Date.parse(r.ended_at))].filter(Boolean).join(' · ')}</span></span>
+            <span class="grow"><b class="tr-name">${esc(r.name)}${r.me ? ' <span class="muted">(you)</span>' : ''}</b><span class="tr-meta">${rideMeta(r, hmTxt(Date.parse(r.ended_at)))}</span></span>
             <span class="tr-play">${PLAY_I}</span></button>` }); });
     evs.forEach(g => { const t = Math.max(...g.rides.map(r => Date.parse(r.ended_at))), n = g.rides.length;
         items.push({ t, html: `<button class="trk-row ride ev" data-act="trk-play" data-e="${g.id}"><span class="tr-face">${faceStack(g.rides.slice(0, 3).map(r => ({ full_name: r.name, avatar_url: r.avatar })), n - 3)}</span>
@@ -6905,19 +6928,31 @@ function drawRides() {
         return d.toDateString() === new Date().toDateString() ? 'Today' : d.toDateString() === y.toDateString() ? 'Yesterday' : d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }); };
     let last = '', html = '';
     show.forEach(i => { const d = day(i.t); if (d !== last) { html += `<h3 class="trk-sub">${d === 'Today' ? 'Recent rides · Today' : d}</h3>`; last = d; } html += i.html; });
-    box.innerHTML = html + (items.length > show.length ? `<button type="button" class="btn ghost block" data-x="more-rides">Show more</button>` : '');
+    html += items.length > show.length ? `<button type="button" class="btn ghost block" data-x="more-rides">Show more</button>` : '';
+    /* rides kept on this phone */
+    const sv = saved.slice(0, trk.savedN || 5);
+    if (sv.length) html += `<h3 class="trk-sub">Saved on this phone</h3>` + sv.map(s => { const one = s.lines.length === 1 ? s.lines[0] : null;
+        return `<button class="trk-row ride${one ? '' : ' ev'}" data-act="trk-play" data-s="${esc(s.key)}"><span class="tr-face">${one ? face({ full_name: one.name, avatar_url: one.avatar }, 'avatar sm') : faceStack(s.lines.slice(0, 3).map(r => ({ full_name: r.name, avatar_url: r.avatar })), s.lines.length - 3)}</span>
+            <span class="grow"><b class="tr-name">${one ? esc(one.name) : '🏍️ ' + esc(s.title || 'Event ride')}</b><span class="tr-meta">${one ? rideMeta(one, dayTxt(Date.parse(s.ended_at))) : `${s.lines.length} riders · ${dayTxt(Date.parse(s.ended_at))}`}</span></span>
+            <span class="tr-play">${PLAY_I}</span></button>`; }).join('')
+        + (saved.length > sv.length ? `<button type="button" class="btn ghost block" data-x="more-saved">Show more</button>` : '');
+    box.innerHTML = html;
     box.querySelector('[data-x=more-rides]')?.addEventListener('click', () => { trk.ridesN = (trk.ridesN || 8) + 8; drawRides(); });
+    box.querySelector('[data-x=more-saved]')?.addEventListener('click', () => { trk.savedN = (trk.savedN || 5) + 10; drawRides(); });
 }
-async function ridePlay(rid, eid) {
+async function ridePlay(rid, eid, skey) {
     let L; try { L = trk.L || await loadLeaflet(); } catch (e) { toast(e.message, true); return; }
-    const key = eid ? 'e' + eid : 'r' + rid, info = eid ? (trk.rides || []).find(r => r.event_id === eid) : (trk.rides || []).find(r => r.id === rid);
+    const key = skey || (eid ? 'e' + eid : 'r' + rid), kept = await savedRideGet(key);
+    if (kept) { eid = kept.event_id || null; rid = eid ? null : kept.lines[0]?.id; }
+    const live = eid ? (trk.rides || []).find(r => r.event_id === eid) : (trk.rides || []).find(r => r.id === rid);
+    const info = live || (kept && { event: kept.title, name: kept.title, started_at: kept.started_at, ended_at: kept.ended_at });
     const lay = gdOverlay('trk-play', 'Ride playback'), el = lay.el;
     el.innerHTML = `<div class="tp-top"><button type="button" class="tf" data-x="close" aria-label="Close">${CLOSE_I}</button>
-        <span class="tp-title grow"><b>${esc(eid ? info?.event || 'Event ride' : info?.name || 'Ride')}</b><small>${info ? clockTxt(Date.parse(info.started_at)) + ' – ' + hmTxt(Date.parse(info.ended_at)) : ''}</small></span><span class="tp-del"></span></div>
+        <span class="tp-title grow"><b>${esc(eid ? info?.event || 'Event ride' : info?.name || 'Ride')}</b><small>${info ? clockTxt(Date.parse(info.started_at)) + ' – ' + hmTxt(Date.parse(info.ended_at)) : ''}</small></span><span class="tp-save"></span><span class="tp-del"></span></div>
         <div class="tp-map"></div><div class="tp-panel">${SKEL(1)}</div>`;
     el.querySelector('[data-x=close]').onclick = () => gdClose();
     trk.lines ??= new Map();
-    let lines = trk.lines.get(key);
+    let lines = kept?.lines || trk.lines.get(key);
     if (!lines) { try { lines = await api.trackRideLines(rid, eid); trk.lines.set(key, lines); } catch (e) { if (gdLayer === lay) el.querySelector('.tp-panel').innerHTML = `<p class="warn small">${esc(e.message)}</p>`; return; } }
     if (gdLayer !== lay) return;
     lines = (lines || []).filter(x => x.pts?.length >= 2);
@@ -6929,7 +6964,27 @@ async function ridePlay(rid, eid) {
     const T0 = Math.min(...R.map(r => r.ts[0])), T1 = Math.max(...R.map(r => r.ts.at(-1))), span = Math.max(T1 - T0, 1000);
     const SPEEDS = [30, 60, 120, 300, 600];
     const st = { t: T0, play: false, speed: SPEEDS.find(s => span / s <= 90000) || 600, focus: R.length === 1 ? R[0] : null, raf: null, last: 0, drawAt: 0 };
-    const mine = R.find(r => r.me), canDel = mine || (isAdmin() && R.length === 1);
+    const mine = R.find(r => r.me), canDel = live && (mine || (isAdmin() && R.length === 1));
+    /* Save to phone: a copy of this ride on this phone (no server, never deleted after 7 days) */
+    const saveBox = el.querySelector('.tp-save');
+    let isKept = !!kept;
+    const saveBtn = () => { saveBox.innerHTML = `<button type="button" class="tf${isKept ? ' on' : ''}" data-x="save" aria-label="${isKept ? 'Saved on this phone' : 'Save to phone'}">${isKept ? SAVED_I : SAVE_I}</button>`;
+        saveBox.querySelector('button').onclick = saveTap; };
+    const saveTap = async () => {
+        try {
+            if (isKept) {
+                if (!confirmBox('Remove this ride from your phone?' + (live ? '' : ' It can’t be brought back.'))) return;
+                await savedRideDel(key); isKept = false; toast('Removed from your phone');
+            } else {
+                const t0 = Math.min(...lines.map(x => Date.parse(x.started_at))), t1 = Math.max(...lines.map(x => Date.parse(x.ended_at)));
+                await savedRidePut({ key, saved_at: new Date().toISOString(), event_id: eid || null, title: eid ? info?.event || lines[0]?.event || 'Event ride' : lines[0]?.name || 'Ride',
+                    started_at: new Date(t0).toISOString(), ended_at: new Date(t1).toISOString(), lines });
+                isKept = true; toast('Saved on your phone');
+            }
+            saveBtn(); trk.saved = await savedRideAll(); drawRides();
+        } catch (er) { toast(er.message || 'Could not save on this phone', true); }
+    };
+    saveBtn();
     if (canDel) el.querySelector('.tp-del').innerHTML = `<button type="button" class="tf" data-x="del" aria-label="Delete ride">${TRASH_I}</button>`;
     const map = L.map(el.querySelector('.tp-map'), { zoomControl: false, attributionControl: true, zoomSnap: 0.5 });
     map.attributionControl.setPrefix(false); const tl = { tiles: [] }; trkTiles(L, map, tl);
@@ -6954,7 +7009,7 @@ async function ridePlay(rid, eid) {
         const f = (t - r.ts[lo]) / Math.max(1, r.ts[hi] - r.ts[lo]), a = r.ll[lo], b = r.ll[hi];
         return { i: lo, f, pos: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f], kmh: r.pts[hi][3], km: (r.cum[lo] + (r.cum[hi] - r.cum[lo]) * f) / 1000, on: true };
     };
-    const tile = (v, l) => `<span class="ts"><b>${v}</b><small>${l}</small></span>`;
+    const tile = (v, l, c) => `<span class="ts${c ? ' ' + c : ''}"><b>${v}</b><small>${l}</small></span>`, groupTop = Math.max(0, ...R.map(topKmh));
     const draw = full => {
         const t = st.t, now = performance.now(), lines2 = now - st.drawAt > 150 || full; if (lines2) st.drawAt = now;
         const P = R.map(r => { const p = at(r, t); r.mk.setLatLng(p.pos); r.mk.getElement()?.classList.toggle('off', !p.on); r.mk.getElement()?.classList.toggle('done', !!p.done);
@@ -6964,12 +7019,12 @@ async function ridePlay(rid, eid) {
         range.value = Math.round((t - T0) / span * 1000);
         if (R.length > 1) panel.querySelectorAll('.tp-chip').forEach((c, i) => { c.classList.toggle('on', st.focus === R[i]); c.querySelector('small').textContent = P[i].on && !P[i].done && P[i].kmh ? P[i].kmh + ' km/h' : P[i].done ? '🏁' : ''; });
         const f = st.focus, fp = f && P[R.indexOf(f)];
-        let spread = 0; const live = R.map((r, i) => ({ r, p: P[i] })).filter(x => x.p.on && !x.p.done);
-        if (!f) live.forEach((a, i) => live.slice(i + 1).forEach(b => { spread = Math.max(spread, distM({ lat: a.p.pos[0], lng: a.p.pos[1] }, { lat: b.p.pos[0], lng: b.p.pos[1] })); }));
+        let spread = 0; const onRoad = R.map((r, i) => ({ r, p: P[i] })).filter(x => x.p.on && !x.p.done);
+        if (!f) onRoad.forEach((a, i) => onRoad.slice(i + 1).forEach(b => { spread = Math.max(spread, distM({ lat: a.p.pos[0], lng: a.p.pos[1] }, { lat: b.p.pos[0], lng: b.p.pos[1] })); }));
         const hm = new Date(t).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }).split(' ');
-        panel.querySelector('.tp-stats').innerHTML = tile(`${hm[0]}<small> ${hm[1] || ''}</small>`, 'time') + (f
-            ? tile(fp.on && !fp.done ? fp.kmh : 0, 'km/h') + tile(`${fp.km.toFixed(1)}<small>/${Number(f.km).toFixed(1)}</small>`, 'km') + tile(avgKmh({ ride_km: f.km, move_s: f.move_s, top_spd: f.top_spd }) || '–', 'avg km/h')
-            : tile(live.length, 'on the road') + tile(live.length > 1 ? distTxt(spread) : '–', 'group spread') + tile(R.length, 'riders'));
+        panel.querySelector('.tp-stats').innerHTML = tile(hm[0], hm[1] || 'time') + (f
+            ? tile(fp.on && !fp.done ? fp.kmh : 0, 'km/h') + tile(fp.km.toFixed(1), `of ${Number(f.km).toFixed(1)} km`) + tile(avgKmh({ ride_km: f.km, move_s: f.move_s, top_spd: f.top_spd }) || '–', 'avg km/h') + tile(topKmh(f) || '–', 'top km/h', 'ts-top')
+            : tile(onRoad.length, 'on the road') + tile(onRoad.length > 1 ? distTxt(spread) : '–', 'group spread') + tile(R.length, 'riders') + tile(groupTop || '–', 'top km/h', 'ts-top'));
     };
     const loop = ts => {
         st.raf = null; if (!st.play || gdLayer !== lay) return;

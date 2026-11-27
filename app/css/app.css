@@ -2860,3 +2860,13 @@ html.calm:not(#_) .lb-hero::before,html.calm:not(#_) .lb-cup,html.calm:not(#_) .
 /* Join requests: why a Non-Ronin rider would like to join (Nov 26 2026) */
 .req-msg.why{background:color-mix(in srgb,var(--orange) 9%,transparent);border-color:color-mix(in srgb,var(--orange) 24%,transparent)}
 .req-msg.why span{color:var(--orange)}
+
+/* Ride playback: top speed tile + Save to phone (Nov 27 2026) */
+.tp-stats{grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}
+.tp-stats .ts{padding:8px 6px}
+.tp-stats .ts b{font-size:1.05rem;overflow:hidden;text-overflow:clip}
+.tp-stats .ts small{font-size:.66rem;white-space:nowrap}
+.tp-stats .ts b small{font-size:.62rem}
+.tp-stats .ts.ts-top b{color:var(--orange)}
+.tp-save:empty{display:none}
+.tp-save .tf.on{background:var(--orange);border-color:var(--orange);color:#fff}
