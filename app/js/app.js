@@ -204,8 +204,9 @@ const tankSpec = (b = mainBike()) => { const [lo, hi] = KMPL_RANGE[b.ronin ? 'ro
    Riders log litres + odometer at every fill-up (any amount). Each fill-up's litres refill what was used since the
    previous fill-up, so a reading = km since the previous fill-up ÷ litres of this one. Mistakes are caught by what a
    bike can really do (TVS Ronin 225: 25–50 km/l; other bikes 12–80 km/l):
-     • a reading too high (a part fill, a fill-up not logged, an odometer typo) is joined with the next one(s), up to 3
-       fill-ups; if it still isn't realistic, those fill-ups are left out and marked "Check";
+     • a reading too high (a part fill, a fill-up not logged, an odometer typo) is joined with the next fill-up(s), up to 3;
+       if it still isn't realistic, only the first of them is left out (marked "Check") and the rest are
+       read again from it, so one missed fill-up costs one reading;
      • a reading too low, or litres more than the tank holds, is left out and marked "Check";
      • the same odometer twice (not updated) joins with the next fill-up; exact duplicates are skipped.
    Average = all good km ÷ all good litres. Boards need 200+ km of good readings (MIN_BOARD_KM).
@@ -213,21 +214,23 @@ const tankSpec = (b = mainBike()) => { const [lo, hi] = KMPL_RANGE[b.ronin ? 'ro
 const KMPL_RANGE = { ronin: [25, 50], other: [12, 80] }, MIN_BOARD_KM = 200;
 const fuelKey = f => `${f.bike_slot ?? 1}|${f.fill_date}|${f.odometer_km}|${Number(f.litres)}|${!!f.full_tank}`;
 function fuelReadings(logs, spec) {
-    const out = [], bad = new Set(), seen = new Set(), cap = spec.size || 20;
-    let prev = null, d = 0, l = 0, n = 0, chain = [];
-    const drop = () => { chain.forEach(x => bad.add(x.id)); d = l = n = 0; chain = []; };
-    for (const f of logs) {
-        const key = fuelKey(f); if (seen.has(key)) continue; seen.add(key);
-        const L = Number(f.litres), odo = Number(f.odometer_km);
-        if (L > cap + 0.5) { if (prev) { chain.push(f); drop(); } else bad.add(f.id); prev = f; continue; }
-        if (!prev) { prev = f; continue; }
-        d += odo - Number(prev.odometer_km); l += L; n++; chain.push(f); prev = f;
-        if (d <= 0) continue;
+    const rows = [], seen = new Set(), out = [], bad = new Set(), cap = spec.size || 20;
+    for (const f of logs) { const key = fuelKey(f); if (!seen.has(key)) { seen.add(key); rows.push(f); } }
+    const odo = j => Number(rows[j].odometer_km);
+    let base = -1, i = 0;
+    while (i < rows.length) {
+        if (Number(rows[i].litres) > cap + 0.5) { for (let j = base + 1; j <= i; j++) bad.add(rows[j].id); base = i++; continue; }
+        if (base < 0) { base = i++; continue; }
+        const n = i - base, d = odo(i) - odo(base);
+        let l = 0; for (let j = base + 1; j <= i; j++) l += Number(rows[j].litres);
         const k = d / l;
-        if (k >= spec.lo && k <= spec.hi) { out.push({ end: f, dist: d, litres: l, kmpl: k, exact: true }); d = l = n = 0; chain = []; }
-        else if (k < spec.lo || n >= 3 || l > cap * 2) drop();
+        if (d > 0 && k >= spec.lo && k <= spec.hi) { out.push({ end: rows[i], dist: d, litres: l, kmpl: k, exact: true }); base = i++; continue; }
+        /* can't add up: leave out only the first fill-up after the last good one and try again from it
+           (a missed fill-up then costs one reading, not the good ones after it) */
+        if (d > 0 ? k < spec.lo || n >= 3 || l > cap * 2 : n >= 3) { bad.add(rows[base + 1].id); base++; i = base + 1; continue; }
+        i++;
     }
-    return { out, bad, open: chain.map(x => x.id) };
+    return { out, bad, open: rows.slice(base + 1).map(f => f.id) };
 }
 const sumKmpl = t => { const d = t.reduce((a, x) => a + x.dist, 0), l = t.reduce((a, x) => a + x.litres, 0); return l ? d / l : null; };
 /* logs: ONE bike's fill-ups, sorted by odometer */

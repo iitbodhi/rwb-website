@@ -2,8 +2,8 @@
 -- Riders now log only litres, ₹, odometer and date (Full tank, DTE, Trip A and notes are no longer asked;
 -- old values stay in fuel_logs but are ignored).
 -- A reading = km since the previous fill-up ÷ litres of this fill-up. Realistic range: TVS Ronin 225 25–50 km/l,
--- other bikes 12–80. Too high → joined with the next fill-up(s) (part fills, a missed log, an odometer typo), up to 3;
--- still unrealistic, too low, or litres over the tank → left out. Boards need 200+ km of good readings.
+-- other bikes 12–80. Too high → joined with the next fill-up(s), up to 3 (part fills); still unrealistic (a missed log, a typo) or too
+-- low → only the first of them is left out and the rest read again from it; litres over the tank → left out. Boards need 200+ km of good readings.
 -- Same maths as fuelReadings() in app/js/app.js: keep both the same.
 -- Also: members.avg_kmpl / kmpl_tanks are now kept up to date by a trigger on fuel_logs (not only by the app),
 -- and every rider's figure is recalculated once below. Safe to run twice.
@@ -12,8 +12,7 @@ create or replace function private.fuel_readings(p_user uuid, p_slot int default
 returns table(end_d date, dist numeric, used numeric, exact boolean)
 language plpgsql stable security definer set search_path = public as $$
 declare m record; model text; vk text; ronin boolean; cap numeric; lo numeric; hi numeric;
-        f record; seen text[] := '{}'; k text; have boolean := false; p_odo numeric;
-        d numeric := 0; l numeric := 0; n int := 0; r numeric;
+        os numeric[]; ls numeric[]; ds date[]; cnt int; base int := 0; i int := 1; n int; d numeric; l numeric; r numeric;
 begin
   select * into m from members where user_id = p_user limit 1;
   if p_slot = 1 then model := m.bike; vk := coalesce(private.vrn_key(m.vrn), 'main');
@@ -22,22 +21,28 @@ begin
   cap := case when ronin then 14 else coalesce(nullif(m.tanks ->> vk, '')::numeric, 20) end;
   lo := case when ronin then 25 else 12 end;
   hi := case when ronin then 50 else 80 end;
-  for f in select * from fuel_logs where user_id = p_user and bike_slot = p_slot
-             and (p_slot = 1 or bike_vrn is null or private.vrn_key(bike_vrn) = vk)
-           order by odometer_km, fill_date, id loop
-    k := f.fill_date || '|' || f.odometer_km || '|' || f.litres::numeric || '|' || f.full_tank;
-    if k = any(seen) then continue; end if;
-    seen := seen || k;
-    if f.litres > cap + 0.5 then d := 0; l := 0; n := 0; have := true; p_odo := f.odometer_km; continue; end if;
-    if not have then have := true; p_odo := f.odometer_km; continue; end if;
-    d := d + (f.odometer_km - p_odo); l := l + f.litres; n := n + 1; p_odo := f.odometer_km;
-    if d <= 0 then continue; end if;
+  -- one row per fill-up (exact duplicates skipped), by odometer
+  select array_agg(x.odometer_km::numeric order by x.odometer_km, x.fill_date, x.id), array_agg(x.litres::numeric order by x.odometer_km, x.fill_date, x.id),
+         array_agg(x.fill_date order by x.odometer_km, x.fill_date, x.id)
+    into os, ls, ds
+    from (select distinct on (f.fill_date, f.odometer_km, f.litres::numeric, f.full_tank) f.*
+            from fuel_logs f where f.user_id = p_user and f.bike_slot = p_slot
+             and (p_slot = 1 or f.bike_vrn is null or private.vrn_key(f.bike_vrn) = vk)
+           order by f.fill_date, f.odometer_km, f.litres::numeric, f.full_tank, f.id) x;
+  cnt := coalesce(array_length(os, 1), 0);
+  while i <= cnt loop
+    if ls[i] > cap + 0.5 then base := i; i := i + 1; continue; end if;
+    if base = 0 then base := i; i := i + 1; continue; end if;
+    n := i - base; d := os[i] - os[base];
+    select sum(ls[j]) into l from generate_series(base + 1, i) j;
     r := d / l;
-    if r between lo and hi then
-      end_d := f.fill_date; dist := d; used := l; exact := true; return next;
-      d := 0; l := 0; n := 0;
-    elsif r < lo or n >= 3 or l > cap * 2 then d := 0; l := 0; n := 0;
+    if d > 0 and r between lo and hi then
+      end_d := ds[i]; dist := d; used := l; exact := true; return next;
+      base := i; i := i + 1; continue;
     end if;
+    -- can't add up: leave out only the first fill-up after the last good one, read again from it
+    if (d > 0 and (r < lo or n >= 3 or l > cap * 2)) or (d <= 0 and n >= 3) then base := base + 1; i := base + 1; continue; end if;
+    i := i + 1;
   end loop;
 end $$;
 revoke execute on function private.fuel_readings(uuid, int) from public, anon, authenticated;
