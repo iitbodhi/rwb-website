@@ -4670,6 +4670,7 @@ function bindFollowUps(inc, all) {
             + (other.length ? `\n✍️ *Please add your missing details* (RWB App → Me → Edit)\n${groupLabels(other).map(({ m, label }) => `• ${label}: ${m.missing.join(', ')}`).join('\n')}\n` : '')
             + (sticker.length ? `\n🏷️ *RWB sticker not received yet?*\nCollect it at our next meet-up or ride. Already got one? Update it in the RWB App → Me → More from RWB: https://roninwb.in/app/#me\n${firstNames(sticker)}\n` : '')
             + (notApp.length ? `\n📲 *Not on the RWB App yet?* Get it: ${getLink()}\nSign in with the email you gave on the join form.${playOnly() ? '' : `\nAndroid guide: ${INSTALL_ANDROID}`}\niPhone guide: ${INSTALL_IPHONE}\n${firstNames(notApp)}\n` : '')
+            + (notApp.length ? '' : `\n📲 Don't have the RWB App yet? Get it on Google Play: ${getLink()}\n`)
             + `\nThank you! Explore. Evolve. Inspire.`;
     };
     Object.assign(actions, {
