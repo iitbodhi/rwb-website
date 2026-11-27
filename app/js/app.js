@@ -4475,6 +4475,8 @@ function waGroupSheet(m, action, opts = {}) {
         body.querySelector('[data-x=skip]').onclick = () => { done(); if (welcome) tellOnWhatsApp(`Let ${first} know`, m.phone, waMsg(welcome, m)); else closeSheet(); };
     });
 }
+/* run in WhatsApp Web's console (Ctrl+Shift+J) with the group open: copies every member's number (Bodhi tested it, Nov 27 2026) */
+const WA_COPY_CODE = "(()=>{try{const C=require('WAWebCollections');let L=null;try{L=require('WAWebApiContact')}catch(e){}const ch=C.Chat.getActive(),g=ch&&(ch.groupMetadata||C.GroupMetadata.get(ch.id));if(!g)return console.log('Open the RWB group first');const out=[];let nameOnly=0;g.participants.getModelsArray().forEach(p=>{let id=p.id;if(id.server==='lid'&&L&&L.getPhoneNumber){const pn=L.getPhoneNumber(id);if(pn)id=pn}if(id.server==='lid'){const c=C.Contact.get(p.id);out.push('~ '+((c&&(c.name||c.pushname))||'unknown'));nameOnly++}else out.push('+'+id.user)});copy(out.join('\\n'));console.log('Copied '+out.length+' members ('+nameOnly+' without a number)')}catch(e){console.log('Did not work: '+e.message)}})()";
 async function adminWhatsApp() {
     state.adminMembers ??= await api.admin.members();
     const all = state.adminMembers;
@@ -4486,11 +4488,12 @@ async function adminWhatsApp() {
         <button class="btn sm wa" data-act="wa-do" data-id="${t.member_id}">${t.action === 'add' ? 'Add now' : 'Remove now'}</button><button class="btn sm ghost" data-act="wa-done" data-id="${t.member_id}" aria-label="Done">✓</button></div>`;
     $('#admin-body').innerHTML = `${todo.length ? `<h2 class="group-title">To do in the WhatsApp group (${todo.length})</h2><div class="list" style="margin-bottom:18px">${todo.map(tRow).join('')}</div>` : ''}
         <h2 class="group-title">Check the group against RWB</h2><details class="howto"${state.waPaste ? '' : ' open'}><summary>How to copy the group list</summary>
-        <ol class="small"><li>On a computer, open <b>web.whatsapp.com</b> and this app (<b>roninwb.in/app</b> → Admin → WhatsApp) side by side.</li>
-            <li>Open the RWB WhatsApp group and wait a few seconds: the line under the group name turns into everyone's names and numbers.</li>
-            <li>Triple-click that line, copy it (Ctrl+C) and paste it below (Ctrl+V).</li>
-            <li>If that doesn't copy everyone: open Group info → the member list, select the names with the mouse, copy and paste; scroll and repeat. Pasting the same person twice is fine.</li></ol>
-        <p class="small muted">Numbers match exactly. People saved in your contacts come as the name you saved, and the app matches those to member names where it can. Nothing is changed by itself: you decide what to do with each list.</p></details>
+        <ol class="small"><li>On a computer, open <b>web.whatsapp.com</b> and this app (<b>roninwb.in/app</b> → Admin → WhatsApp) in two tabs.</li>
+            <li>Tap <b>Copy code</b> below.</li>
+            <li>In WhatsApp Web, open the RWB group, press <b>Ctrl + Shift + J</b>, paste (Ctrl+V) and press Enter. First time only: type <b>allow pasting</b> and Enter, then paste again.</li>
+            <li>It says <b>“Copied 604 members”</b>. Come back here, paste into the box and tap <b>Check</b>.</li></ol>
+        <button class="btn ghost block" data-act="wa-code" style="margin-bottom:12px">Copy code</button>
+        <p class="small muted">It only reads the member list on your screen; nothing is changed or sent. Numbers match exactly. Nothing changes in RWB by itself: you decide what to do with each list.</p></details>
         <textarea id="wa-paste" rows="6" placeholder="Paste the WhatsApp group's member list here" style="margin-top:12px;font-size:.88rem">${esc(state.waPaste)}</textarea>
         <div class="row" style="gap:8px;margin:8px 0 14px"><button class="btn grow" data-act="wa-check">Check</button><button class="btn ghost" data-act="wa-clear">Clear</button></div>
         <div id="wa-out"></div>`;
@@ -4522,6 +4525,7 @@ async function adminWhatsApp() {
             state.waRes = waCompare(all, p); draw();
             out.scrollIntoView({ behavior: 'smooth', block: 'start' });
         },
+        'wa-code': async b => { try { await navigator.clipboard.writeText(WA_COPY_CODE); toast('Code copied. Paste it in WhatsApp Web (Ctrl+Shift+J)'); b.textContent = 'Copied ✓'; } catch { openSheet('Copy this code', `<textarea rows="8" readonly style="font:12px monospace">${esc(WA_COPY_CODE)}</textarea>`); } },
         'wa-clear': () => { state.waPaste = ''; state.waRes = null; $('#wa-paste').value = ''; draw(); },
         'wa-inv': b => { const m = all.find(x => String(x.id) === b.dataset.id); if (m) tellOnWhatsApp(`Invite ${realFirst(m)}`, m.phone, waMsg('invite', m)); },
         member: el => memberSheet(all.find(m => String(m.id) === el.dataset.id)),
