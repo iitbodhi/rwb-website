@@ -1942,18 +1942,23 @@ async function drawVs(el, mine) {
     if (!el) return;
     const rows = state.board ??= await api.boards().catch(() => []);
     const others = rows.filter(r => !r.is_me && r.kmpl > 0).map(r => Number(r.kmpl));
-    if (!mine) { el.innerHTML = '<p class="small muted">Add two fill-ups with the range on your dash to see how your mileage compares with other warriors.</p>'; return; }
+    if (!mine) { el.innerHTML = '<p class="small muted">Add a few fill-ups to see how your mileage compares with other warriors.</p>'; return; }
     if (others.length < 2) { el.innerHTML = `<p class="small muted">Your average is <b>${kmplTxt(mine)}</b>. Comparison appears once a few more warriors log fill-ups.</p>`; return; }
     const avg = others.reduce((a, b) => a + b, 0) / others.length, best = Math.max(mine, ...others), worst = Math.min(mine, ...others);
     const diff = (mine - avg) / avg * 100, all = [...others, mine].sort((a, b) => b - a), rank = all.indexOf(mine) + 1;
     const better = all.filter(v => v < mine).length / (all.length - 1) * 100;
-    const pos = v => ((v - worst) / Math.max(.1, best - worst) * 100).toFixed(1);
-    const good = diff >= 0;
+    /* scale: a little room either side so end dots and their numbers stay inside the card */
+    const pad = Math.max(.5, (best - worst) * .08), lo = worst - pad, hi = best + pad;
+    const pos = v => Math.min(96, Math.max(4, (v - lo) / Math.max(.1, hi - lo) * 100)).toFixed(1);
+    const good = diff >= 0, top = mine >= best;
+    const tag = (cls, v, name, where) => `<span class="vs-tag ${cls} ${where}" style="left:${pos(v)}%"><b>${v.toFixed(1)}</b><i>${name}</i></span>`;
     el.innerHTML = `<div class="vs-head"><span class="vs-big ${good ? 'up' : 'down'}">${good ? '▲' : '▼'} ${Math.abs(diff).toFixed(0)}%</span>
-            <span class="grow"><b>${good ? 'Better' : 'Lower'} than the RWB average</b><span class="small muted">You get ${kmplTxt(mine)} · RWB average ${kmplTxt(avg)}</span></span></div>
-        <div class="vs-scale" aria-hidden="true"><span class="vs-mark avg" style="left:${pos(avg)}%"></span><span class="vs-mark you" style="left:${pos(mine)}%"></span></div>
-        <div class="vs-ends small muted"><span>${kmplTxt(worst)}</span><span>${kmplTxt(best)}</span></div>
-        <div class="vs-legend small"><span><i class="you"></i>You</span><span><i class="avg"></i>RWB average</span></div>
+            <span class="grow"><b>${top ? 'Best in RWB' : `${good ? 'Better' : 'Lower'} than the RWB average`}</b></span></div>
+        <div class="vs-bar" aria-label="You ${mine.toFixed(1)} km/l, RWB average ${avg.toFixed(1)} km/l, best ${best.toFixed(1)} km/l">
+            ${tag('you' + (top ? ' best' : ''), mine, top ? 'You · Best' : 'You', 'up')}
+            <div class="vs-scale">${top ? '' : `<span class="vs-mark best" style="left:${pos(best)}%"></span>`}<span class="vs-mark avg" style="left:${pos(avg)}%"></span><span class="vs-mark you${top ? ' best' : ''}" style="left:${pos(mine)}%"></span></div>
+            ${tag('avg', avg, 'RWB avg', 'down')}${top ? '' : tag('best', best, 'Best', Math.abs(pos(best) - pos(avg)) < 22 ? 'up' + (Math.abs(pos(best) - pos(mine)) < 22 ? ' far' : '') : 'down')}
+        </div>
         <div class="vs-stats"><div><b>#${rank}</b><span>of ${all.length} Mileage Warriors</span></div><div><b>${better.toFixed(0)}%</b><span>of riders you beat</span></div><div><b>${kmplTxt(best)}</b><span>best in RWB</span></div></div>`;
 }
 const TIPS = `<details class="howto tips"><summary>Tips to get more km/l</summary>
@@ -3033,7 +3038,7 @@ function fuelForm(f = null, slot = 1) {
             if (rec.litres && rec.amount) msg.push(`₹${(rec.amount / rec.litres).toFixed(2)}/L`);
             if (rec.litres && rec.odometer_km != null) {
                 const c = check(rec);
-                if (c.why) msg.push(`<span class="warn">${esc(c.why)}</span>`);
+                if (c.why) { calc.innerHTML = (msg.length ? msg.join(' · ') : '') + `<span class="ff-warn">${esc(c.why)}</span>`; return; }
                 else if (c.k) msg.push(`<b style="color:var(--orange)">${c.k.toFixed(1)} km/l</b> · ${c.d.toLocaleString('en-IN')} km since ${fmtDayMonth(c.before.fill_date)}`);
             }
             calc.innerHTML = msg.join(' · ');

@@ -2887,3 +2887,23 @@ body[data-fam] .tp-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
 :root[data-theme=dark] .badge.warn{color:#f2a33a}
 @media (prefers-color-scheme:dark){:root[data-theme=system] .badge.warn{color:#f2a33a}}
 .calc .warn{color:#d97706;font-weight:600}
+
+/* Mileage form warning + You vs RWB bar with numbers on the dots (Nov 28 2026) */
+.calc .ff-warn{display:block;margin-top:4px;color:#c26a06;font-weight:600}
+:root[data-theme=dark] .calc .ff-warn{color:#f2a33a}
+@media (prefers-color-scheme:dark){:root[data-theme=system] .calc .ff-warn{color:#f2a33a}}
+.vs-bar{position:relative;padding:44px 0 44px;margin:6px 0 0}
+.vs-bar .vs-scale{margin:0 2px}
+.vs-mark.best{background:#e2a827}
+.vs-mark.you.best{background:var(--c-spend);box-shadow:0 0 0 3px #e2a827}
+.vs-tag{position:absolute;transform:translateX(-50%);display:grid;justify-items:center;line-height:1.1;white-space:nowrap;pointer-events:none}
+.vs-tag.up{bottom:calc(50% + 14px)}
+.vs-tag.down{top:calc(50% + 14px)}
+.vs-tag.up.far{bottom:auto;top:-4px}
+.vs-tag b{font:700 .95rem/1.1 var(--display);font-variant-numeric:tabular-nums}
+.vs-tag i{font-style:normal;font-size:.68rem;color:var(--muted)}
+.vs-tag.you b{color:var(--c-spend)}
+.vs-tag.avg b{color:var(--muted)}
+.vs-tag.best b{color:#c98f12}
+:root[data-theme=dark] .vs-tag.best b{color:#f0bd45}
+@media (prefers-color-scheme:dark){:root[data-theme=system] .vs-tag.best b{color:#f0bd45}}
