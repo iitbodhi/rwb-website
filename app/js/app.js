@@ -2938,7 +2938,7 @@ const HOWTO = `<details class="howto" id="howto"><summary>How mileage works</sum
         <li>Don't skip one: each fill-up's mileage is the km since the last one ÷ its litres.</li>
     </ol>
     <div class="formula">Mileage = km ridden ÷ petrol used</div>
-    <p class="muted small">Fill-ups that don't add up (a typo, a missed fill-up) show <b>Check</b> and are left out until fixed.</p>
+    <p class="muted small">A part fill shows <b>Pending</b> and counts with your next fill-up. Fill-ups that don't add up (a typo, a missed fill-up) show <b>Check</b> and are left out until fixed.</p>
 </details>`;
 
 async function viewMileage() {
@@ -2959,7 +2959,7 @@ async function viewMileage() {
         ${b.slot === 1 ? `<section class="section"><h2>You vs RWB</h2><div class="card vs" id="vs"><p class="small muted">Comparing…</p></div></section>` : ''}
         ${TIPS}
         ${mine.length || (b.slot === 1 && svcs.length) ? `<section class="section"><h2>Spends and mileage</h2><div class="card trend" id="trend"></div></section>` : ''}
-        <section class="section"><h2>Fill-ups${bikes.length > 1 ? ` · ${esc(b.name)}` : ''}</h2>${mine.length ? `<div class="list">${[...mine].reverse().map(f => fuelCard(f, byEnd.get(f.id), ms.tanks.bad.has(f.id) || ms.tanks.open.includes(f.id))).join('')}</div>` :
+        <section class="section"><h2>Fill-ups${bikes.length > 1 ? ` · ${esc(b.name)}` : ''}</h2>${mine.length ? `<div class="list">${[...mine].reverse().map(f => fuelCard(f, byEnd.get(f.id), ms.tanks.bad.has(f.id) ? 'bad' : ms.tanks.open.includes(f.id) ? 'open' : '')).join('')}</div>` :
             `<div class="card empty"><b>No fill-ups yet</b>Add litres, ₹ and the odometer at every fill-up.</div>`}</section>
         <button class="btn fab" data-act="add-fuel">＋ Add fuel</button>`;
     actions = { open: el => fuelForm(logs.find(f => String(f.id) === el.dataset.id)), 'add-fuel': () => fuelForm(null, b.slot),
@@ -2971,7 +2971,7 @@ function fuelCard(f, t, bad) {
     const p = parts(f.fill_date);
     return `<button class="card tap item" data-act="open" data-id="${f.id}">
         <div class="date"><b>${p.d}</b><span>${MONTHS[p.m - 1]} ${String(p.y).slice(2)}</span></div>
-        <div><p style="font-weight:600">${Number(f.litres).toFixed(2)} L${bad ? ' <span class="badge warn">Check</span>' : ''}</p>
+        <div><p style="font-weight:600">${Number(f.litres).toFixed(2)} L${bad === 'bad' ? ' <span class="badge warn">Check</span>' : bad === 'open' ? ' <span class="badge">Pending</span>' : ''}</p>
             <p class="small muted">${km(f.odometer_km)}${f.amount != null ? ` · ${rs(f.amount)}` : ''}</p></div>
         <div class="right">${t ? `<span class="kmpl">${t.kmpl.toFixed(1)}</span><br><span class="small muted">km/l</span>` : ''}</div></button>`;
 }
@@ -3030,7 +3030,10 @@ function fuelForm(f = null, slot = 1) {
             if (!before) return {};
             const d = rec.odometer_km - Number(before.odometer_km), k = d / rec.litres;
             if (d <= 0) return { d, before, why: `Same odometer as your fill-up on ${fmtDate(before.fill_date)}.` };
-            return { d, k, before, why: k > spec.hi ? `${k.toFixed(0)} km/l is more than a ${bike.ronin ? 'Ronin' : 'bike'} can do. Missed logging a fill-up, or an odometer typo?`
+            /* more km than these litres allow, but within one tank's range: most likely a part fill (the tank wasn't
+               filled back to where it was), which the maths joins with the next fill-up, so it's no mistake */
+            if (k > spec.hi && d <= cap * spec.hi) return { d, k, before, note: 'Part fill: its mileage shows after your next fill-up.' };
+            return { d, k, before, why: k > spec.hi ? `${d.toLocaleString('en-IN')} km on ${rec.litres} L is more than one tank can do. Missed logging a fill-up, or an odometer typo?`
                                     : k < spec.lo ? `${k.toFixed(0)} km/l is too low. Check the odometer and litres.` : null };
         };
         const update = () => {
@@ -3038,6 +3041,7 @@ function fuelForm(f = null, slot = 1) {
             if (rec.litres && rec.amount) msg.push(`₹${(rec.amount / rec.litres).toFixed(2)}/L`);
             if (rec.litres && rec.odometer_km != null) {
                 const c = check(rec);
+                if (c.note) { calc.innerHTML = (msg.length ? msg.join(' · ') : '') + `<span class="ff-note">${esc(c.note)}</span>`; return; }
                 if (c.why) { calc.innerHTML = (msg.length ? msg.join(' · ') : '') + `<span class="ff-warn">${esc(c.why)}</span>`; return; }
                 else if (c.k) msg.push(`<b style="color:var(--orange)">${c.k.toFixed(1)} km/l</b> · ${c.d.toLocaleString('en-IN')} km since ${fmtDayMonth(c.before.fill_date)}`);
             }

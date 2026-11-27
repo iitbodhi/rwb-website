@@ -2907,3 +2907,4 @@ body[data-fam] .tp-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
 .vs-tag.best b{color:#c98f12}
 :root[data-theme=dark] .vs-tag.best b{color:#f0bd45}
 @media (prefers-color-scheme:dark){:root[data-theme=system] .vs-tag.best b{color:#f0bd45}}
+.calc .ff-note{display:block;margin-top:4px;color:var(--muted);font-weight:500}
