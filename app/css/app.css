@@ -2917,3 +2917,23 @@ body[data-fam] .tp-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
 .ff-ask-btns{display:grid;gap:8px}
 .ff-ask-btns .btn{margin:0}
 .ff-missed{margin:0 0 10px}
+
+/* ===== RWB FAM Home (Nov 28 2026): rider + four big buttons, menu behind the RWB logo ===== */
+.fam-logo{position:relative;padding:0;border:0;background:none;display:grid;place-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.fam-logo i{position:absolute;right:-5px;bottom:-4px;width:19px;height:19px;border-radius:50%;display:grid;place-items:center;background:var(--grad-o,var(--orange));box-shadow:0 2px 6px -1px rgba(0,0,0,.35);border:2px solid var(--bg,#fff)}
+.fam-logo i svg{width:11px;height:11px;fill:none;stroke:#fff;stroke-width:2.6;stroke-linecap:round}
+.fam-rider2{padding:16px 18px}
+.fam-rider2 .grow b{font-size:1.25rem}
+.fam-acts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.fam-act{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:128px;padding:16px 10px;border-radius:22px;text-decoration:none;color:var(--text);font:inherit;cursor:pointer;
+  background:var(--card);border:1px solid color-mix(in srgb,var(--text) 9%,transparent);box-shadow:var(--glass3d,0 6px 18px -10px rgba(0,0,0,.25))}
+.fam-act span{width:58px;height:58px;border-radius:18px;display:grid;place-items:center;background:color-mix(in srgb,var(--orange) 14%,transparent)}
+.fam-act svg{width:30px;height:30px;fill:none;stroke:var(--orange);stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.fam-act b{font-size:1.08rem;text-align:center;line-height:1.2}
+.fam-act.main,.fam-act.wide{grid-column:1/-1;flex-direction:row;justify-content:flex-start;min-height:0;padding:16px 18px;gap:16px}
+.fam-act.main{background:var(--grad-o,var(--orange));border-color:transparent;color:#fff;min-height:96px}
+.fam-act.main span{background:rgba(255,255,255,.2)}.fam-act.main svg{stroke:#fff}
+.fam-act.main b{font-size:1.3rem}
+.fam-act:active{transform:scale(.98)}
+.top .fam-logo{margin-right:8px;flex:none}
+.top .fam-logo i{width:20px;height:20px;right:-6px;bottom:-5px}

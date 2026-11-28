@@ -193,6 +193,7 @@ async function supabaseApi(url, key) {
         },
         /* RWB FAM */
         famMe: async () => must(await sb.rpc('fam_me')),
+        famTeam: async () => must(await sb.rpc('fam_team')),
         famInviteInfo: async code => must(await sb.rpc('fam_invite_info', { p_code: code })),
         myFam: async () => must(await sb.rpc('my_fam')),
         removeFam: async id => must(await sb.rpc('remove_fam', { p_id: id })),
@@ -771,7 +772,8 @@ function demoApi() {
             return wait({ ok: true, name: m.full_name.split(' ')[0], moved: !!m.user_id }); },
         /* RWB FAM demo: localStorage rwb-demo-fam = 1 makes this phone a FAM user of Demo Rider */
         famMe: () => { if (!demoFam()) return wait(null); const m = db.members.find(x => x.user_id === 'me'), f = db.famMe ||= { id: 91, full_name: 'Rina Mallick', phone: '9830012345', address: 'Salt Lake, Kolkata', email: 'rina.m@gmail.com', approved: true, created_at: new Date().toISOString() };
-            return wait({ ...f, active: true, member: f.approved ? { id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url, bike: m.bike, odo: 7982, on_app: true } : { full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url } }); },
+            return wait({ ...f, active: true, member: f.approved ? { id: m.id, full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url, bike: m.bike, odo: 7982, on_app: true, phone: m.phone } : { full_name: m.full_name, nickname: m.nickname, avatar_url: m.avatar_url } }); },
+        famTeam: () => wait([{ first_name: 'Bodhi', role: 'superadmin', phone: '9000000001' }, { first_name: 'Sayantan', role: 'admin', phone: '9000000002' }, { first_name: 'Arnab', role: 'coordinator', phone: '9000000003' }, { first_name: 'Priya', role: 'coordinator', phone: '9000000004' }]),
         famInviteInfo: code => wait(code === 'RWB-K7Q2' ? { name: firstOf(me()), left: 3 - (db.fam || [1]).length } : null),
         myFam: () => wait({ code: 'RWB-K7Q2', max: 3, fam: db.fam ||= [{ id: 91, full_name: 'Rina Mallick', phone: '9830012345', approved: true, created_at: new Date(Date.now() - 3 * 864e5).toISOString() }] }),
         removeFam: id => { db.fam = (db.fam || []).filter(f => f.id !== id); save(); return wait('removed'); },

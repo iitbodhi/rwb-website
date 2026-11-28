@@ -425,7 +425,7 @@ const docsAlert = () => (state.docs || []).some(d => docStatus(d).level !== 'ok'
 const getAppBtn = () => !NATIVE && /android/i.test(navigator.userAgent) ? `<a class="get-app" href="${PLAY_URL}" aria-label="Get the RWB app on Google Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span>App</span></a>` : '';
 /* quiet shimmer bars instead of a "Loading…" line */
 const SKEL = (n = 3) => `<div class="skel" aria-hidden="true">${'<i></i>'.repeat(n)}</div><span class="sr-only">Loading</span>`;
-const top = (title, right = '') => `${demoBar()}<header class="top"><img class="logo" src="icons/logo-128.webp" alt="RWB" decoding="sync"><h1>${esc(title)}</h1>${right}${getAppBtn()}
+const top = (title, right = '') => `${demoBar()}<header class="top">${isFam() && famOn() ? `<button type="button" class="fam-logo" data-act="fam-menu" aria-label="RWB menu: events, gallery and more"><img class="logo" src="icons/logo-128.webp" alt="" decoding="sync"><i aria-hidden="true">${FAM_MENU_ICO}</i></button>` : '<img class="logo" src="icons/logo-128.webp" alt="RWB" decoding="sync">'}<h1>${esc(title)}</h1>${right}${getAppBtn()}
     ${isFam() ? '' : `<a class="icon-btn bell cal-btn" href="#calendar" aria-label="Calendar${calAlert() ? ' (something due soon)' : ''}">${CAL_ICON}${calAlert() ? '<i class="dot"></i>' : ''}</a>`}
     <a class="icon-btn bell guide-btn" href="#guides" aria-label="Guides and how-to videos">${HELP_ICON}</a>
     <a class="icon-btn bell" href="#news" aria-label="Announcements${unread() ? ' (new)' : ''}">${BELL}${unread() ? '<i class="dot"></i>' : ''}</a>
@@ -438,6 +438,7 @@ app.addEventListener('click', e => {
     const fn = actions[el.dataset.act] || globalActions[el.dataset.act]; if (fn) { e.preventDefault(); fn(el); }
 });
 const globalActions = {
+    'fam-menu': () => famMenu(),
     'reset-demo': () => { if (confirmBox('Reset the demo data?')) { api.resetDemo(); Object.assign(state, { services: null, fuel: null, bdays: null, adminMembers: null, listings: null, news: null, board: null, dir: null }); boot(); } },
     'add-service': () => serviceForm(),
     'add-fuel': () => fuelForm(),
@@ -7519,34 +7520,57 @@ function famJoinScreen(sess, code = famCodeSaved()) {
 }
 
 /* ---------- FAM: Home ---------- */
+/* RWB FAM Home (Nov 28 2026, family feedback): only the rider and four big buttons. Everything else
+   (events, gallery, updates, Warriorboards, VRN check, guides) is in the menu behind the RWB logo (famMenu). */
+const FAM_MENU_ICO = '<svg viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></svg>';
 async function viewFamHome() {
-    const f = state.fam, m = f.member || {}, first = firstName(m);
-    const [news, evd] = await Promise.all([load.news(), loadEvents().catch(() => null)]);
-    const up = evd ? evd.events.filter(e => e.status === 'live' && !evtPast(e)).slice(0, 3) : [];
-    const feed = visibleNews(news);
+    const f = state.fam, m = f.member || {}, first = firstName(m), ph = String(m.phone || '').replace(/\D/g, '').slice(-10);
     firstNotifAsk();
     let pushAsk = false; try { pushAsk = NATIVE ? !localStorage.getItem(FCM_KEY) && !localStorage.getItem('rwb-push-dismissed') : pushSupported() && Notification.permission === 'default' && !localStorage.getItem('rwb-push-dismissed'); } catch { /* ignore */ }
+    const I = { pin: '<svg viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/></svg>',
+        msg: '<svg viewBox="0 0 24 24"><path d="M4.5 19.5l1.2-3.6A8 8 0 1 1 8.6 18.6z"/><path d="M9 10.5h6M9 13.5h4"/></svg>',
+        call: '<svg viewBox="0 0 24 24"><path d="M6.6 3.8h2.6l1.4 4.1-1.9 1.3a11 11 0 0 0 6.1 6.1l1.3-1.9 4.1 1.4v2.6a2 2 0 0 1-2.1 2A16.5 16.5 0 0 1 4.6 5.9a2 2 0 0 1 2-2.1z"/></svg>',
+        team: '<svg viewBox="0 0 24 24"><path d="M12 3.5l7 2.6v5.2c0 4.4-3 8-7 9.2-4-1.2-7-4.8-7-9.2V6.1z"/><path d="M9.2 12l2 2 3.6-3.8"/></svg>' };
     app.innerHTML = top(`Hi, ${firstName(state.me)}`) + `
-        <section class="card fam-rider">
-            <div class="row">${face(m, 'avatar lg')}<span class="grow"><span class="small muted">Your RWB rider</span><b>${esc(m.full_name ? firstName(m) : 'RWB member')}</b></span></div>
-            <div class="fam-odo"><span class="fam-odo-l">${esc(m.bike || 'Motorcycle')} · odometer</span><b>${m.odo ? Number(m.odo).toLocaleString('en-IN') : '–'}</b><em>km</em></div>
-            <a class="btn block" href="#track">📍 Where is ${esc(first)}?</a>
+        <section class="card fam-rider fam-rider2">
+            <div class="row">${face(m, 'avatar lg')}<span class="grow"><span class="small muted">Your RWB rider</span><b>${esc(m.full_name ? firstName(m) : 'RWB member')}</b>
+                <span class="small muted">${esc(m.bike || 'Motorcycle')}${m.odo ? ` · ${Number(m.odo).toLocaleString('en-IN')} km` : ''}</span></span></div>
         </section>
         ${pushAsk ? `<div class="banner"><span class="b-ico">${ICON.bell}</span><span class="grow">Get important RWB announcements as notifications</span><button class="btn sm" data-act="push-on">Turn on</button><button class="icon-btn" data-act="push-later" aria-label="Not now">✕</button></div>` : ''}
-        ${vrnCheckCard()}
-        ${up.length ? `<section class="section"><h2>RWB events <a href="#events">See all</a></h2><div class="list home-evt">${up.map(e => eventCard(e, evd)).join('')}</div></section>` : ''}
-        ${feed.length ? `<section class="section"><h2>Important updates <span class="h-acts"><a href="#news">See all</a></span></h2><div class="group news-mini">${feed.slice(0, 3).map(n => newsRow(n, false, true)).join('')}</div></section>` : ''}
-        ${galSection()}
-        <section class="section"><h2>Explore</h2><div class="group">
-            <a href="https://roninwb.in" target="_blank" rel="noopener"><span class="g-ico">${ICON.globe}</span><span class="grow"><b>roninwb.in</b><span class="small muted">Rides, events, gallery and the team</span></span>${ICON.out}</a>
-        </div></section>`;
-    swipeToDismiss(app, () => { if (!app.querySelector('.news-mini [data-swipe]')) render(); });
-    bindVrnCheck(); bindHomeGallery(navN);
+        <nav class="fam-acts" aria-label="Your rider">
+            <a class="fam-act main" href="#track"><span>${I.pin}</span><b>Track ${esc(first)}</b></a>
+            ${ph ? `<a class="fam-act" href="${waTo(ph)}" target="_blank" rel="noopener"><span>${I.msg}</span><b>Message ${esc(first)}</b></a>
+            <a class="fam-act" href="tel:+91${ph}"><span>${I.call}</span><b>Call ${esc(first)}</b></a>` : ''}
+            <button type="button" class="fam-act wide" data-act="fam-team"><span>${I.team}</span><b>Call RWB Coordinator</b></button>
+        </nav>`;
     actions = {
-        evt: el => location.hash = '#events/' + el.dataset.id,
+        'fam-team': () => famTeamSheet(),
         'push-on': b => busy(b, async () => { await enablePush(); toast('Notifications are on'); render(); }),
         'push-later': () => { try { localStorage.setItem('rwb-push-dismissed', '1'); } catch { /* ignore */ } render(); }
     };
+}
+/* the RWB team a family member can call: admins and coordinators (file 100: fam_team) */
+async function famTeamSheet() {
+    const list = await api.famTeam().catch(() => api.joinHelpAdmins().then(l => l.map(a => ({ ...a, role: 'admin' }))).catch(() => []));
+    const role = r => r === 'coordinator' ? 'RWB Coordinator' : r === 'superadmin' ? 'RWB Super admin' : 'RWB Admin';
+    openSheet('Call RWB', `<div class="group">${list.length ? list.map(a => `<div class="bike-row"><span class="g-ico">🛡️</span><span class="grow"><b>${esc(a.first_name)}</b><span class="small muted">${role(a.role)}</span></span>
+            <a class="btn sm" href="tel:+91${esc(String(a.phone).slice(-10))}">Call</a></div>`).join('') : '<p class="small muted" style="padding:12px">Could not load the RWB team right now.</p>'}</div>`);
+}
+/* everything else for RWB FAM: tap the RWB logo */
+function famMenu() {
+    const row = (href, ico, t, sub) => `<a href="${href}" data-x="go"><span class="g-ico">${ico}</span><span class="grow"><b>${t}</b><span class="small muted">${sub}</span></span>${ICON.chev}</a>`;
+    openSheet('RWB', `<div class="group fam-menu">
+        ${row('#events', '📅', 'RWB events', 'Rides and meet-ups')}
+        ${row('#gallery', '🖼️', 'RWB Gallery', 'Photos from our rides')}
+        ${row('#news', '📣', 'Important updates', 'News from the RWB team')}
+        ${row('#crew', '🏆', 'Warriorboards', 'Top riders')}
+        <a href="#" data-x="vrn"><span class="g-ico">🔎</span><span class="grow"><b>VRN check</b><span class="small muted">Is this rider in RWB?</span></span>${ICON.chev}</a>
+        ${row('#guides', '❓', 'Guides', 'How to use the app')}
+        <a href="https://roninwb.in" target="_blank" rel="noopener"><span class="g-ico">${ICON.globe}</span><span class="grow"><b>roninwb.in</b><span class="small muted">The RWB website</span></span>${ICON.out}</a>
+        </div>`, body => {
+        body.querySelectorAll('[data-x=go]').forEach(a => a.onclick = () => closeSheet());
+        body.querySelector('[data-x=vrn]').onclick = e => { e.preventDefault(); openSheet('VRN check', vrnCheckCard(), () => bindVrnCheck()); };
+    });
 }
 /* FAM turned off: nothing is shown */
 function viewFamOff() {
