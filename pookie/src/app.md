@@ -165,7 +165,7 @@ On the event they can Edit, Cancel or Delete it, add or remove anyone from the G
 k: leaderboard, ranking, top riders, rank, warriorboard, hall of fame, track warriors, mileage warriors, road warriors, service warriors, pookie warriors
 b: app
 Tap Warriors at the bottom. Five boards: Track Warriors (km ridden while sharing on Track), Mileage Warriors (best average km/l of each rider's main bike), Service Warriors (services logged), Road Warriors (odometer km) and Pookie Warriors (XP from Teach Pookie).
-Switch period with Week, Month, 3M, 6M, Year, All. Swipe or tap tiles to change board; your own rank shows on each tile.
+Boards open on Month every time; switch period with Week, Month, 3M, 6M, Year, All. Swipe or tap tiles to change board; your own rank shows on each tile.
 Don't want to appear? Me → Privacy → turn off "Show me on the Warriorboards".
 
 ## RWB Members list: find a rider, team contacts

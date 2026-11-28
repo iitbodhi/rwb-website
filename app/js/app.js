@@ -1525,6 +1525,7 @@ function galSecure(key, on) {
     RwbTrack()?.secure?.({ on: want }).catch(() => {});   /* older app builds don't have it: nothing happens */
 }
 addEventListener('hashchange', () => { if (!location.hash.startsWith('#gallery')) galSecure('screen', false); });
+addEventListener('hashchange', () => { if (!location.hash.startsWith('#crew')) delete state.boardPer; });   /* Warriorboards open on Month every visit */
 
 /* Home (members and RWB FAM): one slow rolling strip of 16 random photos (a fresh pick each time the app opens).
    It can be swiped, sleeps when off screen or when the app is in the background, and pauses while the page scrolls. */
@@ -6078,7 +6079,7 @@ function lbCount(root) {
 async function viewCrew() {
     const raw = state.board ??= await api.boards().catch(() => api.leaderboard().then(rs => rs.map(r => ({ ...r, services: 0, kmpl: null }))).catch(() => []));
     if (!state.gps || Date.now() - (state.gpsAt || 0) > 120e3) { [state.gps, state.pookieBoard] = await Promise.all([api.gpsBoard().catch(() => []), api.pookieBoard?.().catch(() => []) ?? []]); state.gpsAt = Date.now(); }
-    state.boardKey ??= 'gps'; state.boardPer ??= 'all';
+    state.boardKey ??= 'gps'; state.boardPer ??= '30';   /* every visit opens on Month (Bodhi, Nov 28 2026); reset when leaving #crew */
     if (state.boardPer !== 'all') await lbPeriodLoad(state.boardPer).catch(() => { state.boardPer = 'all'; });
     const keys = Object.keys(BOARDS);
     const mine = Object.fromEntries(keys.map(k => [k, lbRows(k, raw).find(r => r.is_me)?.rank || 0]));
