@@ -425,7 +425,7 @@ const docsAlert = () => (state.docs || []).some(d => docStatus(d).level !== 'ok'
 const getAppBtn = () => !NATIVE && /android/i.test(navigator.userAgent) ? `<a class="get-app" href="${PLAY_URL}" aria-label="Get the RWB app on Google Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span>App</span></a>` : '';
 /* quiet shimmer bars instead of a "Loading…" line */
 const SKEL = (n = 3) => `<div class="skel" aria-hidden="true">${'<i></i>'.repeat(n)}</div><span class="sr-only">Loading</span>`;
-const top = (title, right = '') => `${demoBar()}<header class="top">${isFam() && famOn() ? `<button type="button" class="fam-logo" data-act="fam-menu" aria-label="RWB menu: events, gallery and more"><img class="logo" src="icons/logo-128.webp" alt="" decoding="sync"><i aria-hidden="true">${FAM_MENU_ICO}</i></button>` : '<img class="logo" src="icons/logo-128.webp" alt="RWB" decoding="sync">'}<h1>${esc(title)}</h1>${right}${getAppBtn()}
+const top = (title, right = '') => `${demoBar()}<header class="top">${isFam() && famOn() ? `<button type="button" class="fam-logo" data-act="fam-menu" aria-label="RWB menu: updates, VRN check, guides"><img class="logo" src="icons/logo-128.webp" alt="" decoding="sync"><i aria-hidden="true">${FAM_MENU_ICO}</i></button>` : '<img class="logo" src="icons/logo-128.webp" alt="RWB" decoding="sync">'}<h1>${esc(title)}</h1>${right}${getAppBtn()}
     ${isFam() ? '' : `<a class="icon-btn bell cal-btn" href="#calendar" aria-label="Calendar${calAlert() ? ' (something due soon)' : ''}">${CAL_ICON}${calAlert() ? '<i class="dot"></i>' : ''}</a>`}
     <a class="icon-btn bell guide-btn" href="#guides" aria-label="Guides and how-to videos">${HELP_ICON}</a>
     <a class="icon-btn bell" href="#news" aria-label="Announcements${unread() ? ' (new)' : ''}">${BELL}${unread() ? '<i class="dot"></i>' : ''}</a>
@@ -2174,7 +2174,7 @@ function eventCard(e, d) {
         ${evtCover(e, 'sm')}
         <span class="evt-cbody">
             <span class="evt-crow">${evtTile(e)}<span class="grow">${evtEyebrow(e)}<b>${esc(e.title)}</b><span class="evt-fact">${EVT_ICON.clock}${esc(evtWhen(e, true))}</span>${e.location ? `<span class="evt-fact">${EVT_ICON.pin}${esc(e.location)}</span>` : ''}${!off && !past ? evtSlots(e, n) : ''}</span></span>
-            <span class="evt-meta">${off ? '<span class="badge">Cancelled</span>' : fam ? '<span class="small muted">RWB event</span>' : `${n ? faceStack(c.faces, c.going - c.faces.length) : ''}<span class="small muted">${n ? `${n} ${past ? 'went' : 'going'}` : past ? 'Past event' : 'Be the first to join'}</span>`}
+            <span class="evt-meta">${off ? '<span class="badge">Cancelled</span>' : `${n ? faceStack(c.faces, c.going - c.faces.length) : ''}<span class="small muted">${n ? `${n} ${past ? 'went' : 'going'}` : past ? 'Past event' : 'Be the first to join'}</span>`}
                 ${me ? `<span class="evt-me going">${past ? 'You went' : "You're going"}</span>` : !off && !past && !fam ? '<span class="evt-me ask">Join</span>' : ''}</span>
         </span></button>`;
 }
@@ -2182,11 +2182,11 @@ state.evPeople = {};
 async function eventPage(e) {
     const n = navN, d = state.evd, me = d.mine[e.id], mod = isMod(), myUid = state.myId ??= await api.myId(), fam = isFam();
     /* who's going: shown from the last visit straight away, then refreshed */
-    const cached = state.evPeople[e.id], people = fam ? [] : (cached || []).filter(p => p.status === 'going');
-    if (!fam) api.eventPeople(e.id).then(p => {
+    const cached = state.evPeople[e.id], people = (cached || []).filter(p => p.status === 'going');
+    api.eventPeople(e.id).then(p => {
         state.evPeople[e.id] = p;
         if (!stillHere(n)) return;
-        if (!cached || JSON.stringify(p) !== JSON.stringify(cached)) render(); else if (me || mod) drawExpenses(e, p.filter(x => x.status === 'going'), myUid);
+        if (!cached || JSON.stringify(p) !== JSON.stringify(cached)) render(); else if (!fam && (me || mod)) drawExpenses(e, p.filter(x => x.status === 'going'), myUid);
     }).catch(() => { if (!cached) { state.evPeople[e.id] = []; if (stillHere(n)) render(); } });
     const going = people, guests = going.reduce((a, p) => a + p.guests, 0), cnt = d.counts[e.id];
     const headcount = cached ? going.length + guests : cnt ? cnt.going + cnt.guests : 0;
@@ -2217,9 +2217,9 @@ async function eventPage(e) {
         </section>
         ${e.description ? `<section class="section"><h2>About</h2><div class="card evt-about"><p class="evt-desc clamp" id="evt-desc">${linkify(e.description)}</p><button class="link-btn evt-more" id="evt-more" hidden>Show more</button></div></section>` : ''}
         ${rideLive(e)}
-        ${fam ? '' : `<section class="section"><div class="evt-whohead"><h2>${past ? 'Who went' : "Who's going"}${cached && headcount ? ` <span class="muted">${headcount}</span>` : ''}</h2>${team ? `<span class="btns">${going.length ? '<button class="btn sm ghost" data-act="evt-copy">Share list</button>' : ''}<button class="btn sm" data-act="evt-add">＋ Add rider</button></span>` : ''}</div>
-            <div class="card">${!cached ? SKEL(2) : going.length ? `<div class="evt-plist">${going.map(row).join('')}</div>${guests ? `<p class="small muted" style="margin-top:10px">${going.length} rider${going.length === 1 ? '' : 's'} + ${guests} guest${guests === 1 ? '' : 's'}</p>` : ''}` : `<p class="muted small">${past ? 'Nobody was on the list.' : 'Nobody yet. Be the first!'}</p>`}</div></section>
-        <section class="section" id="exp-sec"><h2>Expenses</h2><div id="exp-body">${me || mod ? SKEL(2) : `<div class="card empty"><b>Split costs with the group</b>Join the event to see and add shared expenses.</div>`}</div></section>`}
+        <section class="section"><div class="evt-whohead"><h2>${past ? 'Who went' : "Who's going"}${cached && headcount ? ` <span class="muted">${headcount}</span>` : ''}</h2>${team ? `<span class="btns">${going.length ? '<button class="btn sm ghost" data-act="evt-copy">Share list</button>' : ''}<button class="btn sm" data-act="evt-add">＋ Add rider</button></span>` : ''}</div>
+            <div class="card">${!cached ? SKEL(2) : going.length ? `<div class="evt-plist">${going.map(row).join('')}</div>${guests ? `<p class="small muted" style="margin-top:10px">${going.length} rider${going.length === 1 ? '' : 's'} + ${guests} guest${guests === 1 ? '' : 's'}</p>` : ''}` : `<p class="muted small">${past ? 'Nobody was on the list.' : fam ? 'Nobody yet.' : 'Nobody yet. Be the first!'}</p>`}</div></section>
+        ${fam ? '' : `<section class="section" id="exp-sec"><h2>Expenses</h2><div id="exp-body">${me || mod ? SKEL(2) : `<div class="card empty"><b>Split costs with the group</b>Join the event to see and add shared expenses.</div>`}</div></section>`}
         ${mod ? `<section class="section"><h2>Organiser</h2><div class="btns">${live ? '<button class="btn ghost" data-act="evt-edit">Edit</button><button class="btn ghost" data-act="evt-cancel">Cancel event</button>' : ''}<button class="btn danger" data-act="evt-del">Delete</button></div></section>` : ''}`;
     actions = {
         rsvp: b => busy(b, async () => { const go = b.dataset.s === 'going';
@@ -7520,8 +7520,8 @@ function famJoinScreen(sess, code = famCodeSaved()) {
 }
 
 /* ---------- FAM: Home ---------- */
-/* RWB FAM Home (Nov 28 2026, family feedback): only the rider and four big buttons. Everything else
-   (events, gallery, updates, Warriorboards, VRN check, guides) is in the menu behind the RWB logo (famMenu). */
+/* RWB FAM Home (Nov 28 2026, family feedback): only the rider and four big buttons. Updates, VRN check,
+   guides and the website are in the menu behind the RWB logo (famMenu); events, gallery and Warriorboards are in the bottom bar. */
 const FAM_MENU_ICO = '<svg viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></svg>';
 async function viewFamHome() {
     const f = state.fam, m = f.member || {}, first = firstName(m), ph = String(m.phone || '').replace(/\D/g, '').slice(-10);
@@ -7562,10 +7562,7 @@ async function famTeamSheet() {
 function famMenu() {
     const row = (href, ico, t, sub) => `<a href="${href}" data-x="go"><span class="g-ico">${ico}</span><span class="grow"><b>${t}</b><span class="small muted">${sub}</span></span>${ICON.chev}</a>`;
     openSheet('RWB', `<div class="group fam-menu">
-        ${row('#events', '📅', 'RWB events', 'Rides and meet-ups')}
-        ${row('#gallery', '🖼️', 'RWB Gallery', 'Photos from our rides')}
         ${row('#news', '📣', 'Important updates', 'News from the RWB team')}
-        ${row('#crew', '🏆', 'Warriorboards', 'Top riders')}
         <a href="#" data-x="vrn"><span class="g-ico">🔎</span><span class="grow"><b>VRN check</b><span class="small muted">Is this rider in RWB?</span></span>${ICON.chev}</a>
         ${row('#guides', '❓', 'Guides', 'How to use the app')}
         <a href="https://roninwb.in" target="_blank" rel="noopener"><span class="g-ico">${ICON.globe}</span><span class="grow"><b>roninwb.in</b><span class="small muted">The RWB website</span></span>${ICON.out}</a>
@@ -7665,7 +7662,7 @@ async function famSheet() {
     const list = d.fam || [], max = d.max || FAM_MAX, full = list.length >= max, me = state.me;
     const msg = `Hi! 🧡 I've added you to my RWB FAM in the RWB App (Ronin Warriors of Bengal).\n\nYou'll see where I am when I share my live location on rides, my bike's odometer, RWB events and important updates.\n\n1️⃣ Open ${famLink(d.code)}\n2️⃣ Sign in with any Google account (remember which one!)\n3️⃣ Enter my code: *${d.code}*\n\n– ${firstName(me)}`;
     openSheet('RWB FAM', `<div class="fam-intro"><span class="fam-intro-ico">${FAM_ICON}</span><p><b>Keep your family in the loop.</b> Invite up to ${max} family members. On the RWB App they see your live location when you share it on Track (and riders on the same event ride), your odometer, RWB events and important announcements.</p></div>
-        <p class="small muted" style="margin:10px 0">They can message or call you and the RWB team. They can't see expenses, RSVPs, MotoMart, Service, Mileage or other riders' phone numbers, and they can't share or send SOS.</p>
+        <p class="small muted" style="margin:10px 0">They can message or call you and the RWB team, and see who's going to RWB events. They can't see expenses, MotoMart, Service, Mileage or other riders' phone numbers, and they can't share or send SOS.</p>
         <h3 class="group-title" style="margin-top:6px">Your FAM <span class="small muted" style="text-transform:none;letter-spacing:0">${list.length} of ${max}</span></h3>
         <div class="group" id="fam-list">${list.length ? list.map(x => `<div class="bike-row">${face(x, 'avatar sm')}<span class="grow"><b>${esc(x.full_name)}</b><span class="small muted">${x.phone ? esc(x.phone.replace(/(\d{5})(\d{5})/, '$1 $2')) + ' · ' : ''}joined ${fmtDate(String(x.created_at).slice(0, 10))}${x.approved === false ? ' · <b class="warn">turned off by them</b>' : ''}</span></span>
             <button class="btn sm ghost" data-rm="${x.id}" data-n="${esc(x.full_name)}">Remove</button></div>`).join('') : '<p class="small muted" style="padding:14px">No one yet. Share your invite below.</p>'}</div>
