@@ -7552,9 +7552,11 @@ async function viewFamHome() {
 /* the RWB team a family member can call: admins and coordinators (file 100: fam_team) */
 async function famTeamSheet() {
     const list = await api.famTeam().catch(() => api.joinHelpAdmins().then(l => l.map(a => ({ ...a, role: 'admin' }))).catch(() => []));
+    const f = state.fam || {}, rider = f.member?.full_name ? realFirst(f.member) : 'an RWB rider';
+    const hi = a => `Hi ${a.first_name}, I'm ${f.full_name || 'family of an RWB rider'}, ${rider}'s family (RWB FAM). `;
     const role = r => r === 'coordinator' ? 'RWB Coordinator' : r === 'superadmin' ? 'RWB Super admin' : 'RWB Admin';
-    openSheet('Call RWB', `<div class="group">${list.length ? list.map(a => `<div class="bike-row"><span class="g-ico">🛡️</span><span class="grow"><b>${esc(a.first_name)}</b><span class="small muted">${role(a.role)}</span></span>
-            <a class="btn sm" href="tel:+91${esc(String(a.phone).slice(-10))}">Call</a></div>`).join('') : '<p class="small muted" style="padding:12px">Could not load the RWB team right now.</p>'}</div>`);
+    openSheet('Call or WhatsApp RWB', `<div class="group fam-team">${list.length ? list.map(a => `<div class="bike-row"><span class="g-ico">🛡️</span><span class="grow"><b>${esc(a.first_name)}</b><span class="small muted">${role(a.role)}</span></span>
+            <a class="btn sm wa" href="${waTo(a.phone, hi(a))}" target="_blank" rel="noopener">WhatsApp</a><a class="btn sm" href="tel:+91${esc(String(a.phone).slice(-10))}">Call</a></div>`).join('') : '<p class="small muted" style="padding:12px">Could not load the RWB team right now.</p>'}</div>`);
 }
 /* everything else for RWB FAM: tap the RWB logo */
 function famMenu() {
