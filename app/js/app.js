@@ -827,6 +827,8 @@ async function viewAccess(status, sess, noJump = false) {
         const mine = await api.myJoin().catch(() => null) || { status };
         const canApply = mine.can_apply !== false;
         const needs = status === 'rejected' ? [] : joinNeeds(mine);
+        const famRej = status === 'rejected' && isFamReject(mine.reason);
+        actions.famvid = () => famVideo();
         actions.edit = b => busy(b, () => startJoin(sess, mine));
         /* Google Play: anyone who can make an account in the app can delete it there too */
         actions.delreq = () => openSheet('Delete my request', `<p style="margin-bottom:10px">This deletes your RWB join request and your sign-in (<b>${esc(sess.email)}</b>) from RWB. The admins won't see your request any more.</p>
@@ -853,10 +855,10 @@ async function viewAccess(status, sess, noJump = false) {
             <li><i aria-hidden="true"></i><span><b>Welcome to RWB</b><small>The app opens with ${esc(sess.email)}</small></span></li></ol>`;
         const note = needs.length ? ['One more step', needs.map(n => NEED_TXT[n]).join(' · ')] : status === 'hold' && mine.hold_note ? ['Note from the admins', mine.hold_note] : status === 'rejected' && mine.reason ? ['Reason', mine.reason] : null;
         const tip = needs.length ? (status === 'hold' && mine.hold_note ? `Note from the admins: ${esc(mine.hold_note)}` : 'The admins need this before they can approve you.') : { pending: 'You\'ll get a notification and a WhatsApp message once you\'re approved.', hold: 'Changed something, or got your Ronin? Update your answers and the request goes back to the admins.',
-            rejected: canApply ? 'If things have changed, or you think this was a mistake, you can apply again.' : 'You can\'t send a new request. If you think this is a mistake, contact RWB.' }[status];
+            rejected: famRej ? 'Ask your rider for their RWB FAM invite code (Home → FAM in their app).' : canApply ? 'If things have changed, or you think this was a mistake, you can apply again.' : 'You can\'t send a new request. If you think this is a mistake, contact RWB.' }[status];
         const btns = needs.length ? `<button class="btn block" data-act="edit">Add ${needs.length > 1 ? 'them' : 'it'} now</button><a class="btn ghost block" href="${RWB_IG_DM}" target="_blank" rel="noopener">Contact RWB</a>` : { pending: '<button class="btn block" data-act="recheck">Check again</button><button class="btn ghost block" data-act="edit">Edit my answers</button>',
             hold: `<button class="btn block" data-act="edit">Update my answers</button><a class="btn ghost block" href="${RWB_IG_DM}" target="_blank" rel="noopener">Contact RWB</a>`,
-            rejected: (canApply ? '<button class="btn block" data-act="edit">Apply again</button>' : '') + `<a class="btn ${canApply ? 'ghost ' : ''}block" href="${RWB_IG_DM}" target="_blank" rel="noopener">Contact RWB</a>` }[status];
+            rejected: famRej ? `<button class="btn block" data-act="fam-join">Join RWB FAM</button><button class="btn ghost block" data-act="famvid">▶ Watch how</button>` : (canApply ? '<button class="btn block" data-act="edit">Apply again</button>' : '') + `<a class="btn ${canApply ? 'ghost ' : ''}block" href="${RWB_IG_DM}" target="_blank" rel="noopener">Contact RWB</a>` }[status];
         const links = { pending: `<a class="link-btn" href="${RWB_IG_DM}" target="_blank" rel="noopener">Contact RWB</a><span aria-hidden="true">·</span><button class="link-btn" data-act="out">Sign out</button>`,
             hold: '<button class="link-btn" data-act="recheck">Check again</button><span aria-hidden="true">·</span><button class="link-btn" data-act="out">Sign out</button>',
             rejected: '<button class="link-btn" data-act="out">Sign out</button>' }[status];
@@ -4423,6 +4425,7 @@ function waMsg(kind, x = {}) {
         returning: `Hi ${first}! 🎉\n\nWelcome back to Ronin Warriors of Bengal! ${x.group ? `Join our official RWB WhatsApp group here: ${x.group}\nTap the link and ask to join; we'll let you in.` : `We'll add you to our official RWB WhatsApp group within 72 hours. Sit tight.`}\n\nThe RWB App: ${getLink()}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}.\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
         group: `Hi ${first}! 👋\n\nHere's the link to join the official RWB WhatsApp group: ${x.group}\n\nTap it and ask to join; we'll let you in. See you on the road! 🏍️\n– ${me}, RWB`,
         rejected: `Hi ${first},\n\nThank you for your interest in Ronin Warriors of Bengal. We're sorry, we couldn't approve your registration this time${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'}\n\nIf things change, you can apply again: open ${joinLink}. If you think this is a mistake, just reply here.\n\nRide safe! 🙏\n– ${me}, RWB`,
+        fam_reject: `Hi ${first}! 👋\n\nThanks for registering with Ronin Warriors of Bengal. Your form came to us as a new RWB member, but you're family of an RWB rider, so *RWB FAM* is the right place for you. It's free, and you'll see your rider's live location on rides, their bike and RWB events.\n\n1️⃣ Ask your rider for their RWB FAM invite code (in their app: Home → FAM)\n2️⃣ Open the RWB App: ${getLink()}\n3️⃣ Tap Continue with Google${x.email ? ` (${x.email})` : ''}\n4️⃣ Tap the big *Join RWB FAM* button and type the code\n\n🎥 Watch how (48 s): ${FAM_VIDEO}\n\nAny questions? Just reply here.\n– ${me}, RWB`,
         hold: `Hi ${first}! 👋\n\nThanks for your interest in Ronin Warriors of Bengal. Your join request is on hold for now${x.note ? `: ${x.note.replace(/[.\s]+$/, '')}.` : '.'}\n\nTo see your request or update your answers, open ${joinLink}. Any questions? Just reply here.\n– ${me}, RWB`,
         change_ok: `Hi ${first}! ✅ Your ${x.what || 'profile'} update in the RWB App is approved. Thanks for keeping your details up to date.\n– ${me}, RWB`,
         change_no: `Hi ${first}, we couldn't approve your ${x.what || 'profile'} update in the RWB App${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'} Just reply here if you'd like help with it. 🙏\n– ${me}, RWB`,
@@ -4824,15 +4827,21 @@ function reasonSheet(title, quick, done) {
         body.querySelector('#rs').onsubmit = e => { e.preventDefault(); const reason = e.target.reason.value.trim(); busy(e.submitter, async () => { closeSheet(); await new Promise(r => setTimeout(r, 50)); await done(reason); }); };
     });
 }
+/* "Intended FAM member": a rider's family member filled the RWB join form instead of joining RWB FAM.
+   The rider sees this reason with a Join RWB FAM button; the WhatsApp message carries the how-to video. */
+const FAM_REJECT = 'You are family of an RWB rider: please join RWB FAM with your rider\'s invite code';
+const isFamReject = t => /join RWB FAM/i.test(t || '');
+const FAM_VIDEO = 'https://roninwb.in/app/videos/fam-invite.mp4';
+const famVideo = () => gdPlayer([{ id: 'b-fam-invite', builtin: true, cat: 'app', kind: 'video', title: 'Invite your family', description: 'Add family to RWB FAM, and how they join', url: 'videos/fam-invite.mp4', thumb_url: 'videos/fam-invite.jpg', duration_s: 48, uploader: 'RWB' }], 0);
 function rejectSheet(r) {
     const quick = ['VRN could not be verified', 'Duplicate entry', 'Did not agree to the T&C', 'Details look fake'];
     openSheet('Reject ' + firstName(r), `<form id="rj"><p class="small muted" style="margin-bottom:10px">They see the reason in the app${r.source === 'form' ? ', and their entry is deleted from the sheet' : ''}. They can apply again unless you mark it as spam. Not sure yet? Use <b>On hold</b> instead.</p>
-        <div class="chips" style="margin-bottom:10px">${quick.map(q => `<button type="button" class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+        <div class="chips" style="margin-bottom:10px">${quick.map(q => `<button type="button" class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}<button type="button" class="chip" data-q="${esc(FAM_REJECT)}">👨‍👩‍👧 Intended FAM member</button></div>
         <label>Reason (the rider sees this)<textarea name="reason" rows="2" maxlength="200"></textarea></label>
         <label class="check-row"><input type="checkbox" name="spam"> <span><b>Spam or fake</b><small class="muted"> They can't send a new request. You can undo it from Rejected.</small></span></label>
         <button class="btn danger block">Reject</button></form>`, body => {
-        body.querySelectorAll('[data-q]').forEach(c => c.onclick = () => { body.querySelector('[name=reason]').value = c.dataset.q; });
-        body.querySelector('#rj').onsubmit = e => { e.preventDefault(); const reason = e.target.reason.value.trim(), spam = e.target.spam.checked; busy(e.submitter, async () => { await api.admin.reject(r.id, reason, spam); closeSheet(); toast(spam ? 'Rejected as spam' : 'Rejected'); await viewAdmin(); if (!spam) tellOnWhatsApp(`Let ${firstName(r)} know`, r.phone, waMsg('rejected', { ...r, reason })); }); };
+        body.querySelectorAll('[data-q]').forEach(c => c.onclick = () => { body.querySelector('[name=reason]').value = c.dataset.q; if (c.dataset.q === FAM_REJECT) body.querySelector('[name=spam]').checked = false; });
+        body.querySelector('#rj').onsubmit = e => { e.preventDefault(); const reason = e.target.reason.value.trim(), spam = e.target.spam.checked; busy(e.submitter, async () => { await api.admin.reject(r.id, reason, spam); closeSheet(); toast(spam ? 'Rejected as spam' : 'Rejected'); await viewAdmin(); if (!spam) tellOnWhatsApp(`Let ${firstName(r)} know`, r.phone, waMsg(isFamReject(reason) ? 'fam_reject' : 'rejected', { ...r, reason })); }); };
     });
 }
 /* On hold: not yes, not no. The rider sees the note in the app (and gets a notification) and can update their answers */
@@ -6256,7 +6265,7 @@ async function boot() {
             return;
         }
         if (status !== 'member') {   /* not a member: in someone's RWB FAM, or joining with an invite code? */
-            const fam = status !== 'not_found' ? null : await api.famMe().catch(() => null);
+            const fam = ['not_found', 'rejected', 'pending', 'hold'].includes(status) ? await api.famMe().catch(() => null) : null;   /* a join request doesn't stop RWB FAM */
             if (fam) return bootFam(fam);
             if (status === 'not_found' && famCodeSaved()) return famJoinScreen(sess);
             return viewAccess(status, sess);
