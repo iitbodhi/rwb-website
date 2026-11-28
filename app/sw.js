@@ -1,6 +1,6 @@
 /* RWB App service worker: keeps the app shell available offline and loads it fast.
    Bump VERSION whenever app files change so phones pick up the new version. */
-const VERSION = 'rwb-app-v260';
+const VERSION = 'rwb-app-v261';
 const SHELL = ['./', 'index.html', 'config.js', 'css/app.css', 'js/app.js', 'js/api.js', 'js/offline.js', '../js/data.js', '../js/terms.js', '../js/pdfview.js',
     'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/app-icon-256.webp', 'icons/logo-128.webp', 'icons/logo-384.webp'];
 
@@ -33,6 +33,20 @@ self.addEventListener('fetch', e => {
        10-minute HTTP cache), falling back to the saved copy when offline */
     /* videos stream straight from the server (they need range requests, and are too big to keep offline) */
     if (url.origin === location.origin && /\.mp4$/i.test(url.pathname)) return;
+    /* Fast start (Nov 28 2026): the app's own files (page, code, styles, icons) open straight from the phone,
+       no waiting for the internet. A fresh copy is fetched in the background for next time. A new version
+       (VERSION bumped) is downloaded whole by the new worker, and the app switches to it when it's next hidden. */
+    if (url.origin === location.origin && (e.request.mode === 'navigate' || /\.(js|css|html|webp|png|jpe?g|svg|webmanifest)$/i.test(url.pathname))) {
+        const nav = e.request.mode === 'navigate';
+        const net = fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }).then(r => {
+            if (r.ok && !r.redirected) { const copy = r.clone(); caches.open(VERSION).then(c => c.put(nav ? 'index.html' : e.request, copy)); }
+            return r;
+        });
+        e.waitUntil(net.then(() => {}, () => {}));
+        e.respondWith(caches.open(VERSION).then(c => c.match(nav ? 'index.html' : e.request, { ignoreSearch: true }))
+            .then(hit => hit || net.catch(() => caches.match(nav ? 'index.html' : e.request, { ignoreSearch: true }).then(r => r || caches.match('index.html')))));
+        return;
+    }
     if (url.origin === location.origin) {
         e.respondWith(fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }).then(r => {
             if (r.ok) { const copy = r.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }

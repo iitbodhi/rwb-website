@@ -6249,9 +6249,26 @@ function initOffline() {
     new MutationObserver(draw).observe(document.getElementById('tabbar'), { attributes: true, attributeFilter: ['hidden'] });
     draw();
 }
+/* Fast start (Nov 28 2026): the first boot shows the data saved on the phone at once (offline.js) and checks the
+   internet behind it; if anything changed, the screen is redrawn once with the new answers (no second download). */
+let firstBoot = true, bootRoute = '';
+const FRESH_KEYS = { services: null, fuel: null, bdays: null, listings: null, news: null, docs: null, reminders: undefined, myBikes: null, ride: null, evd: null, board: null, dir: null, gps: null, pookieBoard: null };
+window.addEventListener('rwb-fresh', e => {
+    const names = e.detail?.names || [];
+    const still = !$('dialog#sheet[open]') && location.hash === bootRoute && (window.scrollY || 0) < 80 && !document.body.classList.contains('blocked');
+    Object.assign(state, FRESH_KEYS);
+    if (still) return api.offline.redraw(() => boot()).catch(() => {});
+    if (names.includes('me') && state.me) api.me().then(m => { if (m) state.me = m; }).catch(() => {});
+    if (names.includes('linkAccount')) api.linkAccount().then(st => { if (st !== 'member' && state.me) location.reload(); }).catch(() => {});
+});
 async function boot() {
+    const fastNow = firstBoot && !!api.offline; firstBoot = false;
+    if (fastNow) { api.offline.fastStart(); bootRoute = location.hash; }
     try {
-        if (await nativeOutdated()) return nativeBlocker();   /* an old RWB Android app: must install the new build first */
+        /* an old RWB Android app: must install the new build first. The Play Store check is slow (it asks Google Play),
+           so the Play copy opens at once and the blocker shows over it only if Play really has a newer version. */
+        if (NATIVE && !state.playChecked && (await nativeInfo()).channel === 'play') { state.playChecked = true; nativeOutdated().then(o => o && nativeBlocker()).catch(() => {}); }
+        else if (!state.playChecked && await nativeOutdated()) return nativeBlocker();
         const androidWeb = !NATIVE && /android/i.test(navigator.userAgent);
         if (androidWeb && !JOIN_MODE) return nativeBlocker(true);   /* Android browser: use the RWB Android app (iPhone stays on the web app); joining from roninwb.in/join works in the browser */
         const sess = await api.session();
@@ -6291,7 +6308,7 @@ async function boot() {
         tabbar.hidden = true;
         const off = !navigator.onLine || /offline|internet/i.test(e.message || '');
         app.innerHTML = `<section class="signin"><img src="icons/app-icon-256.webp" alt=""><div><h1>${off ? 'You\'re offline' : 'Can\'t connect'}</h1><p class="lead">${off ? 'Connect to the internet once, and the RWB App keeps your data on this phone so it opens without internet next time.' : esc(e.message || 'Please check your internet connection.')}</p></div><button class="btn block" onclick="location.reload()">Try again</button></section>`;
-    } finally { hideBoot(); }
+    } finally { hideBoot(); if (fastNow) { bootRoute = location.hash; api.offline.fastDone(); } }
 }
 
 
@@ -6921,7 +6938,7 @@ const rideKm = r => (r.ride_km > 0 ? `${Number(r.ride_km).toLocaleString('en-IN'
 const avgKmh = r => {   /* file 88: distance ÷ time spent moving (hidden when it can't be right, e.g. a ride already going when file 88 ran) */
     if (!r || !(r.move_s >= 60) || !(r.ride_km > 0.2)) return null;
     const v = r.ride_km / (r.move_s / 3600), top = r.top_spd ? r.top_spd * 3.6 : 0;
-    return v > 150 || (top && v > top + 2) ? null : Math.round(v);
+    return v > 150 || (top && Math.round(v) > Math.round(top)) ? null : Math.round(v);   /* the average can never beat the top speed (file 103) */
 };
 const distTxt = m => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`);
 
@@ -7917,9 +7934,16 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
     if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
         const hadSW = !!navigator.serviceWorker.controller;
         navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => {});
-        /* a new version just installed: reload once so the rider sees it straight away */
+        /* a new version just installed (the app opens from the phone's saved copy, sw.js): switch to it at once if the
+           rider has only just opened the app, otherwise quietly the next time the app goes to the background */
         let reloaded = false;
-        navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadSW && !reloaded && !$('dialog#sheet[open]')) { reloaded = true; location.reload(); } });
+        const swap = () => { if (reloaded || $('dialog#sheet[open]')) return false; reloaded = true; location.reload(); return true; };
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!hadSW || reloaded) return;
+            if (performance.now() < 8000 && swap()) return;
+            const later = () => { if (document.visibilityState === 'hidden' && swap()) document.removeEventListener('visibilitychange', later); };
+            document.addEventListener('visibilitychange', later);
+        });
         document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') navigator.serviceWorker.getRegistration().then(r => r && r.update()).catch(() => {}); });
     }
     try { api = await createApi(); }

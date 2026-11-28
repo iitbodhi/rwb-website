@@ -101,10 +101,43 @@ export function withOffline(api) {
         return out;
     }
 
+    /* Fast start (Nov 28 2026): while the app is opening, reads answer from the saved copy at once and the network
+       call runs behind it (the same calls as before, so no extra data). Once the first screen is up (fastDone),
+       if anything came back different, 'rwb-fresh' tells the app to redraw; that redraw uses the answers just
+       fetched (`fresh`, kept 30 s), so nothing is downloaded twice. */
+    let fast = false, bg = [], changed = new Set(), redrawing = false;
+    const fresh = new Map();
+    function fastStart() { fast = true; bg = []; changed = new Set(); setTimeout(fastDone, 10000); }
+    async function fastDone() {
+        if (!fast) return; fast = false;
+        const list = bg; bg = [];
+        await Promise.allSettled(list);
+        if (changed.size) emit('rwb-fresh', { names: [...changed] }); else fresh.clear();
+        changed = new Set();
+    }
+    /* the app's redraw after 'rwb-fresh': reads inside it use the answers just fetched */
+    async function redraw(run) {
+        redrawing = true;
+        try { return await run(); } finally { redrawing = false; fresh.clear(); }
+    }
+
     function wrapRead(obj, name, prefix = '') {
         const fn = obj[name]; if (typeof fn !== 'function') return;
         const k = prefix + name;
         obj[name] = async (...args) => {
+            const kk = key(k, args), f = redrawing && fresh.get(kk);
+            if (f && Date.now() - f.at < 30000) return overlay(k, args, f.v);
+            if (fast && navigator.onLine) {
+                const saved = await kvGet(kk);
+                if (saved !== undefined) {
+                    bg.push(fn.apply(obj, args).then(v => {
+                        if (v == null || (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length)) return;
+                        fresh.set(kk, { v, at: Date.now() });
+                        if (JSON.stringify(v) !== JSON.stringify(saved)) { changed.add(k); kvSet(kk, v); }
+                    }).catch(() => {}));
+                    return overlay(k, args, saved);
+                }
+            }
             if (navigator.onLine) {
                 try {
                     const v = await fn.apply(obj, args);
@@ -216,7 +249,10 @@ export function withOffline(api) {
     api.offline = {
         pending: async () => visible(await getOutbox()),
         sync,
-        isNetErr
+        isNetErr,
+        fastStart,
+        fastDone,
+        redraw
     };
     window.addEventListener('online', () => setTimeout(sync, 800));
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sync(); });
