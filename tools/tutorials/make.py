@@ -18,8 +18,9 @@ CFG = {
     'calendar': ('Calendar & Papers', 'Every date and document in one place', '📅'),
     'coordinators-and-admins': ('Team tools', 'For coordinators and admins', '🛡️'),
     'fam-app': ('RWB FAM', 'For a rider\'s family', '👨‍👩‍👧'),
+    'fam-invite': ('Invite your family', 'Add family to RWB FAM, and how they join', '👨‍👩‍👧'),
 }
-INTRO = {'coordinators-and-admins': 'Team tools, for coordinators and admins.', 'fam-app': 'R W B FAM. The app for a rider\'s family.',
+INTRO = {'coordinators-and-admins': 'Team tools, for coordinators and admins.', 'fam-app': 'R W B FAM. The app for a rider\'s family.', 'fam-invite': 'How to invite your family to R W B FAM, and how they join.',
          'guides': 'Guides and Pookie.', 'calendar': 'Calendar, and your bike papers.', 'home': 'Home, and My Ride.', 'track': 'Track, and S O S.'}
 LEAD, GAP, TAIL, OUTRO = .35, .35, .55, 2.2
 FPS = 30

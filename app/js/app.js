@@ -2631,6 +2631,7 @@ const VIDEOS = [   /* [file, title, what it covers, seconds, who]; who: undefine
     ['me', 'Me', 'Your photo, details, theme and privacy', 26],
     ['calendar', 'Calendar & Papers', 'Reminders, and your licence, RC, PUC and insurance', 36],
     ['coordinators-and-admins', 'Team tools', 'For coordinators and admins', 36, 'team'],
+    ['fam-invite', 'Invite your family', 'Add family to RWB FAM, and how they join', 48],
     ['fam-app', 'RWB FAM', 'Where is my rider, rides and settings', 27, 'fam']
 ];
 

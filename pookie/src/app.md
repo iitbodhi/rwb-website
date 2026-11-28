@@ -72,7 +72,7 @@ In the RWB Android app, Track keeps sharing with the screen locked; allow locati
 k: family, add family, wife, husband, parents, mother, father, son, daughter, brother, sister, girlfriend, invite code, fam code, family circle, fam app
 b: app
 RWB FAM lets you add up to 3 family members. Home → FAM shows your invite code (like RWB-XXXX) with WhatsApp, SMS and Copy buttons.
-They open the link (Android gets the app, iPhone uses the web app), sign in with ANY Google account (they must remember which one) and enter your code.
+They open the link (Android gets the app, iPhone uses the web app), tap Continue with Google with ANY Google account (they must remember which one), then on the "No Account Found!" screen tap the big Join RWB FAM button (right under Join RWB) and enter your code. There's a video showing every step: Guides → App → Invite your family.
 They see: your live location when you share on Track (and riders on the same event ride), your odometer, RWB events, important announcements, members, the gallery and the VRN check.
 They can't see expenses, RSVPs, MotoMart, Service, Mileage or anyone's phone number, and can't share location or send SOS.
 Remove someone any time from Home → FAM → Remove (they lose access at once). Family members can also switch RWB FAM off in their own Me screen.

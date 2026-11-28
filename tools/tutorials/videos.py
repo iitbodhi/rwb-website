@@ -1,7 +1,7 @@
 """The RWB App how-to videos (Nov 2026 app). Each scene = one simple action, with 1-2 short spoken sentences.
 Run: python3 videos.py [names]   (demo app served on localhost:8766)"""
 import asyncio, sys
-from rec import run
+from rec import run, HIDE
 
 G = lambda r, h: r.p.evaluate(f"location.hash = '#{h}'")
 
@@ -244,8 +244,46 @@ async def fam(r):
     r.save('RWB FAM')
 
 
+async def fam_invite(r):
+    """Rider sends the RWB FAM invite, then the family member installs the app, signs in and joins with the code."""
+    p = r.p
+    await p.evaluate("""() => { const k='rwb-app-demo-v2', d=JSON.parse(localStorage.getItem(k)); d.fam=[]; localStorage.setItem(k, JSON.stringify(d)); }""")
+    await p.reload(); await p.wait_for_selector('#boot', state='detached', timeout=30000); await p.wait_for_timeout(1000); await p.add_style_tag(content=HIDE); await p.wait_for_timeout(300)
+    r.scene('Invite your family', ['Rider, on Home, tap the FAM button.'])
+    await r.tap('[data-act=fam]', wait=1300)
+    r.scene('Your invite code', ['This is your invite code. Up to three family members can join.'])
+    await r.tap('#sheet .fam-code', click=False, hold=2.6)
+    r.scene('Send it', ['Tap WhatsApp, and send the invite to your family.'])
+    await r.tap('#sheet [data-x=wa]', click=False, hold=2.4)
+    # the family's phone: the invite page from the link
+    r.scene('Family: open the link', ['Family, tap the link in the message.', 'Then tap Get it on Google Play, and install the R W B app.'])
+    fp = await p.context.new_page()
+    await fp.add_init_script("Object.defineProperty(navigator,'userAgent',{get:()=>'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Mobile Safari/537.36'})")
+    await fp.goto('http://localhost:8766/fam/?c=RWB-K7Q2&p=1'); await fp.wait_for_timeout(1500)
+    r.p = fp; await r.tap('#go', click=False, hold=2.8); r.p = p; await fp.close()
+    # signed out, a Google account that isn't in RWB
+    await p.evaluate("""() => { const k='rwb-app-demo-v2', d=JSON.parse(localStorage.getItem(k)); d.signedIn=false; localStorage.setItem(k, JSON.stringify(d));
+        localStorage.setItem('rwb-demo-join','1'); localStorage.removeItem('rwb-fam-code'); }""")
+    await p.reload(); await p.wait_for_selector('#boot', state='detached', timeout=30000); await p.wait_for_timeout(2500); await p.add_style_tag(content=HIDE); await p.wait_for_timeout(300)
+    r.scene('Sign in', ['Open the app, and tap Continue with Google.', 'Remember which Google account you use.'])
+    await r.tap('[data-act=google]', wait=1500)
+    r.scene('Join RWB FAM', ['You will see No Account Found. That is fine.', 'Tap Join R W B FAM.'])
+    await r.tap('.no-acct [data-act=fam-join]', wait=1200)
+    r.scene('Type the code', ['Type the invite code from the message, and your name.'])
+    await r.type('#fj input[name=code]', 'RWB-K7Q2', hold=1.0)
+    await p.locator('#fj input[name=code]').blur(); await p.wait_for_timeout(500)
+    await r.type('#fj input[name=name]', 'Rina Mallick', hold=1.2)
+    r.scene('Agree and join', ['Tick the box, and tap Join R W B FAM.'])
+    await r.tap('#fj input[name=agree]', wait=400)
+    await r.tap('#fj [data-x=join]', wait=2200)
+    await p.evaluate('scrollTo(0,0)'); await p.wait_for_timeout(1500)
+    r.scene('You are in', ['Done! You can now see your rider live, when they share on Track.'])
+    await r.tap('.fam-rider', click=False, hold=2.6)
+    r.save('Invite your family')
+
+
 VIDEOS = {'home': home, 'track': track, 'service': service, 'mileage': mileage, 'motomart': motomart, 'guides': guides, 'events': events,
-          'warriorboards': warriorboards, 'me': me, 'calendar': calendar, 'coordinators-and-admins': team, 'fam-app': fam}
+          'warriorboards': warriorboards, 'me': me, 'calendar': calendar, 'coordinators-and-admins': team, 'fam-app': fam, 'fam-invite': fam_invite}
 ROLES = {'coordinators-and-admins': 'superadmin', 'fam-app': 'fam'}
 if __name__ == '__main__':
     asyncio.run(run(VIDEOS, ROLES, sys.argv[1:] or list(VIDEOS)))
