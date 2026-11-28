@@ -878,6 +878,8 @@ async function viewAccess(status, sess, noJump = false) {
         <div><h1>No Account Found!</h1><p class="lead">There's no RWB membership for <b>${esc(sess.email)}</b>.</p></div>
         <div class="card na-card na-join"><b class="na-h">New to RWB?</b><p class="small muted">Every rider is welcome, with or without a Ronin. It takes about 3 minutes.</p>
             <button type="button" class="btn block" data-act="join">Join RWB</button></div>
+        <div class="card na-card na-join"><b class="na-h">Family of an RWB member?</b><p class="small muted">Use the invite code your rider sent you.</p>
+            <button type="button" class="btn block" data-act="fam-join">Join RWB FAM</button></div>
         <form class="card na-card na-find" id="naf" novalidate>
             <b class="na-h">Already in RWB? Find your account</b>
             <p class="small muted">Enter the WhatsApp number and VRN you joined RWB with.</p>
@@ -887,7 +889,6 @@ async function viewAccess(status, sess, noJump = false) {
             <div id="na-out" hidden></div>
         </form>
         <div class="card na-card"><p>Still stuck? <a class="linkish" href="${RWB_IG_DM}" target="_blank" rel="noopener">Contact RWB</a> on Instagram to know your registered email.</p></div>
-        <div class="card na-card"><p>Family of an RWB member? <button type="button" class="linkish" data-act="fam-join">Join RWB FAM with an invite code</button></p></div>
         <button class="btn ghost block" data-act="out">Use a different Google account</button></section>`;
     bindFindAccount(sess);
 }
