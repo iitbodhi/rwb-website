@@ -4424,7 +4424,7 @@ function waMsg(kind, x = {}) {
         welcome: `Hi ${first}! 🎉\n\nWelcome to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 24 hours.\n\nUntil then, download the RWB App: ${getLink()}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}. Your details are already there.\n\nAnd check out our socials:\n${[['📸', 'Instagram'], ['👍', 'Facebook']].map(([i, n]) => `${i} ${n}: ${FOLLOW.find(f => f[0] === n)?.[1]}`).join('\n')}\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
         existing: `Hi Warrior ${first}! 👋\n\nYou're already in our RWB WhatsApp group, so nothing to worry about. Your RWB App account is ready: just open the app and explore.\n\n📍 Track: live location on rides, SOS to the RWB team\n🔧 Service: records, bills and next-service reminders\n⛽ Mileage: your real km/l and fuel spends\n🛒 MotoMart: buy and sell used riding gear\n📘 Guides: maintenance help and tested gear\n📅 Events: rides, RSVPs and shared expenses\n🗓️ Calendar: events plus renewal, service and parts due dates, with reminders\n🏍️ RWB: members and leaderboards\n🤖 Pookie: our AI for any bike question\n\nPlease also update your details in the Me tab (you can set your bike model and add up to 3 bikes).\n\n${getLink()}\nExplore. Evolve. Inspire.\n– ${me}, RWB`,
         returning: `Hi ${first}! 🎉\n\nWelcome back to Ronin Warriors of Bengal! We'll add you to our official RWB WhatsApp group within 24 hours.\n\nUntil then, download the RWB App: ${getLink()}\nSign in with Google using ${x.email ? `the same email you joined with (${x.email})` : 'the same email you used on the RWB join form'}.\n\nAnd check out our socials:\n${[['📸', 'Instagram'], ['👍', 'Facebook']].map(([i, n]) => `${i} ${n}: ${FOLLOW.find(f => f[0] === n)?.[1]}`).join('\n')}\n\nExplore. Evolve. Inspire. 🏍️\n– ${me}, RWB`,
-        group: `Hi ${first}! 👋\n\nHere's the link to join the official RWB WhatsApp group: ${x.group}\n\nTap it and ask to join; we'll let you in. See you on the road! 🏍️\n– ${me}, RWB`,
+        group: `Hi ${first}! 👋\n\nWe'll add you to the official RWB WhatsApp group within 24 hours. See you on the road! 🏍️\n– ${me}, RWB`,
         rejected: `Hi ${first},\n\nThank you for your interest in Ronin Warriors of Bengal. We're sorry, we couldn't approve your registration this time${x.reason ? `: ${x.reason.replace(/[.\s]+$/, '')}.` : '.'}\n\nIf things change, you can apply again: open ${joinLink}. If you think this is a mistake, just reply here.\n\nRide safe! 🙏\n– ${me}, RWB`,
         fam_reject: `Hi ${first}! 👋\n\nThanks for registering with Ronin Warriors of Bengal. Your form came to us as a new RWB member, but you're family of an RWB rider, so *RWB FAM* is the right place for you. It's free, and you'll see your rider's live location on rides, their bike and RWB events.\n\n1️⃣ Ask your rider for their RWB FAM invite code (in their app: Home → FAM)\n2️⃣ Open the RWB App: ${getLink()}\n3️⃣ Tap Continue with Google${x.email ? ` (${x.email})` : ''}\n4️⃣ Tap the big *Join RWB FAM* button and type the code\n\n🎥 Watch how (48 s): ${FAM_VIDEO}\n\nAny questions? Just reply here.\n– ${me}, RWB`,
         hold: `Hi ${first}! 👋\n\nThanks for your interest in Ronin Warriors of Bengal. Your join request is on hold for now${x.note ? `: ${x.note.replace(/[.\s]+$/, '')}.` : '.'}\n\nTo see your request or update your answers, open ${joinLink}. Any questions? Just reply here.\n– ${me}, RWB`,
@@ -4577,20 +4577,16 @@ function waGroupSheet(m, action, opts = {}) {
     const done = () => (m.id ? api.admin.waTodoDone(m.id).catch(() => {}) : Promise.resolve()).then(() => opts.after?.());
     openSheet(add ? `Add ${first} to the RWB WhatsApp group` : `Remove ${first} from the RWB WhatsApp group`, `
         <div class="card row" style="gap:10px;margin-bottom:12px">${face(m, 'avatar sm')}<div class="grow"><div class="who">${esc(m.full_name)}</div><div class="meta">${esc(phoneTxt(ph10(m.phone)))}</div></div></div>
-        ${add && !link && !welcome ? '<p class="warn" style="margin-bottom:10px">Save the group\'s invite link first (Approvals → follow-ups → RWB WhatsApp group link), so Add now can send it.</p>' : ''}
-        <p class="small muted" style="margin-bottom:12px">${add ? (welcome ? `Add now copies ${esc(first)}'s number so you can add them in the group (group info → Add member → paste), then sends the welcome. The welcome has no group link.` : `Add now sends ${esc(first)} the group link on WhatsApp; you let them in when they ask to join.`) : 'Remove now copies their number and opens the group: tap the group name → 🔍 → paste → Remove.'}</p>
+                <p class="small muted" style="margin-bottom:12px">${add ? `Add now copies ${esc(first)}'s number so you can add them in the group (group info → Add member → paste), then lets them know. No message carries the group link.` : 'Remove now copies their number and opens the group: tap the group name → 🔍 → paste → Remove.'}</p>
         <button class="btn wa block" data-x="now">${add ? 'Add now' : 'Remove now'}</button>
         <button class="btn ghost block" data-x="later" style="margin-top:8px">${add ? 'Add later' : 'Remove later'}</button>
         <button class="link-btn block" data-x="skip" style="margin:12px auto 0">${add ? 'Already in the group' : 'Not in the group'}</button>`, body => {
         body.querySelector('[data-x=now]').onclick = async () => {
             if (add) {
-                if (welcome) {   /* the welcome never carries the group link (Bodhi, Nov 28 2026): the admin adds them */
-                    const num = '+91 ' + phoneTxt(ph10(m.phone));
-                    try { await navigator.clipboard.writeText(num); toast(`${num} copied. Add them in the RWB group`); } catch { toast(num); }
-                    done(); return tellOnWhatsApp(`Let ${first} know`, m.phone, waMsg(welcome, m));
-                }
-                if (!link) return toast('Save the group link first', true);
-                openWA(waTo(m.phone, waMsg('group', { ...m, group: link }))); closeSheet(); done(); return;
+                /* no message ever carries the group link (Bodhi, Nov 28 2026): copy their number, the admin adds them */
+                const num = '+91 ' + phoneTxt(ph10(m.phone));
+                try { await navigator.clipboard.writeText(num); toast(`${num} copied. Add them in the RWB group`); } catch { toast(num); }
+                done(); return tellOnWhatsApp(`Let ${first} know`, m.phone, waMsg(welcome || 'group', m));
             }
             const num = '+91 ' + phoneTxt(ph10(m.phone));
             try { await navigator.clipboard.writeText(num); toast(`${num} copied`); } catch { toast(num); }
@@ -4751,9 +4747,9 @@ function bindFollowUps(inc, all) {
             ${lists.map(([id, t, sub, list, kind]) => block(id, t, sub, list, kind)).join('')}
             ${(v === 'gone' ? gone.length : tnc.length + other.length + (v === 'all' ? notApp.length : 0) + (v === 'app' ? noSticker.filter(m => m.user_id) : noSticker).length) ? `<button class="btn block section" data-act="fu-share">📣 Share ${FU_VIEWS[v] === 'Members' ? 'all' : `“${FU_VIEWS[v]}”`} follow-ups to the RWB group</button>` : ''}
             ${v !== 'gone' ? `<button class="btn ghost block" data-act="fu-remind" style="margin-top:8px">🔔 Send in-app reminders now (members on the app)</button>` : ''}
-            <details class="fu card section"><summary><b>RWB WhatsApp group link</b><span class="small muted">Optional. Lets members and admins open the group in one tap.</span></summary>
+            <details class="fu card section"><summary><b>RWB WhatsApp group link</b><span class="small muted">Optional. Admins only: opens the group in one tap. It's never sent to riders.</span></summary>
                 <form id="grp" style="margin-top:10px"><input name="link" type="url" placeholder="https://chat.whatsapp.com/…" value="${esc(state.settings?.wa_group_link || '')}">
-                <p class="small muted" style="margin:6px 0 10px">In WhatsApp: open the RWB group → tap its name → Invite via link → Copy link. Only members can see it in the app.</p>
+                <p class="small muted" style="margin:6px 0 10px">In WhatsApp: open the RWB group → tap its name → Invite via link → Copy link. Only admins can see it in the app.</p>
                 <button class="btn block">Save link</button></form></details>`;
         lists.forEach(([id, , , list, kind]) => {
             const box = $('#' + id); if (!box || !list.length) return;
@@ -6278,7 +6274,7 @@ async function boot() {
         state.fam = null; delete document.body.dataset.fam;
         state.me = await api.me();
         { const back = takeReturn(); if (back && !location.hash.startsWith(back)) history.replaceState(null, '', back); }   /* back from Android's settings */
-        api.settings().then(v => { state.settings = v || {}; }).catch(() => { state.settings = {}; });
+        api.settings().then(v => { state.settings = { ...(v || {}) }; if (!isAdmin()) delete state.settings.wa_group_link; }).catch(() => { state.settings = {}; });
         await load.news(true);
         await render();
         if (!state.movedCheck) {   /* coming back to the app: was their email changed meanwhile? (at most every 10 min) */
