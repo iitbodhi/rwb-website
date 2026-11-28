@@ -1865,7 +1865,7 @@ function serviceForm(s = null) {
     openSheet(s ? 'Edit service' : 'Add service', `<form id="sf">
         <div class="grid2">
             <label>Date<input type="date" name="service_date" required max="${todayISO()}" value="${esc(r.service_date)}"></label>
-            <label>Odometer (km)<input type="number" name="odometer_km" required min="0"${opt.before ? ` max="${Number(opt.before.odometer_km) - 1}" placeholder="Below ${esc(Number(opt.before.odometer_km).toLocaleString('en-IN'))}"` : ''} inputmode="numeric" value="${esc(r.odometer_km ?? '')}"></label>
+            <label>Odometer (km)<input type="number" name="odometer_km" required min="0" inputmode="numeric" value="${esc(r.odometer_km ?? '')}"></label>
         </div>
         <div class="grid2">
             <label>Service type<select name="service_type">${Object.entries(SERVICE_TYPES).map(([k, v]) => `<option value="${k}"${k === r.service_type ? ' selected' : ''}>${v}</option>`).join('')}</select></label>
